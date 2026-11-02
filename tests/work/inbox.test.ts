@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /** The agent inbox: an actionable event lands once, in the right agent's inbox only, and can be acknowledged. */
 const db = vi.hoisted(() => ({
   agentInboxItem: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+  issueClaim: { findMany: vi.fn() },
   bug: { findMany: vi.fn() },
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 const markMessagesRead = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/agent-messages", () => ({ markMessagesRead }));
 
-import { inboxRecipients, listInbox, markInboxRead, writeInbox, type InboxEvent } from "@/lib/agent-api/inbox";
+import { expiredClaimOffers, inboxRecipients, listInbox, markInboxRead, serializeInboxItem, writeInbox, type InboxEvent } from "@/lib/agent-api/inbox";
 import { publish } from "@/lib/agent-api/events";
 
 /** A transaction double with every table the inbox routing reads. */
@@ -32,7 +33,7 @@ const run = (t: Tx, event: Omit<InboxEvent, "id" | "tenantId"> & { tenantId?: st
   inboxRecipients(t as never, { id: "event-1", tenantId: "tenant-a", ...event });
 
 const mention = (userId: string) => `hi @[Owner](${userId})`;
-const item = { id: "item-1", kind: "offer", eventId: "event-1", eventType: "claim.offered", bugId: "bug-1", commentId: null,
+const item = { id: "item-1", agentId: "agent-bob", kind: "offer", eventId: "event-1", eventType: "claim.offered", bugId: "bug-1", commentId: null,
   payload: { claimId: "claim-1" }, readAt: null, createdAt: new Date("2026-10-20T10:00:00Z") };
 
 beforeEach(() => vi.resetAllMocks());
@@ -96,6 +97,33 @@ describe("inbox reads", () => {
       agentId: "agent-bob", readAt: null,
       OR: [{ createdAt: { gt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { gt: "item-1" } }],
     }, take: 101 }));
+  });
+
+  it("identifies the receiving agent and flags offers expired for that project's window", async () => {
+    const now = new Date("2026-10-20T10:00:00Z").getTime();
+    const expired = { ...item, payload: { claimId: "claim-expired" } };
+    const live = { ...item, id: "item-2", agentId: "agent-alice", payload: { claimId: "claim-live" } };
+    db.issueClaim.findMany.mockResolvedValue([
+      { id: "claim-expired", status: "offered", offeredAt: new Date(now - 31_000), releaseReason: null,
+        bug: { project: { workflow: { offerWindowSeconds: 30 } } } },
+      { id: "claim-live", status: "offered", offeredAt: new Date(now - 29_000), releaseReason: null,
+        bug: { project: { workflow: { offerWindowSeconds: 30 } } } },
+    ]);
+    const expiredOffers = await expiredClaimOffers([expired, live] as never, now);
+    expect(db.issueClaim.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: ["claim-expired", "claim-live"] } } }));
+    expect(serializeInboxItem(expired as never, new Map(), expiredOffers)).toMatchObject({ agentId: "agent-bob", expired: true });
+    expect(serializeInboxItem(live as never, new Map(), expiredOffers)).toMatchObject({ agentId: "agent-alice", expired: false });
+  });
+
+  it("marks swept expired offers and missing claims as expired without querying non-offer items", async () => {
+    const swept = { ...item, payload: { claimId: "claim-swept" } };
+    const missing = { ...item, id: "item-3", payload: { claimId: "claim-missing" } };
+    db.issueClaim.findMany.mockResolvedValue([
+      { id: "claim-swept", status: "released", offeredAt: item.createdAt, releaseReason: "expired", bug: { project: { workflow: null } } },
+    ]);
+    const expiredOffers = await expiredClaimOffers([swept, missing] as never, Date.now());
+    expect(expiredOffers).toEqual(new Set(["claim-swept", "claim-missing"]));
+    expect(await expiredClaimOffers([{ ...item, eventType: "comment.created" }] as never)).toEqual(new Set());
   });
 
 });

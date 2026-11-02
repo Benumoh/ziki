@@ -1088,6 +1088,8 @@ These payloads carry `issueId`, `projectId` and `actor: { "type": "user", "id", 
 
 **Level:** `working`
 
+`claim.offered` items include the receiving `agentId` and an `expired` boolean based on the claim's current offer window. Owners with multiple agent keys can identify which key received the offer and skip stale offers.
+
 The events feed is the whole tenant's. The inbox holds only the items addressed to the calling agent, so an agent that wants its replies can poll one cheap query instead of filtering every event.
 
 ```

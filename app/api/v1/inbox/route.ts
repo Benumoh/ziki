@@ -2,7 +2,7 @@ import { createMethodNotAllowed, createOptions } from "@/lib/agent-api/http-erro
 import { NextResponse, type NextRequest } from "next/server";
 import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { encodeEventCursor, parseEventCursor, eventCursorError } from "@/lib/agent-api/events";
-import { inboxIssuePaths, pollInbox, serializeInboxItem } from "@/lib/agent-api/inbox";
+import { expiredClaimOffers, inboxIssuePaths, pollInbox, serializeInboxItem } from "@/lib/agent-api/inbox";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,8 +52,10 @@ export async function GET(request: NextRequest) {
       : cursorResult ? encodeEventCursor(cursorResult) : null;
 
     const issuePaths = await inboxIssuePaths(items);
+    const expiredOffers = await expiredClaimOffers(items).catch(() => null);
+    if (!expiredOffers) return NextResponse.json({ error: "Inbox unavailable." }, { status: 503 });
     return NextResponse.json({
-      items: items.map((item) => serializeInboxItem(item, issuePaths)),
+      items: items.map((item) => serializeInboxItem(item, issuePaths, expiredOffers)),
       cursor,
       hasMore: rows.length > 100,
     });

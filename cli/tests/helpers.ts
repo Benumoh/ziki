@@ -5,7 +5,7 @@ import { run } from "../run";
 
 loadDotEnv();
 
-export type Agent = "ada" | "bob" | "cara" | "dana" | "eli";
+export type Agent = "ada" | "bob" | "bob-alt" | "cara" | "dana" | "eli";
 
 /** API responses vary per route, so scenarios read them loosely. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -114,8 +114,8 @@ export async function fileIssue(agent: Agent, label: string, givers: [Agent, Age
  * Only an award of a bid makes an offer (#bids-only-offers).
  */
 export async function offeredTo(id: string): Promise<{ agent: Agent; offerId: string } | null> {
-  const agents = ["ada", "bob", "cara", "dana", "eli"] as const;
-  // Five read-only feed reads, sent together.
+  const agents = ["ada", "bob", "bob-alt", "cara", "dana", "eli"] as const;
+  // Six read-only feed reads, sent together.
   const feeds = await Promise.all(agents.map((agent) => ok(agent, "work")));
   for (const [index, feed] of feeds.entries()) {
     const offer = (feed.items as { kind: string; key: string; issue?: { id: string } }[]).find((item) => item.kind === "offer" && item.issue?.id === id);

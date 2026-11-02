@@ -7,6 +7,8 @@ import { commentPermalinkPath } from "@/lib/comment-window";
 import { issueHref } from "@/lib/issue-ref";
 import { absoluteUrl } from "@/lib/site-url";
 import { markMessagesRead } from "@/lib/agent-messages";
+import { isOfferExpired } from "@/lib/agent-api/offer-expiry";
+import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 import {
   EVENT_MAX_WAIT_SECONDS,
   nextPollDelayMs,
@@ -46,6 +48,12 @@ const REDESIGN_DECISIONS = new Set(["redesign.approved", "redesign.rejected", "r
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
+}
+
+function objectPayload(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 async function claimAgentId(db: Db, claimId: unknown): Promise<string | null> {
@@ -192,6 +200,7 @@ export async function writeInbox(db: Db, event: InboxEvent): Promise<number> {
 
 const itemSelect = {
   id: true,
+  agentId: true,
   kind: true,
   eventId: true,
   eventType: true,
@@ -203,6 +212,36 @@ const itemSelect = {
 } satisfies Prisma.AgentInboxItemSelect;
 
 export type InboxItemRow = Prisma.AgentInboxItemGetPayload<{ select: typeof itemSelect }>;
+
+/** The current expiry state for the claim offers visible in this inbox page. */
+export async function expiredClaimOffers(items: readonly InboxItemRow[], now = Date.now()): Promise<Set<string>> {
+  const claimIds = [...new Set(items.flatMap((item) => {
+    if (item.eventType !== "claim.offered") return [];
+    const claimId = text(objectPayload(item.payload).claimId);
+    return claimId ? [claimId] : [];
+  }))];
+  if (claimIds.length === 0) return new Set();
+
+  const claims = await prisma.issueClaim.findMany({
+    where: { id: { in: claimIds } },
+    select: {
+      id: true,
+      status: true,
+      offeredAt: true,
+      releaseReason: true,
+      bug: { select: { project: { select: { workflow: { select: { offerWindowSeconds: true } } } } } },
+    },
+  });
+  const byId = new Map(claims.map((claim) => [claim.id, claim]));
+  return new Set(claimIds.filter((id) => {
+    const claim = byId.get(id);
+    if (!claim) return true;
+    if (claim.status === "released") return claim.releaseReason === "expired";
+    if (claim.status !== "offered") return false;
+    const windowSeconds = claim.bug.project.workflow?.offerWindowSeconds ?? DEFAULT_PROJECT_WORKFLOW.offerWindowSeconds;
+    return isOfferExpired(claim.offeredAt, now, windowSeconds * 1000);
+  }));
+}
 
 /** This agent's items after `cursor`, oldest first. Reads 101 so the route can tell there is more. */
 export async function listInbox(
@@ -256,11 +295,16 @@ export async function inboxIssuePaths(items: readonly InboxItemRow[]): Promise<M
  * The JSON shape of one item. `url` links to the comment when there is one,
  * else the issue; `issuePaths` comes from `inboxIssuePaths`.
  */
-export function serializeInboxItem(item: InboxItemRow, issuePaths: ReadonlyMap<string, string>) {
+export function serializeInboxItem(
+  item: InboxItemRow,
+  issuePaths: ReadonlyMap<string, string>,
+  expiredOffers: ReadonlySet<string> = new Set(),
+) {
   const issuePath = item.bugId ? issuePaths.get(item.bugId) : undefined;
   const url = issuePath
     ? absoluteUrl(item.commentId ? commentPermalinkPath(issuePath, item.commentId) : issuePath)
     : null;
+  const claimId = item.eventType === "claim.offered" ? text(objectPayload(item.payload).claimId) : null;
   return {
     id: item.id,
     kind: item.kind,
@@ -270,6 +314,10 @@ export function serializeInboxItem(item: InboxItemRow, issuePaths: ReadonlyMap<s
     commentId: item.commentId,
     url,
     payload: item.payload,
+    ...(item.eventType === "claim.offered" ? {
+      agentId: item.agentId,
+      expired: !claimId || expiredOffers.has(claimId),
+    } : {}),
     read: item.readAt !== null,
     readAt: item.readAt?.toISOString() ?? null,
     createdAt: item.createdAt.toISOString(),

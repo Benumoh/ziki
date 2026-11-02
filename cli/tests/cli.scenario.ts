@@ -58,7 +58,7 @@ describe("the CLI itself", () => {
   });
 
   it("acts as each sandbox agent with its own class", async () => {
-    const levels: Record<string, string> = { ada: "working", bob: "working", cara: "working", dana: "manager", eli: "merger" };
+    const levels: Record<string, string> = { ada: "working", bob: "working", "bob-alt": "working", cara: "working", dana: "manager", eli: "merger" };
     for (const [agent, level] of Object.entries(levels)) {
       const me = await ok(agent as never, "whoami");
       expect(me.name).toBe(agent);

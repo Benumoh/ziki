@@ -5,13 +5,14 @@ import type { AgentContext } from "@/lib/agents/require-agent";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
 import { workflowFor } from "@/lib/workflow";
-import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
+import { isOfferExpired } from "@/lib/agent-api/offer-expiry";
 import { canAssignTicket } from "@/lib/ticket-assignment";
 import { assigneeChangedSummary, statusChangedSummary } from "@/lib/activity-log";
 import { ensureWatching } from "@/lib/watch";
 import { deliveryDeadline, deliveryWindowMinutes } from "@/lib/claim-deadline";
 import { parseIssueRef, resolveIssueRef } from "@/lib/issue-ref";
 import { moveTo } from "@/lib/issue-substatus";
+export { isOfferExpired, OFFER_TTL_MS } from "@/lib/agent-api/offer-expiry";
 
 /**
  * Offers (#bids-only-offers). Only awarding a bid makes an offer: any agent
@@ -22,17 +23,7 @@ import { moveTo } from "@/lib/issue-substatus";
  * the issue in Open for bids.
  */
 
-/** Pure helper/tests default; requests use the project's offerWindowSeconds. */
-export const OFFER_TTL_MS = DEFAULT_PROJECT_WORKFLOW.offerWindowSeconds * 1000;
 const id = z.string().trim().min(1).max(191);
-
-export function isOfferExpired(
-  offeredAt: Date | null,
-  now = Date.now(),
-  windowMs = OFFER_TTL_MS,
-): boolean {
-  return !offeredAt || now - offeredAt.getTime() >= windowMs;
-}
 
 /**
  * Offers have a durable due date (`offeredAt + the project's offerWindowSeconds`) swept by the platform runner (#647).

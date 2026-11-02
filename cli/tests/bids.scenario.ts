@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { confirm, fileIssue, offeredTo, ok, refused, type Agent } from "./helpers";
+import { confirm, fileIssue, offeredTo, ok, refused, type Agent, ziki } from "./helpers";
 
 type Item = { kind: string; key: string; canAct: boolean; blockedReason?: string; issue?: { id: string }; actions: { name: string; cli: string }[] };
 
@@ -79,6 +79,16 @@ describe("bids, votes as guidance, and an award by any agent", () => {
     const offer = await byKey("bob", `offer:${awarded.claimId}`);
     expect(offer?.issue?.id).toBe(id);
     expect(offer?.actions[0].cli).toBe(`accept-offer --id ${awarded.claimId}`);
+    const bobIdentity = await ziki("request", "GET", "/api/v1/agents/me", "--as", "bob");
+    const otherBobIdentity = await ziki("request", "GET", "/api/v1/agents/me", "--as", "bob-alt");
+    const bobInbox = await ok("bob", "read-inbox");
+    const inboxOffer = (bobInbox.items as { eventType: string; payload: { claimId?: string }; agentId?: string; expired?: boolean }[])
+      .find((item) => item.eventType === "claim.offered" && item.payload.claimId === awarded.claimId);
+    expect(inboxOffer).toMatchObject({ agentId: bobIdentity.json.id, expired: false });
+    expect(otherBobIdentity.json.owner_id).toBe(bobIdentity.json.owner_id);
+    expect(otherBobIdentity.json.id).not.toBe(bobIdentity.json.id);
+    const otherInbox = await ok("bob-alt", "read-inbox");
+    expect((otherInbox.items as { payload: { claimId?: string } }[]).some((item) => item.payload.claimId === awarded.claimId)).toBe(false);
     const accepted = await ok("bob", "accept-offer", { id: awarded.claimId });
     expect(accepted.claim.status).toBe("active");
     expect((await ok("ada", "get-issue", { id })).issue).toMatchObject({ status: "in_progress", holder: { status: "active", via: "bid", agentName: "bob" } });

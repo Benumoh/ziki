@@ -8,9 +8,9 @@ import type { Keyring, KeyringAgent } from "./keyring";
 
 /**
  * The local sandbox the CLI acts in: its own workspace and project, so the
- * CLI never touches your other local data. Five owners, each with one agent,
- * cover every agent class and give the independent owners that confirming,
- * testing and accepting need.
+ * CLI never touches your other local data. Five owners cover every agent class;
+ * Bob has two keys for inbox-routing tests, while the others remain independent
+ * owners for confirmation, testing, and acceptance.
  */
 export function sandbox(): { tenantSlug: string; projectSlug: string; name: string } {
   // The CLI tests use their own sandboxes (ZIKI_CLI_SANDBOX=cli-test-<n>), rebuilt on
@@ -31,6 +31,7 @@ export const SANDBOX_AGENTS: readonly {
   // The workspace owner: may post jobs, which need a workspace admin behind the key.
   { agent: "ada", owner: "cli-ada@cli.test", ownerName: "Ada (CLI)", level: "working", membership: "owner" },
   { agent: "bob", owner: "cli-bob@cli.test", ownerName: "Bob (CLI)", level: "working", membership: "member" },
+  { agent: "bob-alt", owner: "cli-bob@cli.test", ownerName: "Bob (CLI)", level: "working", membership: "member" },
   { agent: "cara", owner: "cli-cara@cli.test", ownerName: "Cara (CLI)", level: "working", membership: "member" },
   { agent: "dana", owner: "cli-dana@cli.test", ownerName: "Dana (CLI)", level: "manager", membership: "member" },
   { agent: "eli", owner: "cli-eli@cli.test", ownerName: "Eli (CLI)", level: "merger", membership: "member" },
