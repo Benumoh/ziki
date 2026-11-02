@@ -93,15 +93,20 @@ async function findEligibleReviewers(
   if (!people.length) return [];
 
   const userIds = people.map((p) => p.beneficiaryUserId);
-  const activeOffers = await db.jobReviewOffer.groupBy({
-    by: ["beneficiaryUserId"],
+  const activeOffers = await db.jobReviewOffer.findMany({
     where: {
       beneficiaryUserId: { in: userIds },
       status: { in: ["offered", "accepted"] },
     },
-    _count: { _all: true },
+    select: { beneficiaryUserId: true, submission: { select: { status: true } } },
   });
-  const offerCounts = new Map(activeOffers.map((r) => [r.beneficiaryUserId, r._count._all]));
+  const offerCounts = new Map<string, number>();
+  for (const offer of activeOffers) {
+    // Decided submissions cannot produce any more verdicts, so their leftover
+    // offers are not active reviewer workload (#619).
+    if (offer.submission.status !== "pending") continue;
+    offerCounts.set(offer.beneficiaryUserId, (offerCounts.get(offer.beneficiaryUserId) ?? 0) + 1);
+  }
 
   const candidates: Candidate[] = people.map((p) => ({
     ...p,
@@ -312,15 +317,50 @@ export async function sweepJobReviewOffers(): Promise<{ expired: number; offered
 /** Accepts a pending job review offer (#617), mirroring the PR flow's TTLs. */
 export async function acceptJobReviewOffer(agent: AgentContext, offerId: string) {
   const result = await prisma.$transaction(async (tx) => {
+    const initialOffer = await tx.jobReviewOffer.findUnique({
+      where: { id: offerId },
+      select: {
+        submissionId: true,
+        agentId: true,
+        submission: { select: { job: { select: { tenantId: true } } } },
+      },
+    });
+    if (!initialOffer || initialOffer.submission.job.tenantId !== agent.tenantId) {
+      throw new IssueApiError(404, "Review offer not found.");
+    }
+    if (initialOffer.agentId !== agent.agentId) {
+      throw new IssueApiError(409, "This review offer was made to another agent.");
+    }
+
+    // Serialize accepting an offer with verdicts that can decide its submission.
+    // Re-read the offer and submission after the lock, since the initial lookup
+    // may have happened before a competing verdict committed (#619).
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "JobSubmission" WHERE "id" = ${initialOffer.submissionId} FOR UPDATE
+    `;
+    if (!locked.length) throw new IssueApiError(404, "Review offer not found.");
+
     const offer = await tx.jobReviewOffer.findUnique({
       where: { id: offerId },
-      include: { submission: { select: { id: true, job: { select: { tenantId: true } } } } },
+      include: {
+        submission: {
+          select: { id: true, status: true, job: { select: { tenantId: true } } },
+        },
+      },
     });
     if (!offer || offer.submission.job.tenantId !== agent.tenantId) {
       throw new IssueApiError(404, "Review offer not found.");
     }
     if (offer.agentId !== agent.agentId) {
       throw new IssueApiError(409, "This review offer was made to another agent.");
+    }
+
+    if (offer.submission.status !== "pending") {
+      await tx.jobReviewOffer.updateMany({
+        where: { id: offer.id, status: { in: ["offered", "accepted"] } },
+        data: { status: "expired", expiredAt: new Date() },
+      });
+      return { kind: "decided" as const, status: offer.submission.status };
     }
 
     const now = new Date();
@@ -353,6 +393,9 @@ export async function acceptJobReviewOffer(agent: AgentContext, offerId: string)
   if (result.kind === "expired") {
     await ensureJobReviewOffers(result.submissionId);
     throw new IssueApiError(410, "This review offer expired.");
+  }
+  if (result.kind === "decided") {
+    throw new IssueApiError(409, `This submission is already ${result.status}.`);
   }
   return { offer: result.offer };
 }

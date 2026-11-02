@@ -17,7 +17,7 @@ const state = vi.hoisted(() => ({ verdicts: [] as Row[] }));
 
 const db = vi.hoisted(() => ({
   bug: { findFirst: vi.fn() },
-  membership: { findUnique: vi.fn() },
+  membership: { findUnique: vi.fn(), findMany: vi.fn() },
   testVerdict: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   pullRequestReport: { findFirst: vi.fn() },
   agentAuditEvent: { create: vi.fn() },
@@ -28,7 +28,7 @@ const db = vi.hoisted(() => ({
   webhookDelivery: { createMany: vi.fn() },
   jobSubmission: { findUnique: vi.fn(), update: vi.fn() },
   jobReview: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
-  jobReviewOffer: { findFirst: vi.fn(), update: vi.fn() },
+  jobReviewOffer: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   pointEntry: { createMany: vi.fn() },
   $queryRaw: vi.fn(),
   $transaction: vi.fn(),
@@ -67,7 +67,7 @@ function report(overrides: Record<string, unknown> = {}) {
 }
 
 import { submitTestVerdict } from "@/lib/agent-api/test-verdict";
-import { reviewJobSubmission } from "@/lib/jobs/review";
+import { acceptJobReviewOffer, createJobReviewOffers, reviewJobSubmission } from "@/lib/jobs/review";
 
 /** An issue Ada filed herself, with no agent and no claim. */
 function bugRow(overrides: Record<string, unknown> = {}) {
@@ -366,5 +366,128 @@ describe("reviewJobSubmission: concurrent accepts (#584)", () => {
     expect(submission.status).toBe("accepted");
     expect(committedReviews).toHaveLength(2);
     expect(awardCount).toBe(1);
+  });
+});
+
+describe("job review offers after a decision (#619)", () => {
+  it("does not accept a stale offer when a rejection commits while acceptance waits", async () => {
+    const submission = {
+      id: "submission-619",
+      jobId: "job-619",
+      agentId: "submitter-agent",
+      beneficiaryUserId: "submitter",
+      reviewsNeeded: 2,
+      status: "pending",
+      reviewedAt: null as Date | null,
+      job: { id: "job-619", tenantId: "tenant_zedu", projectId: "p1", pointsPerAccepted: 25 },
+    };
+    const offers = [
+      { id: "offer-reviewer-1", submissionId: submission.id, agentId: "reviewer-agent-1", status: "accepted", offeredAt: new Date(), deadlineAt: new Date(Date.now() + 60_000) },
+      { id: "offer-reviewer-2", submissionId: submission.id, agentId: "reviewer-agent-2", status: "offered", offeredAt: new Date() },
+    ];
+    const committedReviews: Array<Record<string, unknown>> = [];
+    let lockTail = Promise.resolve();
+
+    db.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
+      let releaseLock: (() => void) | undefined;
+      const pendingReviews: Array<Record<string, unknown>> = [];
+      const tx = {
+        $queryRaw: async () => {
+          const previous = lockTail;
+          lockTail = new Promise<void>((resolve) => { releaseLock = resolve; });
+          await previous;
+          return [{ id: submission.id }];
+        },
+        jobSubmission: {
+          findUnique: async () => ({ ...submission }),
+          update: async ({ data }: { data: Partial<typeof submission> }) => {
+            Object.assign(submission, data);
+            return { ...submission };
+          },
+        },
+        jobReviewOffer: {
+          findUnique: async ({ where, select }: { where: { id: string }; select?: unknown }) => {
+            const offer = offers.find((candidate) => candidate.id === where.id);
+            if (!offer) return null;
+            if (select) return {
+              submissionId: offer.submissionId,
+              agentId: offer.agentId,
+              submission: { job: { tenantId: submission.job.tenantId } },
+            };
+            return { ...offer, submission: { id: submission.id, status: submission.status, job: { tenantId: submission.job.tenantId } } };
+          },
+          findFirst: async ({ where }: { where: { agentId: string; status: string } }) =>
+            offers.find((offer) => offer.agentId === where.agentId && offer.status === where.status) ?? null,
+          update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+            const offer = offers.find((candidate) => candidate.id === where.id)!;
+            Object.assign(offer, data);
+            return { ...offer };
+          },
+          updateMany: async ({ where, data }: { where: { id: string; status: { in: string[] } }; data: Record<string, unknown> }) => {
+            const offer = offers.find((candidate) => candidate.id === where.id);
+            if (!offer || !where.status.in.includes(offer.status)) return { count: 0 };
+            Object.assign(offer, data);
+            return { count: 1 };
+          },
+        },
+        jobReview: {
+          findFirst: async ({ where }: { where: { agentId: string } }) =>
+            [...committedReviews, ...pendingReviews].find((row) => row.agentId === where.agentId) ?? null,
+          create: async ({ data }: { data: Record<string, unknown> }) => {
+            const row = { id: `review-${committedReviews.length + pendingReviews.length + 1}`, ...data };
+            pendingReviews.push(row);
+            return row;
+          },
+        },
+        agentAuditEvent: { create: async () => ({}) },
+        agentEvent: { create: async () => ({ id: "job-review-event" }) },
+        webhookSubscription: { findMany: async () => [] },
+        webhookDelivery: { createMany: async () => ({ count: 0 }) },
+      };
+
+      try {
+        const result = await callback(tx);
+        committedReviews.push(...pendingReviews);
+        return result;
+      } finally {
+        releaseLock?.();
+      }
+    });
+
+    const rejection = reviewJobSubmission(reviewer("reviewer-agent-1", "owner-1"), submission.id, { verdict: "reject" });
+    const acceptance = acceptJobReviewOffer(reviewer("reviewer-agent-2", "owner-2"), "offer-reviewer-2");
+
+    const [reviewResult, acceptResult] = await Promise.all([
+      rejection,
+      acceptance.then((value) => value, (error: unknown) => error),
+    ]);
+
+    expect(reviewResult.submission.status).toBe("rejected");
+    expect(acceptResult).toMatchObject({ status: 409, message: "This submission is already rejected." });
+    expect(offers[1].status).toBe("expired");
+    expect(offers[0].status).toBe("completed");
+    expect(committedReviews).toHaveLength(1);
+  });
+
+  it("does not count accepted offers on decided submissions as reviewer workload", async () => {
+    db.membership.findMany.mockResolvedValue([
+      { userId: "owner-a", user: { agents: [{ id: "agent-a" }] } },
+      { userId: "owner-b", user: { agents: [{ id: "agent-b" }] } },
+    ]);
+    db.jobReviewOffer.findMany.mockResolvedValue([
+      { beneficiaryUserId: "owner-a", submission: { status: "rejected" } },
+      { beneficiaryUserId: "owner-a", submission: { status: "accepted" } },
+      { beneficiaryUserId: "owner-b", submission: { status: "pending" } },
+    ]);
+    db.jobReviewOffer.create.mockResolvedValue({ id: "new-offer" });
+
+    await createJobReviewOffers(db as never, { tenantId: "tenant_zedu" },
+      { id: "job-619", tenantId: "tenant_zedu", projectId: "p1", pointsPerAccepted: 25 },
+      { id: "submission-new", jobId: "job-619", agentId: "submitter-agent", beneficiaryUserId: "submitter", reviewsNeeded: 2 },
+    );
+
+    expect(db.jobReviewOffer.create.mock.calls[0]?.[0]).toMatchObject({
+      data: { agentId: "agent-a", beneficiaryUserId: "owner-a" },
+    });
   });
 });
