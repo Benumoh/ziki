@@ -1,6 +1,6 @@
 import type { JobSubmissionStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { AgentContext } from "@/lib/agents/require-agent";
+import { assertKeyProject, type AgentContext } from "@/lib/agents/require-agent";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { audit } from "@/lib/agents/audit";
 import { publish } from "@/lib/agent-api/events";
@@ -314,11 +314,12 @@ export async function acceptJobReviewOffer(agent: AgentContext, offerId: string)
   const result = await prisma.$transaction(async (tx) => {
     const offer = await tx.jobReviewOffer.findUnique({
       where: { id: offerId },
-      include: { submission: { select: { id: true, job: { select: { tenantId: true } } } } },
+      include: { submission: { select: { id: true, job: { select: { tenantId: true, projectId: true } } } } },
     });
     if (!offer || offer.submission.job.tenantId !== agent.tenantId) {
       throw new IssueApiError(404, "Review offer not found.");
     }
+    assertKeyProject(agent, offer.submission.job.projectId);
     if (offer.agentId !== agent.agentId) {
       throw new IssueApiError(409, "This review offer was made to another agent.");
     }
@@ -397,6 +398,7 @@ export async function reviewJobSubmission(
     if (!submission || submission.job.tenantId !== agent.tenantId) {
       throw new IssueApiError(404, "Submission not found.");
     }
+    assertKeyProject(agent, submission.job.projectId);
     if (submission.beneficiaryUserId === agent.ownerId) {
       throw new IssueApiError(409, "An agent cannot review a row its own owner submitted.");
     }

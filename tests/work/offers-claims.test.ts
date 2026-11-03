@@ -10,6 +10,8 @@ const db = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
   $transaction: vi.fn(),
   issueClaim: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), count: vi.fn() },
+  reviewOffer: { findUnique: vi.fn(), update: vi.fn() },
+  jobReviewOffer: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   issueBid: { findFirst: vi.fn(), updateMany: vi.fn() },
   bug: { update: vi.fn() },
   bugActivity: { createMany: vi.fn() },
@@ -25,6 +27,9 @@ vi.mock("@/lib/workflow", async (original) => {
 });
 
 import { acceptOffer, isOfferExpired, OFFER_TTL_MS } from "@/lib/agent-api/offer";
+import { acceptReviewOffer } from "@/lib/agent-api/review-offer";
+import { acceptJobReviewOffer } from "@/lib/jobs/review";
+import { AgentProjectError } from "@/lib/agents/require-agent";
 import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 import type { AgentContext } from "@/lib/agents/require-agent";
 
@@ -68,6 +73,43 @@ describe("accepting an offer", () => {
     await expect(acceptOffer({ ...agent, agentId: "agent-2" }, "claim-1")).rejects.toMatchObject({ status: 409 });
     await expect(acceptOffer({ ...agent, tenantId: "t2" }, "claim-1")).rejects.toMatchObject({ status: 404 });
     expect(db.bug.update).not.toHaveBeenCalled();
+  });
+
+  it("does not let a project-scoped key accept an offer in another project", async () => {
+    await expect(acceptOffer({ ...agent, projectId: "p2" }, "claim-1")).rejects.toBeInstanceOf(AgentProjectError);
+    expect(db.issueClaim.update).not.toHaveBeenCalled();
+    expect(db.bug.update).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the locked issue project before activating a claim", async () => {
+    db.issueClaim.findUnique
+      .mockResolvedValueOnce(offered())
+      .mockResolvedValueOnce(offered({ bug: { ...offered().bug, projectId: "p2" } }));
+    await expect(acceptOffer({ ...agent, projectId: "p1" }, "claim-1")).rejects.toBeInstanceOf(AgentProjectError);
+    expect(db.issueClaim.update).not.toHaveBeenCalled();
+    expect(db.bug.update).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it("rejects PR review offers from another project before changing their status", async () => {
+    db.reviewOffer.findUnique.mockResolvedValue({
+      id: "review-offer-1", agentId: agent.agentId, status: "offered", offeredAt: new Date(),
+      bugId: "bug-1", pullRequestUrl: "https://github.com/emerjent/ziki/pull/1", headSha: null,
+      bug: { tenantId: "t1", projectId: "p1" },
+    });
+    await expect(acceptReviewOffer({ ...agent, projectId: "p2" }, "review-offer-1")).rejects.toBeInstanceOf(AgentProjectError);
+    expect(db.reviewOffer.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects job review offers from another project before changing their status", async () => {
+    db.jobReviewOffer.findUnique.mockResolvedValue({
+      id: "job-review-offer-1", agentId: agent.agentId, status: "offered", offeredAt: new Date(),
+      submission: { id: "submission-1", job: { tenantId: "t1", projectId: "p1" } },
+    });
+    await expect(acceptJobReviewOffer({ ...agent, projectId: "p2" }, "job-review-offer-1")).rejects.toBeInstanceOf(AgentProjectError);
+    expect(db.jobReviewOffer.update).not.toHaveBeenCalled();
+    expect(db.jobReviewOffer.updateMany).not.toHaveBeenCalled();
   });
 
   it("refuses when the issue already has an active claim, including a race lost on the unique index", async () => {

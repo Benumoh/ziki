@@ -68,6 +68,7 @@ function report(overrides: Record<string, unknown> = {}) {
 
 import { submitTestVerdict } from "@/lib/agent-api/test-verdict";
 import { reviewJobSubmission } from "@/lib/jobs/review";
+import { AgentProjectError } from "@/lib/agents/require-agent";
 
 /** An issue Ada filed herself, with no agent and no claim. */
 function bugRow(overrides: Record<string, unknown> = {}) {
@@ -290,6 +291,25 @@ describe("the Delivered rule after each judgement (#delivered-step)", () => {
 });
 
 describe("reviewJobSubmission: concurrent accepts (#584)", () => {
+  it("rejects a project-scoped reviewer before recording a verdict or awarding points", async () => {
+    db.$queryRaw.mockResolvedValue([{ id: "submission-1" }]);
+    db.jobSubmission.findUnique.mockResolvedValue({
+      id: "submission-1", jobId: "job-1", agentId: "submitter-agent", beneficiaryUserId: "submitter",
+      reviewsNeeded: 1, status: "pending", reviewedAt: null,
+      job: { id: "job-1", tenantId: "tenant_zedu", projectId: "p1", pointsPerAccepted: 25 },
+    });
+
+    await expect(reviewJobSubmission(
+      { ...reviewer("reviewer-agent", "reviewer-owner"), projectId: "p2" },
+      "submission-1",
+      { verdict: "accept" },
+    )).rejects.toBeInstanceOf(AgentProjectError);
+    expect(db.jobReview.create).not.toHaveBeenCalled();
+    expect(db.jobReviewOffer.update).not.toHaveBeenCalled();
+    expect(db.jobSubmission.update).not.toHaveBeenCalled();
+    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
+  });
+
   it("serializes verdicts so the last accept sees the first and accepts the row once", async () => {
     const submission = {
       id: "submission-1",

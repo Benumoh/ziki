@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { AgentContext } from "@/lib/agents/require-agent";
+import { assertKeyProject, type AgentContext } from "@/lib/agents/require-agent";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
 import { workflowFor } from "@/lib/workflow";
@@ -102,11 +102,13 @@ export async function acceptOffer(agent: AgentContext, claimId: string) {
     const result = await prisma.$transaction(async (tx) => {
       const claim = await tx.issueClaim.findUnique({ where: { id: claimId }, include: { beneficiary: { select: { name: true } }, bug: { select: { id: true, title: true, substatus: true, assigneeId: true, tenantId: true, projectId: true, areaId: true, voteCount: true, assignee: { select: { name: true } } } } } });
       if (!claim || claim.bug.tenantId !== agent.tenantId) throw new IssueApiError(404, "Offer not found.");
+      assertKeyProject(agent, claim.bug.projectId);
       const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Bug" WHERE "id" = ${claim.bugId} AND "tenantId" = ${agent.tenantId} FOR UPDATE`;
       if (!locked.length) throw new IssueApiError(404, "Offer not found.");
       await tx.$queryRaw`SELECT "id" FROM "IssueClaim" WHERE "id" = ${claimId} FOR UPDATE`;
       const fresh = await tx.issueClaim.findUnique({ where: { id: claimId }, include: { beneficiary: { select: { name: true } }, bug: { select: { id: true, title: true, substatus: true, assigneeId: true, tenantId: true, projectId: true, areaId: true, voteCount: true, assignee: { select: { name: true } } } } } });
       if (!fresh || fresh.agentId !== agent.agentId) throw new IssueApiError(409, "This offer is no longer available to this agent.");
+      assertKeyProject(agent, fresh.bug.projectId);
       if (fresh.status === "released" && fresh.releaseReason === "expired") throw new IssueApiError(410, "This offer expired and has been released.");
       if (fresh.status !== "offered" || fresh.releasedAt) throw new IssueApiError(409, "This offer is no longer available to this agent.");
 
