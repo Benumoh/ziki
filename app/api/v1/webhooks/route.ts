@@ -1,17 +1,12 @@
 import { createMethodNotAllowed, createOptions } from "@/lib/agent-api/http-errors";
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
 import { agentIssueRequest, issueJson } from "@/lib/agent-api/issues";
 import { checkSsrf } from "@/lib/webhooks/ssrf";
 import { generateSigningSecret, encryptSigningSecret } from "@/lib/webhooks/sign";
 import { createSubscriptionRecord, normalizeSubscriptionEvents } from "@/lib/webhooks/manage";
 import { prisma } from "@/lib/prisma";
 import { deliverySummaries } from "@/lib/webhooks/history";
-
-const createWebhookSchema = z.object({
-  url: z.string().url().max(2048),
-  events: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
-}).strict();
+import { createWebhookSchema, webhookValidationFailure } from "@/lib/webhooks/validation";
 
 /**
  * GET  /api/v1/webhooks     — list the caller's webhook subscriptions.
@@ -61,7 +56,10 @@ export async function POST(request: NextRequest) {
   return agentIssueRequest(request, "webhooks.create", "working", null, async (agent) => {
     const body = await issueJson(request);
     const parsed = createWebhookSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: "Send a valid webhook URL." }, { status: 400 });
+    if (!parsed.success) {
+      const failure = webhookValidationFailure(parsed.error);
+      return NextResponse.json(failure.body, { status: failure.status });
+    }
     const input = parsed.data;
 
     const ssrf = await checkSsrf(input.url);

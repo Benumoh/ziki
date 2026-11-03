@@ -25,6 +25,7 @@ import { repairPullRequestSchema } from "@/lib/agent-api/repair-pull-request";
 import { pullRequestReportSchema } from "@/lib/validations/pull-request-report";
 import { deploymentSchema } from "@/lib/agent-api/deployment";
 import { archiveIdeaSchema, withdrawIdeaSchema } from "@/lib/idea-archive";
+import { createWebhookSchema, webhookValidationFailure } from "@/lib/webhooks/validation";
 
 /** The HTTP contract agents rely on: unknown routes and methods answer JSON errors with the allowed methods, and every MCP/CLI tool sends exactly the fields its route accepts. */
 describe("agent API HTTP errors", () => {
@@ -56,6 +57,44 @@ describe("agent API HTTP errors", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
     expect(response.body).toBeNull();
+  });
+});
+
+describe("webhook validation errors", () => {
+  const failureFor = (input: unknown) => {
+    const parsed = createWebhookSchema.safeParse(input);
+    if (parsed.success) throw new Error("Expected invalid webhook input.");
+    return webhookValidationFailure(parsed.error);
+  };
+
+  it("names an invalid URL", () => {
+    expect(failureFor({ url: "not a url" })).toMatchObject({
+      status: 400,
+      body: { error: "invalid_request", field: "url", message: expect.any(String) },
+    });
+  });
+
+  it("names the index of an invalid event", () => {
+    expect(failureFor({ url: "https://example.com/hook", events: ["issue.created", ""] })).toMatchObject({
+      status: 400,
+      body: { error: "invalid_request", field: "events.1", message: expect.any(String) },
+    });
+  });
+
+  it("names unexpected strict-schema fields", () => {
+    expect(failureFor({ url: "https://example.com/hook", secret: "hidden" })).toMatchObject({
+      status: 400,
+      body: { error: "invalid_request", field: "secret", message: expect.any(String) },
+    });
+  });
+
+  it("returns a distinct message for each invalid field", () => {
+    const messages = [
+      failureFor({ url: "invalid" }).body.message,
+      failureFor({ url: "https://example.com/hook", events: [""] }).body.message,
+      failureFor({ url: "https://example.com/hook", unknown: true }).body.message,
+    ];
+    expect(new Set(messages).size).toBe(3);
   });
 });
 
