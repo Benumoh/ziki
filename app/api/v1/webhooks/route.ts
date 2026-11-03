@@ -4,7 +4,7 @@ import { z } from "zod";
 import { agentIssueRequest, issueJson } from "@/lib/agent-api/issues";
 import { checkSsrf } from "@/lib/webhooks/ssrf";
 import { generateSigningSecret, encryptSigningSecret } from "@/lib/webhooks/sign";
-import { createSubscriptionRecord, normalizeSubscriptionEvents } from "@/lib/webhooks/manage";
+import { createSubscriptionRecord, validateSubscriptionEvents } from "@/lib/webhooks/manage";
 import { prisma } from "@/lib/prisma";
 import { deliverySummaries } from "@/lib/webhooks/history";
 
@@ -64,6 +64,15 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return NextResponse.json({ error: "Send a valid webhook URL." }, { status: 400 });
     const input = parsed.data;
 
+    const eventValidation = validateSubscriptionEvents(input.events);
+    if (!eventValidation.ok) {
+      const invalid = eventValidation.invalidEvents.join(", ");
+      return NextResponse.json({
+        error: `Unknown webhook event type${eventValidation.invalidEvents.length === 1 ? "" : "s"}: ${invalid}.`,
+        validTypes: eventValidation.validTypes,
+      }, { status: 400 });
+    }
+
     const ssrf = await checkSsrf(input.url);
     if (!ssrf.ok) {
       return NextResponse.json({ error: ssrf.reason }, { status: 422 });
@@ -76,7 +85,7 @@ export async function POST(request: NextRequest) {
       const result = await createSubscriptionRecord(prisma, {
         agentId: agent.agentId,
         url: input.url,
-        events: normalizeSubscriptionEvents(input.events),
+        events: eventValidation.events,
         signingSecretEncrypted,
       });
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });

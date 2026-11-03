@@ -6,7 +6,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: { bug: { findFirst } } }));
 
 import { AgentProjectError } from "@/lib/agents/require-agent";
 import { scopeEventFilters, type EventFilters } from "@/lib/agent-api/events";
-import { createSubscriptionRecord, MAX_SUBSCRIPTIONS_PER_AGENT } from "@/lib/webhooks/manage";
+import { createSubscriptionRecord, MAX_SUBSCRIPTIONS_PER_AGENT, validateSubscriptionEvents } from "@/lib/webhooks/manage";
 import { checkSsrf } from "@/lib/webhooks/ssrf";
 
 const scoped = { tenantId: "tenant-a", projectId: "proj-ziki", projectSlug: "ziki" };
@@ -76,6 +76,18 @@ beforeEach(() => {
 });
 
 describe("webhook subscription limits (#512)", () => {
+  it("accepts only event-feed types and returns the valid names for unknown filters (#500)", () => {
+    expect(validateSubscriptionEvents([" idea.created ", "idea.created"])).toEqual({ ok: true, events: ["idea.created"] });
+
+    const result = validateSubscriptionEvents(["issue.creatd"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.invalidEvents).toEqual(["issue.creatd"]);
+      expect(result.validTypes).toContain("idea.created");
+      expect(result.validTypes).not.toContain("issue.creatd");
+    }
+  });
+
   it("refuses the fourth subscription for one agent", async () => {
     db.webhookSubscription.count.mockResolvedValue(MAX_SUBSCRIPTIONS_PER_AGENT);
     const result = await createSubscriptionRecord(db as never, input);

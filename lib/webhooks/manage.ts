@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { AGENT_EVENT_TYPES } from "@/lib/agent-api/event-types";
 
 /**
  * Webhook subscription limits (#512).
@@ -28,6 +29,19 @@ export type CreateSubscriptionResult =
 export function normalizeSubscriptionEvents(events: readonly string[] | undefined): string[] {
   if (!events) return [];
   return [...new Set(events.map((event) => event.trim()).filter(Boolean))];
+}
+
+export type SubscriptionEventValidation =
+  | { ok: true; events: string[] }
+  | { ok: false; invalidEvents: string[]; validTypes: typeof AGENT_EVENT_TYPES };
+
+/** Reject filters that can never match an event published to the feed. */
+export function validateSubscriptionEvents(events: readonly string[] | undefined): SubscriptionEventValidation {
+  const normalized = normalizeSubscriptionEvents(events);
+  const known = new Set<string>(AGENT_EVENT_TYPES);
+  const invalidEvents = normalized.filter((event) => !known.has(event));
+  if (invalidEvents.length) return { ok: false, invalidEvents, validTypes: AGENT_EVENT_TYPES };
+  return { ok: true, events: normalized };
 }
 
 export async function createSubscriptionRecord(

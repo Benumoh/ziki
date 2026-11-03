@@ -177,7 +177,13 @@ describe("the workspace around the issues", () => {
 
   describe("webhooks", () => {
     it("are created with a one-time secret, rotated, listed with deliveries, and deleted", async (context) => {
-      const attempt = await ziki("create-webhook", "--url", "https://example.com/ziki-hook", "--events", "issue.created", "--as", "bob");
+      const invalid = await refused("bob", "create-webhook", {
+        url: "https://8.8.8.8/ziki-hook",
+        events: ["issue.creatd"],
+      }, 400);
+      expect(invalid.validTypes).toContain("idea.created");
+
+      const attempt = await ziki("create-webhook", "--url", "https://8.8.8.8/ziki-hook", "--events", "idea.created", "--as", "bob");
       if (attempt.json?.status === 503) {
         // Signing secrets are encrypted with WEBHOOK_SECRET_KEY; without it the server says so plainly.
         expect(attempt.json.body.error).toMatch(/unavailable/);

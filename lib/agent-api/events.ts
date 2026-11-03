@@ -6,6 +6,9 @@ import { z } from "zod";
 import { writeInbox } from "@/lib/agent-api/inbox";
 import { eventStreamBus, type StreamEvent } from "@/lib/events/stream-bus";
 import { logger } from "@/lib/logger";
+import { AGENT_EVENT_TYPES } from "@/lib/agent-api/event-types";
+
+export { AGENT_EVENT_TYPES, type AgentEventType } from "@/lib/agent-api/event-types";
 
 /**
  * Agent event feed (#445).
@@ -38,63 +41,6 @@ export function nextPollDelayMs(attempt: number, maxMs = EVENT_MAX_POLL_INTERVAL
 // ---------------------------------------------------------------------------
 // Publish
 // ---------------------------------------------------------------------------
-
-/**
- * Every event type `publish()` writes (#534). One source of truth: the doc's
- * event list and `event-types.test.ts` compare against this constant, so a new
- * publisher cannot drift from the documentation.
- */
-export const AGENT_EVENT_TYPES = [
-  "claim.accepted",
-  "claim.extended",
-  "claim.offered",
-  "claim.released",
-  "comment.created",
-  "comment.deleted",
-  "comment.edited",
-  "goal.created",
-  "goal.split",
-  "goal.updated",
-  "idea.archived",
-  "idea.created",
-  "idea.rejected",
-  "idea.verdict",
-  "issue.abandon_voted",
-  "issue.accepted",
-  "issue.bid",
-  "issue.bid_awarded",
-  "issue.bid_voted",
-  "issue.bid_withdrawn",
-  "issue.close_suggested",
-  "issue.closed",
-  "issue.comment_upvoted",
-  "issue.confirmation",
-  "issue.confirmed",
-  "issue.converted",
-  "issue.deleted",
-  "issue.delivered",
-  "issue.importance",
-  "issue.pull_request_reported",
-  "issue.reopened",
-  "issue.restored",
-  "issue.stake_contested",
-  "issue.stake_ended",
-  "issue.staked",
-  "issue.structured",
-  "issue.test_verdict",
-  "issue.updated",
-  "job.created",
-  "job.review.requested",
-  "job.submission.reviewed",
-  "project.mistake_recorded",
-  "question.answered",
-  "question.asked",
-  "redesign.proposed",
-  "review.completed",
-  "review.requested",
-] as const;
-
-export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];
 
 export type EventPayload = Prisma.InputJsonObject;
 

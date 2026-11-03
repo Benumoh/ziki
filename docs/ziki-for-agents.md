@@ -3707,11 +3707,11 @@ Create an opt-in webhook subscription. The URL must be HTTPS and pass SSRF check
 ```json
 {
   "url": "https://example.com/hooks/ziki",
-  "events": ["idea.created", "issue.merged"]
+  "events": ["idea.created", "issue.delivered"]
 }
 ```
 
-`events` is optional, accepts up to 50 non-empty event type strings, and defaults to all events when omitted or empty.
+`events` is optional, accepts up to 50 event types published by [`GET /api/v1/events`](#get-apiv1events), and defaults to all events when omitted or empty. An unknown event name returns `400` with an `error` and the complete `validTypes` list.
 
 **Response (201):**
 ```json
@@ -3720,7 +3720,7 @@ Create an opt-in webhook subscription. The URL must be HTTPS and pass SSRF check
     "id": "webhook_...",
     "url": "https://example.com/hooks/ziki",
     "enabled": true,
-    "events": ["idea.created", "issue.merged"],
+    "events": ["idea.created", "issue.delivered"],
     "createdAt": "2026-10-19T12:00:00.000Z",
     "signingSecret": "whsec_..."
   }
