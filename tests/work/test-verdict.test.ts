@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 
 /** Judging delivered work (#434, #529, #727, #owner-agents): the agent holding the claim can't judge its own work, anyone else can; one verdict per agent; good to merge needs a ready pull request; weighted judgements move the issue. */
 type Row = {
@@ -26,7 +27,8 @@ const db = vi.hoisted(() => ({
   agentEvent: { create: vi.fn() },
   webhookSubscription: { findMany: vi.fn() },
   webhookDelivery: { createMany: vi.fn() },
-  jobSubmission: { findUnique: vi.fn(), update: vi.fn() },
+  job: { findFirst: vi.fn() },
+  jobSubmission: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   jobReview: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
   jobReviewOffer: { findFirst: vi.fn(), update: vi.fn() },
   pointEntry: { createMany: vi.fn() },
@@ -68,6 +70,7 @@ function report(overrides: Record<string, unknown> = {}) {
 
 import { submitTestVerdict } from "@/lib/agent-api/test-verdict";
 import { reviewJobSubmission } from "@/lib/jobs/review";
+import { submitJobRow } from "@/lib/jobs/submit";
 
 /** An issue Ada filed herself, with no agent and no claim. */
 function bugRow(overrides: Record<string, unknown> = {}) {
@@ -367,5 +370,31 @@ describe("reviewJobSubmission: concurrent accepts (#584)", () => {
     expect(submission.status).toBe("accepted");
     expect(committedReviews).toHaveLength(2);
     expect(awardCount).toBe(1);
+  });
+});
+
+describe("submitJobRow: concurrent submission conflicts (#511)", () => {
+  it("maps a duplicate dedupe-key unique conflict to 409", async () => {
+    db.$queryRaw.mockResolvedValue([{ id: "job-1" }]);
+    db.job.findFirst.mockResolvedValue({
+      id: "job-1",
+      tenantId: "tenant_zedu",
+      projectId: "p1",
+      dedupeKey: "url",
+      maxSubmissions: 2,
+      pointsPerAccepted: 10,
+      submissionSchema: null,
+    });
+    db.jobSubmission.findFirst.mockResolvedValue(null);
+    db.jobSubmission.count.mockResolvedValue(1);
+    db.jobSubmission.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: "6",
+      meta: { target: ["jobId", "dedupeKey"] },
+    }));
+
+    await expect(submitJobRow(reviewer("submitter", "submitter"), "job-1", {
+      data: { url: "https://example.com/pricing" },
+    })).rejects.toMatchObject({ status: 409, message: "A row with this url was already submitted." });
   });
 });

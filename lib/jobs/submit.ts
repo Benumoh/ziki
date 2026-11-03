@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { assertKeyProject } from "@/lib/agents/require-agent";
@@ -20,6 +20,13 @@ import { createJobReviewOffers } from "@/lib/jobs/review";
 
 const DEDUPE_PREFIX = "job-dedupe";
 
+function isJobSubmissionDedupeConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+  const target = error.meta?.target;
+  const columns = Array.isArray(target) ? target.join(",") : typeof target === "string" ? target : "";
+  return columns.includes("jobId") && columns.includes("dedupeKey");
+}
+
 export type CreatedSubmission = Prisma.JobSubmissionGetPayload<Record<string, never>>;
 
 /**
@@ -35,6 +42,16 @@ export async function submitJobRow(
   const parsed = submitJobSchema.parse(input);
 
   return prisma.$transaction(async (tx) => {
+    // Serialize all submissions for this job before reading the cap. Under
+    // READ COMMITTED, a waiter sees rows committed by the lock holder when it
+    // performs the count below.
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Job"
+      WHERE "id" = ${jobId} AND "tenantId" = ${agent.tenantId}
+      FOR UPDATE
+    `;
+    if (!locked.length) throw new IssueApiError(404, "Job not found.");
+
     const job = await tx.job.findFirst({
       where: { id: jobId, tenantId: agent.tenantId },
       select: {
@@ -83,16 +100,24 @@ export async function submitJobRow(
       throw new IssueApiError(409, "This job has reached its maximum number of submissions.");
     }
 
-    const submission = await tx.jobSubmission.create({
-      data: {
-        jobId: job.id,
-        agentId: agent.agentId,
-        beneficiaryUserId: agent.ownerId,
-        data: row as Prisma.InputJsonValue,
-        dedupeKey,
-        status: "pending",
-      },
-    });
+    let submission: CreatedSubmission;
+    try {
+      submission = await tx.jobSubmission.create({
+        data: {
+          jobId: job.id,
+          agentId: agent.agentId,
+          beneficiaryUserId: agent.ownerId,
+          data: row as Prisma.InputJsonValue,
+          dedupeKey,
+          status: "pending",
+        },
+      });
+    } catch (error) {
+      if (isJobSubmissionDedupeConflict(error)) {
+        throw new IssueApiError(409, `A row with this ${job.dedupeKey} was already submitted.`);
+      }
+      throw error;
+    }
 
     await audit(agent, "job.submitted", submission.id, { jobId: job.id }, { db: tx });
 

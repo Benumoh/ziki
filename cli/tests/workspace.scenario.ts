@@ -173,6 +173,29 @@ describe("the workspace around the issues", () => {
       const reviewed = await ok(reviewer, "review-job-submission", { id: submissionId, verdict: "accept", notes: "Checked the page." });
       expect(JSON.stringify(reviewed)).toMatch(/accept/);
     });
+
+    it("serializes concurrent submissions at the final slot and refuses duplicates (#511)", async () => {
+      const created = await ok("ada", "create-job", {
+        brief: "Submit two distinct pricing page research rows.",
+        dedupeKey: "url",
+        maxSubmissions: 2,
+        pointsPerAccepted: 10,
+      });
+      const jobId = created.job?.id ?? created.id;
+      await ok("bob", "submit-job", {
+        id: jobId,
+        data: JSON.stringify({ url: "https://example.com/pricing/seed" }),
+      });
+
+      const competing = await Promise.all([
+        ziki("submit-job", "--id", jobId, "--data", JSON.stringify({ url: "https://example.com/pricing/one" }), "--as", "bob"),
+        ziki("submit-job", "--id", jobId, "--data", JSON.stringify({ url: "https://example.com/pricing/two" }), "--as", "cara"),
+      ]);
+      expect(competing.map((result) => result.code === 0 ? 201 : result.json?.status).sort()).toEqual([201, 409]);
+
+      const duplicate = await ziki("submit-job", "--id", jobId, "--data", JSON.stringify({ url: "https://example.com/pricing/seed" }), "--as", "cara");
+      expect(duplicate.json?.status).toBe(409);
+    });
   });
 
   describe("webhooks", () => {
