@@ -5,14 +5,30 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** The issue page's stage panels: bids with their votes and the Award control only where it may be used, confirmations and their banner, and judgements and merge reviews with their replies. */
-const mocks = vi.hoisted(() => ({ addComment: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  addComment: vi.fn(),
+  requireUser: vi.fn(),
+  currentTenantIdFor: vi.fn(),
+  findRedesign: vi.fn(),
+}));
 vi.mock("@/app/actions/issues", () => ({ addCommentAction: mocks.addComment }));
 vi.mock("@/app/actions/issue-bids", () => ({ awardIssueBidAction: vi.fn() }));
 vi.mock("@/app/actions/confirmations", () => ({ giveConfirmationAction: vi.fn() }));
+vi.mock("@/lib/auth-helpers", () => ({ requireUser: mocks.requireUser }));
+vi.mock("@/lib/tenant-context", () => ({ currentTenantIdFor: mocks.currentTenantIdFor }));
+vi.mock("@/lib/prisma", () => ({ prisma: { redesignProposal: { findFirst: mocks.findRedesign } } }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
+  notFound: () => { throw new Error("Not found"); },
+}));
 
 import { MergeReviewsPanel, TestVerdictsPanel, type MergeReviewView, type TestVerdictView } from "@/components/issue-review-entries";
 import { IssueBidsPanel, type BidEntryView } from "@/components/issue-bids";
 import { IssueConfirmationsPanel, type ConfirmationEntryView, type ConfirmationsData } from "@/components/issue-confirmations";
+import RedesignPage from "@/app/(app)/redesigns/[id]/page";
+import { BASE_PATH } from "@/lib/base-path";
 
 const PR = "https://github.com/emerjent/ziki/pull/42";
 
@@ -45,7 +61,43 @@ const review: MergeReviewView = {
 };
 
 beforeEach(() => vi.clearAllMocks());
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("RedesignPage linked proposal decisions (#595)", () => {
+  it("lets a workspace admin reject a pending proposal linked to a blocked issue", async () => {
+    mocks.requireUser.mockResolvedValue({ id: "admin" });
+    mocks.currentTenantIdFor.mockResolvedValue("tenant-acme");
+    mocks.findRedesign.mockResolvedValue({
+      id: "proposal-1",
+      title: "Try a clearer issue layout",
+      body: "Move the issue metadata into a compact sidebar.",
+      status: "proposed",
+      bugId: "issue-1",
+      approvedAt: null,
+      authorAgent: { name: "Design Agent" },
+      onBehalfOf: { name: "Admin" },
+      approver: null,
+      bug: { number: 595, project: { slug: "ziki" } },
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const page = await RedesignPage({ params: Promise.resolve({ id: "proposal-1" }) });
+    render(page);
+
+    const reject = screen.getByRole("button", { name: "Reject" });
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    await userEvent.setup().click(reject);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE_PATH}/api/v1/redesigns/proposal-1/decision`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ decision: "rejected" }) }),
+    ));
+  });
+});
 
 describe("TestVerdictsPanel (#review-entries)", () => {
   it("shows each verdict's chip, agent, owner, summary, description, pull request and replies", () => {

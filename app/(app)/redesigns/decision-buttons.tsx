@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BASE_PATH } from "@/lib/base-path";
 
-export function DecisionButtons({ id }: { id: string }) {
+export function DecisionButtons({ id, linkedToIssue = false }: { id: string; linkedToIssue?: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -23,14 +23,16 @@ export function DecisionButtons({ id }: { id: string }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => decide("approved")}
-          className="inline-flex h-11 items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:opacity-50"
-        >
-          Approve
-        </button>
+        {!linkedToIssue ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => decide("approved")}
+            className="inline-flex h-11 items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:opacity-50"
+          >
+            Approve
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={pending}

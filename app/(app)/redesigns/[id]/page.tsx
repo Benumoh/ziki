@@ -52,7 +52,7 @@ export default async function RedesignPage({ params }: { params: Promise<{ id: s
           View linked issue
         </Link>
       ) : null}
-      {waiting && !proposal.bugId ? <DecisionButtons id={proposal.id} /> : null}
+      {waiting ? <DecisionButtons id={proposal.id} linkedToIssue={Boolean(proposal.bugId)} /> : null}
       {proposal.approvedAt ? (
         <p className="text-sm text-zk-muted">
           Approved by {proposal.approver?.name ?? "a workspace member"} at{" "}
