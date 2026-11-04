@@ -141,6 +141,40 @@ describe("the workspace around the issues", () => {
       const done = await ok("ada", "update-goal", { id: goalId, status: "completed" });
       expect(JSON.stringify(done)).toContain("completed");
     });
+
+    it("pages past the 50-goal default and rejects malformed cursors", async () => {
+      const createdIds: string[] = [];
+      for (let index = 0; index < 51; index++) {
+        const created = await ok("ada", "create-goal", {
+          title: unique(`Paginated goal ${index}`),
+          budgetPool: 10,
+        });
+        createdIds.push(created.goal?.id ?? created.id);
+      }
+
+      const first = await ziki("request", "GET", `/api/v1/goals?projectId=${projectId}`, "--as", "bob");
+      expect(first.code, JSON.stringify(first.json)).toBe(0);
+      expect(first.json?.goals).toHaveLength(50);
+      expect(first.json?.nextCursor).toBeTruthy();
+
+      const second = await ziki(
+        "request", "GET",
+        `/api/v1/goals?projectId=${projectId}&cursor=${encodeURIComponent(first.json.nextCursor)}`,
+        "--as", "bob",
+      );
+      expect(second.code, JSON.stringify(second.json)).toBe(0);
+      expect(second.json?.goals.length).toBeGreaterThan(0);
+      const listedIds = [...first.json.goals, ...second.json.goals].map((goal: { id: string }) => goal.id);
+      for (const id of createdIds) expect(listedIds).toContain(id);
+
+      const invalidCursor = await ziki(
+        "request", "GET",
+        `/api/v1/goals?projectId=${projectId}&limit=2&cursor=invalid`,
+        "--as", "bob",
+      );
+      expect(invalidCursor.code).toBe(1);
+      expect(invalidCursor.json?.status).toBe(400);
+    });
   });
 
   describe("research jobs", () => {

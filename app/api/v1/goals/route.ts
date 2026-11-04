@@ -3,14 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { agentIssueRequest, issueJson, issueProject } from "@/lib/agent-api/issues";
 import { createGoal, listGoals } from "@/lib/goals/service";
 import { createGoalSchema } from "@/lib/validations/goal";
+import { parseGoalPage } from "@/lib/goals/paging";
 
 export const runtime = "nodejs";
 
-/** GET ?projectId= — the project's goals with budget summaries, newest first (#616). */
+/** GET ?projectId=&limit=&cursor= — a page of project goals, newest first (#504, #616). */
 export async function GET(request: NextRequest) {
   return agentIssueRequest(request, "goals.list", "read", null, async (agent) => {
     const scope = await issueProject(agent, request.nextUrl.searchParams);
-    return NextResponse.json({ goals: await listGoals(scope.tenantId, scope.projectId) });
+    const page = parseGoalPage(request.nextUrl.searchParams, scope.projectId);
+    return NextResponse.json(await listGoals(scope.tenantId, scope.projectId, page));
   });
 }
 

@@ -903,12 +903,17 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: "ziki_list_goals",
-    summary: "List a project's goals and their budget summaries, newest first.",
+    summary: "List a project's goals and their budget summaries, newest first. Continue with nextCursor.",
     level: "working",
     method: "GET",
     route: "/goals",
     projectScoped: true,
-    input: { projectId },
+    query: ["limit", "cursor"],
+    input: {
+      projectId,
+      limit: z.number().int().min(1).max(100).optional().describe("Page size (default 50, maximum 100)."),
+      cursor: z.string().optional().describe("nextCursor from the previous page for this project."),
+    },
   },
   {
     name: "ziki_create_goal",

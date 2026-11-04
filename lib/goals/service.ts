@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_GOAL_PAGE_SIZE, encodeGoalCursor, type GoalCursor } from "@/lib/goals/paging";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { assertKeyProject } from "@/lib/agents/require-agent";
 import { IssueApiError } from "@/lib/agent-api/errors";
@@ -171,17 +172,37 @@ export async function createGoal(agent: AgentContext, input: CreateGoalInput): P
  *
  * @param tenantId - Tenant the goals belong to.
  * @param projectId - Project whose goals to list.
- * @param take - Row cap (default 50).
- * @returns Goal rows with `budget`, newest first.
+ * @param page - Page size and cursor, scoped to this project.
+ * @returns Goal rows with `budget`, newest first, and the next cursor.
  */
-export async function listGoals(tenantId: string, projectId: string, take = 50): Promise<GoalWithBudget[]> {
-  const goals = await prisma.goal.findMany({
-    where: { tenantId, projectId },
+export async function listGoals(
+  tenantId: string,
+  projectId: string,
+  page: { limit: number; cursor: GoalCursor | null } = { limit: DEFAULT_GOAL_PAGE_SIZE, cursor: null },
+): Promise<{ goals: GoalWithBudget[]; nextCursor: string | null }> {
+  const rows = await prisma.goal.findMany({
+    where: {
+      tenantId,
+      projectId,
+      ...(page.cursor ? {
+        OR: [
+          { createdAt: { lt: page.cursor.createdAt } },
+          { createdAt: page.cursor.createdAt, id: { lt: page.cursor.id } },
+        ],
+      } : {}),
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take,
+    take: page.limit + 1,
     select: goalSelect,
   });
-  return goals.map(withBudget);
+  const goals = rows.slice(0, page.limit).map(withBudget);
+  const last = goals[goals.length - 1];
+  return {
+    goals,
+    nextCursor: rows.length > page.limit && last
+      ? encodeGoalCursor({ projectId, createdAt: last.createdAt, id: last.id })
+      : null,
+  };
 }
 
 /**

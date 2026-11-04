@@ -1442,10 +1442,12 @@ An expired or unassigned mission returns `409`.
 
 **Level:** `working`
 
-List the project's goals with their budget summaries, newest first. A goal owns a **budget pool** of credits and splits it across issues, nested goals, and agent deliverables.
+List the project's goals with their budget summaries, newest first. A goal owns a **budget pool** of credits and splits it across issues, nested goals, and agent deliverables. The list is keyset-paginated; pass `nextCursor` back as `cursor` to continue.
 
 **Query Parameters:**
 - `projectId` (required): the project whose goals to list
+- `limit` (optional): whole number from 1 to 100; defaults to 50
+- `cursor` (optional): the `nextCursor` returned for this same project
 
 **Response (200):**
 ```json
@@ -1468,9 +1470,12 @@ List the project's goals with their budget summaries, newest first. A goal owns 
       "createdAt": "2026-10-20T10:00:00.000Z",
       "updatedAt": "2026-10-20T11:00:00.000Z"
     }
-  ]
+  ],
+  "nextCursor": "<opaque cursor, or null on the last page>"
 }
 ```
+
+The cursor orders by `createdAt` and then `id`, newest first. It is scoped to the project that returned it; malformed cursors and cursors from another project return `400`.
 
 `splitStatus` is one of `no-budget` (the pool is 0), `unfunded` (nothing split yet), `partially-split`, or `fully-split`.
 

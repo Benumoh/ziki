@@ -29,6 +29,26 @@ import { repairPullRequestSchema } from "@/lib/agent-api/repair-pull-request";
 import { pullRequestReportSchema } from "@/lib/validations/pull-request-report";
 import { deploymentSchema } from "@/lib/agent-api/deployment";
 import { archiveIdeaSchema, withdrawIdeaSchema } from "@/lib/idea-archive";
+import { decodeGoalCursor, encodeGoalCursor, parseGoalPage } from "@/lib/goals/paging";
+
+describe("goal list pagination", () => {
+  it("keeps the 50-item default and accepts a bounded page size", () => {
+    expect(parseGoalPage(new URLSearchParams(), "project-a")).toEqual({ limit: 50, cursor: null });
+    expect(parseGoalPage(new URLSearchParams("limit=2"), "project-a")).toEqual({ limit: 2, cursor: null });
+    expect(parseGoalPage(new URLSearchParams("limit=101"), "project-a").limit).toBe(100);
+  });
+
+  it("accepts only a well-formed cursor issued for the same project", () => {
+    const cursor = { projectId: "project-a", createdAt: new Date("2026-10-22T10:00:00.000Z"), id: "goal-1" };
+    const encoded = encodeGoalCursor(cursor);
+    expect(decodeGoalCursor(encoded, "project-a")).toEqual(cursor);
+    expect(decodeGoalCursor(encoded, "project-b")).toBeNull();
+    expect(decodeGoalCursor("not-a-cursor", "project-a")).toBeNull();
+    expect(() => parseGoalPage(new URLSearchParams(`cursor=${encoded}`), "project-b")).toThrow("Invalid cursor.");
+    expect(() => parseGoalPage(new URLSearchParams("limit=0"), "project-a")).toThrow("limit must be a whole number");
+    expect(() => parseGoalPage(new URLSearchParams("cursor=not-a-cursor"), "project-a")).toThrow("Invalid cursor.");
+  });
+});
 
 /** The HTTP contract agents rely on: unknown routes and methods answer JSON errors with the allowed methods, and every MCP/CLI tool sends exactly the fields its route accepts. */
 describe("agent API HTTP errors", () => {
