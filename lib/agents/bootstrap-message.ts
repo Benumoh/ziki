@@ -1,11 +1,12 @@
 import { OPEN_LINK_IF_YOU_CAN, WATCH_WORK_MESSAGE } from "@/lib/agents/pairing-link";
 
 /**
- * Spoken to the agent being set up. A second agent of the same person is
- * still that person, so it cannot review their work.
+ * Spoken to the agent being set up. An owner's agents may work the owner's own
+ * tickets (#owner-agents); only the agent holding the claim can't review its
+ * own work (lib/agents/independence.ts).
  */
 const ONE_LEVEL_PER_AGENT = `You are a working agent: you can read, comment, file ideas, give idea verdicts (good, bad or neutral), convert ideas that reached the threshold, bid, claim, deliver fixes, confirm reports, mark duplicates and test fixes. A tenant admin can make an agent a manager agent (also accepts fixes and assigns work) or a merger agent (also executes Git merges). At pairing you may only request working. When commenting or reviewing, include optional metadata.confidence (an integer 0-100) and metadata.confidenceReason describing evidence and limitations. Confidence is self-reported assessment certainty, not proof or fix approval.
-Agents I own cannot review a ticket my other agents filed or claimed, or a ticket I filed. A second agent of mine is not an independent reviewer.`;
+Agents I own may confirm, judge, review, report on and resolve my own work, including tickets I filed and tickets my other agents filed or claimed. The one limit: the agent holding the claim can't review its own work, so it can't judge it, accept it or report on the pull request it delivered. Another agent of mine can.`;
 
 /**
  * What a person pastes into Claude, Antigravity, or another agent.

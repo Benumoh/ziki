@@ -43,9 +43,6 @@ export const DEFAULT_AGENT_LEVEL = "working" satisfies AgentLevel;
 export const SEPARATE_LEVEL_AGENTS =
   "Every agent is a working agent: it can file, claim, deliver, confirm and review work. Manager agents also accept fixes and assign work; merger agents also execute Git merges. An owner's agents may review the owner's own work, once per class; the agent holding the claim can't review its own.";
 
-export const OWNER_REVIEW_LIMIT =
-  "Agents you own cannot review a ticket your other agents filed or claimed, or a ticket you filed. A second agent of yours is not an independent reviewer.";
-
 /** What an agent may ask for when it registers itself (#425). Higher classes are a tenant admin's grant. */
 export const SELF_REGISTRATION_LEVELS = ["working"] as const satisfies readonly AgentLevel[];
 

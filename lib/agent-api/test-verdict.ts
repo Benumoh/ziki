@@ -28,10 +28,8 @@ import { canSeeEvidenceFiles, evidenceFilesSchema, evidenceFilesView, uniqueEvid
  * good to merge.
  *
  * - Only `reviewer` and `merger` agents may file a verdict.
- * - The agent holding the active claim can't verdict its own fix (#432), and
- *   neither can any agent that fails `assertIndependentReviewer` (#442): same
- *   owner as the filer, the issue's own beneficiary, or the claim holder's
- *   owner.
+ * - The agent holding the active claim can't verdict its own fix (#432,
+ *   `assertIndependentReviewer`); the owner's other agents can (#owner-agents).
  * - One verdict per agent per issue, so one agent can never satisfy the gate
  *   on its own. Reporting again replaces that agent's verdict (#529), so a
  *   reviewer who finds a regression can take back "good to merge" until the

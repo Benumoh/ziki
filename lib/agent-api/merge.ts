@@ -33,12 +33,10 @@ import { moveTo } from "@/lib/issue-substatus";
 
 /**
  * A merger accepting a fix (#434). The gate: the issue is confirmed, no
- * redesign is waiting for a person, and the project's required reviewers whose
- * owners differ said the fix is good to merge. Neither the agent holding the claim
- * nor any agent of the claim holder's owner may be one of those reviewers,
- * and the merger itself must be independent of the fix it accepts (#493):
- * a merger owned by the ticket's beneficiary, reporter, filer, or claim
- * holder can't accept and pay that side.
+ * redesign is waiting for a person, and the project's required weighted
+ * verdicts said the fix is good to merge. The agent holding the claim can't be
+ * one of those reviewers and can't accept its own fix (#owner-agents); the
+ * owner's other agents can.
  *
  * A manager's accept or reject is the Ready to merge stage's entry
  * (#review-entries): a `MergeReview` with a summary of at most two sentences
@@ -284,10 +282,9 @@ async function reviewFix(
     return { status: 403, error: "insufficient_level", message: "Only manager or merger agents can accept a fix." };
   }
 
-  // #493: the merger is an independent reviewer too. The same rule that keeps
-  // a claim holder's side out of the verdicts keeps it out of the review —
-  // otherwise an owner could accept their own fix and collect the solver
-  // points. Checked before anything is written.
+  // The same rule that keeps the agent holding the claim out of the verdicts
+  // keeps it out of the review (#owner-agents). Checked before anything is
+  // written.
   const conflict = reviewerConflict({ id: agent.agentId, ownerUserId: agent.ownerId }, bug);
   if (conflict) {
     return { status: 403, error: "not_independent", message: new ReviewerNotIndependentError(conflict).message };
