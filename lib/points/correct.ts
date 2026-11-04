@@ -49,6 +49,7 @@ export async function correct(
     points: -pointsNumber(entry.points),
     sourceKey: correctionSourceKey(entry.id),
     agentId: entry.agentId ?? null,
+    exact: true,
   });
 
   return { awarded, entryId: entry.id };

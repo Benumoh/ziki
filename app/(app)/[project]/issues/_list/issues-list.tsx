@@ -13,6 +13,9 @@ import { prisma } from "@/lib/prisma";
 import { getIssueTypes, getPlatforms } from "@/lib/lookups";
 
 import { PipelineSteps } from "@/components/pipeline-steps";
+import { loadYourCall } from "@/lib/your-call";
+import { YourCall } from "@/components/your-call";
+import { LightOnly } from "@/components/light-only";
 import { StageSidebar } from "@/components/stage-sidebar";
 import { StatusFilterChips } from "@/components/status-filter-chips";
 import { ToolbarFilterMenu, type ToolbarFilterGroup, type ToolbarFilterOption } from "@/components/toolbar-filter-menu";
@@ -120,6 +123,8 @@ type IdeasView = "new" | "drafts" | "rejected";
 const REJECTED_STATUS = "rejected";
 /** Delivered work that can't go live: the Merge · Error substatus (the latest pull request report says it can't merge). */
 const ERROR_STATUS = "error";
+/** Your call (#your-call): the issues the agents split on, a step of In Progress shown only while there are any. */
+const YOUR_CALL_STATUS = "your_call";
 /** Open issues that may already be done (#possibly-delivered): a manager's list to check and close. */
 const POSSIBLY_DELIVERED = POSSIBLY_DELIVERED_STATUS;
 const REJECTED_WHERE = { some: { verdict: "reject", undoneAt: null } } satisfies Prisma.IssueConfirmationListRelationFilter;
@@ -142,6 +147,8 @@ const STAGE_GROUPS = [
   { label: "In Progress", statuses: ["open", "in_progress", "closed", POSSIBLY_DELIVERED] },
   { label: "Delivered", statuses: ["done", "merge", "resolved", ERROR_STATUS] },
 ] as const;
+/** Where In Progress sits in STAGE_GROUPS: Your call belongs to it. */
+const IN_PROGRESS_STAGE = 1;
 
 /** A bug with head, antennae, segmented body and three pairs of legs. */
 const BUG_ICON_PATH =
@@ -337,6 +344,9 @@ export async function IssuesList({
             : "new";
   const isIdeasView = ideasView !== null;
   if (isIdeasView) where.id = { in: [] };
+  // Your call lists its own items (lib/your-call.ts), not issue rows.
+  const isYourCallView = statusParam === YOUR_CALL_STATUS && !isDeletedView;
+  if (isYourCallView) where.id = { in: [] };
   if (statusParam === REJECTED_STATUS && !isDeletedView) {
     where.confirmations = REJECTED_WHERE;
   }
@@ -888,7 +898,16 @@ export async function IssuesList({
 
   // The stage the page is on, and the status inside it, for the stage bar and the list on the left.
   const currentStatus = ideasView === "rejected" ? REJECTED_IDEAS_STATUS : isIdeasView ? IDEAS_STATUS : statusParam;
-  const stageIndex = isDeletedView ? -1 : STAGE_GROUPS.findIndex((group) => (group.statuses as readonly string[]).includes(currentStatus ?? ""));
+  const stageIndex = isDeletedView
+    ? -1
+    : isYourCallView
+      ? IN_PROGRESS_STAGE
+      : STAGE_GROUPS.findIndex((group) => (group.statuses as readonly string[]).includes(currentStatus ?? ""));
+  // Your call (#your-call): the issues the agents split on that this person has to settle. Its step sits above Open only while there
+  // are any, and only In Progress shows it, so the other views don't ask for it.
+  const yourCall = stageIndex !== IN_PROGRESS_STAGE || !tenantId || !projectId || allProjects || !userId
+    ? []
+    : await loadOrEmpty("your call", () => loadYourCall(projectId, { userId, isAdmin: Boolean(membershipRole && isOrganizationAdmin(membershipRole, effectiveRole)) }), []);
   const statusCount = (value: string) =>
     value === IDEAS_STATUS ? ideasCount : value === REJECTED_IDEAS_STATUS ? rejectedIdeasCount : value === ERROR_STATUS ? errorCount : value === POSSIBLY_DELIVERED ? possiblyDeliveredCount : countForStatus(value);
   const statusLink = (value: string) => (value === IDEAS_STATUS ? statusHref(null) : statusHref(value));
@@ -1269,12 +1288,18 @@ export async function IssuesList({
         {/* The Ideas stage has no sidebar: its Filter menu switches to Rejected ideas (#ideas-filter). */}
         {stageIndex >= 0 && !isIdeasView ? (
           <StageSidebar
-            steps={STAGE_GROUPS[stageIndex].statuses.map((value) => ({
-              label: value === IDEAS_STATUS ? "New ideas" : value === REJECTED_IDEAS_STATUS ? "Rejected ideas" : statusFilterLabel(value),
-              count: statusCount(value),
-              href: statusLink(value),
-              selected: value === currentStatus,
-            }))}
+            steps={[
+              // In Progress: Your call joins the top of the steps, in amber, only while the agents have split on something.
+              ...(stageIndex === IN_PROGRESS_STAGE && yourCall.length > 0
+                ? [{ label: "Your call", count: yourCall.length, href: statusLink(YOUR_CALL_STATUS), selected: isYourCallView, tone: "warn" as const }]
+                : []),
+              ...STAGE_GROUPS[stageIndex].statuses.map((value) => ({
+                label: value === IDEAS_STATUS ? "New ideas" : value === REJECTED_IDEAS_STATUS ? "Rejected ideas" : statusFilterLabel(value),
+                count: statusCount(value),
+                href: statusLink(value),
+                selected: value === currentStatus,
+              })),
+            ]}
           />
         ) : null}
         <div className="min-w-0 flex-1">
@@ -1284,7 +1309,8 @@ export async function IssuesList({
               <Link href={projectPath(slug, "/issues/bulk-close")} className="font-bold underline">Review and close</Link>
             </p>
           ) : null}
-          {listContent}
+          {/* Your call is light only (#your-call), whatever the theme setting. */}
+          {isYourCallView ? <><LightOnly /><YourCall items={yourCall} /></> : listContent}
         </div>
       </div>
     </div>

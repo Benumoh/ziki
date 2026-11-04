@@ -5,7 +5,14 @@ import Link from "next/link";
  * with its count. Only the selected one is highlighted. On narrow screens the
  * list runs across the top of the panel instead.
  */
-export type SidebarStep = { label: string; count: number; href: string; selected: boolean };
+export type SidebarStep = {
+  label: string;
+  count: number;
+  href: string;
+  selected: boolean;
+  /** warn: a step that asks for you (Your call, #your-call), drawn in amber so it catches the eye. */
+  tone?: "warn";
+};
 
 export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
   return (
@@ -30,9 +37,13 @@ export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
                     aria-hidden="true"
                     data-testid="stage-count"
                     className={`flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg px-1 font-mono text-[11px] font-semibold tabular-nums ${
-                      step.selected
-                        ? "bg-electric-blue-strong text-white ring-4 ring-electric-blue-strong/20"
-                        : "border-2 border-zk-border bg-zk-surface text-zk-muted group-hover:border-electric-blue-strong group-hover:text-zk-accent"
+                      step.tone === "warn"
+                        ? step.selected
+                          ? "bg-amber-500 text-white ring-4 ring-amber-500/25"
+                          : "border-2 border-amber-400 bg-amber-50 text-amber-700 shadow-[0_0_8px_1px_rgba(245,158,11,0.35)]"
+                        : step.selected
+                          ? "bg-electric-blue-strong text-white ring-4 ring-electric-blue-strong/20"
+                          : "border-2 border-zk-border bg-zk-surface text-zk-muted group-hover:border-electric-blue-strong group-hover:text-zk-accent"
                     }`}
                   >
                     {step.count}
@@ -40,8 +51,10 @@ export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
                   {last ? null : <span aria-hidden="true" className="my-1 min-h-5 w-0.5 flex-1 rounded-full bg-zk-border max-lg:hidden" />}
                 </span>
                 <span
-                  className={`flex min-h-7 min-w-0 flex-1 items-center self-start leading-tight max-lg:whitespace-nowrap text-sm group-hover:text-zk-accent ${
-                    step.selected ? "font-bold text-zk-text" : "font-medium text-zk-text2"
+                  className={`flex min-h-7 min-w-0 flex-1 items-center self-start leading-tight max-lg:whitespace-nowrap text-sm ${
+                    step.tone === "warn"
+                      ? `text-amber-700 group-hover:text-amber-800 ${step.selected ? "font-bold" : "font-semibold"}`
+                      : `group-hover:text-zk-accent ${step.selected ? "font-bold text-zk-text" : "font-medium text-zk-text2"}`
                   }`}
                 >
                   {step.label}

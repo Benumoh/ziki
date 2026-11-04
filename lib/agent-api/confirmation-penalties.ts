@@ -191,6 +191,7 @@ export async function penaliseConfirmation(agent: AgentContext, projectId: strin
         points,
         sourceKey: penaltySourceKey(target.id),
         agentId: agent.agentId,
+        exact: true,
       });
     }
 

@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { pointSourceKey, roundPoints, type PointRole } from "./rules";
+import { pointSourceKey, type PointRole } from "./rules";
 import { solverReward } from "./project-rewards";
+import { pointsMultiplierFor, scaledPoints } from "./multiplier";
 import { getPlatformRewardConfig } from "./platform-rewards";
 import { reportedClosedUnmerged } from "@/lib/agent-api/pull-request-report";
 
@@ -31,12 +32,20 @@ export type PointAward = {
    * it (the startup backfill); omit to stamp it now.
    */
   createdAt?: Date;
+  /**
+   * Store `points` as given, without the workspace's multiplier. Only for an
+   * amount already read from the ledger (a correction, a penalty), which was
+   * multiplied when it was first written.
+   */
+  exact?: boolean;
 };
 
 /** Writes `entry` unless an entry with its `sourceKey` exists. True if it was written. */
 export async function award(db: Db, entry: PointAward): Promise<boolean> {
+  const { exact, ...row } = entry;
+  const multiplier = exact ? 1 : await pointsMultiplierFor(db, entry.tenantId);
   const { count } = await db.pointEntry.createMany({
-    data: [{ ...entry, points: roundPoints(entry.points) }],
+    data: [{ ...row, points: scaledPoints(entry.points, multiplier) }],
     skipDuplicates: true,
   });
   return count > 0;

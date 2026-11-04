@@ -15,6 +15,7 @@ const STATUS_SEGMENT: Record<string, string> = {
   resolved: "live",
   error: "error",
   possibly_delivered: "possibly-delivered",
+  your_call: "your-call",
   closed: "closed",
   all: "all",
   rejected: "rejected",

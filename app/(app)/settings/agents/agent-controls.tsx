@@ -1,8 +1,8 @@
 "use client";
 
 import type { AgentLevel } from "@prisma/client";
-import { useState, useTransition } from "react";
-import { deleteAgentAction, regenerateAgentKeyAction, revokeAgentAction, setAgentBurstAction, setAgentLevelAction } from "./actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { deleteAgentAction, regenerateAgentKeyAction, revokeAgentAction, setAgentLevelAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -10,25 +10,18 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { copyText } from "@/lib/clipboard";
 import { AGENT_LEVEL_LABELS } from "@/lib/agents/levels";
-import { LocalTime } from "@/components/local-time";
 import type { AgentProjectChoice } from "./create-agent-form";
 import {
   agentsDangerBtn,
   agentsInputClass,
   agentsPrimaryBtn,
-  agentsSecondaryBtn,
 } from "./agents-ui";
 
-type BurstExpiryChoice = "keep" | "none" | "2h" | "8h" | "24h" | "custom";
-
-function expiryHours(choice: BurstExpiryChoice): number | null {
-  if (choice === "2h") return 2;
-  if (choice === "8h") return 8;
-  if (choice === "24h") return 24;
-  return null;
-}
-
-/** Change an agent's level or revoke it, as its owner or a team admin (#427). */
+/**
+ * An agent's row controls on My agents, as its owner or a team admin (#427):
+ * its class, and a More menu to get a new key, revoke or delete it. How often
+ * it may call Ziki (the high-volume budget) is set on the agent's own page.
+ */
 export function AgentControls({
   agentId,
   agentName,
@@ -36,10 +29,6 @@ export function AgentControls({
   levels,
   projects,
   currentProjectId,
-  burst = false,
-  burstUntil = null,
-  now,
-  canSetBurst = false,
   revoked = false,
   personal = false,
 }: {
@@ -51,14 +40,6 @@ export function AgentControls({
   projects: AgentProjectChoice[];
   /** The project the live key is limited to, when it has one. */
   currentProjectId?: string | null;
-  /** Whether this agent uses the higher hourly write budget. */
-  burst?: boolean;
-  /** When the higher budget lapses; null means no expiry (#596). */
-  burstUntil?: string | Date | null;
-  /** Server request time, used to label an expired grant without reading the clock during render. */
-  now: string | Date;
-  /** Admins may raise the budget. */
-  canSetBurst?: boolean;
   /** A revoked agent only offers delete. */
   revoked?: boolean;
   /** The automatic personal agent is created again on the next visit. */
@@ -67,13 +48,6 @@ export function AgentControls({
   const toast = useToast();
   const confirm = useConfirm();
   const [current, setCurrent] = useState(level);
-  const initialUntil = burstUntil ? new Date(burstUntil) : null;
-  const initialUntilIso =
-    initialUntil && Number.isFinite(initialUntil.getTime()) ? initialUntil.toISOString() : null;
-  const [burstOn, setBurstOn] = useState(burst);
-  const [savedUntil, setSavedUntil] = useState<string | null>(initialUntilIso);
-  const [expiryChoice, setExpiryChoice] = useState<BurstExpiryChoice>(initialUntilIso ? "keep" : "none");
-  const [customUntil, setCustomUntil] = useState("");
   // A regenerated key stays on the project the current key is limited to.
   const projectId = currentProjectId || projects[0]?.id || "";
   const [issued, setIssued] = useState<{ rawKey: string; prefix: string } | null>(null);
@@ -96,9 +70,9 @@ export function AgentControls({
   async function regenerate() {
     const projectName = projects.find((project) => project.id === projectId)?.name ?? "the chosen project";
     const ok = await confirm({
-      title: `Regenerate the key for ${agentName}?`,
+      title: `Get a new key for ${agentName}?`,
       body: `The current key stops working immediately. The new key only works in ${projectName}, and it stays on this agent's row.`,
-      confirmLabel: "Regenerate key",
+      confirmLabel: "Get a new key",
       tone: "danger",
     });
     if (!ok) return;
@@ -148,73 +122,6 @@ export function AgentControls({
     });
   }
 
-  /**
-   * Resolves the selected expiry to an ISO timestamp. `keep` leaves the
-   * existing grant alone; `custom` needs a valid future value from the input.
-   */
-  function resolvedUntil(choice: BurstExpiryChoice): string | null | "invalid" {
-    if (choice === "none") return null;
-    if (choice === "keep") return savedUntil;
-    if (choice === "custom") {
-      if (!customUntil) return "invalid";
-      const date = new Date(customUntil);
-      return Number.isFinite(date.getTime()) && date.getTime() > Date.now() ? date.toISOString() : "invalid";
-    }
-    const hours = expiryHours(choice);
-    if (!hours) return null;
-    return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
-  }
-
-  function saveBurst(next: boolean, choice: BurstExpiryChoice = expiryChoice) {
-    let until: string | null = null;
-    if (next) {
-      const resolved = resolvedUntil(choice);
-      if (resolved === "invalid") {
-        toast("Choose an expiry time in the future, or choose no expiry.", "error");
-        return;
-      }
-      until = resolved;
-    }
-
-    const previous = { on: burstOn, until: savedUntil };
-    setBurstOn(next);
-    setSavedUntil(until);
-    startTransition(async () => {
-      const result = await setAgentBurstAction(agentId, next, until);
-      if (result.ok) {
-        setSavedUntil(until);
-        if (until) {
-          setExpiryChoice("keep");
-          setCustomUntil("");
-        } else {
-          setExpiryChoice("none");
-          setCustomUntil("");
-        }
-        toast(
-          !next
-            ? `${agentName} is back to 600 reads an hour.`
-            : until
-              ? `${agentName} has the high-volume budget until ${new Date(until).toLocaleString()}.`
-              : `${agentName} can now make 4000 reads an hour, with no expiry.`,
-          "success",
-        );
-      } else {
-        setBurstOn(previous.on);
-        setSavedUntil(previous.until);
-        toast(result.error, "error");
-      }
-    });
-  }
-
-  function changeExpiry(next: BurstExpiryChoice) {
-    setExpiryChoice(next);
-    if (next === "keep" || next === "custom") return;
-    if (burstOn) saveBurst(true, next);
-  }
-
-  const burstExpiresAt = savedUntil ? Date.parse(savedUntil) : null;
-  const burstExpired = burstOn && burstExpiresAt !== null && burstExpiresAt <= new Date(now).getTime();
-
   if (revoked) {
     return (
       <Button type="button" onClick={remove} disabled={pending} className={agentsDangerBtn}>
@@ -224,8 +131,8 @@ export function AgentControls({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col items-stretch gap-3 sm:items-end">
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <label htmlFor={`level-${agentId}`} className="sr-only">
           Agent class for {agentName}
         </label>
@@ -234,7 +141,7 @@ export function AgentControls({
           value={current}
           disabled={pending}
           onChange={(event) => changeLevel(event.target.value as AgentLevel)}
-          className={`${agentsInputClass} w-auto min-w-[8rem]`}
+          className={`${agentsInputClass} !w-auto min-w-[9rem]`}
         >
           {[...new Set([current, ...levels])].map((option) => (
             <option key={option} value={option} disabled={!levels.includes(option)}>
@@ -242,95 +149,16 @@ export function AgentControls({
             </option>
           ))}
         </Select>
-        {canSetBurst ? (
-          <>
-            <label className="flex min-h-10 items-center gap-1.5 rounded-full bg-zk-chip px-3 text-xs font-semibold text-zk-text2">
-              <input
-                type="checkbox"
-                checked={burstOn}
-                disabled={pending}
-                onChange={(event) => saveBurst(event.target.checked)}
-              />
-              High-volume
-            </label>
-            {burstOn ? (
-              <>
-                <label htmlFor={`burst-expiry-${agentId}`} className="sr-only">
-                  High-volume expiry for {agentName}
-                </label>
-                <Select
-                  id={`burst-expiry-${agentId}`}
-                  value={expiryChoice}
-                  disabled={pending}
-                  onChange={(event) => changeExpiry(event.target.value as BurstExpiryChoice)}
-                  className={`${agentsInputClass} w-auto`}
-                >
-                  {savedUntil ? <option value="keep">Keep current expiry</option> : null}
-                  <option value="none">No expiry</option>
-                  <option value="2h">2 hours</option>
-                  <option value="8h">8 hours</option>
-                  <option value="24h">24 hours</option>
-                  <option value="custom">Custom…</option>
-                </Select>
-                {expiryChoice === "custom" ? (
-                  <>
-                    <label htmlFor={`burst-custom-${agentId}`} className="sr-only">
-                      Custom high-volume expiry for {agentName}
-                    </label>
-                    <Input
-                      id={`burst-custom-${agentId}`}
-                      type="datetime-local"
-                      value={customUntil}
-                      disabled={pending}
-                      onChange={(event) => setCustomUntil(event.target.value)}
-                      className={`${agentsInputClass} w-auto text-xs`}
-                    />
-                    <Button
-                      type="button"
-                      disabled={pending || !customUntil}
-                      onClick={() => saveBurst(true, "custom")}
-                      className={agentsSecondaryBtn}
-                    >
-                      Save expiry
-                    </Button>
-                  </>
-                ) : null}
-              </>
-            ) : null}
-          </>
-        ) : burstOn ? (
-          <span className="text-xs font-semibold text-zk-muted">High-volume</span>
-        ) : null}
-        <Button
-          type="button"
-          onClick={regenerate}
-          disabled={pending || !projectId}
-          className={agentsSecondaryBtn}
-        >
-          Regenerate key
-        </Button>
-        <Button type="button" onClick={revoke} disabled={pending} className={agentsDangerBtn}>
-          Revoke
-        </Button>
-        <Button type="button" onClick={remove} disabled={pending} className={agentsDangerBtn}>
-          Delete
-        </Button>
+        <MoreMenu
+          agentName={agentName}
+          disabled={pending}
+          items={[
+            { label: "Get a new key", onSelect: regenerate, disabled: !projectId },
+            { label: "Revoke", onSelect: revoke, danger: true },
+            { label: "Delete", onSelect: remove, danger: true },
+          ]}
+        />
       </div>
-      {canSetBurst || burstOn ? (
-        <p className="text-xs text-zk-muted" suppressHydrationWarning>
-          {!burstOn ? (
-            "Standard budget: 600 reads an hour."
-          ) : burstExpired ? (
-            "High-volume expired; standard budget: 600 reads an hour."
-          ) : savedUntil ? (
-            <>
-              High-volume (4000 reads an hour), ends <LocalTime date={savedUntil} />.
-            </>
-          ) : (
-            "High-volume active with no expiry (4000 reads an hour)."
-          )}
-        </p>
-      ) : null}
       {issued ? (
         <div
           className="w-full space-y-2 rounded-[16px] border border-zk-warn-bd bg-zk-warn-bg/40 p-3 sm:max-w-md"
@@ -351,6 +179,80 @@ export function AgentControls({
               Copy key
             </Button>
           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The row's less frequent actions, behind one button so the row stays quiet. */
+function MoreMenu({
+  agentName,
+  disabled,
+  items,
+}: {
+  agentName: string;
+  disabled: boolean;
+  items: { label: string; onSelect: () => void; danger?: boolean; disabled?: boolean }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    document.addEventListener("pointerdown", away, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className="relative">
+      <button
+        ref={button}
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`More for ${agentName}`}
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        More
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`motion-safe:transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div role="menu" aria-label={`More for ${agentName}`} className="absolute right-0 top-full z-30 mt-2 w-48 rounded-2xl border border-zk-border bg-zk-surface p-1.5 shadow-[0_12px_32px_rgba(11,23,51,0.16)]">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+              className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue disabled:cursor-not-allowed disabled:opacity-50 ${
+                item.danger ? "text-zk-bad-fg hover:bg-zk-bad-bg" : "text-zk-text hover:bg-zk-chip"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       ) : null}
     </div>

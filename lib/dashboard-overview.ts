@@ -2,6 +2,8 @@ import "server-only";
 import { Prisma, type Status } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { bugInTenant } from "@/lib/tenant-context";
+import { issueHref } from "@/lib/issue-ref";
+import { isDeliveryOverdue } from "@/lib/claim-deadline";
 import { pointTotals, tenantRankFor, type PointTotals } from "@/lib/points/leaderboard";
 
 /**
@@ -188,12 +190,12 @@ export async function loadSidebarCounts({
 /* Your agents                                                         */
 /* ------------------------------------------------------------------ */
 
-/** A claim older than this with no heartbeat is not "working" any more. */
+/** A claim older than this with no heartbeat is not "working" any more: it is stuck. */
 export const AGENT_WORKING_WINDOW_MS = 15 * 60 * 1000;
 /** Seen this recently without active work: idle, not offline. */
 export const AGENT_IDLE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-export type AgentStatus = "waiting" | "working" | "idle" | "offline";
+export type AgentStatus = "waiting" | "stuck" | "working" | "idle" | "offline";
 
 export type DashboardAgent = {
   id: string;
@@ -206,31 +208,71 @@ export type DashboardAgent = {
   /** What the table's "Current activity" column says. Never invented. */
   activity: string;
   lastSeenAt: Date | null;
+  /** The issue it is working on, or the one its unanswered question is about (#agents-dock). */
+  issue: { number: number; href: string } | null;
+  /** Its unanswered question to its owner, word for word. */
+  question: string | null;
 };
 
 /**
  * Status from real signals only: an unanswered question means the agent is
- * waiting on its owner; a live claim with a recent heartbeat means working;
- * otherwise a recent event or key use means idle; anything else is offline.
- * Pure so the precedence is unit-tested without a database.
+ * waiting on its owner; a claim it holds but has gone quiet on, or let run
+ * past its deadline, means stuck; a live claim with a recent heartbeat means
+ * working; otherwise a recent event or key use means idle; anything else is
+ * offline. Pure so the precedence is unit-tested without a database.
  */
 export function classifyAgentStatus({
   hasUnansweredQuestion,
+  hasStalledClaim = false,
   hasActiveClaim,
   lastSeenAt,
   now = new Date(),
 }: {
   hasUnansweredQuestion: boolean;
+  hasStalledClaim?: boolean;
   hasActiveClaim: boolean;
   lastSeenAt: Date | null;
   now?: Date;
 }): AgentStatus {
   if (hasUnansweredQuestion) return "waiting";
+  if (hasStalledClaim) return "stuck";
   if (hasActiveClaim) return "working";
   if (lastSeenAt && now.getTime() - lastSeenAt.getTime() <= AGENT_IDLE_WINDOW_MS) {
     return "idle";
   }
   return "offline";
+}
+
+/**
+ * Stuck, as the stale-claim sweep reads it (lib/agent-api/availability.ts):
+ * quiet for the working window, or past its deadline, with no pull request
+ * linked yet and no question to its owner pausing the clocks.
+ */
+export function isClaimStalled({
+  quiet,
+  deliverBy,
+  waitingOnOwnerSince,
+  pullRequestUrl,
+  now,
+}: {
+  quiet: boolean;
+  deliverBy: Date | null | undefined;
+  waitingOnOwnerSince: Date | null;
+  pullRequestUrl: string | null;
+  now: Date;
+}): boolean {
+  if (waitingOnOwnerSince || pullRequestUrl) return false;
+  return quiet || isDeliveryOverdue(deliverBy, now);
+}
+
+/** How long an agent has been quiet, in the largest unit that fits: "20 min", "3 h", "2 days". */
+function quietFor(since: Date | null, now: Date): string {
+  if (!since) return "a while";
+  const minutes = Math.max(1, Math.floor((now.getTime() - since.getTime()) / 60_000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} h`;
+  return `${Math.floor(hours / 24)} days`;
 }
 
 const latest = (...dates: (Date | null | undefined)[]): Date | null => {
@@ -270,7 +312,7 @@ export async function loadOwnAgents({
         where: { answeredAt: null },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 1,
-        select: { createdAt: true },
+        select: { createdAt: true, body: true, bug: { select: { number: true, isDeleted: true, project: { select: { slug: true } } } } },
       },
       claims: {
         where: { releasedAt: null, status: "active" },
@@ -279,7 +321,9 @@ export async function loadOwnAgents({
         select: {
           claimedAt: true,
           lastHeartbeatAt: true,
-          bug: { select: { number: true, title: true, status: true, isDeleted: true } },
+          deliverBy: true,
+          waitingOnOwnerSince: true,
+          bug: { select: { number: true, title: true, status: true, isDeleted: true, pullRequestUrl: true, project: { select: { slug: true } } } },
         },
       },
     },
@@ -303,13 +347,12 @@ export async function loadOwnAgents({
     const claim = agent.claims[0] ?? null;
     const claimedBug = claim?.bug ?? null;
     const heartbeat = claim?.lastHeartbeatAt ?? claim?.claimedAt ?? null;
-    const claimIsLive =
-      claim !== null &&
-      heartbeat !== null &&
-      heartbeat.getTime() >= workingCutoff &&
-      claimedBug !== null &&
-      !claimedBug.isDeleted &&
-      claimedBug.status === "in_progress";
+    const claimHeld = claim !== null && claimedBug !== null && !claimedBug.isDeleted && claimedBug.status === "in_progress";
+    const quiet = heartbeat === null || heartbeat.getTime() < workingCutoff;
+    const claimStalled =
+      claimHeld &&
+      isClaimStalled({ quiet, deliverBy: claim.deliverBy, waitingOnOwnerSince: claim.waitingOnOwnerSince, pullRequestUrl: claimedBug.pullRequestUrl, now });
+    const claimIsLive = claimHeld && !quiet;
 
     const lastSeenAt = latest(
       heartbeat,
@@ -319,6 +362,7 @@ export async function loadOwnAgents({
 
     const status = classifyAgentStatus({
       hasUnansweredQuestion: unanswered,
+      hasStalledClaim: claimStalled,
       hasActiveClaim: claimIsLive,
       lastSeenAt,
       now,
@@ -327,6 +371,10 @@ export async function loadOwnAgents({
     let activity: string;
     if (status === "waiting") {
       activity = "Waiting for your answer";
+    } else if (status === "stuck" && claimedBug) {
+      activity = isDeliveryOverdue(claim?.deliverBy, now)
+        ? `Past its deadline on #${claimedBug.number} ${claimedBug.title}`
+        : `No word on #${claimedBug.number} for ${quietFor(heartbeat, now)}`;
     } else if (status === "working" && claimedBug) {
       activity = `Working on #${claimedBug.number} ${claimedBug.title}`;
     } else if (status === "idle") {
@@ -334,6 +382,9 @@ export async function loadOwnAgents({
     } else {
       activity = "No recent activity";
     }
+
+    const asked = agent.questions[0]?.bug ?? null;
+    const about = status === "waiting" ? (asked && !asked.isDeleted ? asked : null) : status === "working" || status === "stuck" ? claimedBug : null;
 
     return {
       id: agent.id,
@@ -344,6 +395,8 @@ export async function loadOwnAgents({
       status,
       activity,
       lastSeenAt,
+      issue: about ? { number: about.number, href: issueHref(about) } : null,
+      question: agent.questions[0]?.body ?? null,
     };
   });
 }

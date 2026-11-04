@@ -474,6 +474,25 @@ body:has([data-app-shell]) {
   10%, 30% { transform: rotate(-10deg); }
   20%, 40% { transform: rotate(10deg); }
 }
+/* The agents dock's faces (components/agent-face.tsx): a blink, a glance at work, a pulsing ring when it needs you or is stuck. */
+@keyframes zk-face-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.12); }
+}
+@keyframes zk-face-glance {
+  0%, 30%, 100% { transform: translateX(0); }
+  40%, 60% { transform: translateX(1.5px); }
+  70%, 90% { transform: translateX(-1.2px); }
+}
+@keyframes zk-face-ring {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+/* The agents dock's panel grows up out of its Agents button (components/agents-dock.tsx). */
+@keyframes zk-dock-rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
 @keyframes zk-agent-breathe {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.06); }

@@ -82,8 +82,6 @@ export default async function AgentsPage() {
           avatar: true,
           model: true,
           level: true,
-          burst: true,
-          burstUntil: true,
           createdAt: true,
           revokedAt: true,
           defaultProjectId: true,
@@ -115,8 +113,6 @@ export default async function AgentsPage() {
       avatar: agent.avatar,
       model: agent.model,
       level: agent.level,
-      burst: agent.burst,
-      burstUntil: agent.burstUntil ? agent.burstUntil.toISOString() : null,
       createdAt: agent.createdAt.toISOString(),
       revokedAt: agent.revokedAt ? agent.revokedAt.toISOString() : null,
       personal: Boolean(agent.defaultProjectId),
@@ -176,8 +172,6 @@ export default async function AgentsPage() {
               maxActive={MAX_ACTIVE_AGENTS_PER_OWNER}
               levels={ownLevels}
               projects={projects}
-              now={now.toISOString()}
-              canSetBurst={isAdmin}
             />
           )}
         </section>

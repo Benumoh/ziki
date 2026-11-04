@@ -14,6 +14,7 @@ import { InstructionsForm, SendMessageForm } from "./message-forms";
 import { AgentActivity, AgentProfileCard, type AgentActivityItem, type AgentProfileData } from "./agent-profile";
 import { AgentSettingsForm } from "./agent-settings-form";
 import { AgentAvatarPicker } from "./agent-avatar-picker";
+import { AgentCapacity } from "./agent-capacity";
 import { agentsLink, agentsMutedClass, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
 
 export const metadata = { title: "Agent" };
@@ -148,10 +149,13 @@ export default async function AgentPage({ params }: { params: Promise<{ name: st
   if (!thread) notFound();
   const profile = await loadAgentProfile(agentId, user.id);
   if (!profile) notFound();
+  const viewerIsAdmin = await isTenantAdmin(user, profile.tenantId);
   const levels = settableLevels({
     isOwner: thread.isOwner,
-    isTenantAdmin: await isTenantAdmin(user, profile.tenantId),
+    isTenantAdmin: viewerIsAdmin,
   });
+  // How often it may call Ziki: moved here from the My agents list, where its jargon got in the way.
+  const capacity = await prisma.agent.findUnique({ where: { id: agentId }, select: { burst: true, burstUntil: true } });
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -182,6 +186,24 @@ export default async function AgentPage({ params }: { params: Promise<{ name: st
       />
 
       <AgentActivity items={profile.activity} />
+
+      {capacity && !thread.agent.revoked && (thread.isOwner || viewerIsAdmin) && (viewerIsAdmin || capacity.burst) ? (
+        <section className={`${agentsSurface} p-4 sm:p-6`} aria-labelledby="capacity-heading">
+          <h2 id="capacity-heading" className="text-sm font-bold uppercase tracking-[0.06em] text-zk-muted">
+            How often it can call Ziki
+          </h2>
+          <div className="mt-2">
+            <AgentCapacity
+              agentId={agentId}
+              agentName={profile.agent.name}
+              burst={capacity.burst}
+              burstUntil={capacity.burstUntil ? capacity.burstUntil.toISOString() : null}
+              now={new Date().toISOString()}
+              canSetBurst={viewerIsAdmin}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {thread.isOwner && !thread.agent.revoked ? (
         <section className={`${agentsSurface} p-4 sm:p-6`} aria-labelledby="instructions-heading">

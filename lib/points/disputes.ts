@@ -244,6 +244,7 @@ export async function correctEntry(
     role: entry.role,
     points: -pointsNumber(entry.points),
     sourceKey: correctionSourceKey(entry.id),
+    exact: true,
   });
   await db.pointDispute.update({
     where: { id: dispute.id },

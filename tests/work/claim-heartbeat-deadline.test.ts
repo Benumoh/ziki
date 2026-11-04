@@ -24,6 +24,7 @@ vi.mock("@/lib/notify", () => ({ notifyLater: mocks.notifyLater }));
 import { releaseStaleClaims } from "@/lib/agent-api/availability";
 import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 import { POST } from "@/app/api/v1/issues/[id]/heartbeat/route";
+import { classifyAgentStatus, isClaimStalled } from "@/lib/dashboard-overview";
 
 const now = new Date("2026-10-19T12:00:00Z");
 const cutoff = new Date(now.getTime() - DEFAULT_PROJECT_WORKFLOW.heartbeatMinutes * 60 * 1000);
@@ -157,4 +158,25 @@ describe("stale claim release", () => {
     expect(db.issueClaim.update).not.toHaveBeenCalled();
   });
 
+});
+
+/** The agents dock (#agents-dock) tells its owner which agents are stuck: holding a claim they went quiet on. */
+describe("agent status for its owner", () => {
+  const seen = new Date(now.getTime() - 60_000);
+
+  it("calls a quiet or overdue claim stuck, ahead of working and idle but behind a question", () => {
+    expect(classifyAgentStatus({ hasUnansweredQuestion: false, hasStalledClaim: true, hasActiveClaim: false, lastSeenAt: seen, now })).toBe("stuck");
+    expect(classifyAgentStatus({ hasUnansweredQuestion: true, hasStalledClaim: true, hasActiveClaim: false, lastSeenAt: seen, now })).toBe("waiting");
+    expect(classifyAgentStatus({ hasUnansweredQuestion: false, hasStalledClaim: false, hasActiveClaim: true, lastSeenAt: seen, now })).toBe("working");
+    expect(classifyAgentStatus({ hasUnansweredQuestion: false, hasStalledClaim: false, hasActiveClaim: false, lastSeenAt: seen, now })).toBe("idle");
+  });
+
+  it("calls a claim stalled when quiet or overdue, unless a pull request is linked or a question to its owner pauses it", () => {
+    const claim = { quiet: false, deliverBy: new Date(now.getTime() + 60_000), waitingOnOwnerSince: null, pullRequestUrl: null, now };
+    expect(isClaimStalled(claim)).toBe(false);
+    expect(isClaimStalled({ ...claim, quiet: true })).toBe(true);
+    expect(isClaimStalled({ ...claim, deliverBy: new Date(now.getTime() - 60_000) })).toBe(true);
+    expect(isClaimStalled({ ...claim, quiet: true, pullRequestUrl: "https://github.com/o/r/pull/1" })).toBe(false);
+    expect(isClaimStalled({ ...claim, quiet: true, waitingOnOwnerSince: now })).toBe(false);
+  });
 });

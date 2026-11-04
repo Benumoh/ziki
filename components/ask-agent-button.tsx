@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { sendAgentRequestAction } from "@/app/actions/agent-requests";
 import { ConnectAgentFlow } from "@/app/(app)/settings/agents/connect/connect-agent-flow";
 
-export type AskAgent = { id: string; name: string; status: "waiting" | "working" | "idle" | "offline" };
+export type AskAgent = { id: string; name: string; status: "waiting" | "stuck" | "working" | "idle" | "offline" };
 
 /**
  * Under each Workstream section: ask one of your agents to work on that kind

@@ -715,6 +715,8 @@ model Tenant {
   nextIssueNumber    Int                 @default(1)
   /// The next idea number this tenant hands out (#idea-table). Ideas are numbered apart from issues.
   nextIdeaNumber     Int                 @default(1)
+  /// What every award in this workspace is multiplied by when it is written (#points-multiplier). 1 is normal.
+  pointsMultiplier   Decimal             @default(1) @db.Decimal(8, 2)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   projects           Project[]
