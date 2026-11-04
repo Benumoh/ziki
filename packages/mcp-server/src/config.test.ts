@@ -28,7 +28,7 @@ describe("loadConfig", () => {
   });
 
   it("uses the same default path as the reference client", () => {
-    expect(configPath({ XDG_CONFIG_HOME: "/x" })).toBe("/x/ziki/agent.json");
+    expect(configPath({ XDG_CONFIG_HOME: "/x" })).toBe(path.join("/x", "ziki", "agent.json"));
     expect(configPath({ ZIKI_AGENT_CONFIG: "/y.json" })).toBe("/y.json");
   });
 });
