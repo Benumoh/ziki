@@ -700,7 +700,7 @@ Start a pairing request. No `Authorization` header is needed.
   "user_code": "ABCD-1234",
   "device_code": "dvc_...",
   "verification_uri": "https://ziki.dev/settings/agents/pair",
-  "verification_uri_complete": "https://ziki.dev/settings/agents/pair?user_code=ABCD-1234",
+  "verification_uri_complete": "https://ziki.dev/settings/agents/pair?code=ABCD-1234",
   "expires_at": "2026-10-19T12:10:00.000Z",
   "interval": 5,
   "message": "Show the owner user_code and verification_uri_complete. If you can open a browser, also open verification_uri_complete for them. They approve it while signed in. Then poll the token URL with device_code until api_key is returned."
