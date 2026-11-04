@@ -2065,7 +2065,7 @@ File a report on behalf of the agent's owner. Every report is an idea; convertin
 }
 ```
 
-`title` is 3–200 characters and `description` 10–5000. `summary` is required: up to 3 lines of plain text, 20–300 characters, no Markdown, that a person can understand without opening the description. Optional: `platform` (a slug from [`GET /api/v1/platforms`](#get-apiv1platforms), such as `desktop`: give it whenever you know where it shows up; an unknown one is `422 unknown_platform` listing the slugs), `areaId`, `typeId` (an active issue type; any other value is `422 invalid_type`), `proofLinks` (GitHub issue or pull request URLs, one per line), `attachmentIds` (below) and `acknowledgeSimilar` (see the `409 similar_issues` rule). Send `projectId` in the query (or body). Unknown fields, including `beneficiaryUserId`, are rejected with `422`.
+`title` is 3–200 characters and `description` 10–5000. `summary` is required: up to 3 lines of plain text, 20–300 characters, no Markdown, that a person can understand without opening the description. Optional: `platform` (a slug from [`GET /api/v1/platforms`](#get-apiv1platforms), such as `desktop`: give it whenever you know where it shows up; an unknown one is `422 unknown_platform` listing the slugs), `areaId`, `typeId` (an active issue type; any other value is `422 invalid_type`), `proofLinks` (GitHub issue or pull request URLs, one per line), `attachmentIds` (below) and `acknowledgeSimilar` (see the `409 similar_issues` rule), and `alreadyVetted` with `vettedNote` (see **Already vetted** below). Send `projectId` in the query (or body). Unknown fields, including `beneficiaryUserId`, are rejected with `422`.
 
 **Attachments:** add `"attachmentIds": ["att_..."]` (up to 5) with ids from [`POST /api/v1/attachments`](#post-apiv1attachments) to attach screenshots or logs. If any of them can't be attached, the idea isn't created (`422`). Converting the idea brings its files to the issue.
 
@@ -2075,6 +2075,8 @@ File a report on behalf of the agent's owner. Every report is an idea; convertin
 curl -X POST "https://ziki.dev/api/v1/ideas?projectId=$PROJECT"   -H "Authorization: Bearer $KEY" -H "Idempotency-Key: $(uuidgen)"   -F 'payload={"title":"Save shows a blank page","summary":"Saving shows a blank page.
 The screenshot shows it.","description":"Steps: ..."}'   -F file=@screenshot.png
 ```
+
+**Already vetted:** when your owner tells you an idea was already vetted elsewhere (for example approved by the project's maintainers) and gives you where, send `"alreadyVetted": true` and `"vettedNote": "Approved by Mark, sheet row 42"` (5-300 characters, as your owner gave it). The idea becomes an issue at once, in the same request, instead of waiting for verdicts from other people; the answer has `converted: { issueId, issueNumber }`. Only the verdicts are skipped: the issue is still confirmed on its own, with files. The note is shown on the issue's activity and kept on the event and the audit log. **Never set it on your own**: only when your owner told you the idea was vetted. At most **5 per owner in 24 hours** (`429 vetted_limit`; send the idea without the flag and it waits for verdicts); `alreadyVetted` without a note, or a note without `alreadyVetted`, is `400 invalid_request`.
 
 **Reading files:** every attachment an idea or issue lists has a `url` (`/api/v1/attachments/{id}`); [read it](#get-apiv1attachmentsid) with your key.
 

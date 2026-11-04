@@ -13,6 +13,7 @@ const db = vi.hoisted(() => ({
   idea: { findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn() },
   ideaVerdict: { groupBy: vi.fn(async () => []) },
   projectWorkflow: { findUnique: vi.fn() },
+  agentAuditEvent: { count: vi.fn() },
   $queryRaw: vi.fn(),
   $transaction: vi.fn(),
 }));
@@ -37,7 +38,7 @@ vi.mock("@anthropic-ai/sdk", () => {
 vi.mock("@anthropic-ai/sdk/helpers/zod", () => ({ zodOutputFormat: (schema: unknown) => schema }));
 
 import { createIdeaWithPolicy, type CreatePolicyInput } from "@/lib/agent-api/create-policy";
-import { listAgentIdeas, readAgentIdea } from "@/lib/agent-api/ideas";
+import { assertVettedCap, assertVettedFields, createIdeaSchema, listAgentIdeas, readAgentIdea, VETTED_IDEAS_PER_DAY } from "@/lib/agent-api/ideas";
 import { structureIdea } from "@/lib/idea-structuring";
 
 const NOW = new Date("2026-10-19T12:00:00Z");
@@ -166,5 +167,30 @@ describe("structuring an idea as it is submitted", () => {
 
     claude.parse.mockResolvedValueOnce({ stop_reason: "refusal", parsed_output: null });
     expect(await structureIdea(typed)).toBeNull();
+  });
+});
+
+/** Already vetted: an idea the owner says was approved elsewhere skips the verdicts, with a note and a daily limit. */
+describe("already vetted ideas", () => {
+  const owner = { agentId: "agent1", name: "Ada's Claude", ownerId: "ada", tenantId: "t1", level: "working" as const, burst: false, keyId: "k1" };
+
+  it("takes alreadyVetted only with a note saying where it was approved, and a note only with alreadyVetted", () => {
+    expect(() => assertVettedFields({})).not.toThrow();
+    expect(() => assertVettedFields({ alreadyVetted: true, vettedNote: "Approved by Mark, sheet row 42" })).not.toThrow();
+    expect(() => assertVettedFields({ alreadyVetted: true })).toThrowError(/vettedNote/);
+    expect(() => assertVettedFields({ vettedNote: "Approved by Mark" })).toThrowError(/alreadyVetted/);
+    const idea = { title: "Add a CSV export", summary: "People want a CSV of the activity.", description: "People want their data as a CSV." };
+    expect(createIdeaSchema.safeParse({ ...idea, alreadyVetted: "yes" }).success).toBe(false);
+    expect(createIdeaSchema.safeParse({ ...idea, alreadyVetted: true, vettedNote: "ok" }).success).toBe(false);
+  });
+
+  it("allows five in 24 hours per owner and refuses the sixth with what to do instead", async () => {
+    db.agentAuditEvent.count.mockResolvedValue(VETTED_IDEAS_PER_DAY - 1);
+    await expect(assertVettedCap(db as never, owner)).resolves.toBeUndefined();
+    expect(db.agentAuditEvent.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({ action: "idea.vetted", undoneAt: null, agent: { ownerUserId: "ada" } }),
+    });
+    db.agentAuditEvent.count.mockResolvedValue(VETTED_IDEAS_PER_DAY);
+    await expect(assertVettedCap(db as never, owner)).rejects.toMatchObject({ status: 429, body: { error: "vetted_limit", limit: 5 } });
   });
 });

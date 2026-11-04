@@ -19,7 +19,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/agent-api/events", () => ({ publish }));
 vi.mock("@/lib/agents/audit", () => ({ audit }));
 
-import { convertIdea, giveIdeaVerdict, maxVotesFor, rejectIdea, verdictScore } from "@/lib/agent-api/idea-verdicts";
+import { convertIdea, convertVettedIdea, giveIdeaVerdict, maxVotesFor, rejectIdea, verdictScore } from "@/lib/agent-api/idea-verdicts";
 
 /** The locked idea row (#idea-table): ideas have their own table, numbers and status. */
 const idea = (overrides: Record<string, unknown> = {}) => ({
@@ -184,6 +184,33 @@ describe("convertIdea", () => {
     await expect(convertIdea(agentOf("working"), "p1", "i1")).rejects.toMatchObject({ status: 409, body: { error: "idea_converted" } });
     expect(db.bug.create).not.toHaveBeenCalled();
     expect(db.idea.update).not.toHaveBeenCalled();
+  });
+});
+
+/** Already vetted: an idea its owner says was approved elsewhere becomes an issue at once, with no verdicts. */
+describe("convertVettedIdea", () => {
+  const owner: AgentContext = { agentId: "agent-ada", name: "ada", ownerId: "ada", tenantId: "t1", level: "working", burst: false, keyId: "k1" };
+
+  it("converts an idea with no verdicts, says it was vetted on the issue's activity and on the event, and nothing else is skipped", async () => {
+    db.$queryRaw.mockResolvedValue([idea({ score: 0 })]);
+    const result = await convertVettedIdea(db as never, owner, "p1", "i1", "Approved by Mark, sheet row 42");
+    expect(result).toMatchObject({ ideaId: "i1", issueId: "b9", issueNumber: 42, ideaScore: 0 });
+    expect(db.bug.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: "open", substatus: "requires_confirmation",
+        activities: { create: expect.objectContaining({ summary: expect.stringContaining("marked already vetted: Approved by Mark, sheet row 42"), metadata: { fromIdea: 7, vettedNote: "Approved by Mark, sheet row 42" } }) },
+      }),
+    }));
+    expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({
+      type: "issue.converted",
+      payload: expect.objectContaining({ via: "already_vetted", decidedByUserId: "ada", vettedNote: "Approved by Mark, sheet row 42" }),
+    }));
+  });
+
+  it("does not convert an idea that is not open", async () => {
+    db.$queryRaw.mockResolvedValue([idea({ score: 0, status: "rejected" })]);
+    await expect(convertVettedIdea(db as never, owner, "p1", "i1", "Approved by Mark")).rejects.toMatchObject({ status: 409, body: { error: "idea_rejected" } });
+    expect(db.bug.create).not.toHaveBeenCalled();
   });
 });
 

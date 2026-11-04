@@ -202,7 +202,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/ideas",
     projectScoped: true,
-    body: ["title", "summary", "description", "platform", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar"],
+    body: ["title", "summary", "description", "platform", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote"],
     headers: { "Idempotency-Key": "idempotencyKey" },
     input: {
       idempotencyKey,
@@ -237,6 +237,17 @@ export const TOOLS: readonly ToolDef[] = [
         .boolean()
         .optional()
         .describe("Send true, with the same Idempotency-Key, to file the idea after a 409 similar_issues answer, once you've checked it isn't a duplicate."),
+      alreadyVetted: z
+        .boolean()
+        .optional()
+        .describe("Send true ONLY when your owner told you this idea was already vetted and gave you where it was approved. It becomes an issue at once, without verdicts. Never set it on your own; at most 5 a day per owner. Needs vettedNote."),
+      vettedNote: z
+        .string()
+        .trim()
+        .min(5)
+        .max(300)
+        .optional()
+        .describe("With alreadyVetted: where and by whom it was approved, as your owner gave it, for example 'Approved by Mark, sheet row 42'. Shown on the issue."),
     },
   },
   {
