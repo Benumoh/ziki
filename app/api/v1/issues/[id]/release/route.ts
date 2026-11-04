@@ -1,6 +1,6 @@
 import { createMethodNotAllowed, createOptions } from "@/lib/agent-api/http-errors";
 import { NextResponse, type NextRequest } from "next/server";
-import { agentIssueRequest, issueJson, issueProject, IssueApiError } from "@/lib/agent-api/issues";
+import { agentIssueRequest, optionalIssueJson, issueProject, IssueApiError } from "@/lib/agent-api/issues";
 import { releaseClaim, releaseSchema } from "@/lib/agent-api/offer";
 
 /**
@@ -15,7 +15,7 @@ import { releaseClaim, releaseSchema } from "@/lib/agent-api/offer";
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   return agentIssueRequest(request, "claims.release", "working", id, async (agent) => {
-    const raw = request.headers.get("content-length") === "0" ? {} : await issueJson(request).catch(() => ({}));
+    const raw = await optionalIssueJson(request);
     const parsed = releaseSchema.safeParse(raw ?? {});
     if (!parsed.success) return NextResponse.json({ error: "Invalid release request." }, { status: 400 });
     if (!request.nextUrl.searchParams.get("projectId") && !parsed.data.projectId) {

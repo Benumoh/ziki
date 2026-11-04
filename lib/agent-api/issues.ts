@@ -124,6 +124,16 @@ export async function issueJson(request: NextRequest): Promise<unknown> {
   catch { throw new IssueApiError(400, "Send a valid JSON body."); }
 }
 
+/** Read an optional JSON request body without treating malformed JSON as absent. */
+export async function optionalIssueJson(request: NextRequest): Promise<unknown> {
+  let body: string;
+  try { body = await request.text(); }
+  catch { throw new IssueApiError(400, "Send a valid JSON body."); }
+  if (!body.trim()) return {};
+  try { return JSON.parse(body) as unknown; }
+  catch { throw new IssueApiError(400, "Send a valid JSON body."); }
+}
+
 /** The 400 for an issue route called without a project. */
 export const PROJECT_ID_REQUIRED =
   "projectId is required. Pass it as ?projectId= or in the JSON body. Your owner can copy it from Settings, under Agents.";

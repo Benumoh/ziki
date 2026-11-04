@@ -12,7 +12,7 @@ const db = vi.hoisted(() => ({
   agentQuestion: { findFirst: vi.fn(), updateMany: vi.fn() },
   bug: { updateMany: vi.fn(), findFirst: vi.fn() }, $queryRaw: vi.fn(), $transaction: vi.fn(),
 }));
-const mocks = vi.hoisted(() => ({ admin: vi.fn(), budget: vi.fn(), notifyLater: vi.fn(), workflow: vi.fn() }));
+const mocks = vi.hoisted(() => ({ admin: vi.fn(), budget: vi.fn(), notifyLater: vi.fn(), workflow: vi.fn(), releaseClaim: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/workflow", async (original) => ({
   ...await original<typeof import("@/lib/workflow")>(),
@@ -21,9 +21,14 @@ vi.mock("@/lib/workflow", async (original) => ({
 vi.mock("@/lib/auth-helpers", () => ({ requireSuperAdmin: mocks.admin }));
 vi.mock("@/lib/agents/rate-budget", async (original) => ({ ...await original<typeof import("@/lib/agents/rate-budget")>(), consumeAgentBudget: mocks.budget }));
 vi.mock("@/lib/notify", () => ({ notifyLater: mocks.notifyLater }));
+vi.mock("@/lib/agent-api/offer", async (original) => ({
+  ...await original<typeof import("@/lib/agent-api/offer")>(),
+  releaseClaim: mocks.releaseClaim,
+}));
 import { releaseStaleClaims } from "@/lib/agent-api/availability";
 import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 import { POST } from "@/app/api/v1/issues/[id]/heartbeat/route";
+import { POST as releaseIssue } from "@/app/api/v1/issues/[id]/release/route";
 
 const now = new Date("2026-10-19T12:00:00Z");
 const cutoff = new Date(now.getTime() - DEFAULT_PROJECT_WORKFLOW.heartbeatMinutes * 60 * 1000);
@@ -32,6 +37,16 @@ const claim = { id: "claim", bugId: "issue", agentId: "agent", beneficiaryUserId
 const context = { params: Promise.resolve({ id: "issue" }) };
 function request(query = "?projectId=project", key = true) {
   return new NextRequest(`http://localhost/api/v1/issues/issue/heartbeat${query}`, { method: "POST", headers: key ? { authorization: "Bearer ziki_test" } : {} });
+}
+function releaseRequest(body?: string, extraHeaders?: Record<string, string>) {
+  const headers = new Headers({ authorization: "Bearer ziki_test" });
+  if (body !== undefined) headers.set("content-type", "application/json");
+  for (const [name, value] of Object.entries(extraHeaders ?? {})) headers.set(name, value);
+  return new NextRequest("http://localhost/api/v1/issues/issue/release?projectId=project", {
+    method: "POST",
+    headers,
+    ...(body !== undefined ? { body } : {}),
+  });
 }
 beforeEach(() => {
   vi.resetAllMocks();
@@ -80,6 +95,27 @@ describe("claim heartbeats", () => {
     expect((await POST(request(), context)).status).toBe(409);
     expect(db.issueClaim.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { bugId: "issue", releasedAt: null } }));
     expect(db.issueClaim.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("release request bodies (#565)", () => {
+  it("rejects malformed JSON before releasing the claim", async () => {
+    const response = await releaseIssue(releaseRequest('{"reason":', { "content-length": "0" }), context);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: "Send a valid JSON body." });
+    expect(mocks.releaseClaim).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an absent body", undefined, undefined],
+    ["an empty body", "", undefined],
+    ["a whitespace-only body", " \n\t ", undefined],
+    ["a valid reason", JSON.stringify({ reason: "Not my area" }), "Not my area"],
+  ])("keeps %s compatible", async (_label, body, reason) => {
+    mocks.releaseClaim.mockResolvedValueOnce({ claimId: "claim", issueId: "issue", reason: "agent", reopened: true });
+    const response = await releaseIssue(releaseRequest(body), context);
+    expect(response.status).toBe(200);
+    expect(mocks.releaseClaim).toHaveBeenCalledWith(expect.objectContaining({ agentId: "agent" }), "project", "issue", reason);
   });
 });
 
