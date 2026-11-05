@@ -9,6 +9,7 @@ const db = vi.hoisted(() => {
   };
   return {
     bug: { findFirst: vi.fn() },
+    delivery: { findFirst: vi.fn() },
     pullRequestReport: { findFirst: vi.fn() },
     $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
     tx,
@@ -30,7 +31,7 @@ const agent = (ownerId = "owner", level: AgentContext["level"] = "working"): Age
 
 function bug(over: Record<string, unknown> = {}) {
   return {
-    id: "bug1", status: "in_progress", substatus: "in_progress", assigneeId: "owner", reporterId: "rep", pullRequestUrl: PR, pullRequestHeadSha: "abc1234",
+    id: "bug1", status: "in_progress", substatus: "in_progress", assigneeId: "owner", reporterId: "rep", pullRequestUrl: PR, pullRequestLinkedAt: new Date("2026-10-30T07:30:00Z"), pullRequestHeadSha: "abc1234",
     project: { repoUrl: "https://github.com/acme/app" },
     claims: [],
     ...over,
@@ -48,6 +49,7 @@ function report(over: Record<string, unknown> = {}) {
     inDefaultBranch: true,
     headSha: "abc1234",
     mergeCommitSha: "def5678",
+    mergedAt: new Date("2026-10-30T08:00:00Z"),
     checks: "passing",
     mergeable: null,
     note: "Merged into main.",
@@ -66,6 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.tx.bug.updateMany.mockResolvedValue({ count: 1 });
   db.pullRequestReport.findFirst.mockResolvedValue(report());
+  db.delivery.findFirst.mockResolvedValue({ id: "delivery1" });
 });
 
 describe("resolveMergedFix (Ziki #515, #pr-reports)", () => {
@@ -117,6 +120,20 @@ describe("resolveMergedFix (Ziki #515, #pr-reports)", () => {
     // A sent pull request is not linked onto an issue that has none.
     expect(await resolveMergedFix(agent(), scope, "bug1", PR)).toMatchObject({ status: 409, body: { error: "no_pull_request" } });
     expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires an official delivery of the linked PR before accepting its reported merge", async () => {
+    db.bug.findFirst.mockResolvedValue(bug());
+    db.delivery.findFirst.mockResolvedValue(null);
+    expect(await resolveMergedFix(agent(), scope, "bug1", PR)).toMatchObject({ status: 409, body: { error: "needs_delivery" } });
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses a pull request merged before it was delivered on the issue", async () => {
+    db.bug.findFirst.mockResolvedValue(bug());
+    db.bug.findFirst.mockResolvedValue(bug({ pullRequestLinkedAt: new Date("2026-10-30T09:00:00Z") }));
+    expect(await resolveMergedFix(agent(), scope, "bug1", PR)).toMatchObject({ status: 409, body: { error: "pr_precedes_delivery" } });
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 
   it.each([

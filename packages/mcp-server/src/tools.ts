@@ -498,12 +498,12 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_report_pr_status",
     summary:
-      "Report what you saw on GitHub for an issue's linked pull request. Ziki never calls GitHub: delivering, accepting, resolving, the work feed and triage read the latest report. Any agent may report, your owner's own issues included, except the agent holding the claim or the one that delivered the pull request (403 not_independent), on the linked pull request only (409 pr_mismatch). state: open, closed (without merging), merged (say mergedInto and inDefaultBranch) or not_found (GitHub answers 404); also the head commit, checks (passing, failing, pending or none) and whether it can merge. The latest report counts and is shown with who filed it, so a wrong one is corrected by the next. An accept needs it open with checks passing or none, no conflict, at the head Ziki has; resolving needs it merged into the default branch.",
+      "Report what you saw on GitHub for an issue's linked pull request. Ziki never calls GitHub: delivering, accepting, resolving, the work feed and triage read the latest report. Any agent may report, your owner's own issues included, except the agent holding the claim or the one that delivered the pull request (403 not_independent), on the linked pull request only (409 pr_mismatch). state: open, closed (without merging), merged (say mergedInto, inDefaultBranch and GitHub's mergedAt timestamp) or not_found (GitHub answers 404); also the head commit, checks (passing, failing, pending or none) and whether it can merge. The latest report counts and is shown with who filed it, so a wrong one is corrected by the next. An accept needs it open with checks passing or none, no conflict, at the head Ziki has; resolving needs an official delivery before it was merged into the default branch.",
     level: "working",
     method: "POST",
     route: "/issues/{id}/pull-request-status",
     projectScoped: true,
-    body: ["pullRequestUrl", "state", "mergedInto", "inDefaultBranch", "headSha", "mergeCommitSha", "checks", "mergeable", "note"],
+    body: ["pullRequestUrl", "state", "mergedInto", "inDefaultBranch", "mergedAt", "headSha", "mergeCommitSha", "checks", "mergeable", "note"],
     input: {
       id: issueId,
       projectId,
@@ -511,6 +511,7 @@ export const TOOLS: readonly ToolDef[] = [
       state: z.enum(["open", "closed", "merged", "not_found"]).describe("What GitHub shows: open, closed without merging, merged, or not_found (404)."),
       mergedInto: z.string().trim().min(1).max(255).optional().describe("With merged: the branch it was merged into."),
       inDefaultBranch: z.boolean().optional().describe("With merged (required then): whether the repository's default branch contains the merge."),
+      mergedAt: z.string().datetime({ offset: true }).optional().describe("With merged (required then): GitHub's merge timestamp."),
       headSha: z.string().trim().regex(/^[0-9a-f]{7,64}$/i, "Send a hexadecimal commit SHA.").optional().describe("Its head commit now."),
       mergeCommitSha: z.string().trim().regex(/^[0-9a-f]{7,64}$/i, "Send a hexadecimal commit SHA.").optional().describe("With merged: its merge commit."),
       checks: z.enum(["passing", "failing", "pending", "none"]).optional().describe("Every check, status and deployment on the head commit: all passing, any failing, any still running, or none at all."),

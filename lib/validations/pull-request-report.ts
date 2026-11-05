@@ -30,6 +30,8 @@ export const pullRequestReportSchema = z
     headSha: sha.optional(),
     /** Its merge commit (with `merged`). */
     mergeCommitSha: sha.optional(),
+    /** GitHub's actual merge timestamp (required with `merged`). */
+    mergedAt: z.string().datetime({ offset: true }).optional(),
     /** Every check, status and deployment on the head commit: all passing, any failing, any still running, or none at all. */
     checks: z.enum(PULL_REQUEST_CHECKS).optional(),
     /** False when GitHub says it conflicts with its base branch. */
@@ -39,13 +41,17 @@ export const pullRequestReportSchema = z
     projectId: z.string().trim().min(1).max(191).optional(),
   })
   .strict()
-  .refine((body) => body.state === "merged" || (body.mergedInto === undefined && body.inDefaultBranch === undefined && body.mergeCommitSha === undefined), {
-    message: "mergedInto, inDefaultBranch and mergeCommitSha go with state \"merged\" only.",
+  .refine((body) => body.state === "merged" || (body.mergedInto === undefined && body.inDefaultBranch === undefined && body.mergeCommitSha === undefined && body.mergedAt === undefined), {
+    message: "mergedInto, inDefaultBranch, mergeCommitSha and mergedAt go with state \"merged\" only.",
     path: ["state"],
   })
   .refine((body) => body.state !== "merged" || body.inDefaultBranch !== undefined, {
     message: "Say whether the default branch contains the merge (inDefaultBranch).",
     path: ["inDefaultBranch"],
+  })
+  .refine((body) => body.state !== "merged" || body.mergedAt !== undefined, {
+    message: "Include GitHub's merge timestamp (mergedAt).",
+    path: ["mergedAt"],
   });
 
 export type PullRequestReportInput = z.infer<typeof pullRequestReportSchema>;

@@ -61,7 +61,7 @@ describe("pull request state, reported by agents", () => {
 
   it("waits for the release when it is reported merged into staging", async () => {
     await ok("eli", "report-pr-status", {
-      id, pullRequestUrl, state: "merged", mergedInto: "staging", inDefaultBranch: false, mergeCommitSha: "9f2c7aa", note: "Merged into staging; main doesn't have it yet.",
+      id, pullRequestUrl, state: "merged", mergedInto: "staging", inDefaultBranch: false, mergedAt: new Date(Date.now() + 1000).toISOString(), mergeCommitSha: "9f2c7aa", note: "Merged into staging; main doesn't have it yet.",
     });
     expect((await refused("dana", "resolve-issue", { id }, 409)).error).toBe("awaiting_release");
     const waiting = await feedItem("bob", "await_release", id);
@@ -77,7 +77,7 @@ describe("pull request state, reported by agents", () => {
     expect((await refused("dana", "resolve-issue", { id }, 409)).error).toBe("pr_broken");
 
     // The latest report counts: eli saw it merged into main after all.
-    await ok("eli", "report-pr-status", { id, pullRequestUrl, state: "merged", mergedInto: "main", inDefaultBranch: true, mergeCommitSha: "9f2c7aa", note: "Released: main contains the merge." });
+    await ok("eli", "report-pr-status", { id, pullRequestUrl, state: "merged", mergedInto: "main", inDefaultBranch: true, mergedAt: new Date(Date.now() + 1000).toISOString(), mergeCommitSha: "9f2c7aa", note: "Released: main contains the merge." });
     expect((await ok("ada", "get-issue", { id })).issue).toMatchObject({ status: "merge", substatus: "ready_to_merge" });
     const resolved = await ok("dana", "resolve-issue", { id });
     expect(resolved).toMatchObject({ resolved: true, reconciled: true, mergedInto: "main", pullRequestState: { state: "merged", inDefaultBranch: true } });

@@ -95,9 +95,7 @@ import {
 } from "@/lib/rate-limit";
 import { publish } from "@/lib/agent-api/events";
 import { issueChangePayload, publishWebEvent } from "@/lib/agent-api/web-events";
-import { firstPullRequestLink } from "@/lib/github/pr-mention";
 import { CommentPlacementError, placeComment, type CommentPlacement } from "@/lib/comment-placement";
-import { standingAcceptance } from "@/lib/accepted-fix";
 import { reportedClosedUnmerged } from "@/lib/agent-api/pull-request-report";
 import {
   agentMentionNames,
@@ -1173,7 +1171,6 @@ export async function editProofLinksAction(
     select: {
       id: true,
       proofLinks: true,
-      pullRequestUrl: true,
       reporterId: true,
       assigneeId: true,
       isDeleted: true,
@@ -1210,24 +1207,12 @@ export async function editProofLinksAction(
     return { ok: true };
   }
 
-  const accepted = await standingAcceptance(prisma, bugId);
-  const nextPullRequest = firstPullRequestLink(proofLinks);
-  if (accepted && existing.pullRequestUrl && nextPullRequest !== existing.pullRequestUrl) {
-    return {
-      error:
-        "This issue's accepted fix is bound to a different pull request — link the accepted one again.",
-    };
-  }
-
-  const updatePullRequest = !accepted && nextPullRequest !== existing.pullRequestUrl;
-
   await prisma.$transaction(async (tx) => {
     await tx.bug.update({
       where: { id: bugId },
       data: {
         proofLinks,
         updatedAt: new Date(),
-        ...(updatePullRequest ? { pullRequestUrl: nextPullRequest } : {}),
       },
     });
 
@@ -1235,7 +1220,7 @@ export async function editProofLinksAction(
       bugId,
       type: "issue.updated",
       actorUserId: userId,
-      payload: issueChangePayload({ proofLinks, ...(updatePullRequest ? { pullRequestUrl: nextPullRequest } : {}) }),
+      payload: issueChangePayload({ proofLinks }),
     });
 
     await tx.bugActivity.create({
@@ -1252,19 +1237,6 @@ export async function editProofLinksAction(
       },
     });
 
-    if (updatePullRequest) {
-      await tx.bugActivity.create({
-        data: {
-          bugId,
-          actorId: userId,
-          type: "edited",
-          summary: nextPullRequest
-            ? `linked PR ${nextPullRequest}`
-            : `unlinked PR ${existing.pullRequestUrl}`,
-          metadata: { field: "pullRequestUrl", pullRequestUrl: nextPullRequest, via: "proofLinks" },
-        },
-      });
-    }
   });
 
   revalidatePath("/[project]", "layout");

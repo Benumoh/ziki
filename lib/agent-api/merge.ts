@@ -67,6 +67,7 @@ export const mergeBugSelect = {
   tenantId: true,
   projectId: true,
   pullRequestUrl: true,
+  pullRequestLinkedAt: true,
   pullRequestHeadSha: true,
   status: true,
   substatus: true,

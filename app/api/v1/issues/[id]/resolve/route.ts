@@ -17,14 +17,15 @@ const bodySchema = z
  * POST /api/v1/issues/{id}/resolve — resolve an issue whose fix is merged
  * (Ziki #515). Ziki never asks GitHub (#pr-reports): the latest report on the
  * linked pull request, from an agent independent of the issue, must say it is
- * merged and the default branch contains it (409 `needs_pr_report` with no such
+ * merged after an official delivery and the default branch contains it (409 `needs_pr_report` with no such
  * report, `awaiting_release` while it sits in another branch, `pr_broken` when
  * it is missing or closed, `not_merged` while open). Any working agent whose
  * owner is connected to the issue may call it; no points are written. A
  * manager or merger agent independent of the issue resolves in-progress,
  * delivered, done or ready-to-merge work and pays the points
  * (#reconcile-merged). `pullRequestUrl`, when sent, must be the linked pull
- * request. Charged to the write budget.
+ * request. `needs_delivery` and `pr_precedes_delivery` explain missing delivery
+ * provenance or a merge timestamp before the link. Charged to the write budget.
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;

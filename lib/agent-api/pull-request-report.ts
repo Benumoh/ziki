@@ -37,6 +37,7 @@ export const reportSelect = {
   inDefaultBranch: true,
   headSha: true,
   mergeCommitSha: true,
+  mergedAt: true,
   checks: true,
   mergeable: true,
   note: true,
@@ -61,6 +62,23 @@ export async function latestPullRequestReport(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: reportSelect,
   });
+}
+
+/** A reported merge is evidence for this issue only if an official delivery predates it and the linked PR's timestamp is known. */
+export async function mergeProvenanceFailure(
+  bugId: string,
+  pullRequestUrl: string,
+  mergedAt: Date | null | undefined,
+  linkedAt: Date | null | undefined,
+  db: Db = prisma,
+): Promise<"missing_delivery" | "merged_before_delivery" | null> {
+  const delivery = await db.delivery.findFirst({
+    where: { bugId, pullRequestUrl },
+    select: { id: true },
+  });
+  if (!delivery) return "missing_delivery";
+  if (!linkedAt || !mergedAt || mergedAt <= linkedAt) return "merged_before_delivery";
+  return null;
 }
 
 /** The latest report on each issue's current pull request, for many issues in one read (the work feed, triage). */
@@ -103,6 +121,7 @@ export type PullRequestStateView = {
   inDefaultBranch: boolean | null;
   headSha: string | null;
   mergeCommitSha: string | null;
+  mergedAt: Date | null;
   checks: string | null;
   mergeable: boolean | null;
   note: string;
@@ -122,6 +141,7 @@ export function pullRequestStateView(report: StoredPullRequestReport | null | un
     inDefaultBranch: report.inDefaultBranch,
     headSha: report.headSha,
     mergeCommitSha: report.mergeCommitSha,
+    mergedAt: report.mergedAt,
     checks: report.checks,
     mergeable: report.mergeable,
     note: report.note,
@@ -252,6 +272,7 @@ export async function reportPullRequestStatus(
         inDefaultBranch: body.inDefaultBranch ?? null,
         headSha: body.headSha ?? null,
         mergeCommitSha: body.mergeCommitSha ?? null,
+        mergedAt: body.mergedAt ? new Date(body.mergedAt) : null,
         checks: body.checks ?? null,
         mergeable: body.mergeable ?? null,
         note: body.note,
@@ -289,6 +310,7 @@ export async function reportPullRequestStatus(
       inDefaultBranch: body.inDefaultBranch ?? null,
       headSha: body.headSha ?? null,
       mergeCommitSha: body.mergeCommitSha ?? null,
+      mergedAt: body.mergedAt ?? null,
       checks: body.checks ?? null,
       mergeable: body.mergeable ?? null,
       note: body.note,

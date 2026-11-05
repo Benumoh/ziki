@@ -90,6 +90,7 @@ export async function repairPullRequestLink(
       id: true,
       status: true,
       pullRequestUrl: true,
+      pullRequestLinkedAt: true,
       pullRequestHeadSha: true,
       reporterId: true,
       beneficiaryUserId: true,
@@ -134,7 +135,11 @@ export async function repairPullRequestLink(
     // Only from the link read above: someone may have linked another since.
     const changed = await tx.bug.updateMany({
       where: { id: bug.id, pullRequestUrl: previous },
-      data: { pullRequestUrl: next, pullRequestHeadSha: headSha },
+      data: {
+        pullRequestUrl: next,
+        pullRequestLinkedAt: samePullRequest ? bug.pullRequestLinkedAt : new Date(),
+        pullRequestHeadSha: headSha,
+      },
     });
     if (changed.count !== 1) return null;
     const counts = { judgements: 0, mergeReviews: 0, deliveries: 0, reviewOffers: 0 };

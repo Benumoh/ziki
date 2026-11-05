@@ -1226,7 +1226,7 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
           minimumRole: "working",
           method: "POST",
           path: apiPath(issue.id, "pull-request-status", pid),
-          cli: `report-pr-status --id ${issue.id} --pull-request-url ${issue.pullRequestUrl} --state open|closed|merged|not_found [--merged-into <branch> --in-default-branch true|false] [--head-sha <sha>] [--checks passing|failing|pending|none] [--mergeable true|false] --note <what you saw>`,
+          cli: `report-pr-status --id ${issue.id} --pull-request-url ${issue.pullRequestUrl} --state open|closed|merged|not_found [--merged-into <branch> --in-default-branch true|false --merged-at <ISO timestamp>] [--head-sha <sha>] [--checks passing|failing|pending|none] [--mergeable true|false] --note <what you saw>`,
         },
       ],
     });
@@ -1615,12 +1615,12 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "merge_fix",
       key: `merge_fix:${fix.id}`,
       title: `Merge the accepted fix for #${fix.number} on GitHub`,
-      detail: "Accepted and Ready to Merge. Ziki doesn't merge: merge the pull request on GitHub yourself (checks green, no conflict, the head the testers approved), then report it merged (state merged, the branch, whether the default branch contains it) and resolve it, which makes it Live and pays the points.",
+      detail: "Accepted and Ready to Merge. Ziki doesn't merge: merge the pull request on GitHub yourself (checks green, no conflict, the head the testers approved), then report it merged (state, branch, default-branch presence and GitHub's mergedAt timestamp) and resolve it, which makes it Live and pays the points.",
       minimumRole: "merger",
       ...(gate.canAct ? prBlock(fix.id) ?? gate : gate),
       issue: issueRef(fix),
       actions: [
-        { name: "report_pr_status", minimumRole: "working", method: "POST", path: apiPath(fix.id, "pull-request-status", pid), cli: `report-pr-status --id ${fix.id} --pull-request-url <the linked pull request> --state merged --merged-into <branch> --in-default-branch true|false --merge-commit-sha <sha> --note <what you merged>` },
+        { name: "report_pr_status", minimumRole: "working", method: "POST", path: apiPath(fix.id, "pull-request-status", pid), cli: `report-pr-status --id ${fix.id} --pull-request-url <the linked pull request> --state merged --merged-into <branch> --in-default-branch true|false --merged-at <ISO timestamp> --merge-commit-sha <sha> --note <what you merged>` },
         { name: "resolve_merged", minimumRole: "manager", method: "POST", path: apiPath(fix.id, "resolve", pid), cli: `resolve-issue --id ${fix.id}` },
       ],
     });
@@ -1652,7 +1652,7 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       blockedReason: issue.gate.reason ?? "Merged into another branch that isn't released yet.",
       issue: issueRef(issue),
       actions: [
-        { name: "report_pr_status", minimumRole: "working", method: "POST", path: apiPath(issue.id, "pull-request-status", pid), cli: `report-pr-status --id ${issue.id} --pull-request-url ${issue.pullRequestUrl} --state merged --merged-into ${report.mergedInto ?? "<branch>"} --in-default-branch true --note <what you saw>` },
+        { name: "report_pr_status", minimumRole: "working", method: "POST", path: apiPath(issue.id, "pull-request-status", pid), cli: `report-pr-status --id ${issue.id} --pull-request-url ${issue.pullRequestUrl} --state merged --merged-into ${report.mergedInto ?? "<branch>"} --in-default-branch true --merged-at <ISO timestamp> --note <what you saw>` },
       ],
     });
   }

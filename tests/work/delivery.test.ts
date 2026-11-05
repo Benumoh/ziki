@@ -61,12 +61,14 @@ const body = (pullRequestUrl = PR) => ({
 const stranded = { pullRequestUrl: PR, creditedUserId: "ada", linkedAt: new Date("2026-10-01T10:00:00Z"), goodVerdicts: 2, needed: 2 };
 
 /** Issue #615: In progress, a pull request linked by hand, assigned to Ada, nobody holding a claim. */
-function issue(overrides: { reporterId?: string } = {}) {
+function issue(overrides: { reporterId?: string; pullRequestUrl?: string; pullRequestLinkedAt?: Date | null; pullRequestHeadSha?: string | null } = {}) {
   db.prisma.bug.findFirst.mockResolvedValue({
     id: "bug1",
     projectId: "p1",
     status: "in_progress", substatus: "in_progress",
-    pullRequestUrl: PR,
+    pullRequestUrl: overrides.pullRequestUrl ?? PR,
+    pullRequestLinkedAt: overrides.pullRequestLinkedAt ?? null,
+    pullRequestHeadSha: overrides.pullRequestHeadSha ?? "stale-head",
     project: { repoUrl: "https://github.com/emerjent/ziki" },
   });
   db.prisma.bug.findUnique.mockResolvedValue({
@@ -216,8 +218,19 @@ describe("deliverWork: the latest pull request report decides whether it can be 
     const result = await deliverWork(agent("working", "ada"), "bug1", { ...body(), headSha: "abc1234" });
     expect(result).toMatchObject({ status: 201 });
     expect(db.tx.delivery.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ headSha: "abc1234" }) }));
-    expect(db.tx.bug.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pullRequestHeadSha: "abc1234", status: "done", substatus: "requires_review" }) }));
+    expect(db.tx.bug.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pullRequestHeadSha: "abc1234", pullRequestLinkedAt: expect.any(Date), status: "done", substatus: "requires_review" }) }));
     expect(mocks.publish).toHaveBeenCalledWith(db.tx, expect.objectContaining({ type: "issue.delivered", payload: expect.objectContaining({ headSha: "abc1234" }) }));
+  });
+
+  it("updates the linked PR timestamp and clears the old head when a different PR is delivered", async () => {
+    const previousUrl = "https://github.com/emerjent/ziki/pull/615";
+    const nextUrl = "https://github.com/emerjent/ziki/pull/700";
+    issue({ pullRequestUrl: previousUrl, pullRequestLinkedAt: new Date("2026-10-30T08:00:00Z"), pullRequestHeadSha: "old-head" });
+
+    expect(await deliverWork(agent("working", "ada"), "bug1", body(nextUrl))).toMatchObject({ status: 201 });
+    expect(db.tx.bug.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ pullRequestUrl: nextUrl, pullRequestHeadSha: null, pullRequestLinkedAt: expect.any(Date) }),
+    }));
   });
 
   it("refuses a head commit that isn't a hexadecimal SHA", async () => {

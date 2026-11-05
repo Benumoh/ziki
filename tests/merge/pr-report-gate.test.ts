@@ -86,7 +86,7 @@ describe("reportPullRequestStatus (#pr-reports)", () => {
     expect(db.tx.pullRequestReport.create).toHaveBeenCalledWith(expect.objectContaining({
       data: {
         bugId: "bug1", pullRequestUrl: PR, state: "open", mergedInto: null, inDefaultBranch: null, headSha: "aaa1111",
-        mergeCommitSha: null, checks: "passing", mergeable: true, note: "Open, checks green, no conflict.",
+        mergeCommitSha: null, mergedAt: null, checks: "passing", mergeable: true, note: "Open, checks green, no conflict.",
         agentId: "agent-erin", onBehalfOfUserId: "erin",
       },
     }));
@@ -133,6 +133,19 @@ describe("reportPullRequestStatus (#pr-reports)", () => {
   it("answers 400 for a merged report that doesn't say whether the default branch contains it", async () => {
     const result = await reportPullRequestStatus(checker(), scope, "bug1", { pullRequestUrl: PR, state: "merged", mergedInto: "staging", note: "Merged." });
     expect(result).toMatchObject({ status: 400, body: { error: "invalid_request", field: "inDefaultBranch" } });
+    expect(db.bug.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("requires GitHub's merge timestamp with a merged report", async () => {
+    const result = await reportPullRequestStatus(checker(), scope, "bug1", {
+      pullRequestUrl: PR,
+      state: "merged",
+      mergedInto: "main",
+      inDefaultBranch: true,
+      mergeCommitSha: "def5678",
+      note: "Merged into main.",
+    });
+    expect(result).toMatchObject({ status: 400, body: { error: "invalid_request", field: "mergedAt" } });
     expect(db.bug.findFirst).not.toHaveBeenCalled();
   });
 

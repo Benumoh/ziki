@@ -12,7 +12,7 @@ import {
 } from "@/lib/agent-api/merge";
 import { parseGitHubRepoUrl, parsePullRequestUrl } from "@/lib/github/pull-request-url";
 import { prGate } from "@/lib/agent-api/pr-gate";
-import { gateReport, latestPullRequestReport, pullRequestStateView, type PullRequestStateView } from "@/lib/agent-api/pull-request-report";
+import { gateReport, latestPullRequestReport, mergeProvenanceFailure, pullRequestStateView, type PullRequestStateView } from "@/lib/agent-api/pull-request-report";
 
 /**
  * A manager resolves merged work (#reconcile-merged, #pr-reports).
@@ -58,6 +58,8 @@ export type ReconcileError =
   | "no_pull_request"
   | "pr_mismatch"
   | "needs_pr_report"
+  | "needs_delivery"
+  | "pr_precedes_delivery"
   | "awaiting_release"
   | "pr_broken"
   | "not_merged"
@@ -131,6 +133,9 @@ export async function reconcileMergedWork(
   const refusal = mergedRefusal(gate);
   if (refusal) return fail(409, refusal.error, refusal.message);
   const merged = report!;
+  const provenance = await mergeProvenanceFailure(bug.id, bug.pullRequestUrl, merged.mergedAt, bug.pullRequestLinkedAt);
+  if (provenance === "missing_delivery") return fail(409, "needs_delivery", "This pull request has no official delivery on this issue, so its merge cannot resolve the issue.");
+  if (provenance === "merged_before_delivery") return fail(409, "pr_precedes_delivery", "The pull request was merged before it was delivered on this issue. Deliver a new fix and report its merge.");
 
   // Who is credited and paid: the same rules as an accept.
   const claim = deliveredClaim(bug);

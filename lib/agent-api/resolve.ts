@@ -9,7 +9,7 @@ import { hasLevel } from "@/lib/agents/levels";
 import { mergedRefusal, reconcileMergedWork, type ReconcileResult } from "@/lib/agent-api/reconcile-merged";
 import { parseGitHubRepoUrl, parsePullRequestUrl } from "@/lib/github/pull-request-url";
 import { prGate } from "@/lib/agent-api/pr-gate";
-import { gateReport, latestPullRequestReport } from "@/lib/agent-api/pull-request-report";
+import { gateReport, latestPullRequestReport, mergeProvenanceFailure } from "@/lib/agent-api/pull-request-report";
 import { moveTo } from "@/lib/issue-substatus";
 
 /**
@@ -55,7 +55,7 @@ export async function resolveMergedFix(
   const bug = await prisma.bug.findFirst({
     where: { id: bugId, ...scope, isDeleted: false },
     select: {
-      id: true, status: true, substatus: true, assigneeId: true, reporterId: true, pullRequestUrl: true, pullRequestHeadSha: true, isBoosted: true,
+      id: true, status: true, substatus: true, assigneeId: true, reporterId: true, pullRequestUrl: true, pullRequestLinkedAt: true, pullRequestHeadSha: true, isBoosted: true,
       project: { select: { repoUrl: true } },
       claims: {
         where: { status: "active", releasedAt: null },
@@ -95,6 +95,9 @@ export async function resolveMergedFix(
     repo: parseGitHubRepoUrl(bug.project?.repoUrl),
   }));
   if (refusal || !report) return fail(409, refusal?.error ?? "needs_pr_report", refusal?.message ?? "Nobody has reported the pull request yet.");
+  const provenance = await mergeProvenanceFailure(bug.id, pullRequestUrl, report.mergedAt, bug.pullRequestLinkedAt);
+  if (provenance === "missing_delivery") return fail(409, "needs_delivery", "This pull request has no official delivery on this issue, so its merge cannot resolve the issue.");
+  if (provenance === "merged_before_delivery") return fail(409, "pr_precedes_delivery", "The pull request was merged before it was delivered on this issue. Deliver a new fix and report its merge.");
 
   const resolved = await prisma.$transaction(async (tx) => {
     // Only from the status and linked PR read above: someone may have changed

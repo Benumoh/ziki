@@ -76,7 +76,7 @@ const db = vi.hoisted(() => {
 
 vi.mock("@/lib/prisma", () => ({ prisma: db.prisma }));
 
-import { editBugContentAction } from "@/app/actions/issues";
+import { editBugContentAction, editProofLinksAction } from "@/app/actions/issues";
 import { canEditTicket } from "@/lib/ticket-editing";
 import { buildVersions } from "@/lib/issue-revisions";
 
@@ -174,6 +174,28 @@ describe("editBugContentAction confirmation invalidation (#713)", () => {
     expect(result).toEqual({ ok: true });
     expect(db.prisma.$transaction).not.toHaveBeenCalled();
     expect(db.tx.bugRevision.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("editProofLinksAction PR provenance (#725)", () => {
+  it("keeps proof-link edits separate from the issue's authoritative pull request", async () => {
+    const currentPr = "https://github.com/acme/app/pull/12";
+    db.prisma.bug.findUnique.mockResolvedValue(existingBug({
+      proofLinks: [],
+      pullRequestUrl: currentPr,
+      reporterId: "reporter-1",
+    }));
+    const form = new FormData();
+    form.set("proofLinks", "https://github.com/acme/app/pull/99\nhttps://github.com/other/app/pull/88");
+
+    const result = await editProofLinksAction("bug-1", form);
+
+    expect(result).toEqual({ ok: true });
+    expect(db.tx.bug.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ proofLinks: ["https://github.com/acme/app/pull/99", "https://github.com/other/app/pull/88"] }),
+    }));
+    expect(db.tx.bug.update.mock.calls[0][0].data).not.toHaveProperty("pullRequestUrl");
+    expect(db.tx.bug.update.mock.calls[0][0].data).not.toHaveProperty("pullRequestHeadSha");
   });
 });
 

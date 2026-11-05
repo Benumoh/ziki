@@ -382,6 +382,8 @@ model Bug {
   createdByAgent            Agent?                  @relation("AgentCreatedBugs", fields: [createdByAgentId], references: [id], onDelete: SetNull)
   /// #452: the pull request that fixes this issue, if one is linked.
   pullRequestUrl            String?
+  /// When the authoritative pull request was linked to this issue.
+  pullRequestLinkedAt       DateTime?
   /// Head commit of that pull request when it was linked (#489). Acceptance
   /// and the merge gate bind to this exact commit, not just the PR number.
   pullRequestHeadSha        String?
@@ -1626,6 +1628,8 @@ model PullRequestReport {
   headSha          String?
   /// Its merge commit, once merged.
   mergeCommitSha   String?
+  /// The timestamp GitHub reports for the merge; resolution checks it postdates delivery.
+  mergedAt         DateTime?
   /// "passing", "failing", "pending" or "none" (no checks run on it).
   checks           String?
   /// False when GitHub says it conflicts with its base branch.

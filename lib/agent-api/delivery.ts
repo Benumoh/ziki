@@ -172,6 +172,7 @@ export async function deliverWork(
       status: true,
       substatus: true,
       pullRequestUrl: true,
+      pullRequestLinkedAt: true,
       project: { select: { repoUrl: true } },
     },
   });
@@ -282,6 +283,9 @@ export async function deliverWork(
       where: { id: bug.id },
       data: {
         pullRequestUrl: body.pullRequestUrl,
+        pullRequestLinkedAt: bug.pullRequestUrl === body.pullRequestUrl && bug.pullRequestLinkedAt
+          ? bug.pullRequestLinkedAt
+          : new Date(),
         pullRequestHeadSha: headSha,
         ...moveTo("requires_review"),
         ...(screenshots.length ? { proofLinks: { push: screenshots } } : {}),

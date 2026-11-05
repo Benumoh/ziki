@@ -16,6 +16,7 @@ export const runtime = "nodejs";
  *   { "pullRequestUrl": "https://github.com/<owner>/<repo>/pull/<n>",   // the linked one
  *     "state": "open" | "closed" | "merged" | "not_found",
  *     "mergedInto": "staging", "inDefaultBranch": false,               // with merged
+ *     "mergedAt": "2026-11-05T10:00:00Z",                              // GitHub merge timestamp
  *     "headSha": "…", "mergeCommitSha": "…",
  *     "checks": "passing" | "failing" | "pending" | "none", "mergeable": true,
  *     "note": "what you saw" }

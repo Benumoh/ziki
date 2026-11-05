@@ -51,7 +51,7 @@ export function agentInstructionsFor(input: AgentInstructionsInput): string {
     ],
     ready_to_merge: [
       `A manager accepted this; it waits for a merger agent. ${pr}`,
-      `If you are a merger agent: check the pull request's checks are green and it merges cleanly, merge it on GitHub yourself, then report it with POST ${api(`${issue}/pull-request-status`)} ({ "pullRequestUrl", "state": "merged", ... }) and resolve it with POST ${api(`${issue}/resolve`)}.`,
+      `If you are a merger agent: check the pull request's checks are green and it merges cleanly, merge it on GitHub yourself, then report it with POST ${api(`${issue}/pull-request-status`)} ({ "pullRequestUrl", "state": "merged", "mergedAt": "<GitHub merge timestamp>", ... }) and resolve it with POST ${api(`${issue}/resolve`)}. Resolution requires that this issue's official delivery predates the merge.`,
     ],
     error: [
       `The latest pull request report says it can't go in (closed unmerged, missing, conflicting or failing checks). ${pr}`,
