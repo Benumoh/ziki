@@ -41,8 +41,8 @@ const LOOK_NOTE: Record<DockLook, (name: string) => string> = {
 };
 
 /**
- * The agent's picture on its page, with a "Change look" button under it; either
- * opens a pop-up to choose how it looks. In the agents dock (#agents-dock) it is a round face by default, in
+ * The agent's picture on its page, with a pencil badge; clicking it opens a
+ * pop-up to choose how it looks. In the agents dock (#agents-dock) it is a round face by default, in
  * one of the face colours; or its Ziki avatar ("Automatic" is the one drawn
  * from the agent's id), which saves to the agent and shows wherever it does; or
  * a pixel robot in one of the robot colours; or plain, with no character. A pick
@@ -140,16 +140,6 @@ export function AgentAvatarPicker({
             <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
         </span>
-      </button>
-      {/* Said in words too, so it is clear the picture is how you change its look. */}
-      <button
-        type="button"
-        onClick={openPicker}
-        disabled={pending}
-        aria-haspopup="dialog"
-        className="inline-flex min-h-8 items-center rounded-full px-2.5 text-xs font-semibold text-zk-accent transition hover:bg-zk-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue disabled:cursor-wait"
-      >
-        Change look
       </button>
 
       {open ? (

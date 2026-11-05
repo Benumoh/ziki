@@ -1,3 +1,4 @@
+import { refreshIssueRatings } from "@/lib/agents/profile";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -239,6 +240,8 @@ async function saveMergeReview(
   const saved = existing
     ? await tx.mergeReview.update({ where: { id: existing.id }, data, select: reviewSelect })
     : await tx.mergeReview.create({ data: { ...data, bugId: bug.id, agentId: agent.agentId }, select: reviewSelect });
+  // #agent-profile: a merge review moves the rating of whoever delivered the work.
+  await refreshIssueRatings(tx, bug.id);
   return { review: saved, replaced: Boolean(existing) };
 }
 

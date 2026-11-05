@@ -33,6 +33,7 @@ function entrySource(role: string, points: number, sourceKey: string): string {
     "comment-upvote": "Comment upvote",
     importance: "Importance mark",
     "bid-vote": "Bid vote",
+    multiplier: "Points multiplier adjustment",
   };
   return labels[sourceKey.split(":")[0]] ?? `${role[0].toUpperCase()}${role.slice(1)} award`;
 }

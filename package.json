@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.11",
+  "version": "0.1.12"
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -20,6 +20,7 @@
     "db:scenario:open-bids": "tsx --env-file=.env scripts/dev/scenario-open-bids.ts",
     "db:scenario:agents-dock": "tsx --env-file=.env scripts/dev/scenario-agents-dock.ts",
     "db:fixtures": "tsx --env-file=.env scripts/dev/fixtures/run.ts",
+    "db:fill-agent-profiles": "tsx --env-file=.env scripts/dev/fill-agent-profiles.ts",
     "db:fixtures:generate": "tsx scripts/dev/fixtures/generate.ts",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",

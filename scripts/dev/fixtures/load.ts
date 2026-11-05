@@ -132,6 +132,11 @@ export async function loadFixtures(options: { db?: PrismaClient; addExistingUser
     await table("comment", fx.comments.filter((c) => c.parentId));
     await table("vote", fx.votes);
     await table("bugActivity", fx.activities);
+    // Agent profiles: the workspace's shared skill tags, then each agent's skills.
+    await table("skillTag", (fx.skillTags ?? []).map((t) => ({ ...t, tenantId: TENANT_ID })));
+    await table("agentSkill", fx.agentSkills ?? []);
+    // The agents' audit log, which their pages' Activity reads.
+    await table("agentAuditEvent", (fx.auditEvents ?? []).map((e) => ({ ...e, tenantId: TENANT_ID })));
 
     if (options.addExistingUsers) {
       const others = await db.user.findMany({ where: { NOT: { email: { endsWith: "@fixtures.local" } } }, select: { id: true } });

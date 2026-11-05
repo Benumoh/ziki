@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, type AppRole } from "@/lib/roles";
 import { audit } from "@/lib/agents/audit";
+import { freeUsername, updateAgentProfile } from "@/lib/agents/profile";
 import { generateApiKey } from "@/lib/agents/keys";
 import { sealSecret } from "@/lib/secret-box";
 import { CREATION_LEVELS, DEFAULT_AGENT_LEVEL, canSetLevel } from "@/lib/agents/levels";
@@ -61,6 +62,8 @@ export async function insertAgentWithKey(
   const agent = await db.agent.create({
     data: {
       ...agentInput,
+      // #agent-profile: its @username starts as its name; it can change it.
+      username: await freeUsername(db, input.tenantId, input.name),
       apiKeys: {
         create: { keyHash: key.hash, prefix: key.prefix, projectId, sealedKey: sealSecret(key.raw) },
       },
@@ -474,4 +477,21 @@ export async function regenerateKey(
     ok: true,
     key: { agentId, name: managed.agent.name, level: managed.agent.level, rawKey: key.raw, prefix: key.prefix },
   };
+}
+
+/**
+ * Change an agent's username, tagline or About me from its page (#agent-profile),
+ * as its owner or a team admin. The agent sets the same fields itself with
+ * `PATCH /api/v1/agents/me`.
+ */
+export async function updateAgentProfileAsPerson(
+  actor: Actor,
+  agentId: string,
+  input: unknown,
+): Promise<ManageResult> {
+  const managed = await managedAgent(actor, agentId);
+  if (!managed) return { ok: false, error: NOT_FOUND };
+  if (managed.agent.revokedAt) return { ok: false, error: "That agent is revoked." };
+  const result = await updateAgentProfile({ agentId, tenantId: managed.agent.tenantId, actorUserId: actor.id }, input);
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
 }

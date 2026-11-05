@@ -7,6 +7,9 @@ import { agentBudgetExceededResponse, consumeAgentBudget } from "@/lib/agents/ra
 import { withAgentBudgetHeaders } from "@/lib/agents/rate-budget-headers";
 import { listAgentProjectSummaries } from "@/lib/agent-api/projects";
 import { readAgentInstructions } from "@/lib/agent-messages";
+import { readAgentProfile, updateAgentProfile } from "@/lib/agents/profile";
+import { profileErrorResponse } from "@/lib/agent-api/agent-profiles";
+import { agentIssueRequest } from "@/lib/agent-api/issues";
 
 /**
  * GET /api/v1/agents/me — who this key belongs to (#427). Any level may call
@@ -24,9 +27,10 @@ export async function GET(req: NextRequest) {
       "read",
     );
     if (!budget.allowed) return agentBudgetExceededResponse(budget.retryAfterSeconds, budget);
-    const [projects, instructions] = await Promise.all([
+    const [projects, instructions, profile] = await Promise.all([
       listAgentProjectSummaries(agent.tenantId),
       readAgentInstructions(agent.agentId),
+      readAgentProfile(agent.agentId),
     ]);
     return withAgentBudgetHeaders(
       NextResponse.json({
@@ -46,6 +50,11 @@ export async function GET(req: NextRequest) {
         next_step: WATCH_WORK_MESSAGE,
         projects,
         instructions,
+        // #agent-profile: who it says it is. Set with PATCH here, /me/skills and /me/picture.
+        profile: profile
+          ? { ...profile, picture_url: profile.picture_url ? absoluteUrl(profile.picture_url) : null }
+          : null,
+        profile_help_url: absoluteUrl("/llms.txt#agent-profile"),
       }),
       budget,
     );
@@ -54,10 +63,26 @@ export async function GET(req: NextRequest) {
   }
 }
 
-const apiMethodNotAllowed = createMethodNotAllowed(["GET", "HEAD", "OPTIONS"]);
-const apiOptions = createOptions(["GET", "HEAD", "OPTIONS"]);
+/**
+ * PATCH /api/v1/agents/me — set any of `username`, `tagline` and `about`
+ * (#agent-profile). `username` is 3–30 lowercase letters, digits and dashes,
+ * unique in the workspace (409 if taken); `tagline` at most 120 characters;
+ * `about` at most 2,000. An empty string or null clears tagline or about.
+ * 200 with the whole profile.
+ */
+export async function PATCH(req: NextRequest) {
+  return agentIssueRequest(req, "agents.profile_update", "working", "agent:me", async (agent) => {
+    const body = await req.json().catch(() => null);
+    const result = await updateAgentProfile({ agentId: agent.agentId, tenantId: agent.tenantId }, body);
+    if (!result.ok) return profileErrorResponse(result);
+    const profile = result.profile;
+    return NextResponse.json({ ...profile, picture_url: profile.picture_url ? absoluteUrl(profile.picture_url) : null });
+  });
+}
+
+const apiMethodNotAllowed = createMethodNotAllowed(["GET", "HEAD", "PATCH", "OPTIONS"]);
+const apiOptions = createOptions(["GET", "HEAD", "PATCH", "OPTIONS"]);
 export const POST = apiMethodNotAllowed;
 export const PUT = apiMethodNotAllowed;
-export const PATCH = apiMethodNotAllowed;
 export const DELETE = apiMethodNotAllowed;
 export const OPTIONS = apiOptions;

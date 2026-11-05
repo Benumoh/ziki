@@ -13,6 +13,8 @@
  */
 import { writeFileSync } from "node:fs";
 import path from "node:path";
+import { libraryProfile, librarySlug } from "../agent-profile-library";
+import { usernameFromName } from "../../../lib/validations/agent-profile";
 
 // ---------------------------------------------------------------------------
 // Deterministic randomness
@@ -531,6 +533,64 @@ for (const [status, count] of IDEA_PLAN) {
       reporterId: userId(by.owner), beneficiaryUserId: userId(by.owner), createdByAgentId: agentId(by.key), ago: born,
       ...(status === "rejected" ? { rejectedAt: born - 600, rejectedByAgentId: agentId(pick(managers).key) } : {}),
       ...(status === "archived" ? { archiveReason: pick(["already_implemented", "duplicate", "wrong_project"]), archiveEvidence: "Checked against the current build and the open issues.", archivedAt: born - 600, archivedByAgentId: agentId(pick(managers).key) } : {}),
+    });
+  }
+}
+
+// The agents' audit log: one row per action above, so each agent's page has
+// Activity. Derived from the rows already made, with no more random draws, so
+// adding it leaves every other row as it was.
+rows.auditEvents = [];
+function audit(agent: unknown, action: string, ago: unknown, target: string, bugId: unknown, payload: Row | null = null) {
+  if (typeof agent !== "string" || typeof ago !== "number") return;
+  rows.auditEvents.push({ id: id("audit", rows.auditEvents.length + 1), agentId: agent, action, target, bugId: typeof bugId === "string" ? bugId : null, payload, ago });
+}
+for (const i of rows.ideas) {
+  audit(i.createdByAgentId, "idea.created", i.ago, `idea:${i.id}`, null, { number: i.number });
+  if (i.issueId) audit(i.convertedByAgentId, "idea.converted", i.convertedAt, `idea:${i.id}`, i.issueId, { number: i.number });
+  if (i.rejectedByAgentId) audit(i.rejectedByAgentId, "idea.rejected", i.rejectedAt, `idea:${i.id}`, null, { number: i.number });
+  if (i.archivedByAgentId) audit(i.archivedByAgentId, "idea.archived", i.archivedAt, `idea:${i.id}`, null, { number: i.number, reason: i.archiveReason });
+}
+for (const c of rows.confirmations) audit(c.agentId, "issue.confirmation", c.ago, `bug:${c.bugId}`, c.bugId, { verdict: c.verdict, summary: c.summary });
+for (const v of rows.votes) audit(v.agentId, "issue.importance", v.ago, `bug:${v.bugId}`, v.bugId);
+for (const b of rows.bids) {
+  audit(b.agentId, "issue.bid", b.ago, `bug:${b.bugId}`, b.bugId, { bidId: b.id, summary: b.summary });
+  if (b.awardedAt) audit(b.agentId, "issue.bid_awarded", b.awardedAt, `bug:${b.bugId}`, b.bugId, { bidId: b.id });
+}
+for (const v of rows.bidVotes) audit(v.agentId, "issue.bid_voted", v.ago, `bug:${v.bugId}`, v.bugId, { bidId: v.bidId });
+for (const c of rows.claims) audit(c.agentId, "claim.accepted", c.claimedAt, `bug:${c.bugId}`, c.bugId, { claimId: c.id });
+for (const d of rows.deliveries) audit(d.agentId, "issue.delivered", d.ago, `bug:${d.bugId}`, d.bugId, { pullRequestUrl: d.pullRequestUrl });
+for (const t of rows.testVerdicts) audit(t.agentId, "issue.test_verdict", t.ago, `bug:${t.bugId}`, t.bugId, { goodToMerge: t.goodToMerge, summary: t.summary });
+for (const m of rows.mergeReviews) audit(m.agentId, "issue.accepted", m.ago, `bug:${m.bugId}`, m.bugId, { verdict: m.verdict, summary: m.summary });
+for (const r of rows.pullRequestReports) audit(r.agentId, "issue.pull_request_reported", r.ago, `bug:${r.bugId}`, r.bugId, { state: r.state, checks: r.checks, pullRequestUrl: r.pullRequestUrl });
+for (const c of rows.comments) audit(c.agentId, "comment.created", c.ago, String(c.id), c.bugId);
+
+// Agent profiles (#agent-profile): a username, a persona, skills under shared
+// tags, and a rating from the reviews above. No random draws, so the rows
+// before stay as they were.
+rows.skillTags = [];
+rows.agentSkills = [];
+const tagIdBySlug = new Map<string, string>();
+for (const [index, agent] of rows.agents.entries()) {
+  const profile = libraryProfile(index, String(agent.name));
+  agent.username = usernameFromName(String(agent.name));
+  agent.tagline = profile.tagline;
+  agent.about = profile.about;
+  const delivered = new Set(rows.deliveries.filter((d) => d.agentId === agent.id).map((d) => d.bugId));
+  const verdicts = [
+    ...rows.testVerdicts.filter((t) => delivered.has(t.bugId) && t.agentId !== agent.id).map((t) => t.goodToMerge === true),
+    ...rows.mergeReviews.filter((m) => delivered.has(m.bugId) && m.agentId !== agent.id).map((m) => m.verdict === "accept"),
+  ];
+  agent.rating = verdicts.length ? Math.round((verdicts.filter(Boolean).length / verdicts.length) * 50) / 10 : null;
+  for (const [position, skill] of profile.skills.entries()) {
+    const slug = librarySlug(skill.tag);
+    if (!tagIdBySlug.has(slug)) {
+      tagIdBySlug.set(slug, id("skilltag", slug));
+      rows.skillTags.push({ id: id("skilltag", slug), name: skill.tag, slug });
+    }
+    rows.agentSkills.push({
+      id: id("agentskill", `${String(agent.id).replace(/^fx-agent-/, "")}-${slug}`),
+      agentId: agent.id, tagId: tagIdBySlug.get(slug), summary: skill.summary, description: skill.description, position,
     });
   }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createBugSchema, signupSchema, updateBugSchema } from "@/lib/validations/issue";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
 import { safeHref } from "@/lib/rich-text";
+import { agentProfileUpdateSchema, agentSkillsReplaceSchema } from "@/lib/validations/agent-profile";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
 const valid = { title: "Login button broken", description: "Clicking sign in does nothing on mobile." };
@@ -49,5 +50,30 @@ describe("unsafe URLs", () => {
     expect(safeHref("javascript:alert(1)")).toBeNull();
     expect(safeHref("java\u0000script:alert(1)")).toBeNull();
     expect(safeHref("data:text/html;base64,PHNjcmlwdD4=")).toBeNull();
+  });
+});
+
+describe("agent profiles", () => {
+  const skill = { tag: "Postgres", summary: "Query plans.", description: "EXPLAIN ANALYZE first." };
+
+  it("refuses a username that isn't a handle, is reserved, or is out of bounds", () => {
+    expect(agentProfileUpdateSchema.safeParse({ username: "ada-claude" }).success).toBe(true);
+    for (const username of ["Ada Claude", "-ada", "ab", "a".repeat(31), "me", "pairing"]) {
+      expect(agentProfileUpdateSchema.safeParse({ username }).success, username).toBe(false);
+    }
+  });
+
+  it("caps the tagline and About me, and refuses an empty or unknown update", () => {
+    expect(agentProfileUpdateSchema.safeParse({ tagline: "a".repeat(121) }).success).toBe(false);
+    expect(agentProfileUpdateSchema.safeParse({ about: "a".repeat(2001) }).success).toBe(false);
+    expect(agentProfileUpdateSchema.safeParse({}).success).toBe(false);
+    expect(agentProfileUpdateSchema.safeParse({ rating: 5 }).success).toBe(false);
+  });
+
+  it("refuses a skills list with a tag twice, over 20 skills, or text over its limit", () => {
+    expect(agentSkillsReplaceSchema.safeParse({ skills: [skill] }).success).toBe(true);
+    expect(agentSkillsReplaceSchema.safeParse({ skills: [skill, { ...skill, tag: "postgres" }] }).success).toBe(false);
+    expect(agentSkillsReplaceSchema.safeParse({ skills: Array.from({ length: 21 }, (_, n) => ({ ...skill, tag: `Tag ${n}` })) }).success).toBe(false);
+    expect(agentSkillsReplaceSchema.safeParse({ skills: [{ ...skill, summary: "a".repeat(121) }] }).success).toBe(false);
   });
 });

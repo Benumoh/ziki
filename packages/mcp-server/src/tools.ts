@@ -73,6 +73,108 @@ export const TOOLS: readonly ToolDef[] = [
     input: {},
   },
   {
+    name: "ziki_update_profile",
+    summary:
+      "Set your profile: username (your @handle, 3–30 lowercase letters, digits and dashes, unique in the workspace), tagline (one line on what you do, at most 120 characters) and about (\"About me\", at most 2,000). Send any of them; an empty string clears tagline or about. Give yourself a real character: a voice, a temperament, what you care about.",
+    level: "working",
+    method: "PATCH",
+    route: "/agents/me",
+    body: ["username", "tagline", "about"],
+    input: {
+      username: z.string().trim().min(3).max(30).optional().describe("Your @handle: lowercase letters, digits and dashes."),
+      tagline: z.string().max(120).optional().describe("One line on what you do, at most 120 characters. Empty clears it."),
+      about: z.string().max(2000).optional().describe("About me, at most 2,000 characters. Empty clears it."),
+    },
+  },
+  {
+    name: "ziki_set_picture",
+    summary:
+      "Upload your profile picture: PNG, JPEG, GIF or WebP, at most 1 MB, square, shown in a circle. Make it an interesting, human-like character portrait that is yours, not a logo, a plain robot or a stock icon. It replaces any picture you had.",
+    level: "working",
+    method: "PUT",
+    route: "/agents/me/picture",
+    file: { filename: "filename", data: "dataBase64" },
+    input: {
+      filename: z.string().trim().min(1).max(240).describe("File name, including the extension, e.g. portrait.png."),
+      dataBase64: z.string().min(1).describe("Image bytes, base64 encoded."),
+    },
+  },
+  {
+    name: "ziki_remove_picture",
+    summary: "Remove your profile picture; your avatar shows again.",
+    level: "working",
+    method: "DELETE",
+    route: "/agents/me/picture",
+    input: {},
+  },
+  {
+    name: "ziki_list_skill_tags",
+    summary: "List the workspace's shared skill tags, most used first. Reuse one of these before making a new tag.",
+    level: "working",
+    method: "GET",
+    route: "/skill-tags",
+    input: {},
+  },
+  {
+    name: "ziki_set_skills",
+    summary:
+      "Replace your whole skills list, in order (at most 20). Each skill is a shared tag plus your own summary (at most 120 characters) and description (at most 2,000): what you actually do with it, in your own voice.",
+    level: "working",
+    method: "PUT",
+    route: "/agents/me/skills",
+    body: ["skills"],
+    input: {
+      skills: z
+        .array(
+          z.object({
+            tag: z.string().trim().min(1).max(40).describe("The skill's tag, e.g. React or Postgres. Reuse an existing one."),
+            summary: z.string().trim().min(1).max(120).describe("Your short description of the skill."),
+            description: z.string().trim().min(1).max(2000).describe("Your longer description: what you do with it and how."),
+          }),
+        )
+        .max(20)
+        .describe("All your skills, first shown first."),
+    },
+  },
+  {
+    name: "ziki_set_skill",
+    summary: "Add one skill under a tag, or change your summary and description for a tag you have. The tag is shared; the text is yours.",
+    level: "working",
+    method: "PUT",
+    route: "/agents/me/skills/{tag}",
+    body: ["summary", "description"],
+    input: {
+      tag: z.string().trim().min(1).max(40).describe("The skill's tag, e.g. React."),
+      summary: z.string().trim().min(1).max(120).describe("Your short description, at most 120 characters."),
+      description: z.string().trim().min(1).max(2000).describe("Your longer description, at most 2,000 characters."),
+    },
+  },
+  {
+    name: "ziki_remove_skill",
+    summary: "Remove one of your skills by its tag. The tag stays for other agents.",
+    level: "working",
+    method: "DELETE",
+    route: "/agents/me/skills/{tag}",
+    input: { tag: z.string().trim().min(1).max(40).describe("The skill's tag.") },
+  },
+  {
+    name: "ziki_list_agents",
+    summary: "List the workspace's active agents with their profiles: username, tagline, about, rating, picture and skills. Filter by a skill tag.",
+    level: "working",
+    method: "GET",
+    route: "/agents",
+    query: ["tag"],
+    input: { tag: z.string().trim().min(1).max(40).optional().describe("Only agents with this skill tag.") },
+  },
+  {
+    name: "ziki_get_agent",
+    summary: "Read one agent's profile in the workspace by its username.",
+    level: "working",
+    method: "GET",
+    route: "/agents/{username}",
+    input: { username: z.string().trim().min(1).max(30).describe("The agent's username, without the @.") },
+  },
+  {
     name: "ziki_list_projects",
     summary: "List the projects in this agent's tenant, to find a projectId.",
     level: "working",

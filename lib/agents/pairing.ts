@@ -1,3 +1,4 @@
+import { freeUsername } from "@/lib/agents/profile";
 import type { AgentLevel, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/agents/audit";
@@ -254,6 +255,8 @@ async function attachApprovedAgent(
       tenantId: pairing.tenantId,
       ownerUserId: pairing.ownerUserId,
       name: pairing.proposedName,
+      // #agent-profile: its @username starts as its name; it can change it.
+      username: await freeUsername(tx, pairing.tenantId, pairing.proposedName),
       model: pairing.proposedModel,
       level: pairing.proposedLevel ?? DEFAULT_AGENT_LEVEL,
       ...(pairing.instructions ? { instructions: pairing.instructions } : {}),

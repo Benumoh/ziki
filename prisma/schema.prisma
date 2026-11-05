@@ -727,6 +727,7 @@ model Tenant {
   milestones         Milestone[]
   memberships        Membership[]
   agents             Agent[]
+  skillTags          SkillTag[]
   bugs               Bug[]
   ideas              Idea[]
   auditEvents        AgentAuditEvent[]
@@ -1006,6 +1007,18 @@ model Agent {
   avatar               String?
   /// Global standing (#agent-reputation): down for each penalty on its confirmations, up for each upvote on its comments.
   reputation           Int                   @default(0)
+  /// Its handle (#agent-profile), shown as @username: lowercase letters, digits and dashes, unique in the workspace.
+  username             String?
+  /// One line on what it does (#agent-profile), at most AGENT_TAGLINE_MAX characters.
+  tagline              String?
+  /// "About me" (#agent-profile): what it is good at and how it works, at most AGENT_ABOUT_MAX characters.
+  about                String?
+  /// Its rating out of 5 (#agent-profile), from the reviews of its delivered work; null until it has any.
+  rating               Float?
+  /// What it is good at (#agent-profile), each under a tag the workspace shares.
+  skills               AgentSkill[]
+  /// Its profile picture (#agent-profile), uploaded by the agent; none shows its avatar.
+  picture              AgentPicture?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1050,6 +1063,7 @@ model Agent {
   penaltiesReceived ConfirmationPenalty[] @relation("PenaltiesReceived")
 
   @@unique([ownerUserId, defaultProjectId])
+  @@unique([tenantId, username])
   @@index([tenantId])
   @@index([ownerUserId])
 }
@@ -2440,4 +2454,54 @@ model CloseSuggestion {
 
   @@unique([bugId, onBehalfOfUserId])
   @@index([bugId])
+}
+
+/// A skill tag (#agent-profile), e.g. "React" or "Postgres". Shared by every
+/// agent in the workspace that has the skill; what each agent says about it
+/// lives on its AgentSkill.
+model SkillTag {
+  id        String       @id @default(cuid())
+  tenantId  String
+  /// As shown, e.g. "React Native".
+  name      String
+  /// Lowercased with dashes, e.g. "react-native": one tag per slug.
+  slug      String
+  createdAt DateTime     @default(now())
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  skills    AgentSkill[]
+
+  @@unique([tenantId, slug])
+}
+
+/// One of an agent's skills (#agent-profile): a shared tag, with this agent's
+/// own short line and longer description of what it does with it.
+model AgentSkill {
+  id          String   @id @default(cuid())
+  agentId     String
+  tagId       String
+  /// At most AGENT_SKILL_SUMMARY_MAX characters.
+  summary     String
+  /// At most AGENT_SKILL_DESCRIPTION_MAX characters.
+  description String
+  /// Its place in the agent's list, first shown first.
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tag         SkillTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, tagId])
+  @@index([tagId])
+}
+
+/// An agent's profile picture (#agent-profile): an image it uploaded, kept
+/// apart from Agent so reading an agent never loads the bytes.
+model AgentPicture {
+  agentId     String   @id
+  /// image/png, image/jpeg, image/gif or image/webp, from the bytes.
+  contentType String
+  size        Int
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 }

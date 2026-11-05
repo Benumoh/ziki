@@ -7,7 +7,7 @@ import type { AgentLevel } from "@prisma/client";
 import { consumePairingLimit } from "@/lib/agents/rate-limit";
 import { approvePairing, findPendingPairing } from "@/lib/agents/pairing";
 import { currentTenantIdFor } from "@/lib/tenant-context";
-import { createAgent, deleteAgent, regenerateKey, revokeAgent, setAgentAreaPreferences, setAgentBurst, setAgentLevel } from "@/lib/agents/registry";
+import { createAgent, deleteAgent, regenerateKey, revokeAgent, setAgentAreaPreferences, setAgentLevel } from "@/lib/agents/registry";
 import { RATE_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { isAgentPlatformEnabled } from "@/lib/feature-flags";
 
@@ -86,31 +86,6 @@ export async function setAgentLevelAction(agentId: unknown, level: unknown): Pro
     revalidatePath("/[project]/org", "layout");
     revalidatePath("/users/[id]", "page");
   }
-  return result;
-}
-
-export async function setAgentBurstAction(
-  agentId: unknown,
-  burst: unknown,
-  burstUntil: unknown = null,
-): Promise<AgentActionResult> {
-  if (typeof agentId !== "string" || typeof burst !== "boolean") {
-    return { ok: false, error: "Invalid budget." };
-  }
-
-  // Only an explicit ISO timestamp is accepted. Disabling ignores any expiry;
-  // the registry clears the stored value so a later grant starts clean.
-  let expiresAt: Date | null = null;
-  if (burst && burstUntil !== null && burstUntil !== undefined && burstUntil !== "") {
-    if (typeof burstUntil !== "string") return { ok: false, error: "Invalid expiry time." };
-    expiresAt = new Date(burstUntil);
-    if (!Number.isFinite(expiresAt.getTime())) return { ok: false, error: "Invalid expiry time." };
-    if (expiresAt.getTime() <= Date.now()) return { ok: false, error: "Choose an expiry time in the future." };
-  }
-
-  const user = await requireUser();
-  const result = await setAgentBurst(user, agentId, burst, expiresAt);
-  if (result.ok) revalidatePath("/agents");
   return result;
 }
 

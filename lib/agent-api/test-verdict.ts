@@ -1,3 +1,4 @@
+import { refreshIssueRatings } from "@/lib/agents/profile";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -370,6 +371,8 @@ export async function submitTestVerdict(
     });
     // #delivered-step: enough independent judgements move it to Done, or back to Open.
     await refreshJudgedStatus(prisma, bug.id, agent.ownerId);
+    // #agent-profile: a judgement moves the rating of whoever delivered the work.
+    await refreshIssueRatings(prisma, bug.id).catch((error: unknown) => console.error("[agent-rating] refresh failed", error));
     return result;
   } catch (error) {
     if (

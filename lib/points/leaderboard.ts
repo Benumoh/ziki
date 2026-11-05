@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { pointsNumber } from "./rules";
+import { MULTIPLIER_KEY_PREFIX } from "./multiplier";
 
 /**
  * Point balances and the leaderboard (#428), always inside one tenant.
@@ -59,6 +60,8 @@ const solvedWhere = (tenantId: string): Prisma.PointEntryWhereInput => ({
   role: "solver",
   points: { gt: 0 },
   correctedAt: null,
+  // A multiplier adjustment (scripts/points-multiplier.mjs) is not an issue solved.
+  sourceKey: { not: { startsWith: MULTIPLIER_KEY_PREFIX } },
 });
 
 /** One person's balance and solved-task count in `tenantId`. */
@@ -125,7 +128,7 @@ export async function paginatedTenantLeaderboard(
             u."name" AS "name",
             u."image" AS "image",
             COALESCE(SUM(pe."points"), 0)::float8 AS "points",
-            COALESCE(COUNT(CASE WHEN pe."role" = 'solver' AND pe."points" > 0 AND pe."correctedAt" IS NULL THEN 1 END), 0)::int AS "solvedTasks"
+            COALESCE(COUNT(CASE WHEN pe."role" = 'solver' AND pe."points" > 0 AND pe."correctedAt" IS NULL AND pe."sourceKey" NOT LIKE 'multiplier:%' THEN 1 END), 0)::int AS "solvedTasks"
           FROM "User" u
           INNER JOIN "Membership" m ON m."userId" = u."id" AND m."tenantId" = ${tenantId}
           INNER JOIN "PointEntry" pe ON pe."userId" = u."id" AND pe."tenantId" = ${tenantId}
@@ -242,7 +245,7 @@ export async function tenantRankFor(
         WITH totals AS (
           SELECT u."id",
                  COALESCE(SUM(pe."points"), 0)::float8 AS points,
-                 COUNT(CASE WHEN pe."role" = 'solver' AND pe."points" > 0 AND pe."correctedAt" IS NULL THEN 1 END)::int AS solved
+                 COUNT(CASE WHEN pe."role" = 'solver' AND pe."points" > 0 AND pe."correctedAt" IS NULL AND pe."sourceKey" NOT LIKE 'multiplier:%' THEN 1 END)::int AS solved
           FROM "User" u
           INNER JOIN "Membership" m ON m."userId" = u."id" AND m."tenantId" = ${tenantId}
           INNER JOIN "PointEntry" pe ON pe."userId" = u."id" AND pe."tenantId" = ${tenantId}

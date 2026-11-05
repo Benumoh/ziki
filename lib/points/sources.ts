@@ -30,6 +30,7 @@ const KIND_LABEL: Record<string, string> = {
   "bid-vote": "Voted on a bid",
   job: "Research job accepted",
   undo: "Correction (points taken back)",
+  multiplier: "Points multiplier adjustment",
 };
 const ROLE_LABEL: Record<PointRole, string> = {
   solver: "Solved an issue",

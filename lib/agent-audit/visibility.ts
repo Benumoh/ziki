@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 /**
  * Who can read the agent audit log (#447).
@@ -62,7 +62,12 @@ export function auditWhere(access: AuditAccess, filters: AuditFilters = {}): Pri
   }
   if (filters.issueId) where.bugId = filters.issueId;
   if (!filters.includeRequests) {
-    where.NOT = { payload: { path: ["request"], equals: true } };
+    // Domain rows have no `request` key, so the path reads as SQL NULL and a
+    // bare NOT would drop them too (NOT (NULL = true) is NULL): keep them explicitly.
+    where.OR = [
+      { payload: { path: ["request"], equals: Prisma.AnyNull } },
+      { NOT: { payload: { path: ["request"], equals: true } } },
+    ];
   }
   return where;
 }
