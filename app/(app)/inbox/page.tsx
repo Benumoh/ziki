@@ -5,19 +5,20 @@ import { currentTenantIdFor, notificationInTenant } from "@/lib/tenant-context";
 import { countPendingEscalations } from "@/lib/agent-questions";
 import { NotificationsView } from "./notifications-view";
 import { EscalationsView } from "./escalations-view";
+import { MessagesView } from "./messages-view";
 
 export const metadata = { title: "Inbox" };
 
-type Params = { tab?: string; scope?: string | string[]; page?: string | string[]; status?: string };
+type Params = { tab?: string; scope?: string | string[]; page?: string | string[]; status?: string; agent?: string };
 
 /**
- * The Inbox (#inbox): your notifications, and the escalations where agents
- * stop for you. The envelope in the top bar opens it; its count is both.
+ * The Inbox (#inbox): your notifications, the escalations where agents stop
+ * for you, and your messages with your agents (the one place you write to them). The envelope in the top bar opens it; its count is both.
  */
 export default async function InboxPage({ searchParams }: { searchParams?: Promise<Params> }) {
   const user = await requireUser();
   const params = (await searchParams) ?? {};
-  const tab = params.tab === "escalations" ? "escalations" : "notifications";
+  const tab = params.tab === "escalations" ? "escalations" : params.tab === "messages" ? "messages" : "notifications";
   const tenantId = await currentTenantIdFor(user.id);
   const [unread, waiting] = await Promise.all([
     prisma.notification.count({ where: { userId: user.id, readAt: null, ...notificationInTenant(tenantId, false) } }),
@@ -26,6 +27,7 @@ export default async function InboxPage({ searchParams }: { searchParams?: Promi
   const tabs = [
     { value: "notifications", label: "Notifications", href: "/inbox", count: unread },
     { value: "escalations", label: "Escalations", href: "/inbox?tab=escalations", count: waiting },
+    { value: "messages", label: "Messages", href: "/inbox?tab=messages", count: 0 },
   ] as const;
 
   return (
@@ -51,7 +53,9 @@ export default async function InboxPage({ searchParams }: { searchParams?: Promi
           );
         })}
       </nav>
-      {tab === "escalations" ? (
+      {tab === "messages" ? (
+        <MessagesView agent={params.agent} />
+      ) : tab === "escalations" ? (
         <EscalationsView searchParams={Promise.resolve({ status: params.status })} />
       ) : (
         <NotificationsView searchParams={Promise.resolve({ scope: params.scope, page: params.page })} />

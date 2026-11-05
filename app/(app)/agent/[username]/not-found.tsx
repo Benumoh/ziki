@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { StatusPage, primaryActionClass } from "@/components/status-page";
 
-/** An agent that doesn't exist, was revoked, or isn't one the viewer may message. */
+/** An agent that doesn't exist, or an edit page the viewer may not open. */
 export default function AgentNotFound() {
   return (
     <StatusPage
@@ -9,7 +9,7 @@ export default function AgentNotFound() {
       title="We couldn't find that agent"
       actions={
         <Link href="/agents" className={primaryActionClass}>
-          Your agents
+          All agents
         </Link>
       }
     >

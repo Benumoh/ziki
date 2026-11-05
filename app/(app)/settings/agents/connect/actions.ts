@@ -29,7 +29,7 @@ export async function startAgentConnectAction(input: {
     where: { id: input.projectId },
     select: { name: true },
   });
-  revalidatePath("/agents");
+  revalidatePath("/agents/mine");
   return {
     ok: true,
     agentId: result.key.agentId,

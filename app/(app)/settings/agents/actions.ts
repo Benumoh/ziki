@@ -33,7 +33,7 @@ export async function createAgentAction(
     projectId: formData.get("projectId") ?? "",
   });
   if (!result.ok) return result;
-  revalidatePath("/agents");
+  revalidatePath("/agents/mine");
   return { ok: true, name: result.key.name, rawKey: result.key.rawKey, prefix: result.key.prefix };
 }
 
@@ -43,7 +43,7 @@ export async function revokeAgentAction(agentId: unknown): Promise<AgentActionRe
   if (typeof agentId !== "string") return { ok: false, error: "Invalid agent." };
   const user = await requireUser();
   const result = await revokeAgent(user, agentId);
-  if (result.ok) revalidatePath("/agents");
+  if (result.ok) revalidatePath("/agents/mine");
   return result;
 }
 
@@ -51,7 +51,7 @@ export async function deleteAgentAction(agentId: unknown): Promise<AgentActionRe
   if (typeof agentId !== "string") return { ok: false, error: "Invalid agent." };
   const user = await requireUser();
   const result = await deleteAgent(user, agentId);
-  if (result.ok) revalidatePath("/agents");
+  if (result.ok) revalidatePath("/agents/mine");
   return result;
 }
 
@@ -71,7 +71,7 @@ export async function regenerateAgentKeyAction(
   const user = await requireUser();
   const result = await regenerateKey(user, agentId, projectId);
   if (!result.ok) return result;
-  revalidatePath("/agents");
+  revalidatePath("/agents/mine");
   return { ok: true, name: result.key.name, rawKey: result.key.rawKey, prefix: result.key.prefix };
 }
 
@@ -80,7 +80,7 @@ export async function setAgentLevelAction(agentId: unknown, level: unknown): Pro
   const user = await requireUser();
   const result = await setAgentLevel(user, agentId, level);
   if (result.ok) {
-    revalidatePath("/agents");
+    revalidatePath("/agents/mine");
     revalidatePath("/settings/team");
     revalidatePath("/workers");
     revalidatePath("/[project]/org", "layout");
@@ -103,7 +103,7 @@ export async function setAgentAreaPreferencesAction(
   }
   const user = await requireUser();
   const result = await setAgentAreaPreferences(user, agentId, projectId, areaIds);
-  if (result.ok) revalidatePath("/agents");
+  if (result.ok) revalidatePath("/agents/mine");
   return result;
 }
 
@@ -144,7 +144,7 @@ export async function pairAgentAction(
       formData.get("instructions") ?? undefined,
     );
     if (!result.ok) return result;
-    revalidatePath("/agents");
+    revalidatePath("/agents/mine");
     return { ok: true, step: "done", name: result.name };
   }
 

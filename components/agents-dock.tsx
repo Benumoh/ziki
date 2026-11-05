@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { agentPageHref } from "@/lib/header-nav";
+import { CookieSettingsLink } from "@/components/consent-banner";
 import { projectPath } from "@/lib/project-paths";
 import { isReservedProjectSlug } from "@/lib/project-slug";
 import { AGENTS_DOCK_HEIGHT } from "@/lib/agents-dock";
@@ -23,6 +24,8 @@ import { type AgentState, type Palette, metalFor } from "@/components/agent-robo
 export type DockAgent = {
   id: string;
   name: string;
+  /** Its slug: the address of its page. */
+  username: string;
   avatar: string | null;
   status: "waiting" | "stuck" | "working" | "idle" | "offline";
   /** What it is doing now, in words (never invented). */
@@ -152,7 +155,7 @@ export function AgentsDock({
   const pathname = usePathname();
   const projectSlug = projectSlugFromPath(pathname) ?? defaultProjectSlug;
   // My agents and an agent's own page manage the agents and list them already: the dock would only repeat them.
-  const managing = pathname === "/agents" || pathname.startsWith("/settings/agent");
+  const managing = pathname === "/agents/mine" || pathname.startsWith("/agent/");
   const [panel, setPanel] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   // How wide each nameplate is closed (its name and status) and opened (with what it has earned), so its character stands just beside it.
@@ -378,7 +381,7 @@ export function AgentsDock({
   // Clicking an agent on the floor opens its page.
   const go = (agent: DockAgent) => {
     close();
-    router.push(agentPageHref(agent.name));
+    router.push(agentPageHref(agent.username));
   };
   const togglePanel = () => {
     close();
@@ -430,7 +433,7 @@ export function AgentsDock({
                 <PlainFigure agent={agent} />
               ) : null}
               <Link
-                href={agentPageHref(agent.name)}
+                href={agentPageHref(agent.username)}
                 onMouseEnter={() => show(agent.id)}
                 onMouseLeave={hide}
                 onFocus={() => show(agent.id)}
@@ -469,7 +472,7 @@ export function AgentsDock({
               <span className="flex items-center gap-1">
                 <p className="m-0 text-sm font-bold text-zk-text">Your agents</p>
                 <Link
-                  href="/agents"
+                  href="/agents/mine"
                   onClick={() => setPanel(false)}
                   aria-label="Manage my agents"
                   className="group/gear relative flex size-7 items-center justify-center rounded-lg text-zk-muted transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-electric-blue"
@@ -589,6 +592,15 @@ export function AgentsDock({
               />
               Close when I move away
             </label>
+            {/* #agent-profile: every agent on Ziki, beyond your own. */}
+            <Link
+              href="/agents"
+              onClick={() => setPanel(false)}
+              className="mt-2 flex items-center justify-between rounded-lg px-1.5 py-1.5 text-xs font-bold text-zk-accent transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-electric-blue"
+            >
+              See all agents
+              <span aria-hidden="true">→</span>
+            </Link>
           </section>
         ) : null}
         <button
@@ -676,6 +688,7 @@ function DockLinks({ projectSlug, version }: { projectSlug: string | null; versi
           </svg>
         </Link>
       ) : null}
+      <CookieSettingsLink className="text-[9px] leading-none text-zk-muted hover:text-zk-text hover:underline" />
       {version ? (
         <span className="mr-1 select-all font-mono text-[9px] leading-none text-zk-muted" title="The version running">
           {version}
@@ -1138,7 +1151,7 @@ function AgentDetails({ agent, onDone, onHide, inRow = false }: { agent: DockAge
           </button>
         ) : null}
       </div>
-      <Link href={agentPageHref(agent.name)} onClick={onDone} className="mt-3 inline-block text-xs font-semibold text-zk-accent hover:underline">
+      <Link href={agentPageHref(agent.username)} onClick={onDone} className="mt-3 inline-block text-xs font-semibold text-zk-accent hover:underline">
         Open {agent.name}&apos;s page
       </Link>
     </>

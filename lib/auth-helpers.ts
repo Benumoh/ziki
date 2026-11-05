@@ -145,6 +145,17 @@ export async function requireUser(): Promise<SessionAppUser> {
   };
 }
 
+/**
+ * The signed-in person on a page anyone may open (#agent-profile: public agent
+ * profiles and the agents directory): null with no session, otherwise the same
+ * checks as requireUser().
+ */
+export async function optionalUser(): Promise<SessionAppUser | null> {
+  const session = await auth();
+  if (!session?.user) return null;
+  return requireUser();
+}
+
 /** Require one of the given roles. Redirects unauthorized users to /home. */
 export async function requireRole(
   roles: Role | Role[],

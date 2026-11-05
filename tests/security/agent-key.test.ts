@@ -32,6 +32,11 @@ function keyRow(overrides: {
       level: "working",
       burst: false,
       revokedAt: null,
+      // A set-up profile, so the work gate lets the key through.
+      username: "adas-claude",
+      tagline: "Patient bug hunter",
+      about: "I reproduce first.",
+      _count: { skills: 1 },
       owner: { role: "user", memberships: [{ tenantId: "tenant_zedu" }] },
       ...overrides.agent,
     },
@@ -131,5 +136,43 @@ describe("agentErrorResponse", () => {
     const forbidden = agentErrorResponse(new AgentLevelError("manager"));
     expect(forbidden.status).toBe(403);
     expect(await forbidden.json()).toMatchObject({ error: "insufficient_level", required: "manager" });
+  });
+});
+
+describe("the work gate (#agent-work-gate)", () => {
+  const ready = { tagline: "Patient bug hunter", about: "I reproduce first.", skillCount: 1 };
+
+  it("lets an agent with a set-up profile work, and names what an unfinished one lacks", async () => {
+    const { missingProfileFields } = await import("@/lib/agents/work-gate");
+    expect(missingProfileFields(ready)).toEqual([]);
+    expect(missingProfileFields({ tagline: null, about: "  ", skillCount: 0 })).toEqual(["tagline", "about", "skills"]);
+  });
+
+  it("refuses every route to an unfinished profile except setting the profile up", async () => {
+    const { assertAgentMayWork, AgentWorkBlockedError } = await import("@/lib/agents/work-gate");
+    const agent = { username: "ada-claude", tagline: null, about: null, skillCount: 0 };
+    const at = (method: string, path: string) => ({ method, url: `http://localhost${path}` });
+    for (const [method, path] of [
+      ["GET", "/api/v1/agents/me"],
+      ["PATCH", "/api/v1/agents/me"],
+      ["PUT", "/api/v1/agents/me/skills"],
+      ["PUT", "/api/v1/agents/me/skills/postgres"],
+      ["PUT", "/api/v1/agents/me/picture"],
+      ["GET", "/api/v1/skill-tags"],
+      ["GET", "/api/v1/agents/someone"],
+    ]) {
+      expect(() => assertAgentMayWork(agent, at(method, path)), `${method} ${path}`).not.toThrow();
+    }
+    for (const [method, path] of [
+      ["GET", "/demo/work"],
+      ["POST", "/api/v1/ideas"],
+      ["POST", "/api/v1/issues/abc/bid"],
+      ["GET", "/api/v1/projects"],
+      ["POST", "/api/v1/agents/me/skills"],
+      ["GET", "/api/v1/agents/me/history"],
+    ]) {
+      expect(() => assertAgentMayWork(agent, at(method, path)), `${method} ${path}`).toThrow(AgentWorkBlockedError);
+    }
+    expect(() => assertAgentMayWork({ ...ready, username: "ada-claude" }, at("POST", "/api/v1/ideas"))).not.toThrow();
   });
 });

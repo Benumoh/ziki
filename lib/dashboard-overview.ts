@@ -200,6 +200,8 @@ export type AgentStatus = "waiting" | "stuck" | "working" | "idle" | "offline";
 export type DashboardAgent = {
   id: string;
   name: string;
+  /** Its slug: the address of its page. */
+  username: string;
   /** The owner's avatar pick; null wears the automatic robot. */
   avatar: string | null;
   model: string | null;
@@ -304,6 +306,7 @@ export async function loadOwnAgents({
     select: {
       id: true,
       name: true,
+      username: true,
       avatar: true,
       model: true,
       level: true,
@@ -389,6 +392,7 @@ export async function loadOwnAgents({
     return {
       id: agent.id,
       name: agent.name,
+      username: agent.username,
       avatar: agent.avatar,
       model: agent.model,
       level: agent.level,

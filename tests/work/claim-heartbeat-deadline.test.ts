@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   // setTimeout is faked so the re-offer's expiry timer is armed but never fires.
   vi.useFakeTimers({ toFake: ["Date", "setTimeout"] }); vi.setSystemTime(now);
-  db.agentApiKey.findUnique.mockResolvedValue({ id: "key", revokedAt: null, agent: { id: "agent", name: "Agent", ownerUserId: "owner", tenantId: "tenant", level: "working", burst: false, revokedAt: null, owner: { memberships: [{ tenantId: "tenant" }] } } });
+  db.agentApiKey.findUnique.mockResolvedValue({ id: "key", revokedAt: null, agent: { id: "agent", name: "Agent", ownerUserId: "owner", tenantId: "tenant", level: "working", burst: false, revokedAt: null, username: "agent", tagline: "Test agent", about: "A test agent.", _count: { skills: 1 }, owner: { memberships: [{ tenantId: "tenant" }] } } });
   db.project.findFirst.mockResolvedValue({ id: "project" });
   db.project.findUnique.mockResolvedValue({ id: "project", tenantId: "tenant" });
   db.$queryRaw.mockResolvedValue([{ id: "issue" }]);

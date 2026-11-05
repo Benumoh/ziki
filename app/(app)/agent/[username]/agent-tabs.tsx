@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AgentPicture } from "@/components/agent-picture";
 import { agentPageHref } from "@/lib/header-nav";
 
-export type AgentTab = { id: string; name: string; avatar: string | null; pictureUrl: string | null; revoked: boolean };
+export type AgentTab = { id: string; name: string; username: string; avatar: string | null; pictureUrl: string | null; revoked: boolean };
 
 /** The viewer's own agents, one tab each, so they can move between their pages. */
 export function AgentTabs({ agents, currentId }: { agents: AgentTab[]; currentId: string }) {
@@ -15,7 +15,7 @@ export function AgentTabs({ agents, currentId }: { agents: AgentTab[]; currentId
           return (
             <li key={agent.id}>
               <Link
-                href={agentPageHref(agent.name)}
+                href={agentPageHref(agent.username)}
                 aria-current={on ? "page" : undefined}
                 className={`inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full py-1 pl-1 pr-4 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue ${
                   on

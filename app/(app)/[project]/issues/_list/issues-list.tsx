@@ -25,6 +25,8 @@ import { MY_WORK_PARAM, myWorkWhere, parseMyWorkFilter } from "@/lib/my-work-fil
 import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } from "@/lib/list-sort";
 import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectLinks } from "@/components/project-links";
+import { AgentSetupNotice, type UnconfiguredAgent } from "@/components/agent-setup-notice";
+import { missingProfileFields } from "@/lib/agents/work-gate";
 import { isTenantAdmin } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
 import { IssueFilters } from "@/components/issue-filters";
@@ -639,6 +641,29 @@ export async function IssuesList({
     loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true } }), null),
     tenantId && userId ? loadOrEmpty("project admin", () => isTenantAdmin(user, tenantId), false) : Promise.resolve(false),
   ]);
+  // #agent-work-gate: your agents that aren't allowed to work until their profile is set up.
+  const unconfiguredAgents: UnconfiguredAgent[] =
+    tenantId && userId
+      ? await loadOrEmpty(
+          "unconfigured agents",
+          async () => {
+            const agents = await prisma.agent.findMany({
+              where: {
+                tenantId,
+                ownerUserId: userId,
+                revokedAt: null,
+                OR: [{ tagline: null }, { about: null }, { skills: { none: {} } }, { tagline: "" }, { about: "" }],
+              },
+              orderBy: { createdAt: "asc" },
+              select: { id: true, name: true, username: true, tagline: true, about: true, _count: { select: { skills: true } } },
+            });
+            return agents
+              .map((agent) => ({ id: agent.id, name: agent.name, username: agent.username, missing: missingProfileFields({ ...agent, skillCount: agent._count.skills }) }))
+              .filter((agent) => agent.missing.length > 0);
+          },
+          [] as UnconfiguredAgent[],
+        )
+      : [];
   // My Work shows only when you have work in this project: issues you bid on or hold, whatever their status.
   const myWorkCount =
     userId && !isDeletedView
@@ -969,6 +994,8 @@ export async function IssuesList({
         {/* #project-links: the site/code panel renders here (from ProjectLinks in the top right) while it is open. */}
         <div id={PROJECT_LINKS_SLOT_ID} className="empty:hidden" />
 
+        <AgentSetupNotice agents={unconfiguredAgents} />
+
         {milestoneSummary ? (
           <section aria-label={`Milestone ${milestoneSummary.title}`} className="rounded-[20px] border border-zk-border bg-zk-surface p-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -1276,7 +1303,8 @@ export async function IssuesList({
             canEdit={canEditProjectLinks}
             notesHref={`/${encodeURIComponent(slug)}/notes`}
             settingsHref={`/projects/${encodeURIComponent(slug)}/settings`}
-            askOnLoad={isIdeasView}
+            // #agent-work-gate: a blocked agent comes first; the site URL ask waits (the icon still opens it).
+            askOnLoad={isIdeasView && unconfiguredAgents.length === 0}
           />
         ) : null}
       </div>

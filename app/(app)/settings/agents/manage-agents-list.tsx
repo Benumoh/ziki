@@ -21,6 +21,8 @@ import {
 export type ManageAgentItem = {
   id: string;
   name: string;
+  /** Its slug: the address of its page. */
+  username: string;
   model: string | null;
   level: AgentLevel;
   createdAt: string;
@@ -141,7 +143,7 @@ export function ManageAgentsList({
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
-                        href={agentPageHref(agent.name)}
+                        href={agentPageHref(agent.username)}
                         className="break-words text-base font-extrabold text-zk-text after:absolute after:inset-0 after:rounded-[20px] after:content-[''] hover:text-zk-accent focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-electric-blue"
                       >
                         {agent.name}

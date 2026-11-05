@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, type AppRole } from "@/lib/roles";
 import { audit } from "@/lib/agents/audit";
-import { freeUsername, updateAgentProfile } from "@/lib/agents/profile";
+import { freeUsername, removeAgentPicture, replaceAgentSkills, setAgentPicture, updateAgentProfile } from "@/lib/agents/profile";
+import { agentUsernameSchema } from "@/lib/validations/agent-profile";
 import { generateApiKey } from "@/lib/agents/keys";
 import { sealSecret } from "@/lib/secret-box";
 import { CREATION_LEVELS, DEFAULT_AGENT_LEVEL, canSetLevel } from "@/lib/agents/levels";
@@ -488,10 +489,56 @@ export async function updateAgentProfileAsPerson(
   actor: Actor,
   agentId: string,
   input: unknown,
-): Promise<ManageResult> {
+): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
   const managed = await managedAgent(actor, agentId);
   if (!managed) return { ok: false, error: NOT_FOUND };
   if (managed.agent.revokedAt) return { ok: false, error: "That agent is revoked." };
   const result = await updateAgentProfile({ agentId, tenantId: managed.agent.tenantId, actorUserId: actor.id }, input);
+  return result.ok ? { ok: true, username: result.profile.username } : { ok: false, error: result.error };
+}
+
+/**
+ * Is this username free for the agent? Usernames are unique across the platform. For its owner or a
+ * team admin, as they type it on the agent's page. The agent's own current
+ * username counts as free.
+ */
+export async function checkAgentUsername(
+  actor: Actor,
+  agentId: string,
+  input: string,
+): Promise<{ ok: true; available: boolean; message: string } | { ok: false; error: string }> {
+  const managed = await managedAgent(actor, agentId);
+  if (!managed) return { ok: false, error: NOT_FOUND };
+  const parsed = agentUsernameSchema.safeParse(input);
+  if (!parsed.success) return { ok: true, available: false, message: parsed.error.issues[0]?.message ?? "Check the username." };
+  const taken = await prisma.agent.findFirst({
+    where: { username: parsed.data, id: { not: agentId } },
+    select: { id: true },
+  });
+  return taken
+    ? { ok: true, available: false, message: `@${parsed.data} is taken.` }
+    : { ok: true, available: true, message: `@${parsed.data} is available.` };
+}
+
+/** Replace the agent's skills from its edit page (#agent-profile), as its owner or a team admin. */
+export async function replaceAgentSkillsAsPerson(actor: Actor, agentId: string, input: unknown): Promise<ManageResult> {
+  const managed = await managedAgent(actor, agentId);
+  if (!managed) return { ok: false, error: NOT_FOUND };
+  if (managed.agent.revokedAt) return { ok: false, error: "That agent is revoked." };
+  const result = await replaceAgentSkills({ agentId, tenantId: managed.agent.tenantId, actorUserId: actor.id }, input);
   return result.ok ? { ok: true } : { ok: false, error: result.error };
+}
+
+/** Upload or remove the agent's profile picture from its edit page (#agent-profile), as its owner or a team admin. */
+export async function setAgentPictureAsPerson(
+  actor: Actor,
+  agentId: string,
+  bytes: Uint8Array | null,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const managed = await managedAgent(actor, agentId);
+  if (!managed) return { ok: false, status: 404, error: NOT_FOUND };
+  if (managed.agent.revokedAt) return { ok: false, status: 409, error: "That agent is revoked." };
+  const who = { agentId, tenantId: managed.agent.tenantId, actorUserId: actor.id };
+  const result = bytes ? await setAgentPicture(who, bytes) : await removeAgentPicture(who);
+  return result.ok ? { ok: true } : result;
 }

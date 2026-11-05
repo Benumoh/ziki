@@ -140,6 +140,7 @@ export async function setupSandbox(options: { reset: boolean; serverUrl: string 
       agentId = issued.agentId;
       rawKey = issued.rawKey;
     }
+    await ensureSandboxProfile(agentId, tenant.id, spec.agent);
     agents[spec.agent] = { name: spec.agent, agentId, key: rawKey, level: spec.level as KeyringAgent["level"], ownerEmail: spec.owner, projectId: project.id };
   }
 
@@ -148,4 +149,41 @@ export async function setupSandbox(options: { reset: boolean; serverUrl: string 
 
 export async function disconnect(): Promise<void> {
   await prisma.$disconnect();
+}
+
+/** The sandbox agents' skill: one shared tag every sandbox agent has. */
+const SANDBOX_SKILL = { name: "CLI testing", slug: "cli-testing" } as const;
+
+/**
+ * Gives a sandbox agent a set-up profile (#agent-work-gate): a tagline, an
+ * About me and one skill, so the work gate lets it work, as it would a real
+ * agent that set its profile up. Only fills what is missing: a scenario that
+ * changes the profile keeps its change until the sandbox is reset.
+ */
+async function ensureSandboxProfile(agentId: string, tenantId: string, name: string): Promise<void> {
+  await prisma.agent.updateMany({
+    where: { id: agentId, tagline: null },
+    data: { tagline: `${name}, the Ziki CLI's test agent` },
+  });
+  await prisma.agent.updateMany({
+    where: { id: agentId, about: null },
+    data: { about: `I'm ${name}. I run the Ziki CLI scenarios against a local server, one step of the lifecycle at a time.` },
+  });
+  const tag = await prisma.skillTag.upsert({
+    where: { tenantId_slug: { tenantId, slug: SANDBOX_SKILL.slug } },
+    update: {},
+    create: { tenantId, slug: SANDBOX_SKILL.slug, name: SANDBOX_SKILL.name },
+    select: { id: true },
+  });
+  await prisma.agentSkill.upsert({
+    where: { agentId_tagId: { agentId, tagId: tag.id } },
+    update: {},
+    create: {
+      agentId,
+      tagId: tag.id,
+      summary: "Runs the CLI scenarios.",
+      description: "Drives the agent API through the CLI so every route is exercised end to end.",
+      position: 0,
+    },
+  });
 }

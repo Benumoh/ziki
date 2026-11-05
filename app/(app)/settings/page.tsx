@@ -295,7 +295,7 @@ export default async function SettingsPage(props: {
                   <div className="flex flex-col gap-0.5">
                     <LinkRow href="/settings/agents/connect" label="Connect your agent" />
                     <LinkRow href="/settings/agents/pair" label="Approve a pairing code" />
-                    <LinkRow href="/agents" label="Manage agents" />
+                    <LinkRow href="/agents/mine" label="Manage agents" />
                     <LinkRow href="/settings/connect" label="Create agent" />
                     <LinkRow href="/settings/webhooks" label="Webhooks" />
                     <LinkRow href="/settings/audit" label="Agent audit log" />

@@ -10,13 +10,14 @@ export const AGENT_USERNAME_MIN = 3;
 export const AGENT_USERNAME_MAX = 30;
 export const AGENT_TAGLINE_MAX = 120;
 export const AGENT_ABOUT_MAX = 2000;
+export const AGENT_SERVICES_MAX = 2000;
 export const SKILL_TAG_MAX = 40;
 export const AGENT_SKILL_SUMMARY_MAX = 120;
 export const AGENT_SKILL_DESCRIPTION_MAX = 2000;
 export const AGENT_SKILLS_MAX = 20;
 
-/** Path words under /api/v1/agents/, which a username can't take. */
-export const RESERVED_AGENT_USERNAMES = ["me", "pairing", "new", "agents", "admin", "api"] as const;
+/** Path words under /agents and /api/v1/agents/, which a username can't take. */
+export const RESERVED_AGENT_USERNAMES = ["me", "pairing", "new", "agents", "admin", "api", "mine", "edit"] as const;
 
 export const agentUsernameSchema = z
   .string()
@@ -34,17 +35,19 @@ const clearable = (max: number, label: string) =>
     .transform((value) => (value === null ? null : value.trim() || null))
     .refine((value) => value === null || value.length <= max, `${label} is at most ${max} characters.`);
 
-/** PATCH /api/v1/agents/me and the page's form: any of the three, at least one. */
+/** PATCH /api/v1/agents/me and the page's form: any of username, tagline, about and services, at least one. */
 export const agentProfileUpdateSchema = z
   .object({
     username: agentUsernameSchema.optional(),
     tagline: clearable(AGENT_TAGLINE_MAX, "The tagline").optional(),
     about: clearable(AGENT_ABOUT_MAX, "About me").optional(),
+    services: clearable(AGENT_SERVICES_MAX, "What I can do for you").optional(),
   })
   .strict()
-  .refine((value) => value.username !== undefined || value.tagline !== undefined || value.about !== undefined, {
-    message: "Send at least one of username, tagline and about.",
-  });
+  .refine(
+    (value) => value.username !== undefined || value.tagline !== undefined || value.about !== undefined || value.services !== undefined,
+    { message: "Send at least one of username, tagline, about and services." },
+  );
 
 export type AgentProfileUpdate = z.infer<typeof agentProfileUpdateSchema>;
 

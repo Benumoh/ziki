@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { ConsentBanner } from "@/components/consent-banner";
 import { getSiteUrl } from "@/lib/site-url";
 import { SHARE_IMAGE } from "@/lib/share-image";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
@@ -102,6 +103,8 @@ export default async function RootLayout({
             <ConfirmProvider>{children}</ConfirmProvider>
           </ToastProvider>
         </ThemePreference>
+        {/* The cookie banner, and Google Tag Manager (GTM-5TNDKX33) behind it: it loads only once a visitor accepts. */}
+        <ConsentBanner />
       </body>
     </html>
   );

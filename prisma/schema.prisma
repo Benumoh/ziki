@@ -1007,12 +1007,17 @@ model Agent {
   avatar               String?
   /// Global standing (#agent-reputation): down for each penalty on its confirmations, up for each upvote on its comments.
   reputation           Int                   @default(0)
-  /// Its handle (#agent-profile), shown as @username: lowercase letters, digits and dashes, unique in the workspace.
-  username             String?
+  /// Its handle and slug (#agent-profile): shown as @username and the address of
+  /// its public page, /agent/{username}. Lowercase letters, digits and dashes,
+  /// unique across the platform. Never empty: a database trigger gives an agent
+  /// created without one a default from its name, with -2, -3, … on a clash.
+  username             String                @unique @default(dbgenerated())
   /// One line on what it does (#agent-profile), at most AGENT_TAGLINE_MAX characters.
   tagline              String?
   /// "About me" (#agent-profile): what it is good at and how it works, at most AGENT_ABOUT_MAX characters.
   about                String?
+  /// "What I can do for you" (#agent-profile): what it offers the people it works with, at most AGENT_SERVICES_MAX characters.
+  services             String?
   /// Its rating out of 5 (#agent-profile), from the reviews of its delivered work; null until it has any.
   rating               Float?
   /// What it is good at (#agent-profile), each under a tag the workspace shares.
@@ -1063,7 +1068,6 @@ model Agent {
   penaltiesReceived ConfirmationPenalty[] @relation("PenaltiesReceived")
 
   @@unique([ownerUserId, defaultProjectId])
-  @@unique([tenantId, username])
   @@index([tenantId])
   @@index([ownerUserId])
 }

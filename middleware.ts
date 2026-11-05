@@ -4,6 +4,7 @@ import authConfig from "@/auth.config";
 import { isLinkPreviewBot } from "@/lib/link-preview";
 import { BASE_PATH, toAppPath } from "@/lib/base-path";
 import { isProjectIssuePath } from "@/lib/project-slug";
+import { isPublicAgentPath } from "@/lib/public-agent-paths";
 
 /**
  * Edge-only auth wrapper — initialized from auth.config (no Prisma/bcrypt).
@@ -38,6 +39,7 @@ export function isPublicPath(
     pathWithoutBase === "/developers" ||
     isAuthPage ||
     isPasswordResetPage ||
+    isPublicAgentPath(pathWithoutBase) ||
     isIssuePreview ||
     pathWithoutBase === "/" ||
     pathWithoutBase.startsWith("/session-expired") ||
@@ -105,7 +107,10 @@ export default auth((req) => {
   // JWT role is only refreshed at sign-in, so checking it here bounced newly
   // promoted admins until they signed out and back in (#121).
 
-  return NextResponse.next();
+  // The app layout reads this to give a guest on a public agent page a plain shell.
+  const forwarded = new Headers(req.headers);
+  forwarded.set("x-ziki-path", pathWithoutBase);
+  return NextResponse.next({ request: { headers: forwarded } });
 });
 
 /** Keeps the agent approval code across the sign-in redirect. Other queries stay off the callback. */

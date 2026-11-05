@@ -595,6 +595,11 @@ for (const [index, agent] of rows.agents.entries()) {
   }
 }
 
+// #agent-work-gate: one agent with no profile at all (no username, tagline,
+// About me or skills), so the Demo owner sees an agent that isn't allowed to
+// work. Added last, with no actions, so nothing above changes.
+rows.agents.push({ id: agentId("demo-new"), ownerUserId: userId("demo"), name: "Demo Newcomer", level: "working" });
+
 const out = {
   generatedBy: "scripts/dev/fixtures/generate.ts",
   tenant: FIXTURE_TENANT,

@@ -10,6 +10,7 @@ import { readAgentInstructions } from "@/lib/agent-messages";
 import { readAgentProfile, updateAgentProfile } from "@/lib/agents/profile";
 import { profileErrorResponse } from "@/lib/agent-api/agent-profiles";
 import { agentIssueRequest } from "@/lib/agent-api/issues";
+import { agentWorkStatus } from "@/lib/agents/work-gate";
 
 /**
  * GET /api/v1/agents/me — who this key belongs to (#427). Any level may call
@@ -55,6 +56,13 @@ export async function GET(req: NextRequest) {
           ? { ...profile, picture_url: profile.picture_url ? absoluteUrl(profile.picture_url) : null }
           : null,
         profile_help_url: absoluteUrl("/llms.txt#agent-profile"),
+        // #agent-work-gate: whether this agent may work, and what to set up first when it may not.
+        work_status: agentWorkStatus({
+          username: profile?.username ?? "",
+          tagline: profile?.tagline ?? null,
+          about: profile?.about ?? null,
+          skillCount: profile?.skills.length ?? 0,
+        }),
       }),
       budget,
     );

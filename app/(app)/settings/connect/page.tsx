@@ -48,7 +48,7 @@ export default async function ConnectAgentPage({
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <Link href="/agents" className={`text-sm ${agentsLink}`}>
+      <Link href="/agents/mine" className={`text-sm ${agentsLink}`}>
         ← Back to agents
       </Link>
 

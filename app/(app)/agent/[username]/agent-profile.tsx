@@ -11,7 +11,6 @@ import { AboutText } from "./about-text";
 import {
   agentsLink,
   agentsMutedClass,
-  agentsPrimaryBtn,
   agentsSecondaryBtn,
   agentsSurface,
   levelBadgeClass,
@@ -39,6 +38,8 @@ export type AgentProfileData = {
   username: string | null;
   tagline: string | null;
   about: string | null;
+  /** "What I can do for you". */
+  services: string | null;
   rating: number | null;
   pictureUrl: string | null;
   skills: Array<{ tag: string; slug: string; summary: string; description: string }>;
@@ -63,14 +64,14 @@ export function AgentProfileHeader({
   agent,
   avatarControl = null,
   reviewCount,
-  instructions,
+  showWorkspace = false,
 }: {
   agent: AgentProfileData;
   /** Stands in for the avatar when the viewer may change it and the agent has no picture: the avatar, opening a picker. */
   avatarControl?: React.ReactNode;
   reviewCount: number;
-  /** The standing brief, shown to its owner; null hides the section. */
-  instructions: string | null;
+  /** Who it works for and its projects: for members of its workspace only. */
+  showWorkspace?: boolean;
 }) {
   return (
     <section aria-label="Profile" className={`${agentsSurface} space-y-8 p-5 sm:p-8`}>
@@ -114,13 +115,15 @@ export function AgentProfileHeader({
           {agent.model ? <p className="text-sm text-zk-text2">{agent.model}</p> : null}
 
           <p className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-zk-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 21a8 8 0 0 1 16 0" />
-              </svg>
-              Works for {agent.ownerName ?? "you"}
-            </span>
+            {showWorkspace ? (
+              <span className="inline-flex items-center gap-1.5">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 21a8 8 0 0 1 16 0" />
+                </svg>
+                Works for {agent.ownerName ?? "you"}
+              </span>
+            ) : null}
             <span className="inline-flex items-center gap-1.5">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -138,6 +141,15 @@ export function AgentProfileHeader({
           <AboutText text={agent.about} />
         ) : (
           <p className={agentsMutedClass}>{agent.name} hasn&apos;t written about itself yet.</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <h2 className={sectionHeading}>What I can do for you</h2>
+        {agent.services ? (
+          <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-zk-text2">{agent.services}</p>
+        ) : (
+          <p className={agentsMutedClass}>Nothing listed yet.</p>
         )}
       </div>
 
@@ -174,31 +186,22 @@ export function AgentProfileHeader({
         )}
       </div>
 
-      {instructions !== null ? (
-        <div className="space-y-2">
-          <h2 className={sectionHeading}>Standing instructions</h2>
-          {instructions ? (
-            <p className="line-clamp-4 whitespace-pre-wrap break-words text-base text-zk-text2">{instructions}</p>
+      {showWorkspace ? (
+        <div className="space-y-3">
+          <h2 className={sectionHeading}>Works on</h2>
+          {agent.projects.length ? (
+            <ul className="flex flex-wrap gap-2">
+              {agent.projects.map((project) => (
+                <li key={project} className="rounded-full border border-zk-border px-3.5 py-1.5 text-sm text-zk-text">
+                  {project}
+                </li>
+              ))}
+            </ul>
           ) : (
-            <p className={agentsMutedClass}>None yet. Add a brief under More about me.</p>
+            <p className={agentsMutedClass}>No project yet.</p>
           )}
         </div>
       ) : null}
-
-      <div className="space-y-3">
-        <h2 className={sectionHeading}>Works on</h2>
-        {agent.projects.length ? (
-          <ul className="flex flex-wrap gap-2">
-            {agent.projects.map((project) => (
-              <li key={project} className="rounded-full border border-zk-border px-3.5 py-1.5 text-sm text-zk-text">
-                {project}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={agentsMutedClass}>No project yet.</p>
-        )}
-      </div>
     </section>
   );
 }
@@ -227,17 +230,29 @@ export function AgentStats({ counts }: { counts: AgentProfileData["counts"] }) {
 export function AgentSideCard({
   agent,
   editControl = null,
-  canMessage,
+  showActivity = false,
+  blocked = false,
 }: {
   agent: AgentProfileData;
-  /** "More about me", for those who may change it. */
+  /** "Setup Profile" or "Edit Profile", for those who may change it. */
   editControl?: React.ReactNode;
-  canMessage: boolean;
+  /** Whether its activity is on the page, for its owner and team admins. */
+  showActivity?: boolean;
+  /** #agent-work-gate: true while it may not work because its profile isn't set up. */
+  blocked?: boolean;
 }) {
   const activeNow = agent.activeNow;
   return (
     // First on a phone, so its buttons aren't below every review; beside the profile from lg up.
     <aside aria-label={`${agent.name} at a glance`} className="order-first space-y-4 lg:sticky lg:top-24 lg:order-none">
+      {blocked ? (
+        <div role="status" className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-soft p-4 text-sm">
+          <p className="font-extrabold text-zk-bad-fg">Not allowed to work yet</p>
+          <p className="mt-1 text-zk-text2">
+            It can&apos;t do any work until its profile is set up.
+          </p>
+        </div>
+      ) : null}
       {editControl ? <div className="grid">{editControl}</div> : null}
       <div className={`${agentsSurface} space-y-5 p-5 sm:p-6`}>
         <div className="flex items-center gap-3">
@@ -265,27 +280,38 @@ export function AgentSideCard({
           </div>
         </div>
         <div className="grid gap-2.5">
-          {canMessage ? (
-            <a href="#conversation" className={agentsPrimaryBtn}>
-              Message {agent.name}
+          {showActivity ? (
+            <a href="#activity" className={agentsSecondaryBtn}>
+              See its activity
             </a>
           ) : null}
-          <a href="#activity" className={agentsSecondaryBtn}>
-            See its activity
-          </a>
         </div>
       </div>
     </aside>
   );
 }
 
-/** The agent's latest actions, newest first, each linked to its issue when it has one. */
+/** The agent's latest actions, newest first, each linked to its issue when it has one. Collapsed until opened. */
 export function AgentActivity({ items }: { items: AgentActivityItem[] }) {
   return (
-    <section id="activity" className={`${agentsSurface} scroll-mt-24 p-4 sm:p-6`} aria-labelledby="activity-heading">
-      <h2 id="activity-heading" className="text-sm font-bold uppercase tracking-[0.06em] text-zk-muted">
-        Activity
-      </h2>
+    <details id="activity" className={`${agentsSurface} group scroll-mt-24 p-4 sm:p-6`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <h2 id="activity-heading" className="text-sm font-bold uppercase tracking-[0.06em] text-zk-muted">
+          Activity
+        </h2>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="shrink-0 text-zk-muted transition group-open:rotate-180"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </summary>
       {items.length === 0 ? (
         <p className={`mt-3 ${agentsMutedClass}`}>No activity yet.</p>
       ) : (
@@ -311,6 +337,6 @@ export function AgentActivity({ items }: { items: AgentActivityItem[] }) {
           ))}
         </ol>
       )}
-    </section>
+    </details>
   );
 }

@@ -4,11 +4,24 @@ import type { AppRole } from "@/lib/roles";
 export const SITE_ADMIN_HREF = "/superadmin/users";
 
 /** Manage agents: the person's own agents, on a page of its own outside Settings. */
-export const MANAGE_AGENTS_HREF = "/agents";
+export const MANAGE_AGENTS_HREF = "/agents/mine";
 
-/** One agent's own page, addressed by its name. Agents in the Agents menu open here. */
-export function agentPageHref(agentName: string): string {
-  return `/settings/agent/${encodeURIComponent(agentName)}`;
+/** An agent's public profile, addressed by its username (#agent-profile), unique across Ziki. */
+export function agentPageHref(username: string): string {
+  return `/agent/${encodeURIComponent(username)}`;
+}
+
+/** Where its owner (or a team admin) edits the agent: profile, picture, skills and its private settings. */
+export function agentEditHref(username: string): string {
+  return `/agent/${encodeURIComponent(username)}/edit`;
+}
+
+/** Every agent on Ziki (#agent-profile), and the owner's own under My agents. */
+export const AGENTS_DIRECTORY_HREF = "/agents";
+
+/** The agents with one skill, by its tag's slug: /agents/skill/postgres. */
+export function agentsSkillHref(tagSlug: string): string {
+  return `/agents/skill/${encodeURIComponent(tagSlug)}`;
 }
 
 /**

@@ -75,15 +75,16 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_update_profile",
     summary:
-      "Set your profile: username (your @handle, 3–30 lowercase letters, digits and dashes, unique in the workspace), tagline (one line on what you do, at most 120 characters) and about (\"About me\", at most 2,000). Send any of them; an empty string clears tagline or about. Give yourself a real character: a voice, a temperament, what you care about.",
+      "Set your profile: username (your @handle and public page address, 3–30 lowercase letters, digits and dashes, unique across Ziki), tagline (one line on what you do, at most 120 characters), about (\"About me\", at most 2,000) and services (\"What I can do for you\", at most 2,000). Send any of them; an empty string clears tagline or about. Give yourself a real character: a voice, a temperament, what you care about.",
     level: "working",
     method: "PATCH",
     route: "/agents/me",
-    body: ["username", "tagline", "about"],
+    body: ["username", "tagline", "about", "services"],
     input: {
       username: z.string().trim().min(3).max(30).optional().describe("Your @handle: lowercase letters, digits and dashes."),
       tagline: z.string().max(120).optional().describe("One line on what you do, at most 120 characters. Empty clears it."),
       about: z.string().max(2000).optional().describe("About me, at most 2,000 characters. Empty clears it."),
+      services: z.string().max(2000).optional().describe("What I can do for you: what you offer the people you work with, at most 2,000 characters. Empty clears it."),
     },
   },
   {

@@ -20,6 +20,7 @@ const profileSelect = {
   level: true,
   tagline: true,
   about: true,
+  services: true,
   rating: true,
   reputation: true,
   revokedAt: true,
@@ -34,11 +35,12 @@ const profileSelect = {
 export type PublicAgentProfile = {
   id: string;
   name: string;
-  username: string | null;
+  username: string;
   model: string | null;
   level: string;
   tagline: string | null;
   about: string | null;
+  services: string | null;
   rating: number | null;
   reputation: number;
   picture_url: string | null;
@@ -60,13 +62,14 @@ function view(row: Row): PublicAgentProfile {
     level: row.level,
     tagline: row.tagline,
     about: row.about,
+    services: row.services,
     rating: row.rating,
     reputation: row.reputation,
     picture_url: row.picture ? absoluteUrl(agentPicturePath(row, row.picture.updatedAt, "api")) : null,
     skills: row.skills.map((skill) => ({ tag: skill.tag.name, slug: skill.tag.slug, summary: skill.summary, description: skill.description })),
     revoked: row.revokedAt !== null,
     created_at: row.createdAt.toISOString(),
-    profile_url: absoluteUrl(agentPageHref(row.name)),
+    profile_url: absoluteUrl(agentPageHref(row.username)),
   };
 }
 
@@ -87,8 +90,8 @@ export async function listAgentProfiles(tenantId: string, filter: { tag?: string
 
 /** One agent in the workspace by its username, revoked ones included. */
 export async function findAgentProfile(tenantId: string, username: string): Promise<PublicAgentProfile | null> {
-  const row = await prisma.agent.findUnique({
-    where: { tenantId_username: { tenantId, username: username.toLowerCase() } },
+  const row = await prisma.agent.findFirst({
+    where: { tenantId, username: username.toLowerCase() },
     select: profileSelect,
   });
   return row ? view(row) : null;

@@ -32,9 +32,12 @@ export type ProfileResult<T = object> = ({ ok: true } & T) | { ok: false; status
 export type AgentSkillView = { tag: string; slug: string; summary: string; description: string };
 
 export type AgentProfileView = {
-  username: string | null;
+  /** Always set: its slug and public address. */
+  username: string;
   tagline: string | null;
   about: string | null;
+  /** "What I can do for you". */
+  services: string | null;
   rating: number | null;
   /** Where the picture is served; null with none. */
   picture_url: string | null;
@@ -69,6 +72,7 @@ export async function readAgentProfile(agentId: string, audience: "api" | "web" 
       username: true,
       tagline: true,
       about: true,
+      services: true,
       rating: true,
       picture: { select: { updatedAt: true } },
       skills: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: skillSelect },
@@ -79,19 +83,20 @@ export async function readAgentProfile(agentId: string, audience: "api" | "web" 
     username: agent.username,
     tagline: agent.tagline,
     about: agent.about,
+    services: agent.services,
     rating: agent.rating,
     picture_url: agent.picture ? agentPicturePath(agent, agent.picture.updatedAt, audience) : null,
     skills: agent.skills.map(skillView),
   };
 }
 
-/** A username free in the workspace, from the agent's name: "dara-solver", then "dara-solver-2", … */
-export async function freeUsername(db: Db, tenantId: string, name: string, exceptAgentId?: string): Promise<string> {
+/** A username free on the platform, from the agent's name: "dara-solver", then "dara-solver-2", … */
+export async function freeUsername(db: Db, _tenantId: string, name: string, exceptAgentId?: string): Promise<string> {
   const base = usernameFromName(name);
   for (let n = 1; n < 1000; n++) {
     const candidate = n === 1 ? base : `${base}-${n}`;
     const taken = await db.agent.findFirst({
-      where: { tenantId, username: candidate, ...(exceptAgentId ? { id: { not: exceptAgentId } } : {}) },
+      where: { username: candidate, ...(exceptAgentId ? { id: { not: exceptAgentId } } : {}) },
       select: { id: true },
     });
     if (!taken) return candidate;
@@ -103,7 +108,7 @@ function firstIssue(error: { issues: Array<{ message: string }> }, fallback: str
   return error.issues[0]?.message ?? fallback;
 }
 
-/** Set any of username, tagline and about. A username another agent in the workspace has is refused (409). */
+/** Set any of username, tagline, about and services. A username another agent has is refused (409). */
 export async function updateAgentProfile(actor: ProfileActor, input: unknown): Promise<ProfileResult<{ profile: AgentProfileView }>> {
   const parsed = agentProfileUpdateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, status: 400, error: firstIssue(parsed.error, "Check the profile.") };
@@ -111,17 +116,17 @@ export async function updateAgentProfile(actor: ProfileActor, input: unknown): P
 
   if (update.username !== undefined) {
     const taken = await prisma.agent.findFirst({
-      where: { tenantId: actor.tenantId, username: update.username, id: { not: actor.agentId } },
+      where: { username: update.username, id: { not: actor.agentId } },
       select: { id: true },
     });
-    if (taken) return { ok: false, status: 409, error: `@${update.username} is taken in this workspace. Pick another.` };
+    if (taken) return { ok: false, status: 409, error: `@${update.username} is taken. Pick another.` };
   }
 
   try {
     await prisma.$transaction(async (tx) => {
       const before = await tx.agent.findUniqueOrThrow({
         where: { id: actor.agentId },
-        select: { username: true, tagline: true, about: true },
+        select: { username: true, tagline: true, about: true, services: true },
       });
       await tx.agent.update({ where: { id: actor.agentId }, data: update });
       const changed = (Object.keys(update) as Array<keyof typeof update>).filter((key) => before[key] !== update[key]);

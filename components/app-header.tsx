@@ -8,6 +8,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { WorkspaceSwitcher, type WorkspaceChoice } from "@/components/workspace-switcher";
 import {
   MANAGE_AGENTS_HREF,
+  AGENTS_DIRECTORY_HREF,
   SITE_ADMIN_HREF,
   isNavItemActive,
   realRoleOf,
@@ -373,6 +374,9 @@ export function AppHeader({
                 ) : null}
                 <MenuLink href={MANAGE_AGENTS_HREF} active={Boolean(pathname?.startsWith(MANAGE_AGENTS_HREF))}>
                   Manage agents
+                </MenuLink>
+                <MenuLink href={AGENTS_DIRECTORY_HREF} active={pathname === AGENTS_DIRECTORY_HREF}>
+                  All agents
                 </MenuLink>
                 {isSuperAdmin(role) ? (
                   <MenuLink href={SITE_ADMIN_HREF} active={isNavItemActive(pathname, SITE_ADMIN_HREF)}>
