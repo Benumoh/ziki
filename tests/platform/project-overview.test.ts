@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const prisma = vi.hoisted(() => ({
   project: { findFirst: vi.fn() },
   bug: { count: vi.fn() },
+  projectJoinRequest: { findUnique: vi.fn() },
 }));
 const canContributeToProject = vi.hoisted(() => vi.fn());
 const canManageProject = vi.hoisted(() => vi.fn());
@@ -54,6 +55,7 @@ describe("project overview access and data", () => {
     vi.clearAllMocks();
     canContributeToProject.mockResolvedValue(false);
     canManageProject.mockResolvedValue(false);
+    prisma.projectJoinRequest.findUnique.mockResolvedValue(null);
   });
 
   it("shows a public project to visitors and signed-in people outside the organisation", async () => {
@@ -68,10 +70,34 @@ describe("project overview access and data", () => {
     vi.clearAllMocks();
     canContributeToProject.mockResolvedValue(false);
     canManageProject.mockResolvedValue(false);
+    prisma.projectJoinRequest.findUnique.mockResolvedValue(null);
     mockProject("public");
     await expect(
       loadProjectOverview("example", "tracker", { id: "outsider", role: "user" }),
-    ).resolves.toMatchObject({ project: { visibility: "public" }, isMember: false });
+    ).resolves.toMatchObject({ project: { visibility: "public" }, isMember: false, joinRequest: "none" });
+  });
+
+  it("tells a signed-in outsider about their own request to join, and never asks for a guest or a member (#join-requests)", async () => {
+    mockProject("public", { isOpenForContributors: false });
+    prisma.projectJoinRequest.findUnique.mockResolvedValue({ status: "pending" });
+    await expect(
+      loadProjectOverview("example", "tracker", { id: "outsider", role: "user" }),
+    ).resolves.toMatchObject({ isMember: false, joinRequest: "pending" });
+    expect(prisma.projectJoinRequest.findUnique).toHaveBeenCalledWith({
+      where: { projectId_userId: { projectId: "project-1", userId: "outsider" } },
+      select: { status: true },
+    });
+
+    prisma.projectJoinRequest.findUnique.mockClear();
+    mockProject("public", { isOpenForContributors: false });
+    await expect(loadProjectOverview("example", "tracker", null)).resolves.toMatchObject({ joinRequest: "none" });
+
+    canContributeToProject.mockResolvedValue(true);
+    mockProject("public", { isOpenForContributors: false });
+    await expect(
+      loadProjectOverview("example", "tracker", { id: "member-1", role: "user" }),
+    ).resolves.toMatchObject({ isMember: true, joinRequest: "none" });
+    expect(prisma.projectJoinRequest.findUnique).not.toHaveBeenCalled();
   });
 
   it("hides a private project from external non-members", async () => {

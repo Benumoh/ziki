@@ -43,8 +43,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/points/signup-bonus", () => ({ awardSignupBonus: vi.fn() }));
 vi.mock("@/lib/marketing/project-home", () => ({ projectHomePath: vi.fn() }));
 
+import { DECLINED_REQUEST_COOLDOWN_MS } from "@/lib/join-requests";
 import {
-  DECLINED_REQUEST_COOLDOWN_MS,
   acceptJoinRequestAction,
   rejectJoinRequestAction,
   requestToJoinProjectAction,

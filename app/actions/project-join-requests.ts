@@ -7,6 +7,7 @@ import { canContributeToProject, canManageProject } from "@/lib/project-permissi
 import { marketingPath, orgPath, projectPath, projectRef } from "@/lib/project-paths";
 import { projectHomePath } from "@/lib/marketing/project-home";
 import { awardSignupBonus } from "@/lib/points/signup-bonus";
+import { DECLINED_REQUEST_COOLDOWN_MS } from "@/lib/join-requests";
 
 export type JoinRequestActionResult = {
   ok?: boolean;
@@ -225,9 +226,6 @@ export async function joinOpenProjectAction(projectId: string): Promise<JoinOpen
   const href = marketingTasks > 0 ? marketingPath(pRef) : await projectHomePath(prisma, project.id, pRef);
   return { ok: true, href };
 }
-
-/** How long someone whose request was declined waits before asking the same project again. */
-export const DECLINED_REQUEST_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 export type RequestToJoinResult = { ok: true } | { ok: false; error: string };
 
