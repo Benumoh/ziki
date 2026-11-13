@@ -144,6 +144,13 @@ export function freeScanAllowed(counts: { targetFreeScans: number; workspaceFree
   return { allowed: true };
 }
 
+/**
+ * Who adds assets and starts checks (13 Nov): the workspace's owners and
+ * admins, who own the assets. Everyone else in the workspace only sees their
+ * own security work ("Your work").
+ */
+export const OWNERS_ONLY_MESSAGE = "Only workspace owners and admins can add assets and start checks. You can see your own work under Your work.";
+
 /** Preview scans (code only, blurred) one visitor may run from the public page in an hour. */
 export const PREVIEW_SCANS_PER_VISITOR_PER_HOUR = 5;
 

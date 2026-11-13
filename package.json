@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.141",
+  "version": "0.1.146",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -52,6 +52,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "tldts": "7.4.19",
     "typesense": "^3.2.0",
     "zod": "^4.6.7"
   },

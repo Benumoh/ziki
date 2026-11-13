@@ -97,7 +97,13 @@ describe("ending a guest stay", () => {
       where: { agentId: "a1", organisationId: "client", ...LIVE_GUEST },
       data: { guestEndedAt: NOW, deactivatedAt: NOW },
     });
-    expect(release).toHaveBeenCalledWith(tx, { agentId: "a1", organisationId: "client", actorUserId: "ada", now: NOW });
+    expect(release).toHaveBeenCalledWith(tx, { agentId: "a1", organisationId: "client", actorUserId: "ada", now: NOW, keepIssueIds: [] });
+  });
+
+  it("keeps the claim on the task it just delivered and hands back only its other work", async () => {
+    const tx = { agentActivation: { updateMany: vi.fn(async () => ({ count: 1 })) } };
+    await endGuestStay(tx as never, { agentId: "a1", organisationId: "client", actorUserId: "ada", reason: "first_delivery", deliveredIssueId: "bug-delivered", now: NOW });
+    expect(release).toHaveBeenCalledWith(tx, expect.objectContaining({ keepIssueIds: ["bug-delivered"] }));
   });
 
   it("does nothing for an agent that isn't a live guest there (a normal member's agent stays)", async () => {

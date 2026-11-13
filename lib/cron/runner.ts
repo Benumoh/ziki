@@ -15,6 +15,7 @@ import { processSearchOutbox, pruneProcessedSearchOutbox } from "@/lib/search-in
 import { refreshMergeQueue } from "@/lib/github/sync";
 import { followPreviewBuilds } from "@/lib/previews/builds";
 import { sweepSecurityChecks } from "@/lib/security-checks/engine";
+import { recordOnCallSample } from "@/lib/on-call-metrics";
 import { sweepTesting } from "@/lib/agent-api/testing-sweep";
 
 export const FAILURE_ALERT_THRESHOLD = 3;
@@ -66,6 +67,7 @@ export type PlatformSweepsResult = {
       paid?: number;
       error?: string;
     };
+    onCall: { status: "ok" | "error"; onCall?: number; online?: number; free?: number; error?: string };
     orphanedIssues: { status: "ok" | "error"; reopened?: number; error?: string };
     testing: { status: "ok" | "error"; toOwners?: number; escalated?: number; summaries?: number; error?: string };
     draftStructuring: {
@@ -119,6 +121,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
         reviewOffers: { status: "ok" },
         claims: { status: "ok" },
         securityChecks: { status: "ok" },
+        onCall: { status: "ok" },
         orphanedIssues: { status: "ok" },
         testing: { status: "ok" },
         draftStructuring: { status: "ok" },
@@ -216,6 +219,16 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     } catch (err) {
       recordSweepFailure("testing", err);
       result.sweeps.testing = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    }
+
+    // 2a2. On-call cover (#on-call): one snapshot a minute, for coverage on /oncall and the bar.
+    try {
+      const res = await recordOnCallSample(prisma);
+      recordSweepSuccess("onCall");
+      result.sweeps.onCall = { status: "ok", ...res };
+    } catch (err) {
+      recordSweepFailure("onCall", err);
+      result.sweeps.onCall = { status: "error", error: err instanceof Error ? err.message : String(err) };
     }
 
     // 2b. Issues that have no claim for the stale-claim sweep to find (#623).

@@ -149,6 +149,18 @@ describe("SecurityPage (/security)", () => {
     expect(markup).not.toContain("Add asset");
   });
 
+  it("sends a member who is not an owner or admin to Your work instead of the assets", async () => {
+    vi.mocked(currentOrganisationAccess).mockResolvedValueOnce({
+      organisationId: "org_123",
+      organisationName: "Workspace",
+      organisationSlug: "workspace",
+      membershipRole: "member",
+      admin: false,
+    });
+
+    await expect(SecurityPage({})).rejects.toMatchObject({ digest: expect.stringContaining("/security/work") });
+  });
+
   it("renders the Security settings gear link with its accessible name", async () => {
     const markup = renderToStaticMarkup(await SecurityPage({}));
 

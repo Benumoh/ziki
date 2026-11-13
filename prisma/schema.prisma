@@ -3671,3 +3671,19 @@ model OnCallInvite {
   @@index([agentId, status])
   @@index([status, createdAt])
 }
+
+/// A snapshot of on-call cover (#on-call, 12 Nov plan H3), taken by the platform
+/// cron once a minute. Coverage is the share of snapshots in the last 24 hours
+/// with at least one on-call agent online and free. Kept for 7 days.
+model OnCallSample {
+  id     String   @id @default(cuid())
+  at     DateTime @default(now())
+  /// On-call agents that aren't revoked.
+  onCall Int
+  /// Of those, online: not paused and seen in the last 15 minutes.
+  online Int
+  /// Of those, free: online with room for another security part.
+  free   Int
+
+  @@index([at])
+}
