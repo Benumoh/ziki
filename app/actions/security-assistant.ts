@@ -5,8 +5,8 @@ import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { OWNERS_ONLY_MESSAGE } from "@/lib/security-checks";
-import { parseSecurityTarget, PRIVATE_TARGET_ERROR } from "@/lib/security-checks/target";
-import { addTargetAndCheck, nextStepPath, refusedMessage } from "@/lib/security-checks/entry";
+import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/security-checks/target";
+import { addTargetAndCheck, nextStepPath, refusedMessage, saveQuickScan } from "@/lib/security-checks/entry";
 import { previewScan } from "@/lib/security-checks/preview";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
 import type { ParsedTarget } from "@/lib/security-checks/target";
@@ -32,7 +32,7 @@ export type ChatAnswer =
   | { kind: "reply"; reply: string }
   | { kind: "go"; reply: string; href: string }
   /** The quick scan of a site, before anything is saved: counts only. `summary` is null when the scan couldn't run. */
-  | { kind: "scan"; reply: string; target: string; summary: PreviewSummary | null; note: string | null }
+  | { kind: "scan"; reply: string; target: string; summary: PreviewSummary | null; note: string | null; canAdd: boolean }
   | { kind: "error"; error: string };
 
 /** Messages one person may send the assistant in an hour. */
@@ -80,14 +80,25 @@ export async function addSecurityAsset(link: string): Promise<ChatAnswer> {
   if (!access.admin) return { kind: "error", error: OWNERS_ONLY_MESSAGE };
   const parsed = parseSecurityTarget(typeof link === "string" ? link : "");
   if (!parsed.ok) return { kind: "error", error: parsed.error };
-  return addAndGo(access.organisationId, user.id, parsed.target, "");
+  // The quick scan the client just saw, run again here (Dave's scan keeps it for ten minutes) rather than trusted from the page.
+  let summary: PreviewSummary | null = null;
+  const result = await previewScan(targetAddress(parsed.target), { visitor: `user:${user.id}` });
+  if (result.ok) summary = summarisePreview(result);
+  return addAndGo(access.organisationId, user.id, parsed.target, "", summary);
 }
 
-/** Every asset (a website, a server or a public repo) gets the quick scan first; nothing is saved until "Show it's yours". */
+/**
+ * Every asset (a website, a server or a public repo) gets the quick scan first;
+ * nothing is saved until Show it's yours. A site the scan couldn't reach can't
+ * be added from here; a private repo (the scan can't see it) or a scan that
+ * only hit the limit still can.
+ */
 async function scanOrGo(userId: string, target: ParsedTarget, reply: string): Promise<ChatAnswer> {
-  const result = await previewScan(target.value, { visitor: `user:${userId}` });
-  if (!result.ok) return { kind: "scan", reply, target: target.value, summary: null, note: result.reason };
-  return { kind: "scan", reply, target: target.value, summary: summarisePreview(result), note: null };
+  // The card carries the address (a repo's GitHub address), because its Show it's yours button sends it back to be added.
+  const address = targetAddress(target);
+  const result = await previewScan(address, { visitor: `user:${userId}` });
+  if (!result.ok) return { kind: "scan", reply, target: address, summary: null, note: result.reason, canAdd: target.kind === "repo" || result.retryAfterSeconds !== undefined };
+  return { kind: "scan", reply, target: address, summary: summarisePreview(result), note: null, canAdd: true };
 }
 
 async function addAndGo(
@@ -95,9 +106,11 @@ async function addAndGo(
   userId: string,
   target: Parameters<typeof addTargetAndCheck>[2],
   reply: string,
+  summary: PreviewSummary | null = null,
 ): Promise<ChatAnswer> {
   const added = await addTargetAndCheck(organisationId, userId, target);
   if ("refused" in added) return { kind: "reply", reply: refusedMessage(added.refused, target.value) };
+  if (summary) await saveQuickScan(added.targetId, summary);
   revalidatePath("/security");
   // Not proven yet: on to "Show it's yours". Proven already: back to Assets, where the free scan starts.
   return { kind: "go", reply, href: nextStepPath(added) };

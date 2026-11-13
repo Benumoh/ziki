@@ -158,7 +158,7 @@ export default async function IdeaPage({ params, searchParams }: {
   const marketingIdea = idea.track === "marketing";
   const closedIdea = idea.status === "rejected" || idea.status === "archived";
   const backFallback = marketingIdea
-    ? marketingPath(slug, closedIdea ? "ideas/rejected" : "")
+    ? marketingPath(slug, closedIdea ? "ideas/rejected" : "tasks")
     : closedIdea ? ideasPath(slug, "rejected") : ideasPath(slug);
 
   return (

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { auth } from "@/auth";
+import { SecurityPublicPage, securityPublicMetadata } from "@/components/security-checks/security-public-page";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +28,11 @@ import { listWorkspaceChecks, parseSiteFilter } from "@/lib/security-checks/entr
 import { countAgentJobs } from "@/lib/security-checks/your-work";
 import { OrgPageHeader, ReadOnlyNote, orgCard, orgListCard } from "../[org]/[project]/org/org-ui";
 
-export const metadata = { title: "Security" };
+/** Signed out, /security is the public Ziki Security page, so it carries that page's search title and description. */
+export async function generateMetadata() {
+  const session = await auth();
+  return session?.user ? { title: "Security" } : securityPublicMetadata;
+}
 
 /**
  * The Security area (#security-findings): report a vulnerability privately,
@@ -54,6 +60,9 @@ const FINDINGS_FILTERS = ["severity", "stage", "q", "project", "assignee", "repo
 export default async function SecurityPage(props: {
   searchParams?: SearchParams;
 }) {
+  // Signed out: the public Ziki Security page (#security-checks, C2).
+  const session = await auth();
+  if (!session?.user) return <SecurityPublicPage signedIn={false} />;
   const params = (await props.searchParams) ?? {};
   const severity = typeof params.severity === "string" ? params.severity.toLowerCase() : "";
   const selectedSeverity = isSecuritySeverity(severity) ? severity : "all";

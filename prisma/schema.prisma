@@ -59,6 +59,11 @@ enum WorkTrack {
   marketing
 }
 
+enum MarketingPlanRevisionStatus {
+  draft
+  approved
+}
+
 /// Application roles for RBAC.
 /// - user: default; report bugs, comment, mark issues important
 /// - admin: site catalog access. Does not grant power inside an organisation.
@@ -275,6 +280,8 @@ enum GoalAllocationTarget {
 
 model User {
   featurePlans              FeaturePlan[]
+  marketingPlans            MarketingPlan[]           @relation("MarketingPlanCreator")
+  marketingPlanRevisions    MarketingPlanRevision[]   @relation("MarketingPlanRevisionCreator")
   savedIssueViews           SavedIssueView[]
   id                        String                  @id @default(cuid())
   securityVerifications SecurityVerification[]
@@ -898,6 +905,7 @@ model Organisation {
 /// Organisations hold projects and nothing in between (#no-platforms).
 model Project {
   featurePlans          FeaturePlan[]
+  marketingPlans        MarketingPlan[]
   savedIssueViews        SavedIssueView[]
   agentNotes            AgentNote[]
   securityFindings      SecurityFinding[]
@@ -1979,6 +1987,71 @@ model FeaturePlanItem {
   @@unique([planId, position])
   @@index([ideaId])
   @@index([bugId])
+}
+
+/// A customer's structured marketing strategy, separate from a software FeaturePlan or agent Plan.
+model MarketingPlan {
+  id              String                  @id @default(cuid())
+  projectId       String
+  creatorId       String
+  title           String                  @db.VarChar(160)
+  currentRevision Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  project         Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator         User                    @relation("MarketingPlanCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  revisions       MarketingPlanRevision[]
+  activities      MarketingPlanActivity[]
+
+  @@index([projectId, updatedAt])
+  @@index([creatorId, updatedAt])
+}
+
+/// A numbered, preserved snapshot of the strategy and the Bishop context that informed it.
+model MarketingPlanRevision {
+  id                    String                          @id @default(cuid())
+  planId                String
+  revision              Int
+  version               Int                             @default(1)
+  status                MarketingPlanRevisionStatus     @default(draft)
+  sourceContextId       String                          @db.VarChar(191)
+  sourceContextRevision String                          @db.VarChar(191)
+  strategy              Json
+  createdById           String
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  plan                  MarketingPlan                   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdBy             User                            @relation("MarketingPlanRevisionCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  activities            MarketingPlanActivityRevision[]
+
+  @@unique([planId, revision])
+  @@index([planId, status, revision])
+}
+
+/// A durable logical activity identity, reused when that activity appears in later revisions.
+model MarketingPlanActivity {
+  id        String                           @id @default(cuid())
+  planId    String
+  createdAt DateTime                         @default(now())
+  plan      MarketingPlan                    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  revisions MarketingPlanActivityRevision[]
+
+  @@index([planId])
+}
+
+/// Revision-specific content for an activity; prior content remains intact after a draft is edited.
+model MarketingPlanActivityRevision {
+  id         String                @id @default(cuid())
+  revisionId String
+  activityId String
+  position   Int
+  content    Json
+  revision   MarketingPlanRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  activity   MarketingPlanActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([revisionId, activityId])
+  @@index([revisionId, position])
+  @@index([activityId])
 }
 
 model IdeaVerdict {
@@ -3309,6 +3382,11 @@ model SecurityTarget {
   ownershipMethod String?
   /// When ownership was proven; null until then. No agent may touch the target while null.
   verifiedAt      DateTime?
+  /// The quick scan's counts when the client added it (#security-checks): severities, risk and
+  /// areas only, never what was found. Null for a repo or when the scan couldn't run.
+  previewSummary  Json?
+  /// When that quick scan ran.
+  previewAt       DateTime?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   checks          SecurityCheck[]

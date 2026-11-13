@@ -107,7 +107,7 @@ export function Library({ slug, initial }: { slug: ProjectRef; initial: LibraryR
     } finally { request.current = false; setPending(false); }
   }
 
-  const tasksPath = marketingPath(slug);
+  const tasksPath = marketingPath(slug, "tasks");
   return <div className="lb-page" data-detail={detail}>
     <LibraryHeading />
     {!result.ok ? <section className="lb-state" aria-busy={pending}>

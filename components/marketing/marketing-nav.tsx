@@ -10,21 +10,25 @@ const quiet = "border border-zk-border bg-zk-surface text-zk-text hover:bg-zk-ch
 
 const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, className: "h-4 w-4" } as const;
 
-/** The Marketing section's header: the tasks board is its home, with finished work, settings and proposing a task beside it. */
+/** The Marketing section's header: the tasks board, finished work, settings and proposing a task. The breadcrumb names the section. */
 export function MarketingNav({ slug }: { slug: ProjectRef }) {
   const pathname = usePathname()?.replace(/\/+$/, "") ?? "";
-  const home = marketingPath(slug);
+  const tasks = marketingPath(slug, "tasks");
   const output = marketingPath(slug, "output-box");
   const settings = marketingPath(slug, "settings");
   const newTask = marketingPath(slug, "tasks/new");
   const current = (href: string) => (pathname === href || pathname.startsWith(`${href}/`) ? "page" : undefined);
 
   return (
-    <nav aria-label="Marketing" className="mx-auto mb-5 flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
-      <Link href={home} aria-current={pathname === home ? "page" : undefined} className={`rounded-md text-xl font-extrabold tracking-[-0.01em] text-zk-text hover:text-zk-accent ${focus}`}>
-        Marketing
-      </Link>
+    <nav aria-label="Marketing" className="mx-auto mb-5 flex w-full max-w-6xl flex-wrap items-center justify-end gap-3">
       <div className="flex flex-wrap items-center gap-2">
+        <Link href={tasks} aria-current={pathname === tasks ? "page" : undefined} className={`${action} ${quiet} px-4`}>
+          <svg {...iconProps}>
+            <path d="M9 6h11M9 12h11M9 18h11" />
+            <path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2" />
+          </svg>
+          Tasks
+        </Link>
         <Link href={output} aria-current={current(output)} className={`${action} ${quiet} px-4`}>
           <svg {...iconProps}>
             <path d="M22 12h-6l-2 3h-4l-2-3H2" />

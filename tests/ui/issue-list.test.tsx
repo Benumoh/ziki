@@ -657,7 +657,7 @@ describe("the marketing tasks board", () => {
 
   it("keeps the tab and sort when paging", () => {
     const html = renderBoard({ sortParam: "reward", pagination: { page: 1, totalPages: 2, totalCount: 30, from: 1, to: 25 } }).replaceAll("&amp;", "&");
-    expect(html).toContain("/acme/acme/marketing?status=open&sort=reward&page=2");
+    expect(html).toContain("/acme/acme/marketing/tasks?status=open&sort=reward&page=2");
   });
 });
 

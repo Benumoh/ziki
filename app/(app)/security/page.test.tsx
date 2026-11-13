@@ -6,6 +6,8 @@ import SecurityPage from "./page";
 import SecuritySettingsPage from "./settings/page";
 
 vi.mock("@/app/actions/security-assistant", () => ({ talkToSecurityAssistant: vi.fn() }));
+// The page reads the session to tell a signed-in person from a visitor (the public page); the real auth cannot load here.
+vi.mock("@/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "user_test" } })) }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
