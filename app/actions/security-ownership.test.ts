@@ -8,10 +8,14 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT ${path}`);
   }),
+  after: vi.fn(),
+  kick: vi.fn<(db: unknown, checkId: string) => Promise<void>>(async () => undefined),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/server", () => ({ after: mocks.after }));
+vi.mock("@/lib/security-checks/engine", () => ({ kickCheck: mocks.kick }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: vi.fn().mockResolvedValue({ id: "u1", role: "member" }) }));
 vi.mock("@/lib/organisation-access", () => ({ currentOrganisationAccess: mocks.access }));
 vi.mock("@/lib/prisma", () => ({ prisma: { securityTarget: { findFirst: mocks.findTarget } } }));
@@ -29,7 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.access.mockResolvedValue({ organisationId: "org1", admin: false });
   mocks.findTarget.mockResolvedValue(target);
-  mocks.record.mockResolvedValue({ checkId: "c1" });
+  mocks.record.mockResolvedValue({ checkId: "c1", queued: ["c1"] });
 });
 
 describe("verifySecurityTarget (#security-checks part 2)", () => {
@@ -64,5 +68,30 @@ describe("verifySecurityTarget (#security-checks part 2)", () => {
     mocks.findTarget.mockResolvedValue({ ...target, verifiedAt: new Date() });
     await expect(verifySecurityTarget("t1")).rejects.toThrow("REDIRECT /security?check=c1");
     expect(mocks.prove).not.toHaveBeenCalled();
+  });
+
+  it("starts every check it let go at once, after the response, instead of waiting for the sweep", async () => {
+    mocks.record.mockResolvedValue({ checkId: "c1", queued: ["c1", "c2"] });
+    mocks.prove.mockResolvedValue({ ok: true });
+    await expect(verifySecurityTarget("t1")).rejects.toThrow("REDIRECT /security?check=c1");
+    // Nothing is started before the response: only scheduled.
+    expect(mocks.kick).not.toHaveBeenCalled();
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+    await mocks.after.mock.calls[0]![0]();
+    expect(mocks.kick.mock.calls.map((call) => call[1])).toEqual(["c1", "c2"]);
+  });
+
+  it("schedules nothing when no check is waiting", async () => {
+    mocks.record.mockResolvedValue({ checkId: null, queued: [] });
+    mocks.prove.mockResolvedValue({ ok: true });
+    await expect(verifySecurityTarget("t1")).rejects.toThrow("REDIRECT /security");
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it("starts nothing while no proof is there", async () => {
+    mocks.prove.mockResolvedValue({ ok: false, reason: "no" });
+    await verifySecurityTarget("t1");
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.kick).not.toHaveBeenCalled();
   });
 });

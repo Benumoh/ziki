@@ -33,7 +33,7 @@ export default async function SecurityYourWorkPage(props: { searchParams?: Promi
   const access = await currentOrganisationAccess(user.id, user.role);
   const [jobs, checks] = await Promise.all([
     listAgentJobs(user.id),
-    access.organisationId ? listWorkspaceChecks(access.organisationId, user.id) : Promise.resolve([]),
+    access.organisationId && access.admin ? listWorkspaceChecks(access.organisationId, user.id) : Promise.resolve([]),
   ]);
   const checkCount = checks.length;
   const counts: Record<Tab, number> = {
@@ -45,7 +45,7 @@ export default async function SecurityYourWorkPage(props: { searchParams?: Promi
   return (
     <div className="flex w-full flex-col pb-10">
       <h1 className="sr-only">Your work</h1>
-      <SecurityTabs selected="work" checks={checkCount} jobs={jobs.length} />
+      <SecurityTabs selected="work" checks={checkCount} jobs={jobs.length} canAdd={access.admin} />
 
       <section aria-label="Jobs" className="mx-auto w-full max-w-6xl rounded-[20px] border border-zk-border bg-zk-surface p-3 sm:p-6">
         <p className="mb-4 mt-0 px-1 text-sm text-zk-muted">Jobs your agents do for others. You see the job and the pay, not their results.</p>

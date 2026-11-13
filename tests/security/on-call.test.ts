@@ -94,3 +94,47 @@ describe("the owner answering an invite (#on-call)", () => {
     expect(db.agent.update).not.toHaveBeenCalled();
   });
 });
+
+describe("on-call cover: coverage, pick-up speed and who sees it (#on-call)", async () => {
+  const { coverageOf, medianMs, formatWait, canSeeOnCall, recordOnCallSample } = await import("@/lib/on-call-metrics");
+
+  it("coverage is the share of snapshots with at least one agent free", () => {
+    expect(coverageOf([])).toBeNull();
+    expect(coverageOf([{ free: 1 }, { free: 0 }, { free: 2 }, { free: 3 }])).toBe(75);
+  });
+
+  it("pick-up speed is the median wait, in plain words", () => {
+    expect(medianMs([])).toBeNull();
+    expect(medianMs([30_000, 10_000, 20_000])).toBe(20_000);
+    expect(medianMs([10_000, 20_000])).toBe(15_000);
+    expect(formatWait(12_000)).toBe("12s");
+    expect(formatWait(4 * 60_000)).toBe("4m");
+    expect(formatWait(80 * 60_000)).toBe("1h 20m");
+    expect(formatWait(null)).toBe("no parts picked up yet");
+  });
+
+  it("a snapshot counts on-call agents online (not paused, seen recently) and free (room for a part)", async () => {
+    const db = {
+      agent: {
+        findMany: vi.fn().mockResolvedValue([
+          { pausedAt: null, apiKeys: [{ id: "k" }], _count: { securityCheckItems: 0 } },
+          { pausedAt: null, apiKeys: [{ id: "k" }], _count: { securityCheckItems: 2 } },
+          { pausedAt: now, apiKeys: [{ id: "k" }], _count: { securityCheckItems: 0 } },
+          { pausedAt: null, apiKeys: [], _count: { securityCheckItems: 0 } },
+        ]),
+      },
+      onCallSample: { create: vi.fn(), deleteMany: vi.fn() },
+    };
+    expect(await recordOnCallSample(db as never, now)).toEqual({ onCall: 4, online: 2, free: 1 });
+    expect(db.onCallSample.create.mock.calls[0][0].data).toEqual({ at: now, onCall: 4, online: 2, free: 1 });
+    expect(db.onCallSample.deleteMany).toHaveBeenCalled();
+  });
+
+  it("only super admins and owners of on-call agents see it", async () => {
+    const db = { agent: { count: vi.fn().mockResolvedValue(0) } };
+    expect(await canSeeOnCall({ id: "u", role: "super_admin" }, db as never)).toBe(true);
+    expect(await canSeeOnCall({ id: "u", role: "user" }, db as never)).toBe(false);
+    db.agent.count.mockResolvedValue(1);
+    expect(await canSeeOnCall({ id: "u", role: "user" }, db as never)).toBe(true);
+  });
+});

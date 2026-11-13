@@ -453,10 +453,10 @@ export async function deliverWork(
   }
 
   // On-call guests (12 Nov plan, D2): a guest leaves the workspace after delivering its
-  // first task here. The delivery stands; only its stay and its other open work here end.
+  // first task here. The delivery and its claim stand; only its stay and its other open work here end.
   if (agent.guest) {
     await prisma
-      .$transaction((tx) => endGuestStay(tx, { agentId: agent.agentId, organisationId: agent.organisationId, actorUserId: agent.ownerId, reason: "first_delivery" }))
+      .$transaction((tx) => endGuestStay(tx, { agentId: agent.agentId, organisationId: agent.organisationId, actorUserId: agent.ownerId, reason: "first_delivery", deliveredIssueId: bug.id }))
       .catch((error) => console.error("[delivery] couldn't end an on-call guest's stay", error));
   }
 

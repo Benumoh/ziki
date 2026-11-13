@@ -14,6 +14,7 @@ import { parsePullRequestUrl } from "@/lib/github/pull-request-url";
 import { installationIdForPullRequest, PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/project-repositories";
 import { asSnapshot, type PullRequestSnapshot } from "@/lib/github/snapshot-types";
 import { followIssuePreviewBuilds, startPreviewBuildIfDue } from "@/lib/previews/builds";
+import { sameCommit } from "@/lib/github/commit-sha";
 
 /**
  * Ziki reads an issue's pull request on GitHub and records it (#github-status).
@@ -194,7 +195,7 @@ export async function syncPullRequestStatus(
         });
     if (unchanged) return { reportId: report.id, moved: null, changed: false };
 
-    const headMoved = snapshot.state === "open" && snapshot.headSha !== null && snapshot.headSha !== bug.pullRequestHeadSha;
+    const headMoved = snapshot.state === "open" && snapshot.headSha !== null && !sameCommit(snapshot.headSha, bug.pullRequestHeadSha);
     if (headMoved) {
       await tx.bug.updateMany({ where: { id: bug.id, pullRequestUrl }, data: { pullRequestHeadSha: snapshot.headSha } });
     }

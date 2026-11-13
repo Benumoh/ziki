@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Prisma, PrismaClient, TestRowKind, TestRowProof, TestRowRoute, TestRowSource } from "@prisma/client";
 import { storedReceipt } from "@/lib/delivery-receipt";
+import { sameCommit } from "@/lib/github/commit-sha";
 
 /**
  * Deeper testing (#deeper-testing): what a judgement must prove, and the
@@ -224,7 +225,7 @@ export function judgementProof(
   deliveredSha: string | null,
 ): { state: JudgementProofState; missing: string[] } {
   const proof = storedProof(verdict.proof);
-  if (deliveredSha && verdict.headSha && verdict.headSha !== deliveredSha) return { state: "earlier_code", missing: [] };
+  if (deliveredSha && verdict.headSha && !sameCommit(verdict.headSha, deliveredSha)) return { state: "earlier_code", missing: [] };
   const fails = [...Object.values(proof.checks ?? {}), ...Object.values(proof.squares ?? {})].some(isProvenFail);
   if (!verdict.goodToMerge) return { state: fails ? "proved_fail" : "no_fail_proof", missing: [] };
   if (fails) return { state: "contradicts", missing: [] };
@@ -312,7 +313,7 @@ export function buildCard(input: {
   verdicts: CardVerdict[];
 }): TestCard {
   const { rules, checks, deliveredSha } = input;
-  const current = input.verdicts.filter((v) => !deliveredSha || !v.headSha || v.headSha === deliveredSha);
+  const current = input.verdicts.filter((v) => !deliveredSha || !v.headSha || sameCommit(v.headSha, deliveredSha));
   const proofs = current.map((v) => ({ name: v.agent.name, proof: storedProof(v.proof) }));
   const square = (key: string, env: string | null, needed: number, read: (p: VerdictProof) => ProofEntry | undefined): CardSquare => {
     const provers = proofs.filter((p) => read(p.proof)?.result === "pass" && read(p.proof)?.attachmentId).map((p) => p.name);

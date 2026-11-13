@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
+import { getDomain } from "tldts";
 import type { SecuritySeverity, SecurityTargetKind } from "@prisma/client";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { PREVIEW_SCANS_PER_VISITOR_PER_HOUR } from "@/lib/security-checks";
@@ -28,11 +29,12 @@ import { parseSecurityTarget } from "@/lib/security-checks/target";
 export const PREVIEW_CACHE_MS = 10 * 60 * 1000;
 
 const TIMEOUT_MS = 5_000;
-const MAX_REDIRECTS = 3;
+/** Same-site HTTPS redirects followed before the homepage is called unreadable (browsers allow about 20). */
+export const MAX_REDIRECTS = 10;
 const EXPIRING_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type PreviewArea = "https" | "certificate" | "headers" | "cookies" | "email";
+export type PreviewArea = "https" | "certificate" | "headers" | "cookies" | "email" | "secrets" | "policy" | "updates";
 
 export type PreviewFinding = {
   /** Stable for each kind of problem, so a page can key and count them. */
@@ -46,7 +48,7 @@ export type PreviewFinding = {
 export type PreviewResult =
   | {
       ok: true;
-      kind: Exclude<SecurityTargetKind, "repo">;
+      kind: SecurityTargetKind;
       target: string;
       checkedAt: string;
       /** Which areas were looked at, so "no problems" is honest about what it covers. */
@@ -79,13 +81,22 @@ export type PreviewNetwork = {
   certificate(host: string): Promise<CertificateAnswer | null>;
   /** TXT records for a name; empty when there are none. */
   txt(host: string): Promise<string[][]>;
+  /** The file and folder names a public repo shows at its top level, in `.github` and in `docs`. */
+  repo(owner: string, name: string): Promise<RepoAnswer>;
 };
+
+/** What a visitor to github.com sees of a repo: names only, never a file's contents. */
+export type RepoAnswer =
+  | { status: "ok"; root: string[]; github: string[]; docs: string[] }
+  | { status: "not_found" }
+  | { status: "unavailable" };
 
 /* ------------------------------------------------------------------ */
 /* The scan                                                            */
 /* ------------------------------------------------------------------ */
 
-const REPO_REASON = "The quick preview covers websites and servers. Sign up to check a repo.";
+const REPO_NOT_FOUND = "We couldn't see that repo on GitHub. It may be private or the name may be wrong. You can still show it's yours and agents will check it properly.";
+const REPO_UNAVAILABLE = "We couldn't read that repo from GitHub just now. Try again in a little while.";
 const LIMIT_REASON = "You've run a few previews already. Try again in a little while, or sign up to check your site properly.";
 const NOT_PUBLIC = "That address points inside a private network, so Ziki won't look at it.";
 
@@ -102,7 +113,6 @@ export async function previewScan(
   const parsed = parseSecurityTarget(link);
   if (!parsed.ok) return { ok: false, reason: parsed.error };
   const { kind, value } = parsed.target;
-  if (kind === "repo") return { ok: false, reason: REPO_REASON };
 
   const cacheKey = `${kind}:${value}`;
   const cached = cache.get(cacheKey);
@@ -112,7 +122,7 @@ export async function previewScan(
   if (!limit.allowed) return { ok: false, reason: LIMIT_REASON, retryAfterSeconds: Math.ceil(limit.retryAfterMs / 1000) };
 
   try {
-    const result = await scan(kind, value, network, now);
+    const result = kind === "repo" ? await scanRepo(value, network, now) : await scan(kind, value, network, now);
     if (result.ok) {
       cache.set(cacheKey, { at: now, result });
       for (const [key, entry] of cache) if (now - entry.at >= PREVIEW_CACHE_MS) cache.delete(key);
@@ -136,22 +146,29 @@ async function scan(
   now: number,
 ): Promise<PreviewResult> {
   const host = isIP(value) === 6 ? `[${value}]` : value;
-  const [secure, plain, certificate, spf, dmarc] = await Promise.all([
+  // Mail records live on the registrable domain (app.example.co.uk -> example.co.uk), not on each subdomain.
+  const mailDomain = kind === "website" ? emailDomainFor(value) : null;
+  const [home, plain, certificate, spf, dmarc] = await Promise.all([
     homepage(network, `https://${host}/`, value).catch(rethrowPrivate),
     network.page(`http://${host}/`).catch(rethrowPrivate),
     network.certificate(value).catch(rethrowPrivate),
-    kind === "website" ? readTxt(network, value) : Promise.resolve(null),
-    kind === "website" ? readTxt(network, `_dmarc.${value}`) : Promise.resolve(null),
+    mailDomain ? readTxt(network, mailDomain) : Promise.resolve(null),
+    mailDomain ? readDmarc(network, value, mailDomain) : Promise.resolve(null),
   ]);
+  // Too many redirects says nothing about HTTPS either way: don't call it missing.
+  const tooManyRedirects = home === TOO_MANY_REDIRECTS;
+  const secure = tooManyRedirects ? null : home;
 
-  if (!secure && !plain) {
+  if (!secure && !plain && !tooManyRedirects) {
     return { ok: false, reason: `${value} didn't answer on the web (ports 80 and 443). Check it opens in a browser, then try again.` };
   }
 
   const findings: PreviewFinding[] = [];
-  const checked: PreviewArea[] = ["https"];
+  const checked: PreviewArea[] = tooManyRedirects ? [] : ["https"];
 
-  if (!secure) {
+  if (tooManyRedirects) {
+    // Couldn't check: the homepage kept redirecting on its own site, so HTTPS isn't judged.
+  } else if (!secure) {
     findings.push({
       id: "no-https",
       severity: "high",
@@ -183,15 +200,83 @@ async function scan(
   }
 
   // A record is only called missing when the lookup really answered: a lookup that failed says nothing.
-  if (kind === "website" && (spf !== null || dmarc !== null)) {
+  if (mailDomain && (spf !== null || dmarc !== null)) {
     checked.push("email");
-    findings.push(...emailFindings(spf, dmarc, value));
+    findings.push(...emailFindings(spf, dmarc, mailDomain));
   }
 
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const finding of findings) counts[finding.severity] += 1;
   return { ok: true, kind, target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings };
+}
+
+/* ------------------------------------------------------------------ */
+/* A public repo                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Files that usually hold real secrets: the repo should never publish them. Examples and templates are fine. */
+const SECRET_FILE = /^(\.env(\.(local|production|prod|development|staging))?|id_(rsa|dsa|ecdsa|ed25519)|credentials\.json|service-?account[\w-]*\.json|\.htpasswd|\.netrc|.+\.(pem|key|p12|pfx|jks|keystore))$/i;
+/** A file at the top of a repo that says it depends on packages from somewhere. */
+const DEPENDENCY_FILE = /^(package\.json|requirements[\w.-]*\.txt|pyproject\.toml|pipfile|gemfile|go\.mod|cargo\.toml|composer\.json|pom\.xml|build\.gradle(\.kts)?|pubspec\.yaml)$/i;
+const SECURITY_POLICY_FILE = /^security\.(md|markdown|txt)$/i;
+const UPDATE_BOT_FILE = /^(dependabot\.ya?ml|renovate\.json5?|\.renovaterc(\.json5?)?)$/i;
+
+/**
+ * A quick, code-only look at a public repo (13 Nov): the same promise as for a
+ * site. It reads only the names of the files and folders any visitor to
+ * github.com sees, never a file's contents and never anything it would have to
+ * log in for. A private or missing repo says so and still goes on to "Show
+ * it's yours".
+ */
+async function scanRepo(value: string, network: PreviewNetwork, now: number): Promise<PreviewResult> {
+  const [owner, name] = value.split("/");
+  const answer = await network.repo(owner, name);
+  if (answer.status === "not_found") return { ok: false, reason: REPO_NOT_FOUND };
+  if (answer.status === "unavailable") return { ok: false, reason: REPO_UNAVAILABLE };
+
+  const findings: PreviewFinding[] = [];
+  const checked: PreviewArea[] = ["secrets", "policy"];
+
+  for (const file of answer.root.filter((entry) => SECRET_FILE.test(entry))) {
+    findings.push({
+      id: `secret-file:${file.toLowerCase()}`,
+      severity: "high",
+      area: "secrets",
+      title: "A file that usually holds secrets is in the repo",
+      detail: `${value} publishes a file named ${file}. If it holds real keys or passwords, anyone can read them, so they should be removed from the repo and changed.`,
+    });
+  }
+
+  const hasPolicy = [...answer.root, ...answer.github, ...answer.docs].some((entry) => SECURITY_POLICY_FILE.test(entry));
+  if (!hasPolicy) {
+    findings.push({
+      id: "no-security-policy",
+      severity: "low",
+      area: "policy",
+      title: "The repo has no security policy",
+      detail: `${value} has no SECURITY.md, so a person who finds a problem doesn't know how to report it privately.`,
+    });
+  }
+
+  // Only judged when the repo says it depends on packages: a repo with no dependencies has nothing to keep up to date.
+  if (answer.root.some((entry) => DEPENDENCY_FILE.test(entry))) {
+    checked.push("updates");
+    if (![...answer.root, ...answer.github].some((entry) => UPDATE_BOT_FILE.test(entry))) {
+      findings.push({
+        id: "no-dependency-updates",
+        severity: "low",
+        area: "updates",
+        title: "Nothing keeps the repo's dependencies up to date",
+        detail: `${value} has no Dependabot or Renovate setup, so known problems in its packages can sit there unnoticed.`,
+      });
+    }
+  }
+
+  findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+  const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const finding of findings) counts[finding.severity] += 1;
+  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings };
 }
 
 const SEVERITY_ORDER: Record<SecuritySeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -216,8 +301,29 @@ async function readTxt(network: PreviewNetwork, host: string): Promise<string[][
   return null;
 }
 
-/** The homepage's headers, following up to a few redirects on the same site. Null when it doesn't answer. */
-async function homepage(network: PreviewNetwork, start: string, site: string): Promise<PageAnswer | null> {
+/** The registrable domain whose SPF and DMARC records cover `host`; the host itself when it has none (an IP, localhost). */
+export function emailDomainFor(host: string): string {
+  return getDomain(host, { allowPrivateDomains: false }) ?? host;
+}
+
+/**
+ * The DMARC records that apply to `host`: its own `_dmarc` record, else the
+ * registrable domain's (RFC 7489 section 6.6.3). Null when a lookup didn't answer.
+ */
+async function readDmarc(network: PreviewNetwork, host: string, mailDomain: string): Promise<string[][] | null> {
+  const own = await readTxt(network, `_dmarc.${host}`);
+  if (host === mailDomain || own === null) return own;
+  const hasPolicy = own.some((parts) => parts.join("").trim().toLowerCase().startsWith("v=dmarc1"));
+  return hasPolicy ? own : readTxt(network, `_dmarc.${mailDomain}`);
+}
+
+const TOO_MANY_REDIRECTS = "too_many_redirects" as const;
+
+/**
+ * The homepage's headers, following same-site HTTPS redirects. Null when it
+ * doesn't answer; TOO_MANY_REDIRECTS when it still redirects after MAX_REDIRECTS.
+ */
+async function homepage(network: PreviewNetwork, start: string, site: string): Promise<PageAnswer | typeof TOO_MANY_REDIRECTS | null> {
   let url = new URL(start);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const answer = await network.page(url.toString());
@@ -230,7 +336,7 @@ async function homepage(network: PreviewNetwork, start: string, site: string): P
     }
     return answer;
   }
-  return null;
+  return TOO_MANY_REDIRECTS;
 }
 
 function sameSite(host: string, site: string): boolean {
@@ -451,6 +557,31 @@ export function emailFindings(spf: readonly (readonly string[])[] | null, dmarc:
 const USER_AGENT = "ZikiSecurityPreview/1.0 (+https://ziki.dev/security)";
 
 export const realPreviewNetwork: PreviewNetwork = {
+  async repo(owner, name) {
+    // One fixed host. The owner and name were already checked to be plain GitHub names.
+    const headers: Record<string, string> = { "User-Agent": USER_AGENT, Accept: "application/vnd.github+json" };
+    const token = process.env.GITHUB_TOKEN?.trim();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const names = async (path: string): Promise<string[] | "not_found" | "unavailable"> => {
+      try {
+        const response = await fetch(`https://api.github.com/repos/${owner}/${name}/contents${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+        if (response.status === 404) return "not_found";
+        if (!response.ok) return "unavailable";
+        const body: unknown = await response.json();
+        return Array.isArray(body) ? body.flatMap((entry) => (typeof (entry as { name?: unknown })?.name === "string" ? [(entry as { name: string }).name] : [])) : [];
+      } catch {
+        return "unavailable";
+      }
+    };
+    const root = await names("");
+    if (root === "not_found" || root === "unavailable") return { status: root };
+    // A policy can sit in .github or docs; the update bot's setup sits in .github. A folder that can't be read counts as empty.
+    const [github, docs] = await Promise.all([
+      root.includes(".github") ? names("/.github") : Promise.resolve([] as string[]),
+      root.includes("docs") ? names("/docs") : Promise.resolve([] as string[]),
+    ]);
+    return { status: "ok", root, github: Array.isArray(github) ? github : [], docs: Array.isArray(docs) ? docs : [] };
+  },
   async page(url) {
     const target = new URL(url);
     const host = target.hostname.replace(/^\[|\]$/g, "");

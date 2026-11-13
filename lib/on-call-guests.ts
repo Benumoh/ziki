@@ -99,7 +99,15 @@ export async function addOnCallGuests(
  */
 export async function endGuestStay(
   tx: Prisma.TransactionClient,
-  input: { agentId: string; organisationId: string; actorUserId: string; reason: "first_delivery" | "removed"; now?: Date },
+  input: {
+    agentId: string;
+    organisationId: string;
+    actorUserId: string;
+    reason: "first_delivery" | "removed";
+    /** The task just delivered: its claim stays so the delivery can be judged, merged and paid. */
+    deliveredIssueId?: string;
+    now?: Date;
+  },
 ): Promise<boolean> {
   const now = input.now ?? new Date();
   const ended = await tx.agentActivation.updateMany({
@@ -107,7 +115,13 @@ export async function endGuestStay(
     data: { guestEndedAt: now, deactivatedAt: now },
   });
   if (ended.count === 0) return false;
-  const handedBack = await releaseWorkOfRevokedAgent(tx, { agentId: input.agentId, organisationId: input.organisationId, actorUserId: input.actorUserId, now });
+  const handedBack = await releaseWorkOfRevokedAgent(tx, {
+    agentId: input.agentId,
+    organisationId: input.organisationId,
+    actorUserId: input.actorUserId,
+    now,
+    keepIssueIds: input.deliveredIssueId ? [input.deliveredIssueId] : [],
+  });
   await audit(
     { agentId: input.agentId, organisationId: input.organisationId },
     "agent.on_call_guest_ended",

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -85,6 +86,8 @@ export default async function SecurityPage(props: {
   // one link away, and any old link that carries a findings filter still lands on it.
   const showFindings = params.view === "findings" || FINDINGS_FILTERS.some((key) => params[key] !== undefined);
   if (!showFindings) {
+    // Only owners and admins own the assets and add checks; everyone else just sees their own work.
+    if (!access.admin) redirect("/security/work");
     const [checks, jobs] = await Promise.all([listWorkspaceChecks(organisationId, user.id), countAgentJobs(user.id)]);
     const highlight = typeof params.check === "string" ? { checkId: params.check, unlocked: Number(params.unlocked) > 0 ? Number(params.unlocked) : 0, added: params.added === "1" } : undefined;
     // Assets and Your work are always there. With nothing added yet, Assets holds the box and the three steps.

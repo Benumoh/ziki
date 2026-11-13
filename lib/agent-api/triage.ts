@@ -30,6 +30,7 @@ import { absoluteUrl } from "@/lib/site-url";
 import { issuePath } from "@/lib/issue-ref";
 import { refOf } from "@/lib/project-paths";
 import { activeLevels, levelIn } from "@/lib/agents/active-in";
+import { sameCommit } from "@/lib/github/commit-sha";
 
 /**
  * The manager's triage view (#triage): one read that says, for every issue in
@@ -450,7 +451,7 @@ async function judgementsOn(
       .map((delivery) => delivery.beneficiaryUserId);
   const checks = checksFor(await loadProofRules(prisma, bug.organisationId), bug);
   const { good, notGood } = countJudgements(verdicts, bug, credited, checks);
-  const goodAtHead = headSha ? countJudgements(verdicts.filter((v) => v.headSha === headSha), bug, credited, checks).good : null;
+  const goodAtHead = headSha ? countJudgements(verdicts.filter((v) => sameCommit(v.headSha, headSha)), bug, credited, checks).good : null;
   const byCaller = verdicts.some((v) => v.agent.ownerUserId === callerOwnerId || v.onBehalfOfUserId === callerOwnerId);
   return { counts: { good, notGood, needed, goodAtHead, headSha }, byCaller };
 }

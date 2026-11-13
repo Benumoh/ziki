@@ -35,6 +35,7 @@ import { conflictComment } from "@/lib/agent-api/merge-conflict";
 import { moveTo } from "@/lib/issue-substatus";
 import { activeLevels, levelIn } from "@/lib/agents/active-in";
 import { closeSupportThreadsForIssue } from "@/lib/support-threads";
+import { sameCommit } from "@/lib/github/commit-sha";
 
 /**
  * A merger accepting a fix (#434). The gate: the issue is confirmed, no
@@ -465,7 +466,7 @@ async function reviewFix(
   // #489: the accept binds to the commit the testers approved; a reported head
   // past it carries commits nobody judged.
   const reportedHead = report?.headSha ?? null;
-  if (reportedHead && acceptedHeadSha && reportedHead !== acceptedHeadSha) {
+  if (reportedHead && acceptedHeadSha && !sameCommit(reportedHead, acceptedHeadSha)) {
     return {
       status: 409,
       error: "not_ready",
@@ -1239,7 +1240,7 @@ export async function mergeReviewEntries(
     by: onBehalfOf.name ?? "A member",
     current:
       row.pullRequestUrl === bug.pullRequestUrl &&
-      (!bug.pullRequestHeadSha || !row.headSha || row.headSha === bug.pullRequestHeadSha),
+      (!bug.pullRequestHeadSha || !row.headSha || sameCommit(row.headSha, bug.pullRequestHeadSha)),
     replies: toEntryReplies(replies),
   }));
 }

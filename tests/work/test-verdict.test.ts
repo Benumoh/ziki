@@ -917,6 +917,20 @@ describe("deeper testing: what counts (#deeper-testing)", () => {
     expect(card([{ id: "Ivy", proof: proven }]).holes).toBe(1); // r2 needs a second tester
     expect(card([{ id: "Ivy", proof: proven }, { id: "Fern", proof: { squares: { r2: pass() } } }]).holes).toBe(0);
     expect(card([{ id: "Ivy", proof: { ...proven, squares: { ...proven.squares, "r1@Phone": { result: "fail", attachmentId: "att", shows: "It fails on the delivered commit." } } } }]).failed).toBe(1);
+    // #921: a judgement sent with the full ID of the short delivered commit is on the same code.
+    const full = "abc1234def5678abc1234def5678abc1234def56";
+    const onFull = buildCard({
+      rules,
+      checks: { on: true, required: ["fixed"], guidance: [] },
+      priority: "high",
+      deliveredSha: "abc1234",
+      receipt: null,
+      rows: [row("r1", { envs: ["Phone", "Desktop"] }), row("r2", { needsTwo: true }), row("r3", { route: "env" })],
+      verdicts: [{ id: "Ivy", proof: proven, agent: { name: "Ivy" }, goodToMerge: true, headSha: full }],
+    });
+    expect(onFull.holes).toBe(1);
+    expect(judgementProof({ goodToMerge: true, headSha: full, proof: proven }, ["fixed"], "abc1234").state).not.toBe("earlier_code");
+    expect(judgementProof({ goodToMerge: true, headSha: "fedcba98", proof: proven }, ["fixed"], "abc1234").state).toBe("earlier_code");
 
     const wild = Array.from({ length: 8 }, (_, i) => row(`w${i}`, { source: "beyond" }));
     const low = buildCard({ rules, checks: { on: true, required: [], guidance: [] }, priority: "low", deliveredSha: null, receipt: null, rows: wild, verdicts: [] });
