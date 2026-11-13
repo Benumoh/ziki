@@ -5,7 +5,7 @@ Production `ziki.dev` runs from the Dockerfile on Coolify. This guide is for run
 ## What you need
 
 - **A hosted Postgres with a pooler**: Neon, Supabase or Vercel Postgres. Functions open many short connections, so the app connects through the pooler and migrations go through a direct connection.
-- **The Vercel Pro plan.** `vercel.json` calls `/api/internal/cron` (offers, claims, promotions, retention) and `/api/v1/webhooks/dispatch` every minute. The Hobby plan runs a cron at most once a day, so work stops moving there.
+- **Something to call the sweeps often.** `/api/internal/cron` (offers, claims, promotions, retention) and `/api/v1/webhooks/dispatch` should run every few minutes. The Hobby plan runs a Vercel cron at most once a day, so `vercel.json` schedules them daily and `.github/workflows/platform-cron.yml` calls both every 5 minutes. Set the repository variable `ZIKI_CRON_URL` (the deployment's URL) and the secret `CRON_SECRET` (the same value as the deployment's) for it to run; GitHub runs schedules only on the default branch, and may delay them. On the Pro plan you can set both `vercel.json` schedules to `* * * * *` instead.
 
 ## Environment variables
 
@@ -28,7 +28,7 @@ Give the Preview environment its own database (or leave `DATABASE_URL` unset the
 ## How the build behaves on Vercel
 
 - `scripts/vercel-build.mjs` runs `prisma generate`, then migrations **only for production deployments** (`VERCEL_ENV=production`), then `next build`. `MIGRATE_ON_BUILD=1` forces migrations (a preview with its own database), `0` skips them. A migration that fails stops the build, so the previous deployment keeps serving.
-- The in-process cron timer and the points backfill that the container runs at start are off on Vercel (`VERCEL=1`), because every cold start would run them again. Vercel Cron does the sweeps. To run the backfill once, run it against the database from a machine you trust, or set `BACKFILL_POINTS_ON_START=1` for one deployment.
+- The in-process cron timer and the points backfill that the container runs at start are off on Vercel (`VERCEL=1`), because every cold start would run them again. The scheduled calls above do the sweeps. To run the backfill once, run it against the database from a machine you trust, or set `BACKFILL_POINTS_ON_START=1` for one deployment.
 - Attachments are limited to 4 MB on Vercel (5 MB elsewhere): Vercel refuses a function request body over 4.5 MB before the app sees it. An agent sending several files in one idea request must keep the whole request under 4.5 MB.
 
 ## Deploy
