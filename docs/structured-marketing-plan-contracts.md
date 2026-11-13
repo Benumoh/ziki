@@ -75,6 +75,8 @@ Existing project contribution and administration are different permissions:
 | Approve/reject an activity and finalize a plan | No customer-plan decision permission exists today | Proposed authority: organisation owner/admin or site super-admin, checked against the project's organisation. A project member alone is not sufficient. Team/product owner must affirm this mapping before Issue 5 implements it. |
 | Accept Ziki marketing work | Existing agent workflow: manager/merger agent authority | This is an agent's acceptance of delivered marketing work, not customer approval of a strategy; do not reuse it for plan approval. |
 
+Issue 5 implements the proposed owner/admin or site super-admin mapping by reusing `assertMarketingSettingsAccess` on every decision and finalization request. The original product contract marked this mapping for team confirmation; please confirm that policy before enabling the approval workflow for customers.
+
 Project membership has no role field, and `Project` has no project-owner field. The feature must not invent a project-owner role or equate issue assignee/beneficiary with plan approver. Use existing organisation membership and permission helpers; keep the final customer approval authority as an explicit product decision until affirmed.
 
 ## Approval and revision invariants

@@ -4,7 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 const github = vi.hoisted(() => ({ getOrNull: vi.fn(), auth: "token" }));
-vi.mock("@/lib/github/client", () => ({ githubClientFor: vi.fn(async () => github) }));
+vi.mock("@/lib/github/client", () => ({
+  githubClientFor: vi.fn(async () => github),
+  installationIdForRepo: vi.fn(async () => null),
+  githubApiUrl: () => "https://api.github.test",
+  GitHubError: class GitHubError extends Error {
+    constructor(readonly status: number, message: string) {
+      super(message);
+    }
+  },
+}));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { setRateLimitStore } from "@/lib/rate-limit";
@@ -23,6 +32,7 @@ import {
   type PreviewNetwork,
   type RepoAnswer,
 } from "./preview";
+import { GitHubError } from "@/lib/github/client";
 import { PrivateAddressError } from "./ownership";
 
 const NOW = Date.parse("2026-11-12T20:00:00Z");
@@ -315,22 +325,39 @@ describe("reading a public repo through Ziki's GitHub client (13 Nov)", () => {
   // A block body: returning the mock would make Vitest call it again as the test's cleanup.
   beforeEach(() => {
     github.getOrNull.mockReset();
+    github.auth = "token";
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("reads the names at the top level, in .github and in docs, and nothing else", async () => {
     github.getOrNull.mockImplementation(async (path: string) => ({
+      "/repos/settle/app": { private: false },
       "/repos/settle/app/contents": [{ name: "README.md", type: "file" }, { name: ".github", type: "dir" }, { name: "docs", type: "dir" }],
       "/repos/settle/app/contents/.github": [{ name: "dependabot.yml" }],
       "/repos/settle/app/contents/docs": [{ name: "SECURITY.md" }],
     })[path] ?? null);
     expect(await realPreviewNetwork.repo("settle", "app")).toEqual({ status: "ok", root: ["README.md", ".github", "docs"], github: ["dependabot.yml"], docs: ["SECURITY.md"] });
-    expect(github.getOrNull).toHaveBeenCalledTimes(3);
+    expect(github.getOrNull).toHaveBeenCalledTimes(4);
   });
 
   it("only looks inside .github and docs when the top level has them", async () => {
-    github.getOrNull.mockResolvedValue([{ name: "README.md" }]);
+    github.getOrNull.mockImplementation(async (path: string) => (path === "/repos/settle/app" ? { private: false } : [{ name: "README.md" }]));
     expect(await realPreviewNetwork.repo("settle", "app")).toEqual({ status: "ok", root: ["README.md"], github: [], docs: [] });
+    expect(github.getOrNull).toHaveBeenCalledTimes(2);
+  });
+
+  it("never looks into a repo GitHub says is private, even though Ziki's token could read it", async () => {
+    github.getOrNull.mockImplementation(async (path: string) => (path === "/repos/settle/secret" ? { private: true } : [{ name: ".env" }]));
+    expect(await realPreviewNetwork.repo("settle", "secret")).toEqual({ status: "not_found" });
     expect(github.getOrNull).toHaveBeenCalledTimes(1);
+    expect(github.getOrNull).toHaveBeenCalledWith("/repos/settle/secret");
+    // A record that doesn't plainly say public is treated the same way.
+    github.getOrNull.mockReset();
+    github.getOrNull.mockResolvedValue({});
+    expect(await realPreviewNetwork.repo("settle", "unclear")).toEqual({ status: "not_found" });
   });
 
   it("says not found for a private or missing repo", async () => {
@@ -338,11 +365,37 @@ describe("reading a public repo through Ziki's GitHub client (13 Nov)", () => {
     expect(await realPreviewNetwork.repo("settle", "private")).toEqual({ status: "not_found" });
   });
 
-  it("says unavailable, and never throws, when GitHub fails or is limiting Ziki", async () => {
+  it("says unavailable, with why, and never throws, when GitHub can't be read at all", async () => {
     github.getOrNull.mockImplementation(async () => {
-      throw Object.assign(new Error("Ziki has used up its GitHub rate limit for now."), { status: 403 });
+      throw new GitHubError(403, "Ziki has used up its GitHub rate limit for now.");
     });
     const answer = await realPreviewNetwork.repo("settle", "busy").catch((error: unknown) => ({ threw: String(error) }));
-    expect(answer).toEqual({ status: "unavailable" });
+    expect(answer).toEqual({ status: "unavailable", detail: expect.stringContaining("403") });
+  });
+
+  it("asks once with no token when the one Ziki has is rejected, so a public repo can still be read", async () => {
+    github.getOrNull.mockImplementation(async () => {
+      throw new GitHubError(401, "Bad credentials");
+    });
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/contents") ? [{ name: "README.md" }, { name: "SECURITY.md" }] : { private: false }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await realPreviewNetwork.repo("settle", "app")).toEqual({ status: "ok", root: ["README.md", "SECURITY.md"], github: [], docs: [] });
+    expect(fetchMock).toHaveBeenCalledWith("https://api.github.test/repos/settle/app/contents", expect.not.objectContaining({ headers: expect.objectContaining({ Authorization: expect.anything() }) }));
+  });
+
+  it("doesn't ask again without a token when Ziki had none to begin with", async () => {
+    github.auth = "none";
+    github.getOrNull.mockImplementation(async () => {
+      throw new GitHubError(403, "Ziki has used up its GitHub rate limit for now.");
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await realPreviewNetwork.repo("settle", "busy")).toEqual({ status: "unavailable", detail: expect.stringContaining("403") });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("puts why GitHub couldn't be read into what the person is told", async () => {
+    const net = network({ repo: { status: "unavailable", detail: "GitHub answered 403" } });
+    expect(await scan("github.com/settle/busy", net)).toEqual({ ok: false, reason: expect.stringContaining("(GitHub answered 403)") });
   });
 });

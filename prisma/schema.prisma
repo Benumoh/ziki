@@ -64,6 +64,11 @@ enum MarketingPlanRevisionStatus {
   approved
 }
 
+enum MarketingPlanActivityDecisionValue {
+  approved
+  rejected
+}
+
 /// Application roles for RBAC.
 /// - user: default; report bugs, comment, mark issues important
 /// - admin: site catalog access. Does not grant power inside an organisation.
@@ -282,6 +287,9 @@ model User {
   featurePlans              FeaturePlan[]
   marketingPlans            MarketingPlan[]           @relation("MarketingPlanCreator")
   marketingPlanRevisions    MarketingPlanRevision[]   @relation("MarketingPlanRevisionCreator")
+  approvedMarketingPlanRevisions MarketingPlanRevision[] @relation("MarketingPlanRevisionApprover")
+  marketingPlanActivityDecisions MarketingPlanActivityDecision[] @relation("MarketingPlanActivityDecisionActor")
+  marketingPlanActivityDecisionEvents MarketingPlanActivityDecisionEvent[] @relation("MarketingPlanActivityDecisionEventActor")
   savedIssueViews           SavedIssueView[]
   id                        String                  @id @default(cuid())
   securityVerifications SecurityVerification[]
@@ -2022,7 +2030,11 @@ model MarketingPlanRevision {
   updatedAt             DateTime                        @updatedAt
   plan                  MarketingPlan                   @relation(fields: [planId], references: [id], onDelete: Cascade)
   createdBy             User                            @relation("MarketingPlanRevisionCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  approvedBy            User?                           @relation("MarketingPlanRevisionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   activities            MarketingPlanActivityRevision[]
+  decisions             MarketingPlanActivityDecision[]
+  approvedAt            DateTime?
+  approvedById          String?
 
   @@unique([planId, revision])
   @@index([planId, status, revision])
@@ -2035,6 +2047,7 @@ model MarketingPlanActivity {
   createdAt DateTime                         @default(now())
   plan      MarketingPlan                    @relation(fields: [planId], references: [id], onDelete: Cascade)
   revisions MarketingPlanActivityRevision[]
+  decisions MarketingPlanActivityDecision[]
 
   @@index([planId])
 }
@@ -2052,6 +2065,36 @@ model MarketingPlanActivityRevision {
   @@unique([revisionId, activityId])
   @@index([revisionId, position])
   @@index([activityId])
+}
+
+/// The current customer decision for one durable activity in one exact plan revision.
+model MarketingPlanActivityDecision {
+  id             String                           @id @default(cuid())
+  revisionId     String
+  activityId     String
+  decision       MarketingPlanActivityDecisionValue
+  decidedById    String
+  decidedAt      DateTime                         @default(now())
+  revision       MarketingPlanRevision            @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  activity       MarketingPlanActivity            @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  decidedBy      User                             @relation("MarketingPlanActivityDecisionActor", fields: [decidedById], references: [id], onDelete: Cascade)
+  history        MarketingPlanActivityDecisionEvent[]
+
+  @@unique([revisionId, activityId])
+  @@index([revisionId, decision])
+}
+
+/// Append-only decision changes, preserving the actor and time for review history.
+model MarketingPlanActivityDecisionEvent {
+  id          String                           @id @default(cuid())
+  decisionId  String
+  decision    MarketingPlanActivityDecisionValue
+  actorId     String
+  createdAt   DateTime                         @default(now())
+  current     MarketingPlanActivityDecision    @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  actor       User                             @relation("MarketingPlanActivityDecisionEventActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([decisionId, createdAt])
 }
 
 model IdeaVerdict {
