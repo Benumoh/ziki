@@ -1,0 +1,38 @@
+name: Platform cron (Vercel Hobby)
+
+# Vercel's Hobby plan runs a cron at most once a day (vercel.json), so this
+# calls the two sweep endpoints every 5 minutes, GitHub's shortest schedule
+# (docs/deploy-vercel.md). It does nothing until the repository variable
+# ZIKI_CRON_URL (e.g. https://your-app.vercel.app) and the secret CRON_SECRET
+# (the same value as the deployment's CRON_SECRET) are set.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: platform-cron
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    if: ${{ vars.ZIKI_CRON_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run platform sweeps and webhook dispatch
+        shell: bash
+        env:
+          BASE_URL: ${{ vars.ZIKI_CRON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          for path in /api/internal/cron /api/v1/webhooks/dispatch; do
+            echo "GET ${path}"
+            curl --fail-with-body --silent --show-error --max-time 90 \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${BASE_URL%/}${path}"
+            echo
+          done
