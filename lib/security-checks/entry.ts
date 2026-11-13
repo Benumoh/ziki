@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Prisma, type SecurityCheckStatus, type SecurityTargetKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import type { PreviewSummary } from "./preview-summary";
 import { SECURITY_CHECK_PRICE_COINS, FINISHED_CHECK_STATUSES, FREE_SCANS_PER_WORKSPACE_PER_MONTH, freeScanAllowed, freeScanMonthStart } from "@/lib/security-checks";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 
@@ -122,6 +123,11 @@ async function findOrCreateTarget(organisationId: string, userId: string, target
   }
 }
 
+/** Keep the quick scan's counts with the asset (#security-checks), so the client can see it again later. Never what was found. */
+export async function saveQuickScan(targetId: string, summary: PreviewSummary, now = new Date()): Promise<void> {
+  await prisma.securityTarget.update({ where: { id: targetId }, data: { previewSummary: summary, previewAt: now } });
+}
+
 /** Where the client goes next for a new check: show it's theirs, or, if already proven, back to Assets where its free scan starts. */
 export function nextStepPath(check: { targetId: string; checkId: string; verified: boolean }): string {
   return check.verified ? `/security?check=${encodeURIComponent(check.checkId)}&added=1` : `/security/targets/${check.targetId}/verify`;
@@ -185,4 +191,12 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
     unlocked: row.results.filter((result) => result.unlockedAt !== null).length,
     createdAt: row.createdAt,
   }));
+}
+
+/** A saved quick scan, read back from the database: anything that isn't one comes back as null. */
+export function readQuickScan(value: unknown): PreviewSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const summary = value as Partial<PreviewSummary>;
+  if (typeof summary.target !== "string" || typeof summary.total !== "number" || !Array.isArray(summary.areas) || !summary.counts || !summary.risk) return null;
+  return summary as PreviewSummary;
 }

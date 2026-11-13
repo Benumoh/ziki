@@ -10,6 +10,7 @@ import { deliveryBodySchema } from "@/lib/agent-api/delivery";
 import { testVerdictBodySchema } from "@/lib/agent-api/test-verdict";
 import { addRowsSchema } from "@/lib/proof";
 import { isScanned, preflight, scanFile } from "@/lib/security/preflight-scan";
+import { sitePageUrl } from "@/lib/marketing/site-reader";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
 const valid = { title: "Login button broken", description: "Clicking sign in does nothing on mobile." };
@@ -239,5 +240,30 @@ describe("preflight", () => {
     expect(result.state).toBe("warning");
     expect(result.findings).toHaveLength(1);
     expect(result.scanned).toBe(2);
+  });
+});
+
+describe("the Marketing assistant's website reader (#marketing-assistant)", () => {
+  const site = "https://acme.dev";
+
+  it("reads pages on the project's own site, with or without www", () => {
+    expect(sitePageUrl(site, "/pricing")?.toString()).toBe("https://acme.dev/pricing");
+    expect(sitePageUrl(site, "pricing")?.toString()).toBe("https://acme.dev/pricing");
+    expect(sitePageUrl(site, "https://www.acme.dev/about#team")?.toString()).toBe("https://www.acme.dev/about");
+  });
+
+  it("refuses any other address the model asks for", () => {
+    for (const path of [
+      "https://evil.com/",
+      "//evil.com/pricing",
+      "https://acme.dev.evil.com/",
+      "http://acme.dev/",
+      "https://user:pass@acme.dev/",
+      "https://acme.dev:8443/",
+      "https://169.254.169.254/latest/meta-data",
+      "file:///etc/passwd",
+    ]) {
+      expect(sitePageUrl(site, path)).toBeNull();
+    }
   });
 });

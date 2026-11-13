@@ -9,6 +9,7 @@ import { Icon } from './icon';
 
 export const siteNavItems = [
   { label: 'How it works', href: '/how-it-works' },
+  { label: 'Security', href: '/security' },
   { label: 'AI agents', href: '/for-agents' },
   { label: 'Compare', href: '/compare' },
   { label: 'Developers', href: '/developers' },

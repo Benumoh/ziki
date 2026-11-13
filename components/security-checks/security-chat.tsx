@@ -36,7 +36,7 @@ const SCAN_STEPS = [
 const kept: { turns: ChatItem[]; text: string } = { turns: [], text: "" };
 
 /** A message in the chat; Ziki's can carry a quick scan of the site. */
-type ChatItem = AssistantTurn & { scan?: { target: string; summary: PreviewSummary | null; note: string | null } };
+type ChatItem = AssistantTurn & { scan?: { target: string; summary: PreviewSummary | null; note: string | null; canAdd: boolean } };
 
 /**
  * The box on Security, with Ziki's AI behind it (#security-checks, plan part
@@ -46,7 +46,16 @@ type ChatItem = AssistantTurn & { scan?: { target: string; summary: PreviewSumma
  * yours". It only talks about checking a site with Ziki, and creates nothing
  * else.
  */
-export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id?: string; focusOnOpen?: boolean }) {
+export function SecurityChat({
+  id = "security-chat",
+  focusOnOpen = false,
+  startWith,
+}: {
+  id?: string;
+  focusOnOpen?: boolean;
+  /** An address brought from the public page after sign-up: sent once, so its quick scan starts on arrival. */
+  startWith?: string;
+}) {
   const router = useRouter();
   const [turns, setTurns] = useState<ChatItem[]>(() => kept.turns);
   const [adding, setAdding] = useState<string | null>(null);
@@ -82,8 +91,13 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
   }, [text]);
 
   function send() {
-    if (!value || pending) return;
-    const next: ChatItem[] = [...turns, { role: "user", text: value.slice(0, MESSAGE_MAX) }];
+    sendText(value);
+  }
+
+  function sendText(raw: string) {
+    const words = raw.trim();
+    if (!words || pending) return;
+    const next: ChatItem[] = [...turns, { role: "user", text: words.slice(0, MESSAGE_MAX) }];
     setTurns(next);
     setText("");
     setError(null);
@@ -96,7 +110,7 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
           return;
         }
         if (answer.kind === "scan") {
-          setTurns([...next, { role: "assistant", text: answer.reply, scan: { target: answer.target, summary: answer.summary, note: answer.note } }]);
+          setTurns([...next, { role: "assistant", text: answer.reply, scan: { target: answer.target, summary: answer.summary, note: answer.note, canAdd: answer.canAdd } }]);
           return;
         }
         if (answer.kind === "go") {
@@ -136,9 +150,17 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
       }
     });
   }
+  // Brought an address from the public page: send it once, as if typed.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!startWith || started.current) return;
+    started.current = true;
+    sendText(startWith);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startWith]);
   const lastUser = [...turns].reverse().find((turn) => turn.role === "user")?.text ?? "";
   const lastTarget = lastUser ? parseSecurityTarget(lastUser) : null;
-  const scanning = pending && !adding && lastTarget?.ok === true && lastTarget.target.kind !== "repo";
+  const scanning = pending && !adding && lastTarget?.ok === true;
 
   return (
     <div className="flex flex-col gap-3">
@@ -262,8 +284,9 @@ function ScanCard({ scan, adding, onShow }: { scan: NonNullable<ChatItem["scan"]
   if (scan.summary) return <PreviewResult summary={scan.summary}>{next}</PreviewResult>;
   return (
     <div className="flex w-full flex-col gap-3 rounded-2xl border border-zk-border bg-zk-surface p-4 text-left">
-      <p className="m-0 text-sm text-zk-text2">{scan.note ?? "The quick scan couldn't run just now."}</p>
-      {next}
+      <p className="m-0 text-sm leading-relaxed text-zk-text2">{scan.note ?? "The quick scan couldn't run just now."}</p>
+      {/* A site the scan couldn't reach has nothing to secure yet, so no Show it's yours. */}
+      {scan.canAdd ? next : null}
     </div>
   );
 }

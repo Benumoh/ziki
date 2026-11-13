@@ -61,6 +61,8 @@ export default async function AppLayout({
   }
 
   const reqPath = (await headers()).get("x-ziki-path") ?? "";
+  // A guest on /security gets the public Ziki Security page, which brings its own header and footer.
+  if (!session?.user && reqPath === "/security") return <>{children}</>;
   const intakeSegments = !session?.user ? publicIntakeSegments(reqPath) : null;
   const overviewSegments = !session?.user ? projectOverviewSegments(reqPath) ?? intakeSegments : null;
   const overviewProject = overviewSegments

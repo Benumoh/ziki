@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { OrgPageHeader, orgListCard } from "../../../../[org]/[project]/org/org-ui";
 import { OwnershipSteps } from "./ownership-steps";
+import { QuickScanLink } from "@/components/security-checks/quick-scan-link";
+import { readQuickScan } from "@/lib/security-checks/entry";
 
 export const metadata = { title: "Show it's yours" };
 
@@ -29,6 +31,7 @@ export default async function VerifySecurityTargetPage({ params }: { params: Pro
       value: true,
       ownershipToken: true,
       verifiedAt: true,
+      previewSummary: true,
       checks: {
         // Checks are per person: only this person's own check carries on from here.
         where: { requestedById: user.id, status: { notIn: [...FINISHED_CHECK_STATUSES] } },
@@ -43,6 +46,7 @@ export default async function VerifySecurityTargetPage({ params }: { params: Pro
   const openCheck = target.checks[0] ?? null;
   const next = openCheck ? `/security?check=${encodeURIComponent(openCheck.id)}` : "/security";
   const noun = KIND_NOUN[target.kind];
+  const quickScan = readQuickScan(target.previewSummary);
 
   // For a repo: whether the workspace's GitHub App is connected yet, and where to connect it.
   const projects =
@@ -75,6 +79,8 @@ export default async function VerifySecurityTargetPage({ params }: { params: Pro
           <StepLine />
           <Step state="later">Fix</Step>
         </ol>
+        {/* The quick scan from when it was added (#security-checks): why it's worth proving. */}
+        {quickScan && !target.verifiedAt ? <QuickScanLink summary={quickScan} /> : null}
       </div>
 
       <section className={orgListCard} aria-label={`Show ${target.value} is yours`}>

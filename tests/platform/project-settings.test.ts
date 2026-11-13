@@ -20,6 +20,7 @@ const invalidateWorkflow = vi.hoisted(() => vi.fn());
 const projectFindMany = vi.hoisted(() => vi.fn());
 const projectCreate = vi.hoisted(() => vi.fn());
 const projectUpdate = vi.hoisted(() => vi.fn());
+const projectFindUnique = vi.hoisted(() => vi.fn());
 const organisationFindUnique = vi.hoisted(() => vi.fn());
 const redirect = vi.hoisted(() => vi.fn((to: string) => { throw new Error(`redirect:${to}`); }));
 const findFirst = vi.hoisted(() => vi.fn());
@@ -57,7 +58,7 @@ vi.mock("@/lib/github/client", async (importOriginal) => ({
 }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    project: { findFirst, findMany: projectFindMany, create: projectCreate, update: projectUpdate },
+    project: { findFirst, findUnique: projectFindUnique, findMany: projectFindMany, create: projectCreate, update: projectUpdate },
     organisation: { findUnique: organisationFindUnique },
     projectWorkflow: { upsert },
     projectPreviewSettings: { upsert: previewUpsert, findUnique: previewSettingsFindUnique },
@@ -82,6 +83,7 @@ import {
   deleteMarketingIssueTypeAction,
   updateMarketingRevisionLimitAction,
 } from "@/app/(app)/[org]/[project]/marketing/settings/actions";
+import { askMarketingAssistantAction, saveMarketingSiteAction } from "@/app/(app)/[org]/[project]/marketing/actions";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import {
   DEFAULT_PROJECT_WORKFLOW,
@@ -649,6 +651,51 @@ describe("updateProjectPreviewSettingsAction (#previews)", () => {
     findFirst.mockResolvedValue(null);
     await expect(updateProjectPreviewSettingsAction(undefined, previewForm())).resolves.toMatchObject({ ok: false });
     expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveMarketingSiteAction (#marketing-home)", () => {
+  const slug = projectRef("acme", "web");
+  const site = (siteUrl: string) => form({ siteUrl });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireProject.mockResolvedValue({ user: { id: "admin" }, organisationId: "organisation-1", project: { id: "project-1" }, isOrgAdmin: true });
+    projectFindUnique.mockResolvedValue({ siteUrl: null });
+    transaction.mockImplementation(async (run: (tx: unknown) => unknown) =>
+      run({ project: { update: projectUpdate }, projectAuditEvent: { create: auditCreate } }),
+    );
+  });
+
+  it("refuses a member who is not an organisation admin", async () => {
+    requireProject.mockResolvedValue({ user: { id: "member" }, organisationId: "organisation-1", project: { id: "project-1" }, isOrgAdmin: false });
+    await expect(saveMarketingSiteAction(slug, undefined, site("https://acme.dev"))).resolves.toMatchObject({ error: expect.any(String) });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses an empty, plain-http or example address", async () => {
+    for (const address of ["", "http://acme.dev", "https://example.com"]) {
+      await expect(saveMarketingSiteAction(slug, undefined, site(address))).resolves.toMatchObject({ error: expect.any(String) });
+    }
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("lets only organisation admins talk to the marketing assistant", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    requireProject.mockResolvedValue({ user: { id: "member" }, organisationId: "organisation-1", project: { id: "project-1" }, isOrgAdmin: false });
+    await expect(askMarketingAssistantAction(slug, [{ role: "user", text: "Why don't people sign up?" }])).resolves.toMatchObject({ ok: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(projectFindUnique).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("sets the project's site and audits the change", async () => {
+    await expect(saveMarketingSiteAction(slug, undefined, site("https://acme.dev"))).resolves.toEqual({ ok: true });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { siteUrl: "https://acme.dev" } });
+    expect(auditCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ projectId: "project-1", actorUserId: "admin", changes: { siteUrl: { from: null, to: "https://acme.dev" } } }),
+    });
   });
 });
 

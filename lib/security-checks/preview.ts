@@ -5,6 +5,8 @@ import https from "node:https";
 import tls from "node:tls";
 import { getDomain } from "tldts";
 import type { SecuritySeverity, SecurityTargetKind } from "@prisma/client";
+import { githubClientFor } from "@/lib/github/client";
+import { logger } from "@/lib/logger";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { PREVIEW_SCANS_PER_VISITOR_PER_HOUR } from "@/lib/security-checks";
 import { isPublicAddress, PrivateAddressError, publicOnlyLookup, realNetwork } from "@/lib/security-checks/ownership";
@@ -558,29 +560,27 @@ const USER_AGENT = "ZikiSecurityPreview/1.0 (+https://ziki.dev/security)";
 
 export const realPreviewNetwork: PreviewNetwork = {
   async repo(owner, name) {
-    // One fixed host. The owner and name were already checked to be plain GitHub names.
-    const headers: Record<string, string> = { "User-Agent": USER_AGENT, Accept: "application/vnd.github+json" };
-    const token = process.env.GITHUB_TOKEN?.trim();
-    if (token) headers.Authorization = `Bearer ${token}`;
+    // Through Ziki's own GitHub client, like the rest of Ziki: the same address setting, the same token and the same limits.
+    // Only public data is asked for. The owner and name were already checked to be plain GitHub names.
+    const github = await githubClientFor({ githubInstallationId: null });
     const names = async (path: string): Promise<string[] | "not_found" | "unavailable"> => {
       try {
-        const response = await fetch(`https://api.github.com/repos/${owner}/${name}/contents${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
-        if (response.status === 404) return "not_found";
-        if (!response.ok) return "unavailable";
-        const body: unknown = await response.json();
+        const body = await github.getOrNull<unknown>(`/repos/${owner}/${name}/contents${path}`);
+        if (body === null) return "not_found";
         return Array.isArray(body) ? body.flatMap((entry) => (typeof (entry as { name?: unknown })?.name === "string" ? [(entry as { name: string }).name] : [])) : [];
-      } catch {
+      } catch (error) {
+        logger.warn(`[security-preview] couldn't read ${owner}/${name}${path} from GitHub (${github.auth}):`, error instanceof Error ? error.message : error);
         return "unavailable";
       }
     };
     const root = await names("");
     if (root === "not_found" || root === "unavailable") return { status: root };
     // A policy can sit in .github or docs; the update bot's setup sits in .github. A folder that can't be read counts as empty.
-    const [github, docs] = await Promise.all([
+    const [github_, docs] = await Promise.all([
       root.includes(".github") ? names("/.github") : Promise.resolve([] as string[]),
       root.includes("docs") ? names("/docs") : Promise.resolve([] as string[]),
     ]);
-    return { status: "ok", root, github: Array.isArray(github) ? github : [], docs: Array.isArray(docs) ? docs : [] };
+    return { status: "ok", root, github: Array.isArray(github_) ? github_ : [], docs: Array.isArray(docs) ? docs : [] };
   },
   async page(url) {
     const target = new URL(url);
