@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
     ],
   },
   env: {
+    // Vercel refuses a function request body over 4.5 MB, so attachments there stop at 4 MB (lib/attachments.ts).
+    ATTACHMENT_MAX_MB: process.env.ATTACHMENT_MAX_MB || (process.env.VERCEL === "1" ? "4" : "5"),
     NEXTAUTH_URL:
       process.env.NEXTAUTH_URL ||
       (BASE_PATH

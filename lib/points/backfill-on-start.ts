@@ -11,6 +11,8 @@ export function shouldBackfillOnStart(env: NodeJS.ProcessEnv = process.env): boo
   if (env.NEXT_PHASE === "phase-production-build") return false;
   const flag = cleanEnv(env.BACKFILL_POINTS_ON_START);
   if (flag === "0" || flag === "false") return false;
+  // On Vercel every cold start would rerun it; run it once by hand there instead (docs/deploy-vercel.md).
+  if (env.VERCEL === "1" && flag !== "1" && flag !== "true") return false;
   if (env.NODE_ENV === "production") return true;
   return flag === "1" || flag === "true";
 }

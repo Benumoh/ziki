@@ -21,7 +21,7 @@ import {
 import { issueJson, issueProject, securityJson } from "@/lib/agent-api/issues";
 import { createBugSchema } from "@/lib/validations/issue";
 import { attachmentIdsInMarkdown, linkAttachments } from "@/lib/attachment-link";
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_ITEM, checkAttachment } from "@/lib/attachments";
+import { ATTACHMENT_SIZE_LABEL, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_ITEM, checkAttachment } from "@/lib/attachments";
 import { MULTIPART_OVERHEAD_BYTES, readLimitedMultipart } from "@/lib/attachment-body";
 import { createHash } from "node:crypto";
 import { extractMentionedUserIds, normalizeMentions } from "@/lib/mentions";
@@ -283,7 +283,7 @@ async function ideaCreateBody(agent: AgentContext, request: NextRequest): Promis
   if (!type.toLowerCase().startsWith("multipart/form-data")) return { body: await issueJson(request), uploaded: [], digests: [] };
   const read = await readLimitedMultipart(request, MAX_ATTACHMENTS_PER_ITEM * MAX_ATTACHMENT_BYTES + MULTIPART_OVERHEAD_BYTES);
   if (!read.ok) {
-    const message = read.reason === "too-large" ? "Over the size limit: up to 5 files of 5 MB each." : "Send multipart/form-data with a `payload` part and `file` parts.";
+    const message = read.reason === "too-large" ? `Over the size limit: up to ${MAX_ATTACHMENTS_PER_ITEM} files of ${ATTACHMENT_SIZE_LABEL} each.` : "Send multipart/form-data with a `payload` part and `file` parts.";
     throw new IssueApiError(read.status, message);
   }
   const raw = read.form.get("payload");

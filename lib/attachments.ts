@@ -6,12 +6,18 @@
  * are saved, and only ever served to signed-in users.
  */
 
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+/**
+ * 5 MB, or 4 MB on Vercel: Vercel refuses a function request body over 4.5 MB
+ * before the app sees it, so next.config.ts sets ATTACHMENT_MAX_MB=4 there.
+ */
+const MAX_ATTACHMENT_MB = Number(process.env.ATTACHMENT_MAX_MB) || 5;
+export const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+/** The limit as people read it, e.g. "5 MB". */
+export const ATTACHMENT_SIZE_LABEL = `${MAX_ATTACHMENT_MB} MB`;
 export const MAX_ATTACHMENTS_PER_ITEM = 5;
 
 /** Shown next to the file picker. */
-export const ATTACHMENT_HELP =
-  "PNG, JPG, GIF, WebP, PDF, or a text log / JSON / HAR file. Up to 5 MB each, 5 per issue or comment.";
+export const ATTACHMENT_HELP = `PNG, JPG, GIF, WebP, PDF, or a text log / JSON / HAR file. Up to ${ATTACHMENT_SIZE_LABEL} each, 5 per issue or comment.`;
 
 /** For the file input's `accept`; the real check is on the server. */
 export const ATTACHMENT_ACCEPT =
@@ -83,7 +89,7 @@ export type AttachmentCheck =
 export function checkAttachment(bytes: Uint8Array, filename: string): AttachmentCheck {
   if (bytes.byteLength === 0) return { ok: false, error: "That file is empty." };
   if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-    return { ok: false, error: "Over 5 MB. Try a smaller file." };
+    return { ok: false, error: `Over ${ATTACHMENT_SIZE_LABEL}. Try a smaller file.` };
   }
   const type = detectAttachmentType(bytes, filename);
   if (!type) {
