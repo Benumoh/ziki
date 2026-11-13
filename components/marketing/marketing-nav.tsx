@@ -16,6 +16,7 @@ export function MarketingNav({ slug }: { slug: ProjectRef }) {
   const tasks = marketingPath(slug, "tasks");
   const output = marketingPath(slug, "output-box");
   const settings = marketingPath(slug, "settings");
+  const plans = marketingPath(slug, "plans");
   const newTask = marketingPath(slug, "tasks/new");
   const current = (href: string) => (pathname === href || pathname.startsWith(`${href}/`) ? "page" : undefined);
 
@@ -36,6 +37,7 @@ export function MarketingNav({ slug }: { slug: ProjectRef }) {
           </svg>
           Output box
         </Link>
+        <Link href={plans} aria-current={current(plans)} className={`${action} ${quiet} px-4`}>Plans</Link>
         <Link href={settings} aria-current={current(settings)} aria-label="Marketing settings" title="Marketing settings" className={`${action} ${quiet} w-10 justify-center`}>
           <svg {...iconProps}>
             <circle cx="12" cy="12" r="3" />

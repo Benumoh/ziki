@@ -152,6 +152,8 @@ export async function getMarketingPlan(user: SessionAppUser, projectId: string, 
           id: true, revision: true, version: true, status: true, sourceContextId: true,
           sourceContextRevision: true, strategy: true, createdAt: true, updatedAt: true,
           activities: { orderBy: { position: "asc" }, select: { activityId: true, position: true, content: true } },
+          approvedAt: true, approvedById: true,
+          decisions: { orderBy: { decidedAt: "asc" }, select: { activityId: true, decision: true, decidedAt: true, decidedById: true, history: { orderBy: { createdAt: "asc" }, select: { decision: true, actorId: true, createdAt: true } } } },
         },
       },
     },
@@ -163,7 +165,7 @@ export async function getMarketingPlan(user: SessionAppUser, projectId: string, 
     currentRevision: plan.currentRevision,
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt,
-    revisions: plan.revisions.map((revision) => ({ ...snapshot(revision), createdAt: revision.createdAt, updatedAt: revision.updatedAt })),
+    revisions: plan.revisions.map((revision) => ({ ...snapshot(revision), createdAt: revision.createdAt, updatedAt: revision.updatedAt, approvedAt: revision.approvedAt, approvedById: revision.approvedById, decisions: revision.decisions })),
   };
 }
 
