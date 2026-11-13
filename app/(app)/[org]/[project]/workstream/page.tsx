@@ -136,7 +136,8 @@ export default async function WorkstreamPage({ params }: { params: Promise<{ org
       voteCount: true,
       boostedAt: true,
       createdAt: true,
-      reporter: { select: { name: true, email: true } },
+      // Reporters' names only (#access-control).
+      reporter: { select: { name: true } },
     },
   });
 
@@ -148,7 +149,6 @@ export default async function WorkstreamPage({ params }: { params: Promise<{ org
     actionRequired: "triage_vote",
     expeditedBy: {
       name: b.reporter?.name || "Workspace Member",
-      handle: b.reporter?.email?.split("@")[0] || "member",
     },
     urgencyNote: "Prioritized into Work Stream Blocking Queue by human operator.",
     progress: {

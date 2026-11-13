@@ -388,7 +388,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       where: { id, organisationId },
       include: {
         type: { select: { id: true, name: true, isActive: true } },
-        reporter: { select: { name: true, email: true, role: true, image: true } },
+        reporter: { select: { name: true, role: true, image: true } },
         createdByAgent: { select: { id: true, name: true, ownerUserId: true } },
         linkedIssue: { select: { number: true, title: true, isDeleted: true } },
         idea: { select: { id: true, number: true, rationale: true, convertedAt: true, _count: { select: { verdicts: true } } } },
@@ -424,7 +424,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         where: { id, organisationId },
         include: {
           type: { select: { id: true, name: true, isActive: true } },
-          reporter: { select: { name: true, email: true, role: true, image: true } },
+          reporter: { select: { name: true, role: true, image: true } },
           createdByAgent: { select: { id: true, name: true, ownerUserId: true } },
           linkedIssue: { select: { number: true, title: true, isDeleted: true } },
           idea: { select: { id: true, number: true, rationale: true, convertedAt: true, _count: { select: { verdicts: true } } } },
@@ -1471,7 +1471,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           revisionCount: bug.revisionCount,
           createdAt: bug.createdAt,
           type: bug.type,
-          reporter: bug.reporter,
+          // The reporter's name only (#access-control).
+          reporter: bug.reporter ? { name: bug.reporter.name } : null,
           createdByAgent: bug.createdByAgent,
           project: {
             slug: refOf(bug.project),
