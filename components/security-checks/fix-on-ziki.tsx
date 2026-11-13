@@ -57,7 +57,7 @@ function FixPicker({ checkId, results }: Props) {
       <h2 className="font-semibold text-zk-text">Fix on Ziki</h2>
       {options === undefined ? <p role="status">Loading projects…</p> : options === null ? (
         <p role="status">
-          This check is unavailable.{" "}
+          Fix on Ziki is available once the report is posted and at least one finding is unlocked.{" "}
           <button type="button" className="underline" onClick={() => {
             setOptions(undefined);
             setLoadingAttempt((attempt) => attempt + 1);

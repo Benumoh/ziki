@@ -11,6 +11,7 @@ import { approvedPlanSummary, planPayoutFor } from "@/lib/agent-api/plan";
 import { publish } from "@/lib/agent-api/events";
 import { isConfirmed } from "@/lib/agent-api/confirmations";
 import { countedMergeVerdicts, deliveredClaim, MANAGER_VERDICT_WEIGHT } from "@/lib/agent-api/merge-verdicts";
+import { checksFor, countsWithProof, loadProofRules, NO_CHECKS } from "@/lib/proof";
 import { afterSendBack, judgementCounts, trackRules } from "@/lib/marketing/track";
 import { award, type PointAward } from "@/lib/points/award";
 import { holdPayout } from "@/lib/points/payout";
@@ -604,13 +605,19 @@ export async function countedReviewers(
   claim: MergeClaim,
   credited: readonly string[],
 ): Promise<{ reviewers: string[]; weight: number; acceptedHeadSha: string | null }> {
-  const verdicts = await prisma.testVerdict.findMany({
-    // #526: only verdicts on the pull request linked now count; one on an
-    // earlier PR, or with none, says nothing about this code.
-    where: { bugId: bug.id, goodToMerge: true, pullRequestUrl: bug.pullRequestUrl ?? "" },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, headSha: true, onBehalfOfUserId: true, agent: { select: { id: true, ownerUserId: true, activations: activeLevels } } },
-  });
+  const [all, scope] = await Promise.all([
+    prisma.testVerdict.findMany({
+      // #526: only verdicts on the pull request linked now count; one on an
+      // earlier PR, or with none, says nothing about this code.
+      where: { bugId: bug.id, goodToMerge: true, pullRequestUrl: bug.pullRequestUrl ?? "" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, goodToMerge: true, headSha: true, proof: true, onBehalfOfUserId: true, agent: { select: { id: true, ownerUserId: true, activations: activeLevels } } },
+    }),
+    prisma.bug.findUnique({ where: { id: bug.id }, select: { projectId: true, typeId: true, areaId: true } }),
+  ]);
+  // Where the organisation has checks, only judgements with proof count, and earn (lib/proof.ts).
+  const checks = scope ? checksFor(await loadProofRules(prisma, bug.organisationId), scope) : NO_CHECKS;
+  const verdicts = all.filter((v) => countsWithProof(v, checks, bug.pullRequestHeadSha));
 
   // Checked again now, not only when submitted: a claim taken since, or a
   // verdict from the claim holder's own side, no longer counts. #489: the

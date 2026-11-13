@@ -397,7 +397,7 @@ export async function convertVettedIdea(tx: Tx, agent: AgentContext, projectId: 
   return { ...converted, ...held };
 }
 
-/** A client selected this finding from a paid report. Convert it as vetted
+/** A client selected this finding from an unlocked report result. Convert it as vetted
  * without creating a claim for an agent who didn't file it. */
 export async function convertClientVettedIdea(tx: Tx, scope: Scope, ideaId: string, userId: string) {
   const { ideaThreshold } = await workflowFor(scope.projectId, tx);
@@ -407,7 +407,7 @@ export async function convertClientVettedIdea(tx: Tx, scope: Scope, ideaId: stri
     via: "already_vetted",
     decidedByUserId: userId,
     decidedByAgentId: null,
-    vettedNote: "Selected by the client from a paid security check.",
+    vettedNote: "Selected by the client from an unlocked finding on a posted security report.",
   });
 }
 

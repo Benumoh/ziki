@@ -321,19 +321,19 @@ describe("issue list layout", () => {
           { status: "closed", _count: { _all: 3 } },
         ]) as never);
     const html = await renderList({ status: "open" });
-    // Your Work: the issues assigned to you. Ideas: new ideas + rejected ideas. In Progress: Open, In progress,
+    // Project Overview: the project's goals, then the issues assigned to you. Ideas: new ideas + rejected ideas. In Progress: Open, In progress,
     // Closed. Delivered: Done, Merge. Live: its own stage. Possibly delivered is a list inside Open, so In
     // Progress's total doesn't count it again.
-    expect(counted(stages(html))).toEqual({ "Your Work": 1, Ideas: 8, "In Progress": 18, Delivered: 8, Live: 7 });
+    expect(counted(stages(html))).toEqual({ Overview: 1, New: 8, "In Progress": 18, Delivered: 8, Live: 7 });
     expect(counted(statusList(html))).toEqual({ Open: 13, "In progress": 2, Closed: 3, "Possibly delivered": 1 });
   });
 
-  it("shows Your Work only while something is assigned to you, and Live only once something went live", async () => {
+  it("shows Overview to anyone who can contribute, and Live only once something went live", async () => {
     groupBy.mockImplementation((async (args: { by: string[] }) =>
       args.by[0] !== "status" ? [] : [{ status: "open", _count: { _all: 4 } }, { status: "done", _count: { _all: 2 } }]) as never);
     count.mockResolvedValue(0);
     const html = await renderList({ status: "open" });
-    expect(Object.keys(counted(stages(html)))).toEqual(["Ideas", "In Progress", "Delivered"]);
+    expect(Object.keys(counted(stages(html)))).toEqual(["Overview", "New", "In Progress", "Delivered"]);
   });
 
 });

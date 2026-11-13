@@ -12,7 +12,7 @@ import { unlockFindings } from "@/lib/security-checks/payment";
  * other parts: unlocking sets `unlockedAt`, and the engine pays the finder.
  */
 
-const NO_WORKSPACE = "Join or create a workspace to check a site.";
+const NO_WORKSPACE = "Join or create a workspace to secure your assets.";
 
 /**
  * Unlock fixes (plan C1): every locked finding on the check, or the ones

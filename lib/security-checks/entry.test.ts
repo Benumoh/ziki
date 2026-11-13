@@ -89,7 +89,7 @@ describe("free-scan limits (plan C1)", () => {
 
     expect(added).toEqual({ refused: "target_used", targetId: "t1", lastCheckId: "c-old" });
     expect(prismaMock.securityCheck.create).not.toHaveBeenCalled();
-    expect(refusedMessage("target_used", "settle.ng")).toMatch(/already had your free scan of settle\.ng/);
+    expect(refusedMessage("target_used", "settle.ng")).toBe("settle.ng has already been scanned. Open its report to unlock fixes.");
   });
 
   it("stops at the workspace's monthly free scans, counted from the 1st of the month", async () => {
@@ -104,7 +104,7 @@ describe("free-scan limits (plan C1)", () => {
     expect(prismaMock.securityCheck.count.mock.calls[1][0].where).toEqual({
       organisationId: "org1", free: true, createdAt: { gte: new Date("2026-11-01T00:00:00Z") },
     });
-    expect(refusedMessage("workspace_limit", "settle.ng", now)).toBe("You've used this month's 3 free scans. More start on 1 December.");
+    expect(refusedMessage("workspace_limit", "settle.ng", now)).toBe("You've used this month's 3 scans. More start on 1 December.");
   });
 });
 

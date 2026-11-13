@@ -135,7 +135,7 @@ describe("SecurityPage (/security)", () => {
     expect(markup).toContain('href="/security?view=findings"');
     expect(markup).toContain('href="/security/work"');
     expect(markup).not.toContain('href="/security/activity"');
-    expect(markup).toContain(">Sites<");
+    expect(markup).toContain(">Assets<");
     expect(markup).not.toContain("Open findings");
     expect(markup).not.toContain("Apply filters");
   });
@@ -146,7 +146,7 @@ describe("SecurityPage (/security)", () => {
     expect(markup).toContain("Open findings");
     expect(markup).toContain("Apply filters");
     expect(markup).toContain('name="view" value="findings"');
-    expect(markup).not.toContain("Check a site");
+    expect(markup).not.toContain("Add asset");
   });
 
   it("renders the Security settings gear link with its accessible name", async () => {

@@ -121,33 +121,50 @@ describe("security check words (#security-checks)", () => {
   });
 });
 
-describe("what a client sees of a check (#security-checks, part 4)", () => {
+describe("what a client sees of a check (12 Nov plan, S1 and S2)", () => {
   const at = (minutes: number) => new Date(Date.UTC(2026, 10, 12, 9, minutes));
-  function check(paidAt: Date | null, postedAt: Date | null = at(9)) {
+  function check(postedAt: Date | null = at(9)) {
     return {
       id: "check1",
-      status: "checking",
-      paidAt,
+      status: postedAt ? "done" : "checking",
+      free: true,
       postedAt,
-      summary: "Fix the admin login first: it allows unlimited guesses.",
-      priceCoins: 50,
+      summary: "We checked 5 parts and found 3 problems, one of them critical. Unlock them to see the details and fixes.",
       createdAt: at(0),
-      finishedAt: null,
+      finishedAt: postedAt,
       startedAt: at(0),
       target: { id: "t1", kind: "website", value: "shop.example.test", input: "https://shop.example.test", verifiedAt: at(0) },
       items: [
         { id: "i1", title: "Login", status: "done", agentId: "a1" },
         { id: "i2", title: "TLS", status: "skipped", agentId: "a1" },
-        { id: "i3", title: "Headers", status: "checking", agentId: "a2" },
-        { id: "i4", title: "CORS", status: "waiting", agentId: null },
+        { id: "i3", title: "Headers", status: postedAt ? "done" : "checking", agentId: "a2" },
+        { id: "i4", title: "CORS", status: postedAt ? "done" : "waiting", agentId: null },
         { id: "i5", title: "Cookies", status: "done", agentId: "a2" },
       ],
     };
   }
-  const full = (id: string, severity: string, minute: number) => ({
-    id, itemId: "i1", severity, title: `${id} title`, description: `${id} description`, howToFix: `${id} fix`, createdAt: at(minute), finding: null,
-    item: { agent: { id: "a1", name: "Atlas Agent", avatar: null } },
-  });
+  const PART_TITLE: Record<string, string> = { i1: "Login", i3: "Headers", i4: "CORS" };
+  /** A result as the first (no text) query returns it. */
+  const row = (id: string, severity: string, minute: number, opts: { unlocked?: boolean; itemId?: string; priceCoins?: number | null } = {}) => {
+    const itemId = opts.itemId ?? "i1";
+    return {
+      id,
+      itemId,
+      severity,
+      priceCoins: opts.priceCoins === undefined ? 9 : opts.priceCoins,
+      unlockedAt: opts.unlocked ? at(20) : null,
+      createdAt: at(minute),
+      item: { title: PART_TITLE[itemId], agent: { id: "a1", name: "Atlas Agent", avatar: null } },
+    };
+  };
+  /** An unlocked result's text, as the second query returns it. */
+  const text = (id: string) => ({ id, title: `${id} title`, description: `${id} description`, howToFix: `${id} fix`, finding: null });
+  /** The results table: the first query gets every row, the text query only what it asks for. */
+  function results(rows: ReturnType<typeof row>[]) {
+    db.securityCheckResult.findMany.mockImplementation(async ({ where }: { where: { unlockedAt?: unknown } }) =>
+      where.unlockedAt ? rows.filter((r) => r.unlockedAt).map((r) => text(r.id)) : rows,
+    );
+  }
 
   beforeEach(() => {
     db.securityCheck.findFirst.mockReset();
@@ -166,73 +183,16 @@ describe("what a client sees of a check (#security-checks, part 4)", () => {
     expect(db.securityCheckResult.findMany).not.toHaveBeenCalled();
   });
 
-  it("unpaid: shows the worst problem without its fix, and never reads the hidden ones' text", async () => {
+  it("before the report is posted: progress only, no result read at all; the PDF goes back to the check", async () => {
     db.securityCheck.findFirst.mockResolvedValue(check(null));
-    db.securityCheckResult.findMany.mockResolvedValue([
-      { id: "low", itemId: "i1", severity: "low", createdAt: at(1) },
-      { id: "crit", itemId: "i1", severity: "critical", createdAt: at(2) },
-      { id: "high", itemId: "i1", severity: "high", createdAt: at(3) },
-    ]);
-    db.securityCheckResult.findUnique.mockResolvedValue({
-      id: "crit", severity: "critical", title: "crit title", description: "crit description", item: { agent: { id: "a1", name: "Atlas Agent", avatar: null } },
-    });
-
-    const report = await loadCheckReport("check1", "org1", "owner");
-
-    // The list query reads no text at all, and the teaser query never reads how to fix.
-    const listSelect = db.securityCheckResult.findMany.mock.calls[0][0].select;
-    expect(Object.keys(listSelect).sort()).toEqual(["createdAt", "id", "itemId", "severity"]);
-    const teaserQuery = db.securityCheckResult.findUnique.mock.calls[0][0];
-    expect(teaserQuery.where).toEqual({ id: "crit" });
-    expect(teaserQuery.select).not.toHaveProperty("howToFix");
-
-    expect(report).toMatchObject({ paid: false, total: 3, hiddenCount: 2, teaser: { id: "crit", agent: { id: "a1", name: "Atlas Agent", avatar: null } } });
-    expect(report).not.toHaveProperty("results");
-    // The summary talks about the hidden problems too: paid only.
-    expect(report).not.toHaveProperty("summary");
-    expect(report?.counts).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
-    // A skipped part counts as finished (3 of 5); a finished part that found nothing is clear.
-    expect(report?.progress).toEqual({ done: 3, total: 5, percent: 60 });
-    expect(report?.clearParts).toEqual(["Cookies"]);
-    expect(report?.agentCount).toBe(2);
-  });
-
-  it("unpaid with no critical: the teaser is the worst problem found", async () => {
-    db.securityCheck.findFirst.mockResolvedValue(check(null));
-    db.securityCheckResult.findMany.mockResolvedValue([
-      { id: "medium", itemId: "i1", severity: "medium", createdAt: at(1) },
-      { id: "high", itemId: "i5", severity: "high", createdAt: at(2) },
-    ]);
-    db.securityCheckResult.findUnique.mockResolvedValue({ id: "high", severity: "high", title: "t", description: "d", item: { agent: null } });
-
-    await loadCheckReport("check1", "org1", "owner");
-
-    expect(db.securityCheckResult.findUnique.mock.calls[0][0].where).toEqual({ id: "high" });
-  });
-
-  it("paid: every problem, worst first, with how to fix", async () => {
-    db.securityCheck.findFirst.mockResolvedValue(check(at(5)));
-    db.securityCheckResult.findMany.mockResolvedValue([full("low", "low", 1), full("crit", "critical", 2), full("high-late", "high", 4), full("high", "high", 3)]);
-
-    const report = await loadCheckReport("check1", "org1", "owner");
-
-    expect(report?.paid).toBe(true);
-    if (!report?.paid) throw new Error("expected a paid report");
-    expect(report.results.map((r) => r.id)).toEqual(["crit", "high", "high-late", "low"]);
-    expect(report.results[0]).toMatchObject({ howToFix: "crit fix", agent: { name: "Atlas Agent" } });
-    expect(report.summary).toBe("Fix the admin login first: it allows unlimited guesses.");
-    expect(db.securityCheckResult.findUnique).not.toHaveBeenCalled();
-  });
-
-  it("before the report is posted: progress only, no result read, even when paid; the PDF goes back to the check", async () => {
-    db.securityCheck.findFirst.mockResolvedValue(check(at(5), null));
 
     const report = await loadCheckReport("check1", "org1", "owner");
 
     expect(db.securityCheckResult.findMany).not.toHaveBeenCalled();
-    expect(db.securityCheckResult.findUnique).not.toHaveBeenCalled();
-    expect(report).toMatchObject({ posted: false, paid: false, total: 0, teaser: null, hiddenCount: 0, clearParts: [] });
+    expect(report).toMatchObject({ posted: false });
+    expect(report).not.toHaveProperty("findings");
     expect(report).not.toHaveProperty("summary");
+    // A skipped part counts as finished (3 of 5).
     expect(report?.progress).toEqual({ done: 3, total: 5, percent: 60 });
 
     const params = { params: Promise.resolve({ id: "check1" }) };
@@ -240,32 +200,98 @@ describe("what a client sees of a check (#security-checks, part 4)", () => {
     expect(renderReportPdf).not.toHaveBeenCalled();
   });
 
-  it("PDF: an unpaid check is sent to pay and no PDF is made; a stranger gets 404", async () => {
+  it("posted: a locked finding's text is never read; only unlocked findings come with their details and fix", async () => {
+    db.securityCheck.findFirst.mockResolvedValue(check());
+    results([
+      row("low", "low", 1, { itemId: "i4", priceCoins: null }),
+      row("crit", "critical", 2, { priceCoins: 5 }),
+      row("high", "high", 3, { itemId: "i3", unlocked: true, priceCoins: 3 }),
+    ]);
+
+    const report = await loadCheckReport("check1", "org1", "owner");
+
+    // The query for every finding reads no text at all.
+    const [first, second] = db.securityCheckResult.findMany.mock.calls.map((call) => call[0]);
+    for (const key of ["title", "description", "howToFix", "finding"]) expect(first.select).not.toHaveProperty(key);
+    // The text query asks the database for unlocked findings only.
+    expect(second.where).toEqual({ checkId: "check1", unlockedAt: { not: null } });
+
+    if (!report?.posted) throw new Error("expected a posted report");
+    expect(report.findings.map((f) => [f.id, f.locked])).toEqual([
+      ["crit", true],
+      ["high", false],
+      ["low", true],
+    ]);
+    const [crit, high, low] = report.findings;
+    // Locked: severity, the part that found it and its price. Nothing else.
+    expect(crit).toEqual({ id: "crit", locked: true, severity: "critical", area: "Login", priceCoins: 5, agent: { id: "a1", name: "Atlas Agent", avatar: null } });
+    // A result reported before per-finding prices costs its severity's price.
+    expect(low).toMatchObject({ locked: true, area: "CORS", priceCoins: SEVERITY_PRICE.low });
+    expect(high).toMatchObject({ locked: false, title: "high title", description: "high description", howToFix: "high fix", area: "Headers" });
+    // The summary is for everyone: Ziki writes it without any finding's details.
+    expect(report.summary).toContain("Unlock them");
+    expect(report.counts).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
+    expect(report.clearParts).toEqual(["Cookies"]);
+    expect(report.agentCount).toBe(2);
+  });
+
+  it("posted with nothing unlocked: the text is never even asked for", async () => {
+    db.securityCheck.findFirst.mockResolvedValue(check());
+    results([row("crit", "critical", 1), row("low", "low", 2)]);
+
+    const report = await loadCheckReport("check1", "org1", "owner");
+
+    expect(db.securityCheckResult.findMany).toHaveBeenCalledTimes(1);
+    if (!report?.posted) throw new Error("expected a posted report");
+    expect(report.findings.every((f) => f.locked && !("title" in f) && !("howToFix" in f))).toBe(true);
+  });
+
+  it("PDF: free once posted, made from the same vague report; a stranger gets 404", async () => {
     const params = { params: Promise.resolve({ id: "check1" }) };
-    db.securityCheck.findFirst.mockResolvedValue(check(null));
-    db.securityCheckResult.findMany.mockResolvedValue([]);
+    db.securityCheck.findFirst.mockResolvedValue(check());
+    results([row("crit", "critical", 1)]);
+    renderReportPdf.mockResolvedValue(Buffer.from("%PDF-1.3"));
 
-    await expect(downloadReportPdf(new Request("http://localhost/x"), params)).rejects.toThrow("redirect:/security/checks/check1/pay");
-    expect(renderReportPdf).not.toHaveBeenCalled();
+    const response = await downloadReportPdf(new Request("http://localhost/x"), params);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/pdf");
+    const [[printed]] = renderReportPdf.mock.calls;
+    expect(printed.findings[0]).toEqual(expect.objectContaining({ locked: true, area: "Login" }));
+    expect(printed.findings[0]).not.toHaveProperty("title");
 
+    renderReportPdf.mockReset();
     session.userId = "stranger";
     db.securityCheck.findFirst.mockResolvedValue(null);
-    const response = await downloadReportPdf(new Request("http://localhost/x"), params);
-    expect(response.status).toBe(404);
+    expect((await downloadReportPdf(new Request("http://localhost/x"), params)).status).toBe(404);
     expect(renderReportPdf).not.toHaveBeenCalled();
   });
 
-  it("PDF: a paid report prints ₦ and Yoruba in its own embedded font, not Helvetica", async () => {
+  it("PDF: prints ₦ and Yoruba in its own embedded font, not Helvetica", async () => {
     const { renderReportPdf: render } = await vi.importActual<typeof import("@/components/security-checks/report-pdf")>(
       "@/components/security-checks/report-pdf",
     );
     const yoruba = "Ọjọ́ àti ẹ̀ṣọ́";
-    const result = { ...full("crit", "critical", 1), title: yoruba, description: "Refunds of ₦50,000 skip the owner check.", fix: null };
+    const agent = { id: "a1", name: "Atlas Agent", avatar: null };
     const report = {
-      checkId: "check1", status: "done", priceCoins: 50, createdAt: at(0), startedAt: at(0), finishedAt: at(9),
+      checkId: "check1",
+      status: "done",
+      free: true,
+      createdAt: at(0),
+      startedAt: at(0),
+      finishedAt: at(9),
+      posted: true,
+      summary: "Refunds of ₦50,000 skip the owner check.",
       target: { id: "t1", kind: "website", value: "ọjà.example.test", input: "https://ọjà.example.test", verified: true },
-      parts: [], progress: { done: 1, total: 1, percent: 100 }, agentCount: 1, clearParts: [],
-      counts: { critical: 1, high: 0, medium: 0, low: 0 }, total: 1, paid: true, results: [result],
+      parts: [],
+      progress: { done: 2, total: 2, percent: 100 },
+      agentCount: 1,
+      clearParts: [],
+      counts: { critical: 1, high: 1, medium: 0, low: 0 },
+      total: 2,
+      findings: [
+        { id: "crit", locked: false, severity: "critical", area: "Login", priceCoins: 5, agent, title: yoruba, description: "d", howToFix: "f", fix: null },
+        { id: "high", locked: true, severity: "high", area: "Owó sísan", priceCoins: 3, agent },
+      ],
     } as never;
 
     const pdf = await render(report);
@@ -276,10 +302,12 @@ describe("what a client sees of a check (#security-checks, part 4)", () => {
     expect(raw).not.toContain("Helvetica");
 
     // The embedded fonts' ToUnicode maps list the characters drawn with a real
-    // glyph: ₦, the Yoruba letters and their tone marks are among them.
+    // glyph: ₦, the Yoruba letters and their tone marks are among them. (A
+    // dotted letter whose plain letter is already used, like ṣ beside "sísan",
+    // is drawn as that letter plus the dot, so it isn't listed on its own.)
     const maps = inflatedStreams(pdf).filter((stream) => stream.includes("begincmap")).join("\n");
     const printed = new Set([...maps.matchAll(/<([0-9a-f]{4,})>/gi)].map((m) => hexToText(m[1])));
-    for (const char of ["₦", "Ọ", "ọ", "ṣ", "à", "́", "̀"]) expect(printed, char).toContain(char);
+    for (const char of ["₦", "Ọ", "ọ", "à", "́", "̀"]) expect(printed, char).toContain(char);
   });
 
   it("a sent problem's fix follows its finding: Live is fixed, a deleted issue doesn't count, a rejected idea is closed", () => {

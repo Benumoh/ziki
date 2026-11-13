@@ -18,7 +18,7 @@ export function SecurityTabs({ selected, checks, jobs }: { selected: "checks" | 
         </li>
         <li aria-hidden="true" className="text-zk-muted">/</li>
         <li>
-          <span aria-current="page" className={`${CRUMB} block font-medium text-zk-text2`}>{selected === "checks" ? "Sites" : "Your work"}</span>
+          <span aria-current="page" className={`${CRUMB} block font-medium text-zk-text2`}>{selected === "checks" ? "Assets" : "Your work"}</span>
         </li>
       </ol>
     </nav>
@@ -27,7 +27,7 @@ export function SecurityTabs({ selected, checks, jobs }: { selected: "checks" | 
       <PipelineSteps
         label="Security"
         stages={[
-          { label: "Sites", count: checks, href: "/security", selected: selected === "checks" },
+          { label: "Assets", count: checks, href: "/security", selected: selected === "checks" },
           { label: "Your work", count: jobs, href: "/security/work", selected: selected === "work" },
         ]}
       />

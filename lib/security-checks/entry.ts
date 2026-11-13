@@ -89,10 +89,10 @@ export async function addTargetAndCheck(
 
 /** What to tell the client when there's no free scan left, in plain words. */
 export function refusedMessage(refused: RefusedCheck["refused"], site: string, now = new Date()): string {
-  if (refused === "target_used") return `You've already had your free scan of ${site}. Open its report to unlock fixes.`;
+  if (refused === "target_used") return `${site} has already been scanned. Open its report to unlock fixes.`;
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   const day = next.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
-  return `You've used this month's ${FREE_SCANS_PER_WORKSPACE_PER_MONTH} free scans. More start on ${day}.`;
+  return `You've used this month's ${FREE_SCANS_PER_WORKSPACE_PER_MONTH} scans. More start on ${day}.`;
 }
 
 async function findOrCreateTarget(organisationId: string, userId: string, target: ParsedTarget) {
@@ -122,7 +122,7 @@ async function findOrCreateTarget(organisationId: string, userId: string, target
   }
 }
 
-/** Where the client goes next for a new check: show it's theirs, or, if already proven, back to Sites where its free scan starts. */
+/** Where the client goes next for a new check: show it's theirs, or, if already proven, back to Assets where its free scan starts. */
 export function nextStepPath(check: { targetId: string; checkId: string; verified: boolean }): string {
   return check.verified ? `/security?check=${encodeURIComponent(check.checkId)}&added=1` : `/security/targets/${check.targetId}/verify`;
 }
@@ -142,7 +142,7 @@ export type WorkspaceCheckRow = {
   createdAt: Date;
 };
 
-/** Where a site is, for the Sites sidebar: waiting for proof, being checked, or its report is ready to fix. */
+/** Where a site is, for the Assets sidebar: waiting for proof, being checked, or its report is ready to fix. */
 export type SiteStage = "prove" | "checking" | "fix" | "cancelled";
 export const SITE_FILTERS = ["all", "prove", "checking", "fix"] as const;
 export type SiteFilter = (typeof SITE_FILTERS)[number];

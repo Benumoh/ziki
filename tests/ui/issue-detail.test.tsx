@@ -131,21 +131,21 @@ describe("Library approved deliverables", () => {
 
   it("switches attachments and updates actions without changing the associated task", async () => {
     const user = userEvent.setup();
-    const view = render(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    const view = render(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     await user.click(screen.getByRole("button", { name: "guide.docx" }));
-    view.rerender(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    view.rerender(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     expect(screen.getByRole("link", { name: /Open original/ })).toHaveAttribute("href", "https://example.com/guide.docx");
     expect(screen.getByRole("link", { name: /View task #42/ })).toHaveAttribute("href", "/acme/demo/42");
     expect(screen.getByRole("button", { name: /Download/ })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /Agent workflow.*Task #38/ }));
-    view.rerender(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    view.rerender(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     expect(screen.getByRole("link", { name: /Open original/ })).toHaveAttribute("href", "https://example.com/blog/workflow");
     expect(screen.queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
   });
 
   it("keeps everything typed in search while the URL catches up", async () => {
     const user = userEvent.setup();
-    render(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    render(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     const search = screen.getByRole("searchbox", { name: "Search approved work" });
     await user.type(search, "workflow");
     expect(search).toHaveValue("workflow");
@@ -155,7 +155,7 @@ describe("Library approved deliverables", () => {
 
   it("retries only a failed preview and keeps task access available", async () => {
     const user = userEvent.setup();
-    render(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    render(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     fireEvent.error(screen.getByRole("img", { name: /Launch campaign/ }));
     await user.click(screen.getByRole("button", { name: "Retry preview" }));
     expect(screen.getByRole("img", { name: /Launch campaign/ })).toBeInTheDocument();
@@ -166,13 +166,13 @@ describe("Library approved deliverables", () => {
   it("retains results on refresh failure and recovers from an initial collection error", async () => {
     const user = userEvent.setup();
     libraryRefresh.mockResolvedValue({ ok: false });
-    const view = render(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    const view = render(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/previous results/);
     expect(screen.getByRole("link", { name: /View task #42/ })).toBeInTheDocument();
     view.unmount();
     libraryRefresh.mockResolvedValue({ ok: true, items });
-    render(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: false }} />);
+    render(<Library slug={projectRef("acme", "demo")} initial={{ ok: false }} />);
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("link", { name: /View task #42/ })).toBeInTheDocument();
   });
@@ -182,13 +182,13 @@ describe("Library approved deliverables", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
     const scroll = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     const user = userEvent.setup();
-    const view = render(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    const view = render(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     await user.click(screen.getByRole("button", { name: /Launch campaign.*Task #42/ }));
-    view.rerender(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    view.rerender(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     expect(new URLSearchParams(window.location.search).get("view")).toBe("detail");
     expect(screen.getByRole("heading", { name: "Launch campaign" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: /Back to Library/ }));
-    view.rerender(<Library slug={projectRef("acme", "demo")} projectName="Demo" initial={{ ok: true, items }} />);
+    view.rerender(<Library slug={projectRef("acme", "demo")} initial={{ ok: true, items }} />);
     expect(new URLSearchParams(window.location.search).get("q")).toBe("Studio");
     expect(new URLSearchParams(window.location.search).get("item")).toBe("launch");
     expect(new URLSearchParams(window.location.search).has("view")).toBe(false);

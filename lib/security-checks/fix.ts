@@ -6,7 +6,7 @@ import { convertClientVettedIdea } from "@/lib/agent-api/idea-verdicts";
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
-import { isCheckPaid, isReportPosted } from "@/lib/security-checks";
+import { isReportPosted, isResultUnlocked } from "@/lib/security-checks";
 import { createFinding, PLACEHOLDER_DESCRIPTION, PLACEHOLDER_SUMMARY, placeholderTitle } from "@/lib/security-findings";
 
 const id = z.string().trim().min(1).max(128);
@@ -24,11 +24,11 @@ export type FixOutcome =
   | { ok: false; error: string };
 
 type Client = { userId: string; organisationId: string; superAdmin: boolean };
-type Check = { paidAt: Date | null; postedAt: Date | null; projectId: string | null };
+type Check = { postedAt: Date | null; projectId: string | null };
 type Result = { id: string; severity: SecuritySeverity; finding: { bug: { number: number } | null } | null };
 
 const unavailable = { ok: false, error: "This check is unavailable in your workspace." } as const;
-const unpaid = { ok: false, error: "Pay for this check before sending findings to a project." } as const;
+const locked = { ok: false, error: "Unlock every selected finding before sending it to a project." } as const;
 
 // Workspace members can contribute to its projects under the board's existing
 // access rules. Recheck membership in the same query that scopes the project.
@@ -45,10 +45,15 @@ function eligibleProjects(client: Client): Prisma.ProjectWhereInput {
 
 export async function listFixProjects(client: Client, checkId: string, db = prisma): Promise<FixOptions | null> {
   const check = await db.securityCheck.findFirst({
-    where: { id: checkId, requestedById: client.userId, organisationId: client.organisationId },
-    select: { paidAt: true, postedAt: true, projectId: true },
+    where: {
+      id: checkId,
+      requestedById: client.userId,
+      organisationId: client.organisationId,
+      results: { some: { unlockedAt: { not: null } } },
+    },
+    select: { postedAt: true, projectId: true },
   });
-  if (!check || !isCheckPaid(check) || !isReportPosted(check)) return null;
+  if (!check || !isReportPosted(check)) return null;
   const projects = await db.project.findMany({
     where: { ...eligibleProjects(client), ...(check.projectId ? { id: check.projectId } : {}) },
     orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -68,13 +73,12 @@ export async function sendCheckFindings(
     // The check row serializes all submissions for this report. A waiter reads
     // the committed destination and finding links after the preceding commit.
     const [check] = await tx.$queryRaw<Check[]>`
-      SELECT "paidAt", "postedAt", "projectId" FROM "SecurityCheck"
+      SELECT "postedAt", "projectId" FROM "SecurityCheck"
       WHERE "id" = ${checkId} AND "organisationId" = ${client.organisationId}
         AND "requestedById" = ${client.userId}
       FOR NO KEY UPDATE
     `;
     if (!check) return unavailable;
-    if (!isCheckPaid(check)) return unpaid;
     if (!isReportPosted(check)) return { ok: false, error: "Wait for the report to be posted before sending findings." };
     const project = await tx.project.findFirst({
       where: { ...eligibleProjects(client), id: projectId },
@@ -87,11 +91,14 @@ export async function sendCheckFindings(
 
     const results = await tx.securityCheckResult.findMany({
       where: { checkId, id: { in: resultIds } },
-      select: { id: true, severity: true, finding: { select: { bug: { select: { number: true } } } } },
+      select: { id: true, severity: true, unlockedAt: true, finding: { select: { bug: { select: { number: true } } } } },
     });
     if (results.length !== resultIds.length) {
       return { ok: false, error: "One or more selected findings are unavailable in this check." };
     }
+
+    // Reject the entire selection before any writes if one finding is locked.
+    if (results.some((result) => !isResultUnlocked(result))) return locked;
 
     let created = 0;
     const issues: { number: number; href: string }[] = [];

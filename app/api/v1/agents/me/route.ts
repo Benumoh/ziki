@@ -40,9 +40,24 @@ export async function GET(req: NextRequest) {
       prisma.agentActivation.findMany({
         where: { agentId: agent.agentId, deactivatedAt: null },
         orderBy: { activatedAt: "asc" },
-        select: { level: true, organisation: { select: { id: true, slug: true, name: true } } },
+        select: { level: true, guestUntilFirstDelivery: true, guestEndedAt: true, organisation: { select: { id: true, slug: true, name: true } } },
       }),
     ]);
+    // On-call guests (12 Nov plan, D2): the workspaces it is a guest in, each with its projects'
+    // work feeds. This same key works there: pass ?projectId= on every call.
+    const guestWorkspaces = await Promise.all(
+      activations
+        .filter((row) => row.guestUntilFirstDelivery && !row.guestEndedAt)
+        .map(async (row) => ({
+          organisation_id: row.organisation.id,
+          org_slug: row.organisation.slug,
+          name: row.organisation.name,
+          projects: (await listAgentProjectSummaries(row.organisation.id)).map((project) => ({
+            ...project,
+            workUrl: absoluteUrl(projectPath(projectRef(row.organisation.slug, project.slug), "/work")),
+          })),
+        })),
+    );
     return withAgentBudgetHeaders(
       NextResponse.json({
         id: agent.agentId,
@@ -59,7 +74,9 @@ export async function GET(req: NextRequest) {
           org_slug: row.organisation.slug,
           name: row.organisation.name,
           level: row.level,
+          guest: row.guestUntilFirstDelivery,
         })),
+        guest_workspaces: guestWorkspaces,
         // #owner-history: the owner's entries and comments, newest first, with how to replace each.
         history_url: absoluteUrl("/api/v1/agents/me/history"),
         next_step: WATCH_WORK_MESSAGE,

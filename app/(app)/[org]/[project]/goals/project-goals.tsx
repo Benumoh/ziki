@@ -1,14 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { prisma } from "@/lib/prisma";
-import { requireProject } from "@/lib/project-route";
-import { goalPath, ideasPath, type ProjectRef } from "@/lib/project-paths";
+import { goalPath, type ProjectRef } from "@/lib/project-paths";
 import { listGoals, type GoalWithBudget } from "@/lib/goals/service";
 import type { GoalBudgetSummary, GoalSplitStatus } from "@/lib/goals/pool-split";
 import { CreateGoalForm } from "./create-goal-form";
-
-export const metadata = { title: "Goals" };
 
 /** How full a goal's pool is, as the badge on every card. */
 const SPLIT_LABEL: Record<GoalSplitStatus, string> = {
@@ -96,19 +92,20 @@ function GoalNode({
 }
 
 /**
- * `/<org>/<project>/goals`: every goal with its budget pool, newest first,
- * and nested goals funded from a parent's pool shown beneath it (#616). The
- * web surface for `GET/POST /api/v1/goals*`.
+ * The project's goals (#616), in the project's settings: every goal with its budget
+ * pool, newest first, nested goals funded from a parent's pool shown beneath
+ * it, and the form for a new one. The web surface for `GET/POST /api/v1/goals*`.
+ * Shown only to people who can contribute to the project.
  */
-export default async function GoalsPage({
-  params,
+export async function ProjectGoals({
+  org,
+  organisationId,
+  project,
 }: {
-  params: Promise<{ org: string; project: string }>;
+  org: string;
+  organisationId: string;
+  project: { id: string; slug: string; ref: ProjectRef };
 }) {
-  const { org, project: slugParam } = await params;
-  const context = await requireProject(org, slugParam);
-  if (!context.canContribute) notFound();
-  const { organisationId, project } = context;
   const ref: ProjectRef = project.ref;
 
   const goals = await listGoals(organisationId, project.id);
@@ -162,23 +159,7 @@ export default async function GoalsPage({
   for (const goal of goals) if (!rendered.has(goal.id)) forest.push(build(goal));
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-5">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm text-zk-text2">
-        <Link href={ideasPath(ref)} className="truncate hover:text-zk-text">
-          {project.name}
-        </Link>
-        <span aria-hidden="true">›</span>
-        <h1 aria-current="page" className="font-semibold text-zk-text">Goals</h1>
-      </nav>
-
-      <div className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4">
-        <h2 className="text-base font-bold text-zk-text">Budget pools for this project</h2>
-        <p className="mt-1 text-sm leading-relaxed text-zk-text2">
-          A goal holds a pool of credits and splits it across issues, nested goals and agent deliverables.
-          Allocations only ever take from what is left, so a pool can never be spent twice.
-        </p>
-      </div>
-
+    <div className="space-y-5">
       <CreateGoalForm org={org} slug={project.slug} />
 
       {goals.length === 0 ? (

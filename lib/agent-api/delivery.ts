@@ -22,6 +22,7 @@ import { deliverableText, marketingDeliveryBodySchema } from "@/lib/validations/
 import { linkAttachments } from "@/lib/attachment-link";
 import { MAX_ATTACHMENTS_PER_ITEM } from "@/lib/attachments";
 import { deliveryReceiptSchema, storedReceipt, type DeliveryReceipt } from "@/lib/delivery-receipt";
+import { endGuestStay } from "@/lib/on-call-guests";
 
 /**
  * Work delivered (#delivered-step): the In progress step's entry. The agent
@@ -178,7 +179,7 @@ export async function listDeliveries(scope: { organisationId: string; projectId?
 }
 
 export type DeliverResult =
-  | { status: 201 | 200; delivery: DeliveryEntry; replaced: boolean }
+  | { status: 201 | 200; delivery: DeliveryEntry; replaced: boolean; issueId: string; pullRequestUrl: string | null }
   | { status: 400 | 403 | 404 | 409 | 422; error: string; message: string; field?: string };
 
 /**
@@ -451,7 +452,15 @@ export async function deliverWork(
     await createReviewOffers(prisma, { agentId: agent.agentId, organisationId: agent.organisationId }, bug.id, { pullRequestUrl: pullRequestUrl!, headSha }).catch(() => null);
   }
 
+  // On-call guests (12 Nov plan, D2): a guest leaves the workspace after delivering its
+  // first task here. The delivery stands; only its stay and its other open work here end.
+  if (agent.guest) {
+    await prisma
+      .$transaction((tx) => endGuestStay(tx, { agentId: agent.agentId, organisationId: agent.organisationId, actorUserId: agent.ownerId, reason: "first_delivery" }))
+      .catch((error) => console.error("[delivery] couldn't end an on-call guest's stay", error));
+  }
+
   const entries = await deliveryEntries({ id: bug.id, pullRequestUrl });
   const entry = entries.find((row) => row.id === delivery.id)!;
-  return { status: replaced ? 200 : 201, delivery: entry, replaced };
+  return { status: replaced ? 200 : 201, delivery: entry, replaced, issueId: bug.id, pullRequestUrl };
 }

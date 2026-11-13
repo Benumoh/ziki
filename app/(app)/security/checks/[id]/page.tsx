@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { LiveRefresh } from "@/components/live-refresh";
 import { Badge } from "@/components/ui/badge";
 import { FixOnZiki } from "@/components/security-checks/fix-on-ziki";
+import { ReportLive } from "@/components/security-checks/report-live";
 import { ReportProgress } from "@/components/security-checks/report-progress";
 import { ReportResults, parseFixFilter } from "@/components/security-checks/report-results";
 import { ReportSummary } from "@/components/security-checks/report-summary";
@@ -17,15 +17,15 @@ export const metadata = { title: "Security check" };
 
 /** What each step tells the client while there are no parts to list yet. */
 const WAITING_NOTE: Partial<Record<keyof typeof CHECK_STATUS_LABEL, string>> = {
-  queued: "An agent will start planning the checks soon.",
-  splitting: "An agent is looking at it and planning the checks.",
+  queued: "Ziki will start planning the checks in a moment.",
+  splitting: "Ziki is looking at it and planning the checks.",
 };
 
 /**
- * One security check (#security-checks, part 4): how far the agents have got
- * and, once the report is posted (#648), what was found, worst first. Only the person who asked
- * for the check sees it. Until it is paid, the findings are the teaser that
- * `loadCheckReport` builds.
+ * One security check (12 Nov plan, S1 and S2): live progress while Ziki
+ * checks, then, once the report is posted, Ziki's summary and every finding
+ * worst first, locked until the client unlocks it. Only the person who asked
+ * for the check sees it.
  */
 export default async function SecurityCheckPage({
   params,
@@ -46,7 +46,8 @@ export default async function SecurityCheckPage({
 
   return (
     <div className="flex w-full flex-col gap-4 pb-10 sm:gap-6">
-      {working ? <LiveRefresh /> : null}
+      {/* Live until the report is posted; a cancelled check has nothing more to show. */}
+      {working && !report.posted ? <ReportLive /> : null}
       {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx). */}
       <nav aria-label="Breadcrumb" className="flex w-full items-center px-0.5 text-[13px] text-zk-text2">
         <ol className="flex min-w-0 flex-wrap items-center gap-0.5">
@@ -78,7 +79,7 @@ export default async function SecurityCheckPage({
         <>
           <ReportSummary report={report} />
 
-          {/* Progress only, until an agent has summed up every part and posted the report. */}
+          {/* Progress only, until Ziki has summed up every part and posted the report. */}
           {!report.posted ? (
             <section aria-labelledby="progress-heading" className={orgCard}>
               <h2 id="progress-heading" className="text-base font-semibold text-zk-text">Progress</h2>
@@ -87,7 +88,7 @@ export default async function SecurityCheckPage({
                   <>
                     <ReportProgress progress={report.progress} parts={report.parts} />
                     {working && report.progress.done === report.progress.total ? (
-                      <p className="mt-3 text-sm text-zk-text2">Every part is checked. An agent is writing your report.</p>
+                      <p className="mt-3 text-sm text-zk-text2">Every part is checked. Ziki is writing your report.</p>
                     ) : null}
                   </>
                 ) : (
@@ -99,10 +100,15 @@ export default async function SecurityCheckPage({
 
           {report.posted ? <ReportResults report={report} show={parseFixFilter(show)} /> : null}
 
-          {/* Fix on Ziki (part 5, #647): paid, and so posted, checks only. "Fix them on Ziki" above jumps here. */}
-          {report.paid ? (
+          {/* Fix on Ziki (part N): unlocked findings only. "Fix them on Ziki" above jumps here. */}
+          {report.posted && report.findings.some((finding) => !finding.locked) ? (
             <div id="fix-on-ziki" className="scroll-mt-20 rounded-lg bg-zk-surface">
-              <FixOnZiki checkId={report.checkId} results={report.results.map(({ id, severity, title }) => ({ id, severity, title }))} />
+              <FixOnZiki
+                checkId={report.checkId}
+                results={report.findings.flatMap((finding) =>
+                  finding.locked ? [] : [{ id: finding.id, severity: finding.severity, title: finding.title }],
+                )}
+              />
             </div>
           ) : null}
         </>

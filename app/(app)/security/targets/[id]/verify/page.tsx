@@ -14,7 +14,7 @@ const KIND_NOUN = { website: "site", server: "server", repo: "repo" } as const;
 /**
  * Step 2, show it's yours (#security-checks, part 2). Before any agent looks
  * at a target, the client proves it is theirs with its secret code, once. Then
- * its checks are let go to the agents and the client goes back to Sites, where the free scan runs.
+ * its checks are let go to the agents and the client goes back to Assets, where the free scan runs.
  */
 export default async function VerifySecurityTargetPage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }, user] = await Promise.all([params, requireUser()]);
@@ -71,9 +71,7 @@ export default async function VerifySecurityTargetPage({ params }: { params: Pro
         <ol aria-label="Steps" className="m-0 flex list-none flex-wrap items-center gap-x-1.5 gap-y-1 p-0 text-[13px]">
           <Step state={target.verifiedAt ? "done" : "now"}>Show it&apos;s yours</Step>
           <StepLine />
-          <Step state={target.verifiedAt ? "now" : "later"}>
-            Check <span className="font-normal text-zk-muted">· free</span>
-          </Step>
+          <Step state={target.verifiedAt ? "now" : "later"}>Checking</Step>
           <StepLine />
           <Step state="later">Fix</Step>
         </ol>

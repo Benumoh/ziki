@@ -26,7 +26,7 @@ function PrivacyNote({ className = "" }: { className?: string }) {
 
 /**
  * What the Security page opens on (#security-checks, part 1). The box waits
- * behind "Check a site" and opens in a pop-up. A workspace with no checks yet
+ * behind "Add asset" and opens in a pop-up. A workspace with no checks yet
  * sees a short card; a returning one sees its checks. The findings dashboard
  * sits behind the "Findings" link.
  */
@@ -42,7 +42,7 @@ export function SecurityChecksPanel({
   // Nothing added yet: the welcome, inside the same panel, like a project's Ideas page with no ideas.
   if (checks.length === 0) {
     return (
-      <section aria-label="Sites" className={PANEL}>
+      <section aria-label="Assets" className={PANEL}>
         <div className="flex items-center justify-end gap-3 border-b border-zk-divider px-4 py-3 sm:px-6">
           <CheckSiteButton variant="inline" />
         </div>
@@ -65,12 +65,12 @@ export function SecurityChecksPanel({
       {/* Like a project's Ideas: what's shown on the left of the top bar, the add button on the right. */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-divider px-4 py-3 sm:px-6">
         <h2 id="security-checks-heading" className="m-0 text-sm font-normal text-zk-muted">
-          {show === "all" ? "Sites, newest first" : `${SITE_FILTER_TEXT[show].label}, newest first`}
+          {show === "all" ? "Assets, newest first" : `${SITE_FILTER_TEXT[show].label}, newest first`}
         </h2>
         <CheckSiteButton variant="inline" />
       </div>
       {highlight?.added && !highlight.unlocked ? (
-        <FlashNote>Saved. Show it&apos;s yours and your free scan starts.</FlashNote>
+        <FlashNote>Saved. Show it&apos;s yours and the scan starts.</FlashNote>
       ) : null}
       {highlight?.unlocked ? (
         <FlashNote>
@@ -90,7 +90,7 @@ export function SecurityChecksPanel({
           ) : (
             <div className="bg-zk-bg px-6 py-12 text-center">
               <p className="m-0 font-semibold text-zk-text">{SITE_FILTER_TEXT[show].empty}</p>
-              <Link href="/security" className="mt-2 inline-flex text-sm font-semibold text-zk-accent hover:underline">Show all sites</Link>
+              <Link href="/security" className="mt-2 inline-flex text-sm font-semibold text-zk-accent hover:underline">Show all assets</Link>
             </div>
           )}
         </div>
@@ -103,7 +103,7 @@ export function SecurityChecksPanel({
 }
 
 const SITE_FILTER_TEXT: Record<SiteFilter, { label: string; empty: string }> = {
-  all: { label: "All", empty: "No sites yet" },
+  all: { label: "All", empty: "No assets yet" },
   prove: { label: "Show it's yours", empty: "Nothing waiting for proof" },
   checking: { label: "Checking", empty: "Nothing being checked right now" },
   fix: { label: "Fix", empty: "No reports ready yet" },
@@ -139,15 +139,12 @@ function CheckRow({ check, highlighted }: { check: WorkspaceCheckRow; highlighte
           <Step state={proving ? "now" : "done"}>Show it&apos;s yours</Step>
           <StepLine />
           <Step state={check.status === "done" ? "done" : running ? "now" : "later"}>
+            {/* Always "Checking"; once it's done, it opens the report. */}
             {check.status === "done" ? (
-              // Done: straight to the report.
-              <Link href={`/security/checks/${check.id}`} className="hover:underline">{CHECK_STATUS_LABEL.done}</Link>
-            ) : running && check.status !== "queued" ? (
-              CHECK_STATUS_LABEL[check.status]
+              <Link href={`/security/checks/${check.id}`} className="hover:underline">Checking</Link>
             ) : (
-              "Check"
-            )}{" "}
-            <span className="font-normal text-zk-muted">· free</span>
+              "Checking"
+            )}
           </Step>
           <StepLine />
           <Step state={allUnlocked ? "done" : canUnlock ? "now" : "later"}>

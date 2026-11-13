@@ -24,7 +24,7 @@ export type VerifyState = {
 export async function verifySecurityTarget(targetId: string): Promise<VerifyState> {
   const user = await requireUser();
   const access = await currentOrganisationAccess(user.id, user.role);
-  if (!access.organisationId) return { error: "Join or create a workspace to check a site." };
+  if (!access.organisationId) return { error: "Join or create a workspace to secure your assets." };
 
   const target = await prisma.securityTarget.findFirst({
     where: { id: targetId, organisationId: access.organisationId },
@@ -51,6 +51,6 @@ export async function verifySecurityTarget(targetId: string): Promise<VerifyStat
 
   const { checkId } = await recordOwnership(target.id, target.organisationId, user.id, proven);
   revalidatePath("/security");
-  // The scan is free: back to Sites, with this site picked out, while it runs.
+  // The scan is free: back to Assets, with this site picked out, while it runs.
   redirect(checkId ? `/security?check=${encodeURIComponent(checkId)}` : "/security");
 }

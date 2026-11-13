@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { talkToSecurityAssistant } from "@/app/actions/security-assistant";
+import { addSecurityAsset, talkToSecurityAssistant } from "@/app/actions/security-assistant";
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { ClaudeWorking } from "@/components/claude-working";
 import { parseSecurityTarget, PRIVATE_TARGET_ERROR } from "@/lib/security-checks/target";
 import type { AssistantTurn } from "@/lib/security-checks/assistant";
+import type { PreviewSummary } from "@/lib/security-checks/preview-summary";
+import { PreviewResult } from "./preview-result";
 
 const MESSAGE_MAX = 600;
 
@@ -18,6 +20,24 @@ const WORKING_STEPS = [
   "Writing back…",
 ];
 
+/** While Dave's quick scan looks at a site (#security-checks): the areas it checks. */
+const SCAN_STEPS = [
+  "Checking HTTPS and the certificate…",
+  "Reading the security headers…",
+  "Looking at the cookies…",
+  "Checking the email settings…",
+];
+
+/**
+ * The conversation, kept while the client moves around Security (Assets, Your
+ * work and back), so nothing typed or said is lost. It lives only in this
+ * browser tab's memory: a refresh starts afresh, and so does "Show it's yours".
+ */
+const kept: { turns: ChatItem[]; text: string } = { turns: [], text: "" };
+
+/** A message in the chat; Ziki's can carry a quick scan of the site. */
+type ChatItem = AssistantTurn & { scan?: { target: string; summary: PreviewSummary | null; note: string | null } };
+
 /**
  * The box on Security, with Ziki's AI behind it (#security-checks, plan part
  * C3). It looks like the Ideas box. Paste a link and it goes straight on;
@@ -28,8 +48,9 @@ const WORKING_STEPS = [
  */
 export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id?: string; focusOnOpen?: boolean }) {
   const router = useRouter();
-  const [turns, setTurns] = useState<AssistantTurn[]>([]);
-  const [text, setText] = useState("");
+  const [turns, setTurns] = useState<ChatItem[]>(() => kept.turns);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [text, setText] = useState(() => kept.text);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const box = useRef<HTMLTextAreaElement>(null);
@@ -43,6 +64,11 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
   useEffect(() => {
     if (focusOnOpen) box.current?.focus();
   }, [focusOnOpen]);
+  // Keep the conversation for when the client comes back to it.
+  useEffect(() => {
+    kept.turns = turns;
+    kept.text = text;
+  }, [turns, text]);
   // Keep the newest message in view.
   useEffect(() => {
     log.current?.lastElementChild?.scrollIntoView({ block: "nearest" });
@@ -57,31 +83,69 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
 
   function send() {
     if (!value || pending) return;
-    const next: AssistantTurn[] = [...turns, { role: "user", text: value.slice(0, MESSAGE_MAX) }];
+    const next: ChatItem[] = [...turns, { role: "user", text: value.slice(0, MESSAGE_MAX) }];
     setTurns(next);
     setText("");
     setError(null);
     startTransition(async () => {
       try {
-        const answer = await talkToSecurityAssistant(next);
+        // Only the words go to the server, never a scan card.
+        const answer = await talkToSecurityAssistant(next.map(({ role, text }) => ({ role, text })));
         if (answer.kind === "error") {
           setError(answer.error);
           return;
         }
+        if (answer.kind === "scan") {
+          setTurns([...next, { role: "assistant", text: answer.reply, scan: { target: answer.target, summary: answer.summary, note: answer.note } }]);
+          return;
+        }
+        if (answer.kind === "go") {
+          kept.turns = [];
+          kept.text = "";
+          router.push(answer.href);
+          return;
+        }
         setTurns([...next, { role: "assistant", text: answer.reply }]);
-        if (answer.kind === "go") router.push(answer.href);
       } catch {
         setError("Ziki couldn't answer just now. Try again.");
       }
     });
   }
 
+  // "Show it's yours" under a scan: only now is the asset added, then on to prove it.
+  function showItsYours(site: string) {
+    if (adding) return;
+    setAdding(site);
+    setError(null);
+    startTransition(async () => {
+      try {
+        const answer = await addSecurityAsset(site);
+        if (answer.kind === "go") {
+          // On to Show it's yours: this conversation is done.
+          kept.turns = [];
+          kept.text = "";
+          router.push(answer.href);
+          return;
+        }
+        if (answer.kind === "error") setError(answer.error);
+        else setTurns((current) => [...current, { role: "assistant", text: answer.reply }]);
+        setAdding(null);
+      } catch {
+        setError("Ziki couldn't add it just now. Try again.");
+        setAdding(null);
+      }
+    });
+  }
+  const lastUser = [...turns].reverse().find((turn) => turn.role === "user")?.text ?? "";
+  const lastTarget = lastUser ? parseSecurityTarget(lastUser) : null;
+  const scanning = pending && !adding && lastTarget?.ok === true && lastTarget.target.kind !== "repo";
+
   return (
     <div className="flex flex-col gap-3">
       {turns.length ? (
-        <ol ref={log} aria-label="Conversation with Ziki" aria-live="polite" className="m-0 flex max-h-80 list-none flex-col gap-2.5 overflow-y-auto p-0">
+        <ol ref={log} aria-label="Conversation with Ziki" aria-live="polite" className="m-0 flex max-h-[34rem] list-none flex-col gap-2.5 overflow-y-auto p-0">
           {turns.map((turn, index) => (
-            <li key={index} className={turn.role === "user" ? "ml-auto max-w-[85%]" : "mr-auto flex max-w-[90%] items-start gap-2"}>
+            <li key={index} className={turn.role === "user" ? "ml-auto max-w-[85%]" : `mr-auto flex items-start gap-2 ${turn.scan ? "w-full max-w-[95%]" : "max-w-[90%]"}`}>
               {turn.role === "user" ? (
                 <p className="m-0 whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
                   <span className="sr-only">You: </span>
@@ -90,10 +154,15 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
               ) : (
                 <>
                   <span aria-hidden="true" className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-zk-text text-[11px] font-extrabold text-zk-surface">Z</span>
-                  <p className="m-0 whitespace-pre-wrap break-words rounded-[18px] rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
-                    <span className="sr-only">Ziki: </span>
-                    {turn.text}
-                  </p>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    {turn.text ? (
+                      <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-[18px] rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
+                        <span className="sr-only">Ziki: </span>
+                        {turn.text}
+                      </p>
+                    ) : null}
+                    {turn.scan ? <ScanCard scan={turn.scan} adding={adding === turn.scan.target} onShow={() => showItsYours(turn.scan!.target)} /> : null}
+                  </div>
                 </>
               )}
             </li>
@@ -101,7 +170,11 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
           {pending ? (
             // The same "Claude is working" lines as the Ideas chat, for this job.
             <li className="mr-auto w-full max-w-[90%]">
-              <ClaudeWorking steps={WORKING_STEPS} statusText="Ziki is reading your message." />
+              {scanning ? (
+                <ClaudeWorking steps={SCAN_STEPS} statusText={`Ziki is scanning ${lastTarget.ok ? lastTarget.target.value : "the site"}.`} />
+              ) : (
+                <ClaudeWorking steps={WORKING_STEPS} statusText="Ziki is reading your message." />
+              )}
             </li>
           ) : null}
         </ol>
@@ -124,7 +197,7 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
             value={text}
             disabled={pending}
             maxLength={MESSAGE_MAX}
-            placeholder={turns.length ? "Reply to Ziki" : "ziki.dev, or tell Ziki what you want to secure"}
+            placeholder={turns.length ? "Reply to Ziki" : "Tell Ziki what you want to secure"}
             autoComplete="off"
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : `${id}-reading`}
@@ -165,6 +238,32 @@ export function SecurityChat({ id = "security-chat", focusOnOpen = false }: { id
         </div>
         {error ? <p id={errorId} role="alert" className="m-0 mt-2 px-2 text-sm text-zk-bad-fg">{error}</p> : null}
       </form>
+    </div>
+  );
+}
+
+/** The quick scan in the chat, then the one next step: show it's yours. */
+function ScanCard({ scan, adding, onShow }: { scan: NonNullable<ChatItem["scan"]>; adding: boolean; onShow: () => void }) {
+  const next = (
+    <div className="flex flex-wrap items-center gap-3 border-t border-zk-divider pt-3">
+      <p className="m-0 min-w-[12rem] flex-1 text-[13px] leading-snug text-zk-muted">
+        A quick scan only sees what a browser sees. Show {scan.target} is yours to see every problem and have agents check it properly.
+      </p>
+      <button
+        type="button"
+        onClick={onShow}
+        disabled={adding}
+        className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:opacity-60"
+      >
+        {adding ? "Adding…" : "Show it\u2019s yours"}
+      </button>
+    </div>
+  );
+  if (scan.summary) return <PreviewResult summary={scan.summary}>{next}</PreviewResult>;
+  return (
+    <div className="flex w-full flex-col gap-3 rounded-2xl border border-zk-border bg-zk-surface p-4 text-left">
+      <p className="m-0 text-sm text-zk-text2">{scan.note ?? "The quick scan couldn't run just now."}</p>
+      {next}
     </div>
   );
 }

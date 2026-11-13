@@ -3,15 +3,14 @@ import path from "node:path";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { SecuritySeverity } from "@prisma/client";
 import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
-import type { CheckReport, SeverityCounts } from "@/lib/security-checks/report";
+import type { PostedReport, ReportFinding, SeverityCounts } from "@/lib/security-checks/report";
 import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
 
 /**
- * The downloadable security report (#security-checks, part 4): the full
- * report of a paid check. An unpaid check has no PDF; its "Download PDF"
- * asks the client to pay instead (agreed with the team, 12 Nov).
+ * The downloadable security report (12 Nov plan, S2): free once the report
+ * is posted, and exactly as vague as the page. A locked finding prints only its
+ * severity, the part that found it and its price; its text was never read.
  */
-type PaidReport = Extract<CheckReport, { paid: true }>;
 
 /**
  * The PDF's own font, embedded in every report. The built-in Helvetica can only
@@ -47,6 +46,7 @@ const styles = StyleSheet.create({
   severity: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
   problemTitle: { marginTop: 2, fontSize: 11, fontWeight: "bold" },
   body: { marginTop: 3 },
+  locked: { marginTop: 3, color: "#4b5563" },
   fixLabel: { marginTop: 6, fontSize: 9, fontWeight: "bold", color: "#4b5563" },
   footer: { position: "absolute", bottom: 24, left: 40, right: 40, fontSize: 8, color: "#6b7280" },
 });
@@ -62,19 +62,31 @@ function countsText(counts: SeverityCounts): string {
     .join(" · ");
 }
 
-function Problem({ severity, title, description, howToFix }: { severity: SecuritySeverity; title: string; description: string; howToFix: string }) {
+function Problem({ finding }: { finding: ReportFinding }) {
+  const severity = finding.severity;
   return (
     <View style={styles.problem} wrap={false}>
       <Text style={[styles.severity, { color: SEVERITY_COLOUR[severity] }]}>{SEVERITY_LABEL[severity]}</Text>
-      <Text style={styles.problemTitle}>{plain(title)}</Text>
-      <Text style={styles.body}>{plain(description)}</Text>
-      <Text style={styles.fixLabel}>How to fix</Text>
-      <Text style={styles.body}>{plain(howToFix)}</Text>
+      {finding.locked ? (
+        <>
+          <Text style={styles.problemTitle}>{plain(finding.area)}</Text>
+          <Text style={styles.locked}>
+            Locked. Unlock it on Ziki for {finding.priceCoins} {finding.priceCoins === 1 ? "coin" : "coins"} to see the details and the fix.
+          </Text>
+        </>
+      ) : (
+        <>
+          <Text style={styles.problemTitle}>{plain(finding.title)}</Text>
+          <Text style={styles.body}>{plain(finding.description)}</Text>
+          <Text style={styles.fixLabel}>How to fix</Text>
+          <Text style={styles.body}>{plain(finding.howToFix)}</Text>
+        </>
+      )}
     </View>
   );
 }
 
-function ReportDocument({ report, generatedAt }: { report: PaidReport; generatedAt: Date }) {
+function ReportDocument({ report, generatedAt }: { report: PostedReport; generatedAt: Date }) {
   const still = !FINISHED_CHECK_STATUSES.has(report.status);
   const kind = TARGET_KIND_LABEL[report.target.kind];
   return (
@@ -101,8 +113,8 @@ function ReportDocument({ report, generatedAt }: { report: PaidReport; generated
               : `${report.total} ${report.total === 1 ? "problem" : "problems"} found${still ? " so far" : ""}: ${countsText(report.counts)}`}
           </Text>
 
-          {report.results.map((result) => (
-            <Problem key={result.id} severity={result.severity} title={result.title} description={result.description} howToFix={result.howToFix} />
+          {report.findings.map((finding) => (
+            <Problem key={finding.id} finding={finding} />
           ))}
         </View>
 
@@ -114,7 +126,7 @@ function ReportDocument({ report, generatedAt }: { report: PaidReport; generated
   );
 }
 
-/** Only a paid check has a PDF: the type refuses an unpaid report outright. */
-export function renderReportPdf(report: PaidReport): Promise<Buffer> {
+/** Only a posted report has a PDF: the type refuses one still in progress outright. */
+export function renderReportPdf(report: PostedReport): Promise<Buffer> {
   return renderToBuffer(<ReportDocument report={report} generatedAt={new Date()} />);
 }

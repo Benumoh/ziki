@@ -5,20 +5,20 @@ import { PipelineSteps } from "@/components/pipeline-steps";
 import { RichText } from "@/components/rich-text";
 import { SeverityChip } from "@/components/security-finding-panel";
 import { ReportProgress } from "@/components/security-checks/report-progress";
+import { UnlockActions, UnlockCheckbox, UnlockChoiceProvider } from "@/components/security-checks/report-unlock";
 import { Badge } from "@/components/ui/badge";
 import { stateLabel, statusClass, substatusClass } from "@/lib/labels";
-import { FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
-import type { CheckReport, ReportAgent, ResultFix, SeverityCounts } from "@/lib/security-checks/report";
-import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
+import { lockedOf, type LockedFinding, type PostedReport, type ReportAgent, type ReportFinding, type ResultFix } from "@/lib/security-checks/report";
 
 /**
- * "What we found" on a security check (#security-checks, part 4): one row per
- * problem, worst first, with who found it. A paid check shows every problem
- * with how to fix it. An unpaid one shows only what `loadCheckReport` handed
- * over: the worst problem without its fix, and how many more there are.
+ * "What we found" on a posted security report (12 Nov plan, S2): every
+ * finding, worst first. An unlocked one shows in full with how to fix it. A
+ * locked one shows only its severity, the part that found it and its price,
+ * behind an obvious lock, with a tick box to unlock it. Its text was never
+ * read (see `loadCheckReport`), so the blurred lines are placeholders.
  */
-export function ReportResults({ report, show = "all" }: { report: CheckReport; show?: FixFilter }) {
-  const still = !FINISHED_CHECK_STATUSES.has(report.status);
+export function ReportResults({ report, show = "all" }: { report: PostedReport; show?: FixFilter }) {
+  const locked = lockedOf(report);
 
   return (
     <section aria-labelledby="found-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
@@ -34,45 +34,29 @@ export function ReportResults({ report, show = "all" }: { report: CheckReport; s
       </div>
 
       {report.total === 0 ? (
-        <p className="px-4 py-4 text-sm text-zk-text2 sm:px-6">
-          {still ? "Nothing found yet. Problems show up here as agents find them." : "The agents found no problems."}
-        </p>
-      ) : report.paid ? (
-        <PaidResults report={report} show={show} />
+        <p className="px-4 py-4 text-sm text-zk-text2 sm:px-6">The agents found no problems.</p>
       ) : (
-        <>
-          {report.teaser ? (
-            <div className="mt-3 border-t border-zk-border">
-              <ProblemRow severity={report.teaser.severity} title={report.teaser.title} description={report.teaser.description} agent={report.teaser.agent}>
-                <HowToFix>
-                  <span className="text-zk-text2">in the full report.</span>
-                </HowToFix>
-              </ProblemRow>
+        <UnlockChoiceProvider>
+          <Findings report={report} show={show} />
+          {locked.findings.length ? (
+            <div className="border-t border-zk-border px-4 py-4 sm:px-6">
+              <div className="rounded-[14px] border border-zk-warn-bd bg-zk-warn-bg p-4">
+                <p className="flex items-start gap-1.5 text-sm font-medium text-zk-text">
+                  <span className="mt-0.5 shrink-0">
+                    <LockIcon />
+                  </span>
+                  {locked.findings.length} locked. Tick the ones you want, or unlock them all, to see their details and fixes.
+                </p>
+                <div className="mt-3">
+                  <UnlockActions checkId={report.checkId} prices={locked.findings.map(({ id, priceCoins }) => ({ id, priceCoins }))} />
+                </div>
+              </div>
             </div>
           ) : null}
-          <div className="border-t border-zk-border px-4 py-4 sm:px-6">
-            <div className="rounded-[14px] border border-zk-warn-bd bg-zk-warn-bg p-4">
-              {report.hiddenCount > 0 ? (
-                <CountsLine
-                  counts={restCounts(report.counts, report.teaser?.severity)}
-                  prefix={`${report.hiddenCount} more ${report.hiddenCount === 1 ? "problem" : "problems"} found${still ? " so far" : ""}:`}
-                />
-              ) : (
-                <p className="text-sm font-medium text-zk-text">No other problems found{still ? " so far" : ""}.</p>
-              )}
-              <Link
-                href={`/security/checks/${report.checkId}/pay`}
-                className="mt-3 inline-flex h-10 items-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2"
-              >
-                Pay {report.priceCoins} coins to see all
-              </Link>
-            </div>
-          </div>
-        </>
+        </UnlockChoiceProvider>
       )}
 
-      {/* While agents work, the Progress card lists the parts; once finished, this footer does. */}
-      {!still && report.parts.length ? <ClearFooter report={report} /> : null}
+      {report.parts.length ? <ClearFooter report={report} /> : null}
     </section>
   );
 }
@@ -91,20 +75,21 @@ export function parseFixFilter(value: string | string[] | undefined): FixFilter 
   return FIX_FILTERS.find((filter) => filter.value === value)?.value ?? "all";
 }
 
-function fixFilterOf(fix: ResultFix | null): Exclude<FixFilter, "all"> {
-  return fix ? fix.bucket : "not-sent";
+/** A locked finding can't have been sent, so it counts as "Not sent". */
+function fixFilterOf(finding: ReportFinding): Exclude<FixFilter, "all"> {
+  return !finding.locked && finding.fix ? finding.fix.bucket : "not-sent";
 }
 
 /**
- * A paid check's problems. Once any was sent with Fix on Ziki, tabs split
- * them by where their fix is, as the Findings page does.
+ * The findings. Once any was sent with Fix on Ziki, tabs split them by where
+ * their fix is, as the Findings page does.
  */
-function PaidResults({ report, show }: { report: Extract<CheckReport, { paid: true }>; show: FixFilter }) {
-  const anySent = report.results.some((result) => result.fix);
+function Findings({ report, show }: { report: PostedReport; show: FixFilter }) {
+  const anySent = report.findings.some((finding) => !finding.locked && finding.fix);
   const filter = anySent ? show : "all";
-  const shown = filter === "all" ? report.results : report.results.filter((result) => fixFilterOf(result.fix) === filter);
+  const shown = filter === "all" ? report.findings : report.findings.filter((finding) => fixFilterOf(finding) === filter);
   const count = (value: FixFilter) =>
-    value === "all" ? report.results.length : report.results.filter((result) => fixFilterOf(result.fix) === value).length;
+    value === "all" ? report.findings.length : report.findings.filter((finding) => fixFilterOf(finding) === value).length;
   const tabs = FIX_FILTERS.filter((tab) => tab.value !== "closed" || count("closed") > 0).map((tab) => ({
     label: tab.label,
     count: count(tab.value),
@@ -121,13 +106,17 @@ function PaidResults({ report, show }: { report: Extract<CheckReport, { paid: tr
       ) : null}
       {shown.length ? (
         <ol className="mt-3 divide-y divide-zk-border border-t border-zk-border">
-          {shown.map((result) => (
-            <li key={result.id}>
-              <ProblemRow severity={result.severity} title={result.title} description={result.description} agent={result.agent} fix={result.fix}>
-                <HowToFix>
-                  <RichText content={result.howToFix} className="min-w-0 text-sm" />
-                </HowToFix>
-              </ProblemRow>
+          {shown.map((finding) => (
+            <li key={finding.id}>
+              {finding.locked ? (
+                <LockedRow finding={finding} />
+              ) : (
+                <ProblemRow severity={finding.severity} title={finding.title} description={finding.description} agent={finding.agent} fix={finding.fix}>
+                  <HowToFix>
+                    <RichText content={finding.howToFix} className="min-w-0 text-sm" />
+                  </HowToFix>
+                </ProblemRow>
+              )}
             </li>
           ))}
         </ol>
@@ -138,6 +127,45 @@ function PaidResults({ report, show }: { report: Extract<CheckReport, { paid: tr
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * A locked finding: severity, the part that found it and its price, then
+ * blurred placeholder lines and "Unlock to see details and the fix", so it is
+ * plain there is more behind the lock.
+ */
+function LockedRow({ finding }: { finding: LockedFinding }) {
+  const coins = `${finding.priceCoins} ${finding.priceCoins === 1 ? "coin" : "coins"}`;
+  return (
+    <article className="grid gap-2 px-4 py-4 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:gap-4 sm:px-6">
+      <div>
+        <SeverityChip severity={finding.severity} />
+      </div>
+      <div className="min-w-0">
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <UnlockCheckbox id={finding.id} label={finding.area} />
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="inline-flex min-w-0 items-center gap-1.5 wrap-break-word text-base font-bold text-zk-text">
+              <LockIcon />
+              {finding.area}
+            </span>
+            <span className="rounded-full bg-zk-chip px-2 py-0.5 text-xs font-bold text-zk-text2">{coins}</span>
+          </span>
+        </label>
+        {/* Placeholder words, not the finding: its real text never leaves the server until it is unlocked. */}
+        <div aria-hidden="true" className="mt-1.5 select-none space-y-1 blur-[5px]">
+          <p className="text-sm text-zk-text2">A problem was found in this part, with what it is and why it matters.</p>
+          <p className="text-sm text-zk-text2">How to fix: the steps are written out in full.</p>
+        </div>
+        <p className="mt-2 text-sm font-semibold text-zk-text">Unlock to see details and the fix</p>
+      </div>
+      {finding.agent ? (
+        <div className="flex flex-col gap-1.5 sm:items-end">
+          <AgentTag agent={finding.agent} />
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -233,7 +261,7 @@ function AgentTag({ agent }: { agent: ReportAgent }) {
 }
 
 /** "36 clear · Security headers, Open pages and 34 more checks found nothing. See all checks" */
-function ClearFooter({ report }: { report: CheckReport }) {
+function ClearFooter({ report }: { report: PostedReport }) {
   const clear = report.clearParts;
   const named = clear.slice(0, 3);
   const rest = clear.length - named.length;
@@ -269,22 +297,4 @@ function LockIcon() {
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
   );
-}
-
-/** "3 high · 5 medium · 2 low": only the severities that have any. */
-function CountsLine({ counts, prefix }: { counts: SeverityCounts; prefix: string }) {
-  const parts = SECURITY_SEVERITIES.filter((level) => counts[level] > 0).map(
-    (level) => `${counts[level]} ${SEVERITY_LABEL[level].toLowerCase()}`,
-  );
-  return (
-    <p className="text-sm font-medium text-zk-text">
-      {prefix} {parts.join(" · ")}
-    </p>
-  );
-}
-
-/** The counts without the one problem already shown as the teaser. */
-function restCounts(counts: SeverityCounts, shown: SecuritySeverity | undefined): SeverityCounts {
-  if (!shown) return counts;
-  return { ...counts, [shown]: counts[shown] - 1 };
 }

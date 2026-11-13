@@ -20,6 +20,7 @@
  * prints each check's address.
  */
 import { PrismaClient, type SecurityCheckItemStatus, type SecurityCheckStatus, type SecuritySeverity, type SecurityTargetKind } from "@prisma/client";
+import { SEVERITY_PRICE } from "../../lib/security-checks";
 
 const ORGANISATION_SLUG = "demo";
 const OWNER_EMAIL = "demo@fixtures.local";
@@ -47,8 +48,10 @@ type Scenario = {
   verified: boolean;
   status: SecurityCheckStatus;
   paid: boolean;
-  /** The collating agent's summary; a done check is posted with it (#648). */
+  /** Ziki's summary; a done check is posted with it. Kept general: everyone sees it, locked findings included. */
   summary?: string;
+  /** How many of its first parts' problems the client has unlocked (12 Nov plan: per-finding unlocks). */
+  unlockParts?: number;
   parts: Part[];
 };
 
@@ -85,7 +88,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     key: "checking",
-    label: "Mid-check, unpaid",
+    label: "Mid-check",
     kind: "website",
     input: "blog.example.test",
     value: "blog.example.test",
@@ -116,7 +119,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     key: "paid",
-    label: "Finished, paid",
+    label: "Finished, 2 unlocked",
     kind: "repo",
     input: "https://github.com/acme/web-app",
     value: "acme/web-app",
@@ -124,7 +127,8 @@ const SCENARIOS: Scenario[] = [
     status: "done",
     paid: true,
     summary:
-      "We found 4 problems in acme/web-app. Start with the live payment key committed in config: revoke it today and issue a new one. Then fix the search query, which lets crafted input change the SQL. The other two (stack traces on error pages and a missing HSTS header) are quick to fix.",
+      "We checked 6 parts of acme/web-app and found 4 problems: 1 critical, 1 high, 1 medium and 1 low. Start with the critical one. The medium and low ones are quick to fix once unlocked.",
+    unlockParts: 2,
     parts: [
       {
         title: "Secrets committed to the repository",
@@ -154,7 +158,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     key: "no-critical",
-    label: "Finished, unpaid, no critical",
+    label: "Finished, all locked",
     kind: "server",
     input: "203.0.113.10",
     value: "203.0.113.10",
@@ -162,7 +166,7 @@ const SCENARIOS: Scenario[] = [
     status: "done",
     paid: false,
     summary:
-      "We found 3 problems on 203.0.113.10. The database port is open to the internet: close it first. The other two are smaller.",
+      "We checked 4 parts of 203.0.113.10 and found 3 problems: 1 high, 1 medium and 1 low. Start with the high one.",
     parts: [
       {
         title: "Open ports",
@@ -231,6 +235,7 @@ async function main() {
           requestedById: owner.id,
           status: scenario.status,
           priceCoins: 50,
+          free: true,
           paidAt: scenario.paid ? new Date(now - 90 * MIN) : null,
           startedAt: scenario.verified ? started : null,
           finishedAt: scenario.status === "done" ? new Date(now - 30 * MIN) : null,
@@ -278,6 +283,8 @@ async function main() {
               checkId,
               itemId,
               ...problem,
+              priceCoins: SEVERITY_PRICE[problem.severity],
+              unlockedAt: index < (scenario.unlockParts ?? 0) ? new Date(now - 20 * MIN) : null,
               createdAt: new Date(createdAt.getTime() + 20 * MIN),
             },
           });

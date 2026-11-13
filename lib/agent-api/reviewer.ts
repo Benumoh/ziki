@@ -16,6 +16,8 @@ export type ReviewableIssue = {
   reviewType: ReviewType;
   pullRequestUrl?: string | null;
   createdAt: Date;
+  /** Force-merged (#force-merge): already merged by its author, judged afterwards. */
+  forceMerged?: boolean;
 };
 
 /**
@@ -40,7 +42,8 @@ export async function findReviewableIssues(
         projectId,
         ...trackFilter(track),
         isDeleted: false,
-        substatus: "requires_review",
+        // #force-merge: work merged by its author without Ziki's checks is judged afterwards too.
+        substatus: { in: ["requires_review", "force_merged"] },
         ...(track === "marketing" ? {} : { pullRequestUrl: { not: null } }),
         testVerdicts: {
           none: {
@@ -55,13 +58,15 @@ export async function findReviewableIssues(
         title: true,
         projectId: true,
         pullRequestUrl: true,
+        substatus: true,
         reporterId: true,
         beneficiaryUserId: true,
         createdByAgentId: true,
         createdByAgent: { select: { ownerUserId: true } },
         createdAt: true,
         claims: {
-          where: { status: "active", releasedAt: null },
+          // The claim a force-merged fix was done under is released at the merge, and its agent still can't judge it.
+          where: { OR: [{ status: "active", releasedAt: null }, { releaseReason: "force_merge" }] },
           select: { agentId: true, beneficiaryUserId: true, agent: { select: { ownerUserId: true } } },
         },
       },
@@ -92,6 +97,7 @@ export async function findReviewableIssues(
         reviewType: "test",
         pullRequestUrl: bug.pullRequestUrl,
         createdAt: bug.createdAt,
+        ...(bug.substatus === "force_merged" ? { forceMerged: true } : {}),
       });
     }
   }

@@ -22,7 +22,7 @@ describe("SecurityChecksPanel (#security-checks part 1)", () => {
   it("shows a new workspace one box asking what to secure, the three steps, and that the first scan is free", () => {
     const html = renderToStaticMarkup(<SecurityChecksPanel checks={[]} />);
     expect(html).toContain("What do you want to secure?");
-    expect(html).toContain("Your first scan is free");
+    expect(html).not.toContain("free");
     expect(html).toContain("See what&#x27;s wrong");
     expect(html).toContain('name="target"');
     expect(html).not.toContain("Your sites");
@@ -39,7 +39,7 @@ describe("SecurityChecksPanel (#security-checks part 1)", () => {
         ]}
       />,
     );
-    expect(html).toContain("Sites, newest first");
+    expect(html).toContain("Assets, newest first");
     expect(html).not.toContain("Find the holes");
     expect(html).toContain('href="/security/targets/t1/verify"');
     expect(html).toContain(">Continue</a>");
@@ -55,15 +55,15 @@ describe("SecurityChecksPanel (#security-checks part 1)", () => {
     // Every finding unlocked.
     expect(html).toContain("Fixes unlocked");
     expect(html).not.toContain('href="/security/checks/c4/pay"');
-    expect(html).toContain("· free");
+    expect(html).not.toContain("free");
     expect(html).toContain('aria-current="step"');
   });
 
   it("says nothing to fix when the report found nothing", () => {
     const html = renderToStaticMarkup(<SecurityChecksPanel checks={[row({ status: "done", verified: true, posted: true })]} />);
     expect(html).toContain("Nothing to fix");
-    // Done opens the report straight away.
-    expect(html).toContain('href="/security/checks/c1">Done</a>');
+    // Checking, once done, opens the report straight away.
+    expect(html).toContain('href="/security/checks/c1">Checking</a>');
     expect(html).not.toContain("/pay");
   });
 
@@ -77,7 +77,7 @@ describe("SecurityChecksPanel (#security-checks part 1)", () => {
 
   it("says a new check was saved, and keeps Continue on its row", () => {
     const html = renderToStaticMarkup(<SecurityChecksPanel checks={[row({})]} highlight={{ checkId: "c1", unlocked: 0, added: true }} />);
-    expect(html).toContain("Saved. Show it&#x27;s yours and your free scan starts.");
+    expect(html).toContain("Saved. Show it&#x27;s yours and the scan starts.");
     expect(html).toContain('href="/security/targets/t1/verify"');
   });
   it("shows a sidebar of where each site is, and filters the list by it", () => {

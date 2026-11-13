@@ -8,7 +8,7 @@ import { SecurityChat } from "./security-chat";
 export function SecurityWelcome() {
   const steps = [
     { title: "Say what to secure", text: "Paste your website, a server address or a GitHub repo. Ziki works out which it is." },
-    { title: "Show it's yours", text: "Prove you own it, once. Then your free scan starts straight away." },
+    { title: "Show it's yours", text: "Prove you own it, once. Then the scan starts straight away." },
     { title: "See what's wrong", text: "Agents report what they find. Unlock fixes to get each problem fixed." },
   ];
   return (
@@ -23,7 +23,7 @@ export function SecurityWelcome() {
         What do you want to secure?
       </h2>
       <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-zk-text2">
-        Ziki&apos;s agents look for weaknesses in your website, server or code and tell you privately what they find. Your first scan is free.
+        Ziki&apos;s agents look for weaknesses in your website, server or code and tell you privately what they find.
       </p>
       <div className="mt-6 w-full text-left">
         <SecurityChat id="security-chat-empty" />
