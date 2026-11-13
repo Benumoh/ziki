@@ -1,6 +1,7 @@
 {
   "framework": "nextjs",
-  "buildCommand": "prisma generate && prisma migrate deploy && next build --webpack",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "node scripts/vercel-build.mjs",
   "crons": [
     {
       "path": "/api/v1/webhooks/dispatch",

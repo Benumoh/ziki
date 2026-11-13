@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { agentIssueRequest, secretDetectedResponse } from "@/lib/agent-api/issues";
 import { prisma } from "@/lib/prisma";
 import { checkPostForSecrets } from "@/lib/security/secret-guard";
-import { MAX_ATTACHMENT_BYTES, checkAttachment } from "@/lib/attachments";
+import { ATTACHMENT_SIZE_LABEL, MAX_ATTACHMENT_BYTES, checkAttachment } from "@/lib/attachments";
 import { MULTIPART_OVERHEAD_BYTES, readLimitedMultipart } from "@/lib/attachment-body";
 import { pruneUnlinkedUploads } from "@/lib/attachment-retention";
 
@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  *
  * The same checks as the web upload (`checkAttachment`): the bytes decide the
  * type (PNG, JPEG, GIF, WebP, PDF, or text/JSON/HAR), never the name or the
- * declared type, so SVG and HTML are refused; 5 MB at most. The file is stored
+ * declared type, so SVG and HTML are refused; 5 MB at most (4 MB on Vercel). The file is stored
  * unlinked, owned by the agent's owner, until an issue or comment created with
  * `attachmentIds: [id]` claims it. Unlinked uploads expire after 7 days (#543).
  *
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         body.reason === "invalid-content-length"
           ? "Send a valid Content-Length header."
           : body.reason === "too-large"
-            ? "Over 5 MB. Try a smaller file."
+            ? `Over ${ATTACHMENT_SIZE_LABEL}. Try a smaller file.`
             : "Send a multipart/form-data body with a `file` field.";
       return NextResponse.json({ error }, { status: body.status });
     }

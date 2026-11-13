@@ -5,6 +5,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_HELP,
+  ATTACHMENT_SIZE_LABEL,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_ITEM,
   formatBytes,
@@ -103,7 +104,7 @@ export function AttachmentPicker({
       ...list,
       ...added.map(({ file, key }) =>
         file.size > MAX_ATTACHMENT_BYTES
-          ? { key, name: file.name, state: "error" as const, error: "File is too large (max 5 MB)." }
+          ? { key, name: file.name, state: "error" as const, error: `File is too large (max ${ATTACHMENT_SIZE_LABEL}).` }
           : { key, name: file.name, state: "uploading" as const },
       ),
     ]);

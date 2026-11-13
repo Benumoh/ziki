@@ -15,6 +15,8 @@ export function shouldRunInProcessCron(env: NodeJS.ProcessEnv = process.env): bo
   if (!isAgentPlatformEnabled()) return false;
   const flag = cleanEnv(env.ENABLE_IN_PROCESS_CRON);
   if (flag === "0" || flag === "false") return false;
+  // On Vercel each function instance is short-lived; Vercel Cron (vercel.json) runs this instead.
+  if (env.VERCEL === "1" && flag !== "1" && flag !== "true") return false;
   if (env.NODE_ENV === "production") return true;
   return flag === "1" || flag === "true";
 }

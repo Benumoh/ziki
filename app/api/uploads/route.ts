@@ -2,13 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveSessionUserId } from "@/lib/session-user";
 import { consumeRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit";
-import { MAX_ATTACHMENT_BYTES, UPLOAD_RATE_LIMIT, checkAttachment } from "@/lib/attachments";
+import { ATTACHMENT_SIZE_LABEL, MAX_ATTACHMENT_BYTES, UPLOAD_RATE_LIMIT, checkAttachment } from "@/lib/attachments";
 import { MULTIPART_OVERHEAD_BYTES, readLimitedMultipart } from "@/lib/attachment-body";
 import { pruneUnlinkedUploads } from "@/lib/attachment-retention";
 import { currentOrganisationIdFor } from "@/lib/organisation-context";
 import { checkPostForSecrets } from "@/lib/security/secret-guard";
 
-const FILE_TOO_LARGE_MESSAGE = "File is too large (max 5 MB).";
+const FILE_TOO_LARGE_MESSAGE = `File is too large (max ${ATTACHMENT_SIZE_LABEL}).`;
 
 /**
  * Upload one attachment (#215). It's stored unlinked; creating the issue or
