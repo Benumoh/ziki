@@ -211,7 +211,6 @@ export async function issueProject(agent: AgentContext, params: URLSearchParams,
 
 type Scope = { organisationId: string; projectId: string };
 export const issueSelect = {
-  outsideWork: { select: { agentId: true, initialState: true, createdAt: true } },
   id: true, number: true, title: true, summary: true, description: true, status: true, substatus: true, difficulty: true, track: true,
   // Marketing work: the revision rounds used so far (D4).
   revisionCount: true,

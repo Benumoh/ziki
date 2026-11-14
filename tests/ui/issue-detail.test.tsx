@@ -10,9 +10,6 @@ const mocks = vi.hoisted(() => ({ addComment: vi.fn(), requestRetest: vi.fn(), e
 vi.mock("@/app/(app)/organisations/issue-switch-action", () => ({ switchIssueWorkspaceAction: mocks.switchWorkspace }));
 vi.mock("@/app/actions/take-it-back", () => ({ takeItBackAction: mocks.takeItBack }));
 const libraryRefresh = vi.hoisted(() => vi.fn());
-const importActions = vi.hoisted(() => ({ importWork: vi.fn(), request: vi.fn(), grant: vi.fn() }));
-vi.mock("@/app/actions/import-outside-work", () => ({ importOutsideWorkAction: importActions.importWork }));
-vi.mock("@/app/actions/express-imports", () => ({ requestExpressImportAction: importActions.request, setExpressImportAction: importActions.grant }));
 vi.mock("@/app/(app)/[org]/[project]/marketing/output-box/actions", () => ({ refreshLibrary: libraryRefresh }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -51,60 +48,9 @@ import { MarketingDeliverablesPanel, type MarketingDeliveryView } from "@/compon
 import { MarketingTaskDetail } from "@/components/marketing/marketing-task-detail";
 import { projectRef } from "@/lib/project-paths";
 import { DecisionCard } from "@/components/decision-card";
-import { IssueProgressReport } from "@/components/issue-progress-report";
-import { outsideWorkSkippedStages } from "@/lib/outside-work";
-import { OutsideWorkForm, ExpressImportRequestQueue } from "@/components/outside-work-form";
 import { decisionFor, type DecisionIssue, type DecisionSuggestion } from "@/lib/your-decision";
 
 const PR = "https://github.com/emerjent/ziki/pull/42";
-
-describe("outside-work import form and access requests (#788)", () => {
-  afterEach(cleanup);
-  const agent = { id: "agent-1", name: "SERGE", enabled: false, request: null };
-  it("explains approval before import and displays a declined import's error", async () => {
-    importActions.importWork.mockResolvedValue({ ok: false, error: "An organisation owner or admin must grant this agent express import access to this project." });
-    render(<OutsideWorkForm projectId="p1" agents={[agent]} />);
-    expect(screen.getByLabelText("Import requirements")).toHaveTextContent("Imports without approval are declined");
-    for (const [label, value] of [["Title", "Delivered search"], ["Summary", "Search now works."], ["Description", "Implemented and verified search."], ["GitHub pull request", PR], ["Tests run and results", "pnpm test passed."]]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
-    fireEvent.submit(screen.getByRole("button", { name: "Import delivered work" }).closest("form")!);
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("must grant this agent express import access"));
-    expect(importActions.importWork).toHaveBeenCalledWith("agent-1", "p1", expect.objectContaining({ title: "Delivered search", pullRequestUrl: PR, testResults: "pnpm test passed." }), expect.any(String));
-  });
-  it("lets an owner request approval without offering a self-grant control", async () => {
-    importActions.request.mockResolvedValue({ ok: true });
-    render(<OutsideWorkForm projectId="p1" agents={[agent]} />);
-    expect(screen.queryByRole("button", { name: "Approve access" })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Why does this agent need express imports?"), { target: { value: "Owner-directed delivered work." } });
-    fireEvent.submit(screen.getByRole("button", { name: "Request admin approval" }).closest("form")!);
-    await waitFor(() => expect(importActions.request).toHaveBeenCalledWith("agent-1", "p1", "Owner-directed delivered work."));
-    expect(await screen.findByRole("status")).toHaveTextContent("Access requested");
-  });
-  it("shows a declined request's admin response and permits a revised request", () => {
-    render(<OutsideWorkForm projectId="p1" agents={[{ ...agent, request: { decision: "declined", response: "Provide the PR evidence first." } }]} />);
-    expect(screen.getByText(/Provide the PR evidence first/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Request admin approval" })).toBeEnabled();
-  });
-  it("shows the requesting agent and reason in the admin queue", () => {
-    render(<ExpressImportRequestQueue projectId="p1" requests={[{ agentId: "agent-1", name: "SERGE", username: "serge", owner: "Developer", reason: "Owner-directed delivered work." }]} />);
-    expect(screen.getByText("Owner-directed delivered work.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Approve access" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Decline request" })).toBeVisible();
-  });
-});
-
-describe("outside-board progress provenance (#788)", () => {
-  afterEach(cleanup);
-  it("shows omitted pre-merge steps for merged imports instead of positive verdict totals", () => {
-    render(<IssueProgressReport decisions={[]} currentStage="live" skippedStages={outsideWorkSkippedStages("merged")} />);
-    expect(screen.getByRole("button", { name: /Requires review.*Skipped: PR already merged/ })).toBeVisible();
-    expect(screen.queryByText("0 judgements")).not.toBeInTheDocument();
-  });
-  it("retains real judging for open imports", () => {
-    render(<IssueProgressReport decisions={[]} currentStage="delivered" entryCounts={{ delivered: 2 }} skippedStages={outsideWorkSkippedStages("open")} />);
-    expect(screen.getByRole("button", { name: /Requires review.*2 judgements/ })).toBeVisible();
-    expect(outsideWorkSkippedStages("open").delivered).toBeUndefined();
-  });
-});
 
 const verdict: TestVerdictView = {
   id: "tv1",

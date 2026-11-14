@@ -70,7 +70,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
     if (!second) return named("Feature plans");
     return [{ label: "Feature plans", href: projectPath(ref, "/features") }, { label: second === "new" ? "New plan" : "Plan" }];
   }
-  const pages: Record<string, string> = { notes: "Notes", org: "Organisation", workstream: "Workstream", report: "Report an issue", import: "Import delivered work" };
+  const pages: Record<string, string> = { notes: "Notes", org: "Organisation", workstream: "Workstream", report: "Report an issue" };
   return pages[first] ? named(pages[first]) : [];
 }
 
@@ -129,7 +129,6 @@ export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
           </>
         )}
       </ol>
-      {ref ? <Link href={`${projectPath(ref)}/import`} className={`${crumb} ml-auto shrink-0 text-zk-accent`}>Import work</Link> : null}
     </nav>
   );
 }
