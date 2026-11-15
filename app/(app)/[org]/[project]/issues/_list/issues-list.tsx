@@ -33,6 +33,7 @@ import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } fr
 import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
 import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
+import { FirstQuestions } from "@/components/get-started/first-questions";
 import { NEXT_STEP_COOKIE, organisationNextStep, type OrganisationNextStep } from "@/lib/organisation-next-step";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
@@ -757,6 +758,10 @@ export async function IssuesList({
       }
     }
   }
+  // First questions: only on the Ideas page of a project that has no ideas yet (any status, rejected included).
+  const showFirstQuestions =
+    isIdeasView && !isDeletedView && Boolean(organisationId && userId) && canContribute &&
+    (await loadOrEmpty("first questions", () => prisma.idea.count({ where: { projectId: project.id } }), 1)) === 0;
   // My Work shows only when you have work in this project: issues you bid on or hold, whatever their status.
   const myWorkCount =
     userId && !isDeletedView
@@ -1173,6 +1178,19 @@ export async function IssuesList({
 
         {/* Earnings (#earnings): the way to earn, on the page everyone lands on, closed with × like the panel above. */}
         {isIdeasView && !isDeletedView && earnProject ? <EarnPanel project={earnProject} line={earnBannerLine(earnProject)} /> : null}
+
+        {/* First questions: full-screen, one at a time, over a project that has no ideas yet. */}
+        {showFirstQuestions ? (
+          <FirstQuestions
+            projectId={project.id}
+            projectSlug={project.slug}
+            siteUrl={projectLinks?.siteUrl ?? null}
+            repoUrl={projectLinks?.repoUrl ?? null}
+            canEditLinks={canEditProjectLinks}
+            firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
+          />
+        ) : null}
+
 
         {nextStep && organisationId ? <OrganisationNextStepCard step={nextStep} organisationId={organisationId} /> : null}
 
