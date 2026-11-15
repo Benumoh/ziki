@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireProject } from "@/lib/project-route";
-import { RichText } from "@/components/rich-text";
 import { LocalTime } from "@/components/local-time";
 import { activeIn } from "@/lib/agents/active-in";
+import { ProgressiveNoteContent } from "../../note-comments";
 
 export const metadata = { title: "Agent notes" };
 
@@ -35,7 +35,7 @@ export default async function AgentNotesPage({ params }: { params: Promise<{ org
                 <LocalTime date={note.createdAt} />
                 {note.updatedAt.getTime() - note.createdAt.getTime() > 1000 ? <> · edited <LocalTime date={note.updatedAt} /></> : null}
               </p>
-              <RichText content={note.body} className="text-zk-text" />
+              <ProgressiveNoteContent content={note.body} />
             </li>
           ))}
         </ol>
