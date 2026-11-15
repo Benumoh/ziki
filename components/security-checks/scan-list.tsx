@@ -25,6 +25,14 @@ const STAGE: Record<ScanStage, { label: string; tone: string }> = {
 };
 
 
+/** The stage as coloured text, for the phone's status line. */
+const STAGE_TEXT: Record<ScanStage, string> = {
+  scanning: "text-zk-accent",
+  report: "text-zk-ok-fg",
+  in_app: "text-zk-text2",
+  cancelled: "text-zk-muted",
+};
+
 type Filter = "all" | "scanning" | "report" | "in_app";
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -196,6 +204,30 @@ function ScanRow({ check, highlighted, last }: { check: WorkspaceCheckRow; highl
   const shown = found.filter(([, n]) => n > 0);
   // A posted report with nothing in it counts as nothing found, even with no counts to show.
   const nothing = (found.length > 0 && shown.length === 0) || (check.posted && check.findings === 0);
+  const counts = (
+    <>
+        {nothing ? (
+        <NoProblems />
+      ) : found.length === 0 ? null : (
+        found.map(([severity, n]) => (
+          <span
+            key={severity}
+            title={`${n} ${severity}`}
+            className={`inline-flex h-6 min-w-7 items-center justify-center rounded-md px-1.5 text-xs font-bold tabular-nums security-severity security-severity--${severity} ${n ? "" : "opacity-30"}`}
+          >
+            <span className="sr-only">{severity}: </span>
+            {n}
+          </span>
+        ))
+      )}
+    </>
+  );
+  const badge = (
+    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${STAGE[stage].tone}`}>
+      {stage === "scanning" ? <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" /> : null}
+      {STAGE[stage].label}
+    </span>
+  );
 
   return (
     <li className={`issues-row relative flex cursor-pointer items-center ${last ? "" : "border-b border-zk-divider"} ${highlighted ? "bg-zk-tint/40" : ""}`}>
@@ -209,35 +241,86 @@ function ScanRow({ check, highlighted, last }: { check: WorkspaceCheckRow; highl
           <span>{TARGET_KIND_LABEL[check.kind]}</span>
           <span>{agent ? "Agents' report" : check.preview ? "Quick scan" : "Not scanned yet"}</span>
           {check.moved ? <span>{check.moved} moved to your app</span> : null}
+          {/* On a phone the side columns are hidden (issues.css), so the date shows here, as Ideas and Issues do. */}
+          <span className="md:hidden">
+            <LocalTime date={check.createdAt} />
+          </span>
+        </span>
+        {/* On a phone the status is a coloured line under the details, as Ideas shows "Idea (2/3)". */}
+        <span className={`mt-1 inline-flex items-center gap-1.5 text-xs font-semibold md:hidden ${STAGE_TEXT[stage]}`}>
+          <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full bg-current ${stage === "scanning" ? "animate-pulse" : ""}`} />
+          {STAGE[stage].label}
         </span>
       </Link>
+      {/* On a phone, one ring on the right instead of the four boxes: each severity a coloured piece, the total in the middle. */}
+      {found.length || nothing ? (
+        <span className="shrink-0 md:hidden">
+          <SeverityRing found={found} nothing={nothing} />
+        </span>
+      ) : null}
       {/* Like Intruder and Detectify: four coloured counts in a fixed order (critical, high, medium, low), in the report's own severity colours (security-finding.css); an empty one is the same box, faded, as on Detectify. */}
-      <span className="hidden w-48 shrink-0 items-center gap-1 md:flex">
-        {nothing ? (
-          <NoProblems />
-        ) : found.length === 0 ? null : (
-          found.map(([severity, n]) => (
-            <span
-              key={severity}
-              title={`${n} ${severity}`}
-              className={`inline-flex h-6 min-w-7 items-center justify-center rounded-md px-1.5 text-xs font-bold tabular-nums security-severity security-severity--${severity} ${n ? "" : "opacity-30"}`}
-            >
-              <span className="sr-only">{severity}: </span>
-              {n}
-            </span>
-          ))
-        )}
-      </span>
+      <span className="hidden w-48 shrink-0 items-center gap-1 md:flex">{counts}</span>
       <span className="hidden w-28 shrink-0 text-xs text-zk-muted md:block">
         <LocalTime date={check.createdAt} />
       </span>
-      <span className="issues-status-cell justify-end gap-2" style={{ width: 220, flexBasis: 220 }}>
-        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${STAGE[stage].tone}`}>
-          {stage === "scanning" ? <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" /> : null}
-          {STAGE[stage].label}
-        </span>
-      </span>
+      <span className="issues-status-cell justify-end gap-2" style={{ width: 220, flexBasis: 220 }}>{badge}</span>
     </li>
+  );
+}
+
+/**
+ * What was found, as a ring for small screens: Ziki's score ring (app/(app)/[org]/page.tsx)
+ * split into one coloured piece per severity, in the severity boxes' colours, with the total
+ * found in the middle. A green ring with a tick when nothing was found.
+ */
+/** The ring's pieces: the same colours as the severity boxes (their border shade in security-finding.css). */
+const RING_COLOUR: Record<"critical" | "high" | "medium" | "low", string> = {
+  critical: "var(--color-red-300)",
+  high: "var(--color-orange-300)",
+  medium: "var(--color-yellow-300)",
+  low: "var(--color-blue-300)",
+};
+
+function SeverityRing({ found, nothing }: { found: ReadonlyArray<readonly ["critical" | "high" | "medium" | "low", number]>; nothing: boolean }) {
+  const radius = 17;
+  const length = 2 * Math.PI * radius;
+  const total = found.reduce((sum, [, n]) => sum + n, 0);
+  const gap = total > 1 ? 2.5 : 0;
+  let start = 0;
+  const label = nothing ? "No problems" : found.filter(([, n]) => n).map(([severity, n]) => `${n} ${severity}`).join(", ");
+  return (
+    <span role="img" aria-label={label} title={label} className="relative grid h-11 w-11 place-items-center">
+      <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true" className="absolute inset-0 -rotate-90">
+        <circle cx="22" cy="22" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="5" className={nothing ? "text-zk-ok-fg" : "text-zk-muted"} />
+        {nothing ? (
+          <circle cx="22" cy="22" r={radius} fill="none" stroke="currentColor" strokeWidth="5" className="text-zk-ok-fg" />
+        ) : (
+          found.map(([severity, n]) => {
+            if (!n) return null;
+            const piece = (n / total) * length;
+            const dash = Math.max(piece - gap, 1);
+            const offset = -start;
+            start += piece;
+            return (
+              <circle
+                key={severity}
+                cx="22"
+                cy="22"
+                r={radius}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="5"
+                strokeDasharray={`${dash} ${length - dash}`}
+                strokeDashoffset={offset}
+                style={{ color: RING_COLOUR[severity] }}
+              />
+            );
+          })
+        )}
+      </svg>
+      {/* The total found in the middle; a tick when there's nothing. */}
+      <span className={`text-sm font-bold tabular-nums ${nothing ? "text-zk-ok-fg" : "text-zk-text"}`}>{nothing ? "✓" : total}</span>
+    </span>
   );
 }
 

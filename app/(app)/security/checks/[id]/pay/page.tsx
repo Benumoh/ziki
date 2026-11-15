@@ -61,8 +61,9 @@ export default async function UnlockFixesPage({
       </Link>
 
       <p className="mb-0 mt-8 text-sm text-zk-muted">Step 3 of 3 · Fix</p>
-      <h1 className="mb-0 mt-1 text-[28px] font-bold leading-tight tracking-tight text-zk-text">
-        Unlock fixes for <span className="break-all">{site}</span>
+      {/* The site breaks only when it can't fit a line, not mid-word on every phone. */}
+      <h1 className="mb-0 mt-1 text-2xl font-bold leading-tight tracking-tight text-zk-text sm:text-[28px]">
+        Unlock fixes for <span className="wrap-break-word">{site}</span>
       </h1>
       <p className="mb-0 mt-2 text-[15px] leading-relaxed text-zk-text2">
         Unlock a finding to see what&apos;s wrong in full and how to fix it. You pay per finding, by how serious it is.
