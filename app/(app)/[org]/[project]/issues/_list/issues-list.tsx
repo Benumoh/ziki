@@ -36,6 +36,7 @@ import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/compone
 import { AppInfoLinks } from "@/components/app-info-links";
 import { ShareMenu } from "@/components/share-menu";
 import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
+import { FirstQuestions } from "@/components/get-started/first-questions";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
@@ -1263,6 +1264,10 @@ export async function IssuesList({
           [] as UnconfiguredAgent[],
         )
       : [];
+  // First questions: only on the Ideas page of a project that has no ideas yet (any status, rejected included).
+  const showFirstQuestions =
+    isIdeasView && !isDeletedView && Boolean(organisationId && userId) && canContribute &&
+    (await loadOrEmpty("first questions", () => prisma.idea.count({ where: { projectId: project.id } }), 1)) === 0;
   // My Work shows only when you have work in this project: issues you bid on or hold, whatever their status.
   const myWorkCount =
     userId && !isDeletedView
@@ -1777,6 +1782,18 @@ export async function IssuesList({
 
 
         {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
+
+        {/* First questions: full-screen, one at a time, over a project that has no ideas yet. */}
+        {showFirstQuestions ? (
+          <FirstQuestions
+            projectId={project.id}
+            projectSlug={project.slug}
+            siteUrl={projectLinks?.siteUrl ?? null}
+            repoUrl={projectLinks?.repoUrl ?? null}
+            canEditLinks={canEditProjectLinks}
+            firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
+          />
+        ) : null}
 
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}
