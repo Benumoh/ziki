@@ -11,8 +11,8 @@ import type { PrismaClient } from "@prisma/client";
  */
 export const UNLINKED_UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Default TTL for orphaned uploads cleanup: 24 hours (#658). */
-export const ORPHANED_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
+/** Keep unlinked draft uploads for the same week in both cleanup paths (#533). */
+export const ORPHANED_UPLOAD_TTL_MS = UNLINKED_UPLOAD_TTL_MS;
 
 /** How often (1 in N uploads) the site-wide sweep also runs. */
 export const SITE_SWEEP_EVERY = 50;
@@ -67,7 +67,7 @@ export async function pruneUnlinkedUploads(
 
 /**
  * Storage cleanup job to purge orphaned attachments (#658):
- * 1. Unattached uploads older than TTL (default 24 hours).
+ * 1. Unattached uploads older than TTL (default seven days, matching draft retention).
  * 2. Attachments whose parent bug or comment was deleted.
  *
  * Runs in bounded batches to ensure predictable execution time.

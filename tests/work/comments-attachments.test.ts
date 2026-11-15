@@ -32,6 +32,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { GET, DELETE } from "@/app/api/attachments/[id]/route";
 import { canDeleteComment, canEditComment } from "@/lib/comment-permissions";
+import { sweepOrphanedAttachments } from "@/lib/attachment-retention";
 
 const userMock = vi.mocked(requireUser) as unknown as ReturnType<typeof vi.fn>;
 const findUnique = vi.mocked(prisma.attachment.findUnique) as unknown as ReturnType<typeof vi.fn>;
@@ -215,5 +216,45 @@ describe("comment permissions", () => {
     expect(canDeleteComment("me", "super_admin", theirs)).toBe(true);
     expect(canDeleteComment("me", "admin", theirs)).toBe(false);
     expect(canDeleteComment(undefined, "user", theirs)).toBe(false);
+  });
+});
+
+describe("sweepOrphanedAttachments", () => {
+  it("keeps a two-day-old unlinked upload within the draft retention window", async () => {
+    const now = new Date("2026-11-15T00:00:00.000Z");
+    const draftUpload = {
+      id: "draft-upload",
+      bugId: null,
+      ideaId: null,
+      commentId: null,
+      redesignProposalId: null,
+      securityFindingId: null,
+      createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+    };
+    const rows = [draftUpload];
+    const attachment = {
+      findMany: vi.fn(async ({ where, take }: { where: Record<string, unknown>; take: number }) => {
+        if (!("createdAt" in where)) return [];
+        const cutoff = (where.createdAt as { lt: Date }).lt;
+        return rows.filter((row) => row.createdAt < cutoff).slice(0, take).map(({ id }) => ({ id }));
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) => {
+        const cutoff = (where as unknown as { createdAt: { lt: Date } }).createdAt.lt;
+        const expiredIds = new Set(where.id.in);
+        const before = rows.length;
+        for (let index = rows.length - 1; index >= 0; index -= 1) {
+          if (expiredIds.has(rows[index].id) && rows[index].createdAt < cutoff) rows.splice(index, 1);
+        }
+        return { count: before - rows.length };
+      }),
+    };
+
+    const result = await sweepOrphanedAttachments(
+      { attachment } as unknown as Parameters<typeof sweepOrphanedAttachments>[0],
+      { now, sweep: true },
+    );
+
+    expect(result.unlinked).toBe(0);
+    expect(rows).toContain(draftUpload);
   });
 });
