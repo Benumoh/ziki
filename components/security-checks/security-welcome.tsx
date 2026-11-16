@@ -1,4 +1,6 @@
-import { SecurityChat } from "./security-chat";
+"use client";
+
+import { SecurityChat, keepChatOpen } from "./security-chat";
 
 /**
  * Security before anything is scanned (#security-checks, 14 Nov plan): laid
@@ -26,7 +28,9 @@ export function SecurityWelcome({ startWith }: { startWith?: string }) {
         Paste your website, a server address or a GitHub repo. The scan starts straight away and you see what it finds here.
       </p>
       <div className="mt-6 w-full text-left">
-        <SecurityChat id="security-chat-empty" focusOnOpen startWith={startWith} />
+        {/* The first scan turns this page into the Assets list: keep the chat open there, with the result and See progress,
+            instead of it closing the moment the result comes in. */}
+        <SecurityChat id="security-chat-empty" focusOnOpen startWith={startWith} onScanned={() => keepChatOpen(true)} />
       </div>
       <ol className="mt-8 grid w-full list-none gap-3 p-0 text-left sm:grid-cols-3">
         {steps.map((step, index) => (
