@@ -87,6 +87,14 @@ function lastScanned(check: WorkspaceCheckRow): Date {
   return at && !Number.isNaN(at.getTime()) ? at : new Date(check.createdAt);
 }
 
+/** Where the name takes you: the website itself, or the repo on GitHub. A server address has no page to open. */
+function siteUrl(check: WorkspaceCheckRow): string | null {
+  if (check.kind === "repo") return `https://github.com/${check.value.replace(/^https?:\/\/(www\.)?github\.com\//i, "")}`;
+  if (check.kind !== "website") return null;
+  const host = hostOf(check.value);
+  return host ? (/^[a-z]+:\/\//i.test(check.value) ? check.value : `https://${check.value}`) : null;
+}
+
 /** The site's address without its scheme or path, for its icon. */
 function hostOf(value: string): string | null {
   try {
@@ -368,9 +376,9 @@ function PageArrow({ href, label, glyph }: { href: string | null; label: string;
   );
 }
 
-/** The site's own icon (its favicon), like Netlify and Vercel list sites; the globe, server or repo icon when there isn't one. */
+/** The site's own icon, like Netlify and Vercel list sites: Ziki's server finds the one the site declares (security/checks/[id]/icon). The globe, server or repo icon when there isn't one. */
 function TargetIcon({ check }: { check: WorkspaceCheckRow }) {
-  const host = check.kind === "website" ? hostOf(check.value) : null;
+  const host = check.kind === "website" ? hostOf(check.value) : null; // only websites have an icon to look for
   const [failed, setFailed] = useState(false);
   const image = useRef<HTMLImageElement>(null);
   // An icon that failed before the page came alive never fires onError: check it once on mount.
@@ -384,11 +392,10 @@ function TargetIcon({ check }: { check: WorkspaceCheckRow }) {
         // eslint-disable-next-line @next/next/no-img-element -- the site's own favicon, from the site itself
         <img
           ref={image}
-          src={`https://${host}/favicon.ico`}
+          src={`/security/checks/${check.id}/icon`}
           alt=""
           width={16}
           height={16}
-          referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
           onLoad={(event) => {
             if (event.currentTarget.naturalWidth < 2) setFailed(true);
@@ -447,14 +454,23 @@ function TargetRow({
         {/* On a phone there's no Status column: a dot says it instead, where Intruder puts its status dot. */}
         <span aria-hidden="true" title={STAGE[stage].label} className={`h-2 w-2 shrink-0 rounded-full md:hidden ${STAGE[stage].dot} ${stage === "scanning" ? "animate-pulse" : ""}`} />
         <TargetIcon check={check} />
-        {/* The whole row opens the target: this link covers the row. */}
-        <Link
-          href={href}
-          className="min-w-0 truncate text-sm font-semibold text-zk-text after:absolute after:inset-0 after:content-[''] group-hover:text-zk-accent group-hover:underline group-hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
-        >
-          {check.value}
-          <span className="sr-only">, {STAGE[stage].label}</span>
-        </Link>
+        {/* The row opens the target's page in Ziki: this link covers the row (the name is a separate link, above it). */}
+        <Link href={href} aria-label={`Open ${check.value} (${STAGE[stage].label})`} className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric-blue" />
+        {/* The name opens the site itself, in a new tab, like a domain on Intruder or Detectify. */}
+        {siteUrl(check) ? (
+          <a
+            href={siteUrl(check)!}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Visit ${check.value}`}
+            className="relative z-10 min-w-0 truncate text-sm font-semibold text-zk-text hover:text-zk-accent hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+          >
+            {check.value}
+            <span className="sr-only"> (opens the site in a new tab)</span>
+          </a>
+        ) : (
+          <span className="min-w-0 truncate text-sm font-semibold text-zk-text">{check.value}</span>
+        )}
       </span>
       <span role="cell" className="hidden md:block">
         <span className="inline-flex rounded-md border border-zk-border px-1.5 py-0.5 text-xs text-zk-text2">{TARGET_KIND_LABEL[check.kind]}</span>
@@ -508,7 +524,8 @@ function RowMenu({ site, href, onScanAgain, onRemove, busy }: { site: string; hr
       document.removeEventListener("keydown", escape);
     };
   }, [open]);
-  const item = "block w-full px-3.5 py-1.5 text-left text-[13px] text-zk-text hover:bg-zk-chip disabled:opacity-60";
+  const base = "block w-full px-3.5 py-1.5 text-left text-[13px] hover:bg-zk-chip disabled:opacity-60";
+  const item = `${base} text-zk-text`;
   return (
     <div ref={box} className="relative">
       <button
@@ -537,7 +554,7 @@ function RowMenu({ site, href, onScanAgain, onRemove, busy }: { site: string; hr
             Copy link
           </button>
           <div className="mt-1 border-t border-zk-divider pt-1">
-            <button role="menuitem" type="button" disabled={busy} className={`${item} text-[#b42318]`} onClick={() => { setOpen(false); onRemove(); }}>Remove scan</button>
+            <button role="menuitem" type="button" disabled={busy} className={`${base} text-[#b42318]`} onClick={() => { setOpen(false); onRemove(); }}>Remove scan</button>
           </div>
         </div>
       ) : null}
@@ -624,7 +641,7 @@ export function ScansArea({
           Add target
         </button>
       </header>
-      <section aria-labelledby="security-scans-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+      <section aria-labelledby="security-scans-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
         {top}
         <ScanList checks={checks} highlightId={highlightId} show={show} page={page} adding={chat} hideId={adding ? inChat : null} />
         {bottom}

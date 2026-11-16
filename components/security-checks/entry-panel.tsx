@@ -61,7 +61,7 @@ export function SecurityChecksPanel({
         ) : null
       }
       bottom={
-        <div className="border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
+        <div className="rounded-b-[20px] border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
           <PrivacyNote />
         </div>
       }
