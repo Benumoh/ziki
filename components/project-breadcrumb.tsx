@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { designPath, ideasPath, marketingPath, orgHomePath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
+import { designPath, ideasPath, isVideoStudio, marketingPath, orgHomePath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
 
 /** The organisation's slug, and the project (none on the organisation's own page). */
 export type BreadcrumbProject = { orgSlug: string; slug?: string; name?: string };
@@ -103,6 +103,8 @@ export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
   if (/(?:^|\/)forum(?:\/|$)/.test(pathname)) {
     return null;
   }
+  // The video studio opens on its own Back to Marketing link.
+  if (isVideoStudio(pathname)) return null;
   const projectsHref = orgHomePath(project.orgSlug);
   const ref = project.slug ? projectRef(project.orgSlug, project.slug) : null;
   const onProjects = !ref;
