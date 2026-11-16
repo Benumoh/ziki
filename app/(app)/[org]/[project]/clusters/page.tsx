@@ -109,11 +109,11 @@ export default async function ClustersPage({ params, searchParams }: {
           <section className="issues-results flex flex-col gap-3.5 p-4" aria-label="Clusters">
             <div className="issues-table relative">
               <div>
-                <div className="issues-table-heading">
+                <div className="flex items-center gap-2 border-b border-zk-divider px-2 pb-2.5 text-[13px] font-semibold text-zk-text2 lg:gap-4 lg:px-4">
                   <span className="w-[52px]">Members</span>
                   <span className="min-w-0 flex-1">Cluster</span>
                   <span className="hidden w-24 shrink-0 md:block">Last update</span>
-                  <span className="issues-status-cell justify-end" style={{ width: 264, flexBasis: 264 }}><span className="sr-only">Status</span></span>
+                  <span className="shrink-0" style={{ width: 264, flexBasis: 264 }}><span className="sr-only">Status</span></span>
                 </div>
                 <ul>
                   {items.map((cluster, index) => {
