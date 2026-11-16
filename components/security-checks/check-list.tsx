@@ -39,7 +39,7 @@ export function CheckList({ checkId, tabs }: { checkId: string; tabs: [ListTab, 
                 aria-selected={on}
                 aria-controls={`panel-${t.key}`}
                 onClick={() => setActive(t.key)}
-                className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-zk-accent ${
+                className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-2 py-3 text-sm font-semibold sm:px-3 focus-visible:outline-2 focus-visible:outline-zk-accent ${
                   on ? "border-electric-blue-strong text-zk-text" : "border-transparent text-zk-text2 hover:text-zk-text"
                 }`}
               >
@@ -93,7 +93,7 @@ function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: L
       ))}
       {pending.map((part) => (
         <li key={part.id}>
-          <Row severity={null} title={part.title} right={<PartState state={part.state} />} />
+          <Row severity={null} title={part.title} right={<PartState state={part.state} />} lead={null} />
         </li>
       ))}
       {clear.length ? (
@@ -110,17 +110,23 @@ function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: L
   );
 }
 
-/** Tick box (or nothing), the threat, what it is, then where it stands. */
+/**
+ * Tick box (or nothing), the threat, what it is, then where it stands. On a phone the threat sits above the
+ * title, so the title keeps the width.
+ */
 function Row({ severity, title, sub, right, lead }: { severity: SecuritySeverity | null; title: ReactNode; sub?: string | null; right?: ReactNode; lead?: ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
-      <span className="flex w-4 shrink-0 justify-center">{lead}</span>
-      <span className="w-[7.5rem] shrink-0">
-        {severity ? <ThreatChip severity={severity} /> : <span className="text-sm text-zk-muted" aria-label="Not checked yet">—</span>}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className={`m-0 wrap-break-word text-sm ${severity ? "font-semibold text-zk-text" : "text-zk-text2"}`}>{title}</p>
-        {sub ? <p className="m-0 truncate text-xs text-zk-muted">{sub}</p> : null}
+    <div className="flex items-start gap-3 px-4 py-3 sm:items-center sm:px-6">
+      {/* The tick-box column only where a tab has tick boxes (the deeper scan), so the quick scan has no empty gap. */}
+      {lead !== undefined ? <span className="flex w-4 shrink-0 justify-center pt-0.5 sm:pt-0">{lead}</span> : null}
+      <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
+        <span className="block shrink-0 sm:w-[7.5rem]">
+          {severity ? <ThreatChip severity={severity} /> : <span className="text-sm text-zk-muted" aria-label="Not checked yet">—</span>}
+        </span>
+        <div className="mt-1 min-w-0 flex-1 sm:mt-0">
+          <p className={`m-0 wrap-break-word text-sm ${severity ? "font-semibold text-zk-text" : "text-zk-text2"}`}>{title}</p>
+          {sub ? <p className="m-0 truncate text-xs text-zk-muted">{sub}</p> : null}
+        </div>
       </div>
       {right ? <span className="shrink-0">{right}</span> : null}
     </div>
@@ -130,7 +136,7 @@ function Row({ severity, title, sub, right, lead }: { severity: SecuritySeverity
 function FindingRow({ checkId, finding, checked, onToggle }: { checkId: string; finding: ListFinding; checked: boolean; onToggle: () => void }) {
   const [open, setOpen] = useState(false);
   const href = `/security/checks/${encodeURIComponent(checkId)}/findings/${encodeURIComponent(finding.id)}`;
-  const lead = finding.fix ? null : (
+  const lead: ReactNode = finding.fix ? null : (
     <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Fix ${finding.title}`} className="size-4 cursor-pointer accent-electric-blue-strong" />
   );
   const right = (
