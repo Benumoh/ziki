@@ -3,12 +3,10 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { IssueActionsMenu } from "@/components/issue-actions-menu";
 import { RemoveScanButton } from "@/components/security-checks/remove-scan-button";
-import { QuickScanList } from "@/components/security-checks/preview-result";
-import { LiveCheckCard } from "@/components/security-checks/live-check-card";
+import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
-import { ReportProgress } from "@/components/security-checks/report-progress";
-import { ReportResults } from "@/components/security-checks/report-results";
-import { ReportSummary } from "@/components/security-checks/report-summary";
+import { CheckHeader } from "@/components/security-checks/check-header";
+import { checkListTabs } from "@/lib/security-checks/check-list";
 import { SiteChatButton, SiteChatHolder, SiteChatPanel } from "@/components/security-checks/site-chat-box";
 import { requireUser } from "@/lib/auth-helpers";
 import { substatusClass } from "@/lib/labels";
@@ -66,6 +64,12 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
         <div className="flex shrink-0 items-center gap-2">
           <SiteChatButton />
           <IssueActionsMenu>
+            {/* The PDF is a secondary action (16 Nov call): people want things fixed, not a file. */}
+            {report.posted ? (
+              <a href={`/security/checks/${report.checkId}/report.pdf`} className="px-2.5 py-1 text-xs font-semibold text-zk-text hover:underline">
+                Download report (PDF)
+              </a>
+            ) : null}
             <RemoveScanButton checkId={report.checkId} site={report.target.value} posted={report.posted} />
           </IssueActionsMenu>
         </div>
@@ -89,23 +93,11 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
         </section>
       ) : (
         <>
-          {/* A running check is one card (headline, something always moving, the numbers and each part); otherwise the summary on top. */}
-          {working && !report.posted ? <LiveCheckCard report={report} /> : <ReportSummary report={report} />}
-
-          {/* The quick scan from when it was added, until the agents' report replaces it (14 Nov plan). */}
-          {!report.posted && report.quickScan ? <QuickScanList summary={report.quickScan} /> : null}
-
-          {/* A check that was cancelled keeps its parts; a running one shows them inside its card. */}
-          {!report.posted && !working ? (
-            <section aria-labelledby="progress-heading" className={orgCard}>
-              <h2 id="progress-heading" className="text-base font-semibold text-zk-text">Progress</h2>
-              <div className="mt-3">
-                {report.parts.length ? <ReportProgress progress={report.progress} parts={report.parts} /> : <p className="text-sm text-zk-text2">No parts were checked.</p>}
-              </div>
-            </section>
-          ) : null}
-
-          {report.posted ? <ReportResults report={report} /> : null}
+          {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
+          <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+            <CheckHeader report={report} />
+            <CheckList checkId={report.checkId} tabs={checkListTabs(report)} />
+          </section>
 
         </>
       )}

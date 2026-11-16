@@ -19,6 +19,7 @@ import {
   startCheck,
   startWaitingChecks,
   submitReport,
+  sweepSecurityChecks,
 } from "@/lib/security-checks/engine";
 
 /** A fake Prisma client: every model method is a mock, and $transaction runs the callback on the same fake. */
@@ -80,10 +81,32 @@ describe("who gets a part (#security-checks)", () => {
   it("only offers parts to cleared, unpaused agents seen recently", async () => {
     const db = fakeDb();
     db.agent.findMany.mockResolvedValue([]);
-    expect(await assignWaitingJobs(asDb(db), now)).toBe(0);
+    expect(await assignWaitingJobs(asDb(db), now, "agentA")).toBe(0);
     const where = db.agent.findMany.mock.calls[0][0].where;
     expect(where).toMatchObject({ owner: { securityClearedAt: { not: null } }, revokedAt: null, pausedAt: null });
     expect(where.apiKeys.some.lastUsedAt.gte).toEqual(new Date(now.getTime() - 15 * 60 * 1000));
+  });
+
+  it("only considers the agent that asked", async () => {
+    const db = fakeDb();
+    db.agent.findMany.mockResolvedValue([]);
+    await assignWaitingJobs(asDb(db), now, "agentA");
+    expect(db.agent.findMany.mock.calls[0][0].where.id).toBe("agentA");
+  });
+
+  it("never hands parts out in the sweep, so an agent that doesn't ask for security work can't hold one (16 Nov call)", async () => {
+    const db = fakeDb();
+    db.securityCheck.findMany.mockResolvedValue([]);
+    db.securityCheck.updateMany.mockResolvedValue({ count: 0 });
+    db.securityCheckItem.findMany.mockResolvedValue([]);
+    db.securityCheckItem.updateMany.mockResolvedValue({ count: 0 });
+    db.securityCheckResult.findMany.mockResolvedValue([]);
+    db.securityCheckResult.updateMany.mockResolvedValue({ count: 0 });
+    db.agent.findMany.mockResolvedValue([{ id: "agentA", owner: { onCallAt: now }, activations: [], _count: { securityCheckItems: 0 } }]);
+    const result = await sweepSecurityChecks(asDb(db), now, { ai: null });
+    expect(result).not.toHaveProperty("assigned");
+    expect(db.agent.findMany).not.toHaveBeenCalled();
+    for (const [args] of db.securityCheckItem.updateMany.mock.calls) expect(args.data.status).not.toBe("checking");
   });
 
   it("gives a waiting part only while it is still free", async () => {
@@ -94,7 +117,7 @@ describe("who gets a part (#security-checks)", () => {
       { id: "j2", check: { organisationId: "client" } },
     ]);
     db.securityCheckItem.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
-    expect(await assignWaitingJobs(asDb(db), now)).toBe(1);
+    expect(await assignWaitingJobs(asDb(db), now, "agentA")).toBe(1);
     expect(db.securityCheckItem.updateMany.mock.calls[0][0]).toMatchObject({
       where: { id: "j1", status: "waiting", agentId: null },
       data: { status: "checking", agentId: "agentA", assignedAt: now },
@@ -108,7 +131,7 @@ describe("who gets a part (#security-checks)", () => {
       const db = fakeDb();
       db.agent.findMany.mockResolvedValue([{ id: "agentA", owner: { onCallAt: now }, activations: [], _count: { securityCheckItems: 0 } }]);
       db.securityCheckItem.findMany.mockResolvedValue([]);
-      await assignWaitingJobs(asDb(db), now);
+      await assignWaitingJobs(asDb(db), now, "agentA");
       const where = db.securityCheckItem.findMany.mock.calls[0][0].where;
       expect(where.createdAt).toEqual({ gte: new Date(now.getTime() - 5 * 60_000) });
     } finally {
@@ -123,7 +146,7 @@ describe("who gets a part (#security-checks)", () => {
         const db = fakeDb();
         db.agent.findMany.mockResolvedValue([{ id: "agentA", owner: { onCallAt: now }, activations: [], _count: { securityCheckItems: 0 } }]);
         db.securityCheckItem.findMany.mockResolvedValue([]);
-        await assignWaitingJobs(asDb(db), now);
+        await assignWaitingJobs(asDb(db), now, "agentA");
         expect(db.securityCheckItem.findMany.mock.calls[0][0].where).not.toHaveProperty("createdAt");
       } finally {
         vi.unstubAllEnvs();

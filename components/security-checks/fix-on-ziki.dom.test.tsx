@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { fixSecurityCheck, loadSecurityCheckFixOptions } from "@/app/actions/security-check-fix";
 import { FixOnZiki } from "./fix-on-ziki";
 
+vi.mock("@/app/actions/ziks-loan", () => ({ borrowZiks: vi.fn() }));
 vi.mock("@/app/actions/security-check-fix", () => ({
   fixSecurityCheck: vi.fn(),
   loadSecurityCheckFixOptions: vi.fn(),

@@ -206,7 +206,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     }
 
     // 2a. Security checks (#security-checks): start proven checks (Ziki AI splits them),
-    // take back stale parts, give waiting parts to cleared agents, post finished
+    // take back stale parts (agents get parts by asking for them), post finished
     // reports (Ziki AI summary) and pay the finders of unlocked findings.
     try {
       const res = await sweepSecurityChecks(prisma);
