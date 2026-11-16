@@ -24,7 +24,6 @@ export function SecurityChecksPanel({
   checks,
   highlight,
   startWith,
-  thenProgress,
   show,
   page,
 }: {
@@ -32,8 +31,6 @@ export function SecurityChecksPanel({
   highlight?: { checkId: string; unlocked: number };
   /** An address brought from the public page after sign-up: its scan starts on arrival. */
   startWith?: string;
-  /** From Try now on the public page: once that site is in, open its page, where the agents' progress shows. */
-  thenProgress?: boolean;
   /** Which scans to show (?show=): all, scanning, report or in_app. */
   show?: string;
   /** Which page of scans (?page=). */
@@ -43,7 +40,7 @@ export function SecurityChecksPanel({
   if (checks.every((check) => check.status === "cancelled")) {
     return (
       <section aria-label="Security" className={PANEL}>
-        <SecurityWelcome startWith={startWith} thenProgress={thenProgress} />
+        <SecurityWelcome startWith={startWith} />
       </section>
     );
   }
@@ -55,7 +52,7 @@ export function SecurityChecksPanel({
           {highlight.unlocked === 1 ? "1 fix unlocked." : `${highlight.unlocked} fixes unlocked.`} Open the report to read each one in full, with how to fix it.
         </FlashNote>
       ) : null}
-      <ScansArea checks={checks} highlightId={highlight?.checkId} show={show} page={page} startWith={startWith} thenProgress={thenProgress} />
+      <ScansArea checks={checks} highlightId={highlight?.checkId} show={show} page={page} startWith={startWith} />
       <div className="border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
         <PrivacyNote />
       </div>
