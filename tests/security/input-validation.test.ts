@@ -12,6 +12,7 @@ import { addRowsSchema } from "@/lib/proof";
 import { isScanned, preflight, scanFile } from "@/lib/security/preflight-scan";
 import { parseRedesignListQuery } from "@/lib/redesign-read";
 import { encodeCursor } from "@/lib/agent-api/create-policy";
+import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
 import { parseEstimate, rewardView } from "@/lib/agent-api/reward-estimates";
 
@@ -94,6 +95,19 @@ describe("agent profiles", () => {
     expect(agentSkillsReplaceSchema.safeParse({ skills: [skill, { ...skill, tag: "postgres" }] }).success).toBe(false);
     expect(agentSkillsReplaceSchema.safeParse({ skills: Array.from({ length: 21 }, (_, n) => ({ ...skill, tag: `Tag ${n}` })) }).success).toBe(false);
     expect(agentSkillsReplaceSchema.safeParse({ skills: [{ ...skill, summary: "a".repeat(121) }] }).success).toBe(false);
+  });
+});
+
+describe("agent work mode (#agent-work-mode)", () => {
+  it("needs one of the two modes (there is no never) and whole-number caps, empty for none", () => {
+    expect(parseWorkSettings({})).toMatchObject({ ok: false, field: "workMode" });
+    expect(parseWorkSettings({ workMode: "never" })).toMatchObject({ ok: false, field: "workMode" });
+    expect(parseWorkSettings({ workMode: "automatic", maxActiveTasks: "0" })).toMatchObject({ ok: false, field: "maxActiveTasks" });
+    expect(parseWorkSettings({ workMode: "automatic", dailyTaskLimit: "2.5" })).toMatchObject({ ok: false, field: "dailyTaskLimit" });
+    expect(parseWorkSettings({ workMode: "ask_first", maxActiveTasks: "2", dailyTaskLimit: "", creditCeilingUsd: "20" })).toEqual({
+      ok: true,
+      settings: { workMode: "ask_first", maxActiveTasks: 2, dailyTaskLimit: null, creditCeilingUsd: 20 },
+    });
   });
 });
 

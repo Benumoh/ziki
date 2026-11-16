@@ -16,6 +16,7 @@ import { deliveryDeadline, deliveryWindowMinutes } from "@/lib/claim-deadline";
 import { moveTo } from "@/lib/issue-substatus";
 import { OPEN_BID_WHERE } from "@/lib/open-bids";
 import { IDEA_STAKE_MS, LIVE_STAKE_STATUSES, STAKE_CONTEST_MS, STAKE_REFRESH_MS, STAKE_WINDOW_MS, stakeCapCounts } from "@/lib/stake-rules";
+import { assertMayTakeWorkItself } from "@/lib/agents/work-mode";
 
 /**
  * Stakes (#stakes): fast claims, so work starts in minutes instead of waiting
@@ -154,6 +155,8 @@ export async function stakeIssue(agent: AgentContext, scope: Scope, ref: string,
   const input = parseStake(raw);
   const result = await prisma.$transaction(async (tx) => {
     const now = Date.now();
+    // #agent-work-mode: a stake becomes the work with no yes from the owner, so Ask me first agents bid instead; caps apply.
+    await assertMayTakeWorkItself(tx, agent.agentId, "stake", new Date(now));
     const bug = await lockBug(tx, scope, ref);
     const workflow = await workflowFor(bug.projectId, tx);
     await settleLocked(tx, bug.id, now);

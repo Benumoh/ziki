@@ -9,6 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { previewScan } from "@/lib/security-checks/preview";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
+import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 import {
   ASSISTANT_HISTORY_MAX,
@@ -58,7 +59,7 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}` });
   if (!result.ok) return { ok: false, error: result.reason };
-  const summary = summarisePreview(result);
+  const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
   revalidatePath("/security");
   return { ok: true, summary };
@@ -154,6 +155,24 @@ export async function talkToSecurityAssistant(history: AssistantTurn[]): Promise
 }
 
 /**
+ * Try now from the public page: add the site and start the agents' check, with no chat. The person asked for the
+ * agents already, so the Security page opens the scan's progress page straight from here (never the chat box).
+ * A site already in their scans goes to its page too.
+ */
+export async function startFromOutside(site: string): Promise<{ ok: true; checkId: string } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const access = await currentOrganisationAccess(user.id, user.role);
+  if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
+  const parsed = typeof site === "string" ? parseSecurityTarget(site) : null;
+  if (!parsed?.ok) return { ok: false, error: "That address can't be scanned. Try it again from the Security page." };
+  const answer = await scanAndAdd(access.organisationId, user.id, parsed.target, "");
+  if (answer.kind === "scan" && answer.checkId) return { ok: true, checkId: answer.checkId };
+  if (answer.kind === "scan") return { ok: false, error: answer.note ?? `Ziki couldn't reach ${parsed.target.value}.` };
+  return { ok: false, error: answer.kind === "error" ? answer.error : answer.reply };
+}
+
+/**
  * Every asset (a website, a server or a public repo) gets the quick scan, and
  * is added to the person's scans straight away, so the full check starts. A
  * site the scan couldn't reach isn't added; a private repo (the scan can't
@@ -176,7 +195,7 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
     };
   }
   const result = await previewScan(address, { visitor: `user:${userId}` });
-  const summary = result.ok ? summarisePreview(result) : null;
+  const summary = result.ok ? await withSiteAddress(summarisePreview(result)) : null;
   const addable = result.ok || target.kind === "repo" || result.retryAfterSeconds !== undefined;
   // Couldn't reach it: say so plainly, with no "here's a quick look" before it.
   if (!addable) return { kind: "scan", reply: "", target: address, summary: null, note: result.ok ? null : result.reason, checkId: null };

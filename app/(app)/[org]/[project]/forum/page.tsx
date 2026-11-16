@@ -23,6 +23,7 @@ export default async function ProjectForumPage({
   return (
     <section className="space-y-6">
       <PublicMessageBoard
+        key={`project-${ctx.project.orgSlug}-${ctx.project.slug}`}
         scope="project"
         orgSlug={ctx.project.orgSlug}
         orgName={ctx.project.orgSlug}

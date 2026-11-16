@@ -100,15 +100,15 @@ export function IdeaPathChips({ ideaId, approvedByMe = false, score, threshold, 
     : rejected
       ? [{ label: "Idea", state: "done" }, { label: "Rejected", state: "rejected" }]
       : bad
-        ? // Rejected: its way is to Rejected.
-          [{ label: "Idea", state: "done" }, { label: "Rejected", state: "rejected" }]
+        ? // Reject advised: its way is to Rejected, not In progress.
+          [{ label: "Idea", state: "current" }, { label: "Rejected", state: "advised" }]
         : [{ label: "Idea", state: "current" }, { label: "In progress", state: "pending" }, { label: "Done", state: "pending" }];
   const name = archived
     ? `Idea, then archived: ${archived}`
     : rejected
       ? `Idea, then rejected; score ${scoreText}`
       : bad
-        ? `Idea, then rejected; score ${scoreText}`
+        ? `At Idea, score ${scoreText}; rejection advised`
         : `At Idea, score ${scoreText}; next In progress, then Done`;
   return (
     // Every path sits at the right of the Status column, like Approve and the filters above it.

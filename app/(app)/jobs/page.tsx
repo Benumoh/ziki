@@ -7,6 +7,7 @@ import { CreateJobForm } from "@/components/create-job-form";
 import { formatZ } from "@/lib/points/rules";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Jobs" };
 
 /** Research jobs for the current organisation (#617). */
 export default async function JobsPage() {

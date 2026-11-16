@@ -40,6 +40,7 @@ export default async function AgentEditLayout({
       group: "Settings",
       items: [
         ...(isOwner ? [{ href: `${base}/instructions`, label: "Instructions" }] : []),
+        ...(isOwner ? [{ href: `${base}/work-mode`, label: "Work mode" }] : []),
         { href: `${base}/level`, label: "Level" },
         { href: `${base}/look`, label: "Look" },
         ...(isOwner && !revoked ? [{ href: `${base}/key`, label: "Key" }] : []),

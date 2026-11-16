@@ -35,6 +35,22 @@ export function PreviewResult({ summary, children }: { summary: PreviewSummary; 
         {/* Named after the site, like other scanners' results ("SSL Report: go.dev", "Website test: go.dev"). */}
         <h3 className="m-0 wrap-break-word text-base font-semibold text-zk-text">Scan summary: {summary.target}</h3>
         <p className="m-0 text-xs text-zk-muted">What any browser can see. The agents check much more, and their report replaces this.</p>
+        {summary.ip ? (
+          // The site's facts the way other scanners write them: a bold label, then the value, on one line
+          // (SecurityHeaders' "IP Address: …" and "Report Time: …" rows, Sucuri's "IP address: …" box).
+          <dl className="m-0 mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+            <div className="flex gap-1.5">
+              <dt className="font-semibold text-zk-text">IP address:</dt>
+              <dd className="m-0 tabular-nums text-zk-text2">{summary.ip}</dd>
+            </div>
+            <div className="flex gap-1.5">
+              <dt className="font-semibold text-zk-text">Checked:</dt>
+              <dd className="m-0 text-zk-text2">
+                {new Date(summary.checkedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
 
         {/* One summary: how many problems, whether HTTPS is set up, and the risk on a meter. */}
         <RiskMeter

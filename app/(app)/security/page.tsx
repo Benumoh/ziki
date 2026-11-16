@@ -22,6 +22,7 @@ import {
 } from "@/components/security-stage-filter";
 import { LocalTime } from "@/components/local-time";
 import { SecurityChecksPanel } from "@/components/security-checks/entry-panel";
+import { OutsideStart } from "@/components/security-checks/outside-start";
 import { SecurityTabs } from "@/components/security-checks/security-tabs";
 import { WorkspacePickerModal } from "@/components/security-checks/workspace-picker";
 import { listWorkspaceChecks } from "@/lib/security-checks/entry";
@@ -55,6 +56,8 @@ type SearchParams = Promise<{
   show?: string | string[];
   target?: string | string[];
   picked?: string | string[];
+  /** "1" from Try now on the public page: once the site is in, open its page. */
+  progress?: string | string[];
   page?: string | string[];
 }>;
 
@@ -97,7 +100,7 @@ export default async function SecurityPage(props: {
       select: { organisation: { select: { id: true, name: true } } },
     });
     if (owned.length > 1) {
-      const pickedBack = `/security?target=${encodeURIComponent(brought)}&picked=1`;
+      const pickedBack = `/security?target=${encodeURIComponent(brought)}&picked=1${params.progress === "1" ? "&progress=1" : ""}`;
       picker = (
         <WorkspacePickerModal
           site={brought}
@@ -163,6 +166,18 @@ export default async function SecurityPage(props: {
     );
   }
   const organisationId = access.organisationId;
+  // Try now from the public page, with the workspace settled: add the site and open its progress page. Never the
+  // chat box for someone coming from outside.
+  if (!showFindings && brought && params.progress === "1" && !picker) {
+    return (
+      <div className="flex w-full flex-col pb-10">
+        <h1 className="sr-only">Security</h1>
+        <div className="mx-auto w-full max-w-[880px] pt-6">
+          <OutsideStart site={brought} />
+        </div>
+      </div>
+    );
+  }
   if (!showFindings) {
     const [checks, jobs] = await Promise.all([listWorkspaceChecks(organisationId, user.id), countAgentJobs(user.id)]);
     const highlight = typeof params.check === "string" ? { checkId: params.check, unlocked: Number(params.unlocked) > 0 ? Number(params.unlocked) : 0 } : undefined;

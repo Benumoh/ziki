@@ -13,6 +13,7 @@ const db = vi.hoisted(() => ({
   issueBid: { findFirst: vi.fn(), updateMany: vi.fn() },
   bug: { update: vi.fn(), findFirstOrThrow: vi.fn() },
   bugActivity: { createMany: vi.fn() },
+  agent: { findUnique: vi.fn() },
 }));
 const publish = vi.hoisted(() => vi.fn());
 const notifyLater = vi.hoisted(() => vi.fn());
@@ -27,6 +28,7 @@ vi.mock("@/lib/workflow", async (original) => {
 });
 
 import { acceptOffer, isOfferExpired, OFFER_TTL_MS, releaseClaim } from "@/lib/agent-api/offer";
+import { autoAcceptAward } from "@/lib/agent-api/auto-accept";
 import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
@@ -56,6 +58,8 @@ beforeEach(() => {
   db.issueClaim.count.mockResolvedValue(0);
   db.bug.update.mockResolvedValue({ id: "bug-1", assigneeId: "ada", status: "in_progress", substatus: "in_progress" });
   db.issueBid.updateMany.mockResolvedValue({ count: 2 });
+  // No work mode chosen: the agent accepts its own offers, as before (#agent-work-mode).
+  db.agent.findUnique.mockResolvedValue(null);
 });
 
 describe("accepting an offer", () => {
@@ -106,6 +110,48 @@ describe("accepting an offer", () => {
     await expect(acceptOffer(agent, "claim-1")).rejects.toMatchObject({ status: 409 });
     expect(db.issueClaim.count.mock.calls[0][0].where.bug).toMatchObject({ status: "in_progress" });
     expect(db.issueClaim.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ releaseReason: "capacity" }) }));
+  });
+});
+
+describe("work mode and caps (#agent-work-mode)", () => {
+  const workRow = (overrides: Record<string, unknown> = {}) => ({
+    username: "ada-claude", workMode: "automatic", maxActiveTasks: null, dailyTaskLimit: null, creditCeilingUsd: null, ...overrides,
+  });
+
+  it("refuses an Ask me first agent's own accept, and the owner's one-tap yes takes it", async () => {
+    db.agent.findUnique.mockResolvedValue(workRow({ workMode: "ask_first" }));
+    await expect(acceptOffer(agent, "claim-1")).rejects.toMatchObject({ status: 403, body: { error: "owner_approval_required" } });
+    expect(db.issueClaim.update).not.toHaveBeenCalled();
+    expect(db.bug.update).not.toHaveBeenCalled();
+
+    await expect(acceptOffer(agent, "claim-1", { byOwner: true })).resolves.toMatchObject({ claim: { status: "active" } });
+    expect(db.bug.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ substatus: "in_progress" }) }));
+  });
+
+  it("refuses at the owner's caps without giving the offer up", async () => {
+    db.agent.findUnique.mockResolvedValue(workRow({ maxActiveTasks: 1 }));
+    db.issueClaim.count.mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+    await expect(acceptOffer(agent, "claim-1")).rejects.toMatchObject({ status: 409, body: { error: "work_cap_reached", cap: "max_active_tasks" } });
+
+    db.agent.findUnique.mockResolvedValue(workRow({ dailyTaskLimit: 3 }));
+    db.issueClaim.count.mockResolvedValueOnce(0).mockResolvedValueOnce(3);
+    await expect(acceptOffer(agent, "claim-1")).rejects.toMatchObject({ status: 409, body: { cap: "daily_task_limit" } });
+    expect(db.issueClaim.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a Work automatically agent's award for it, and leaves an Ask me first agent's waiting", async () => {
+    const award = (workMode: string) => ({
+      status: "offered", releasedAt: null, bug: { organisationId: "t1" },
+      agent: { id: "agent-1", name: "Ada's Claude", ownerUserId: "ada", pausedAt: null, revokedAt: null, workMode, activations: [{ organisationId: "t1", level: "working" }] },
+    });
+    db.issueClaim.findUnique.mockResolvedValueOnce(award("ask_first"));
+    await expect(autoAcceptAward("claim-1")).resolves.toBe(false);
+    expect(db.issueClaim.update).not.toHaveBeenCalled();
+
+    db.issueClaim.findUnique.mockResolvedValueOnce(award("automatic"));
+    db.agent.findUnique.mockResolvedValue(workRow());
+    await expect(autoAcceptAward("claim-1")).resolves.toBe(true);
+    expect(db.issueClaim.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "active" }) }));
   });
 });
 

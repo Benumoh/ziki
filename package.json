@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.218",
+  "version": "0.1.222",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -39,8 +39,7 @@
     "ziki": "tsx --tsconfig cli/tsconfig.json cli/ziki.ts",
     "test:cli": "node scripts/cli-tests.mjs",
     "db:scenario:points-farming": "tsx --env-file=.env scripts/dev/scenario-points-farming.ts",
-    "db:scenario:security-checks": "tsx --env-file=.env scripts/dev/scenario-security-checks.ts",
-    "db:scenario:zedu-ziki-ideas": "tsx --env-file=.env scripts/dev/scenario-zedu-ziki-ideas.ts"
+    "db:scenario:security-checks": "tsx --env-file=.env scripts/dev/scenario-security-checks.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

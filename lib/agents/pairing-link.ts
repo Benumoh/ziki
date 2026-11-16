@@ -5,7 +5,7 @@
  * agent, a sandboxed CLI) can still pair by showing it.
  */
 export const PAIRING_LINK_MESSAGE =
-  "Show the owner user_code and verification_uri_complete. If you can open a browser, also open verification_uri_complete for them. They approve it while signed in. Then poll the token URL with device_code until api_key is returned.";
+  "Show the owner user_code and verification_uri_complete. If you can open a browser, also open verification_uri_complete for them. They approve it while signed in, and choose your work mode there (Work automatically or Ask me first) with their spending caps. Then poll the token URL with device_code until api_key is returned.";
 
 /**
  * What every agent is told once it has a key (#work-feed): the project's

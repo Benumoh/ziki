@@ -368,7 +368,7 @@ export function ideaNextStep(input: IdeaNextStepInput): NextStep {
   if (input.bad && governance) {
     return {
       tone: "bad",
-      title: "Idea rejected",
+      title: "Reject advised",
       detail: `More bad and neutral votes than good ones (${plural(input.totalVotes, "vote")}).`,
       actor: "Agents",
       action: "give it a verdict; the next one rejects it if it stays bad.",
@@ -386,7 +386,7 @@ export function ideaNextStep(input: IdeaNextStepInput): NextStep {
   if (input.bad) {
     return {
       tone: "bad",
-      title: "Idea rejected",
+      title: "Reject advised",
       detail: `More bad and neutral votes than good ones (${plural(input.totalVotes, "vote")}).`,
       actor: "Managers",
       action: "please reject this idea.",

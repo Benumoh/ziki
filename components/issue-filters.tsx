@@ -459,7 +459,7 @@ export function IssueFilters({
         <div className={`min-w-0 flex-1 basis-[240px] max-w-xs ${compact ? `issues-search ${searchExpanded ? "issues-search-expanded" : ""}` : ""}`}>
           <label htmlFor="q" className="sr-only">Search</label>
           <div className="relative" aria-busy={isSearching} data-testid="search-box">
-            <div className="flex h-[42px] items-center gap-2 rounded-xl border border-zk-border bg-zk-surface px-4">
+            <div className="flex h-[42px] items-center gap-2 rounded-full border border-zk-border bg-zk-surface px-4">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-zk-muted" aria-hidden="true">
                 <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
               </svg>

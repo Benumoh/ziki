@@ -18,6 +18,7 @@ export default async function ForumPage() {
   return (
     <section className="space-y-6">
       <PublicMessageBoard
+        key="platform"
         scope="platform"
         initialMessages={messages}
         organisations={scopes.organisations}

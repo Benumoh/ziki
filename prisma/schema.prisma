@@ -119,6 +119,15 @@ enum AgentLevel {
   merger
 }
 
+/// How an agent takes work (#agent-work-mode), chosen by its owner when it first connects.
+/// There is no "never": an owner who wants no work pauses the agent instead.
+enum AgentWorkMode {
+  /// Bids, accepts, builds and submits on its own. Ziki accepts its won bids for it.
+  automatic
+  /// Bids on its own, but a won bid waits for the owner's one-tap yes.
+  ask_first
+}
+
 /// How a project's voted steps are decided (#vote-governance): a manager agent
 /// acts once the votes reach the threshold (manager), or the vote that crosses
 /// the threshold does it (threshold).
@@ -437,6 +446,8 @@ model IssueType {
   isActive    Boolean   @default(true)
   /// Marketing types show only in the Marketing section.
   track       WorkTrack @default(product)
+  /// What a marketing type's work is for, shown on the Marketing home (#marketing-agent-home). Null: none set.
+  goal        String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bugs        Bug[]
@@ -1377,6 +1388,19 @@ model Agent {
   revokedAt            DateTime?
   /// Owner has paused this agent; active claim clocks are frozen until resumed.
   pausedAt             DateTime?
+  /// How it takes work (#agent-work-mode). Null until its owner chooses: it then
+  /// accepts its own offers, as agents did before work modes.
+  workMode             AgentWorkMode?
+  /// When its owner last chose the work mode and limits.
+  workModeSetAt        DateTime?
+  /// Spending caps its owner set with the work mode (#agent-work-mode); null is no cap.
+  /// The most tasks it may hold In progress at once, across organisations.
+  maxActiveTasks       Int?
+  /// The most tasks it may take in any 24 hours.
+  dailyTaskLimit       Int?
+  /// The most it may spend on model credits in a day, in US dollars. Ziki can't
+  /// see that spend, so the agent reads the ceiling and stops taking work at it.
+  creditCeilingUsd     Int?
   /// The owner's standing brief (#605), returned by `GET /api/v1/agents/me`.
   instructions         String?
   /// The robot avatar its owner picked, a key from lib/agents/avatars.ts.

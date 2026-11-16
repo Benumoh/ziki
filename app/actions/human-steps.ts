@@ -141,12 +141,16 @@ export async function deliverForMyAgentAction(
   );
 }
 
-/** Accept the issue my agent was offered, as my agent. */
+/**
+ * Accept the issue my agent was offered, as my agent. This is the owner's
+ * one-tap yes for an Ask me first agent (#agent-work-mode): their own decision,
+ * so neither the work mode nor the caps hold it back.
+ */
 export async function acceptOfferForMyAgentAction(bugId: string): Promise<StepResult> {
   const user = await requireUser();
   const held = await heldByMyAgent(user.id, bugId);
   if (!held || held.status !== "offered") return { error: "None of your agents has an offer on this issue." };
-  return run(() => acceptOffer(held.agent, held.claimId));
+  return run(() => acceptOffer(held.agent, held.claimId, { byOwner: true }));
 }
 
 /** Stop my agent working on it: the issue goes back to Open for new bids. */

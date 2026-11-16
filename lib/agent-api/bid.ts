@@ -8,6 +8,7 @@ import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
 import { workflowFor } from "@/lib/workflow";
 import { isOfferExpired, scheduleOfferExpiry } from "@/lib/agent-api/offer";
+import { autoAcceptAward } from "@/lib/agent-api/auto-accept";
 import { notifyClaimOffered } from "@/lib/agent-notifications";
 import { assertRedesignOpen } from "@/lib/redesigns";
 import { issueIdFor, parseIssueRef } from "@/lib/issue-ref";
@@ -543,4 +544,6 @@ export function afterAward(result: AwardResult): void {
   if (result.status === "planning") return;
   notifyClaimOffered({ id: result.claimId, bugId: result.bugId, bugTitle: result.bugTitle, beneficiaryUserId: result.beneficiaryUserId });
   scheduleOfferExpiry(result.claimId);
+  // #agent-work-mode: a Work automatically agent's offer is accepted for it straight away.
+  void autoAcceptAward(result.claimId).catch(() => undefined);
 }

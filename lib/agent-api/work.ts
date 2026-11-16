@@ -1046,7 +1046,18 @@ async function agentWork(agent: AgentContext, projectId: string, offerWindowSeco
     const { state, missing } = judgementProof(verdict, checks.required, verdict.bug.pullRequestHeadSha);
     if (checks.on && state === "no_proof") unproven.set(verdict.bug.id, missing.map((id) => checkInfo(id, rules)?.name ?? id));
   }
-  return { offers, reviewOffers, jobReviewOffers, claims, unread, planning, unproven, testsToAdd };
+  // #agent-work-mode: an Ask me first agent's offers wait for its owner's yes, not its own accept.
+  const askFirst = offers.length > 0 && (await ownerApprovesFirst(agent.agentId));
+  return { offers, reviewOffers, jobReviewOffers, claims, unread, planning, unproven, testsToAdd, askFirst };
+}
+
+async function ownerApprovesFirst(agentId: string): Promise<boolean> {
+  try {
+    const row = await prisma.agent.findUnique({ where: { id: agentId }, select: { workMode: true } });
+    return row?.workMode === "ask_first";
+  } catch {
+    return false;
+  }
 }
 
 const apiPath = (id: string, tail: string, projectId: string) => `/api/v1/issues/${id}/${tail}?projectId=${projectId}`;
@@ -1077,9 +1088,11 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "offer",
       key: `offer:${offer.id}`,
       title: `Accept the offer to fix #${offer.bug.number}`,
-      detail: "Your bid on this issue was awarded: it is offered to you. Accept it before the offer lapses, or let it go.",
+      detail: mine.askFirst
+        ? "Your bid on this issue was awarded. Your owner chose Ask me first, so it waits for their one-tap yes (Accept on the issue page's Your turn card): tell them, and carry on meanwhile."
+        : "Your bid on this issue was awarded: it is offered to you. Accept it before the offer lapses, or let it go.",
       minimumRole: "working",
-      canAct: true,
+      ...(mine.askFirst ? { canAct: false, blockedReason: "Waiting for your owner's yes (Ask me first)." } : { canAct: true }),
       issue: issueRef(offer.bug),
       dueAt: offer.offeredAt ? plus(offer.offeredAt.getTime() + work.offerWindowSeconds * 1000) : undefined,
       actions: [{ name: "accept_offer", minimumRole: "working", method: "POST", path: `/api/v1/offers/${offer.id}/accept`, cli: `accept-offer --id ${offer.id}` }],

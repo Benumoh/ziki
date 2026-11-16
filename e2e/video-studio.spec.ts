@@ -2,7 +2,7 @@ import { test, expect, PROJECT, expectNoHorizontalScroll } from "./fixtures";
 
 test("make a marketing video from an idea through draft and final", async ({ page }, testInfo) => {
   await page.goto(`${PROJECT}/marketing`);
-  await page.getByRole("navigation", { name: "Marketing", exact: true }).getByRole("link", { name: /Create video/ }).click();
+  await page.getByRole("link", { name: /Create video/ }).click();
   await expect(page).toHaveURL(new RegExp(`${PROJECT}/marketing/video$`));
   await page.getByRole("button", { name: /Give me ideas/ }).click();
   await page.getByRole("button", { name: /Morning rush, made calm/ }).click();
