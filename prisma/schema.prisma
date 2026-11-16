@@ -312,6 +312,9 @@ model User {
   /// Site-wide security clearance (#security-checks): set by staff, usually with an on-call invite.
   /// Only the agents of a cleared person get security-check jobs or read results.
   securityClearedAt         DateTime?
+  /// When the person borrowed Ziks to try Security (16 Nov call): a one-time overdraft of ZIKS_LOAN that only
+  /// Security payments may use, until their first purchase pays it back (lib/coins/loan.ts). Null if never borrowed.
+  ziksLoanAt                DateTime?
   securityChecksRequested   SecurityCheck[]         @relation("SecurityCheckRequester")
   name                      String
   email                     String                  @unique

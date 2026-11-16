@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
 import { WITHDRAW_THRESHOLD } from "@/lib/earnings-threshold";
 import { walletSummary } from "@/lib/coins/ledger";
+import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
 import { WITHDRAW_MIN_ZIK, syncPayoutsEnabled } from "@/lib/coins/withdraw";
@@ -89,6 +90,12 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
           <h2 id="wallet" className={label}>Your Ziks</h2>
           <p className="mt-3 text-4xl font-extrabold tracking-tight tabular-nums text-zk-text sm:text-[44px]">{wallet.balance.toLocaleString("en-US")}</p>
           <p className="mt-1 text-sm text-zk-text2">{formatUsd(zikToCents(wallet.balance))} in value</p>
+          {/* A borrowed overdraft (lib/coins/loan.ts): the part below zero is paid back first by the next top-up. */}
+          {owedOf(wallet.balance) > 0 ? (
+            <p className="mt-1 text-sm font-semibold text-zk-text">
+              You owe {owedOf(wallet.balance).toLocaleString("en-US")} Ziks you borrowed. Your next top-up pays it back first.
+            </p>
+          ) : null}
           <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-zk-divider pt-4">
             <div><dt className="text-xs text-zk-muted">To spend</dt><dd className="mt-0.5 font-mono text-base font-bold tabular-nums text-zk-text">{(wallet.balance - wallet.withdrawable).toLocaleString("en-US")}</dd></div>
             <div><dt className="text-xs text-zk-muted">Earned, can withdraw</dt><dd className="mt-0.5 font-mono text-base font-bold tabular-nums text-zk-ok-fg">{wallet.withdrawable.toLocaleString("en-US")}</dd></div>

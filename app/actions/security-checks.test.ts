@@ -56,3 +56,4 @@ describe("unlockSecurityFindings (#security-checks, plan C1)", () => {
     expect((await unlockSecurityFindings("c1", "all")).error).toMatch(/workspace/);
   });
 });
+
