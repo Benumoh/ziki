@@ -33,9 +33,9 @@ export function PaginationControls({
     page < totalPages ? buildPaginationUrl(basePath, page + 1, queryParams) : null;
 
   const pill =
-    "inline-flex min-h-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 py-1.5 text-xs font-semibold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zk-accent";
+    "inline-flex min-h-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface px-3.5 text-xs font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
   const pillDisabled =
-    "inline-flex min-h-10 cursor-not-allowed items-center justify-center rounded-full border border-zk-border bg-zk-chip px-4 py-1.5 text-xs font-medium text-zk-muted";
+    "inline-flex min-h-10 cursor-not-allowed items-center justify-center rounded-full border border-zk-border bg-zk-chip px-3.5 text-xs font-bold text-zk-muted";
 
   return (
     <nav
@@ -70,7 +70,7 @@ export function PaginationControls({
                 <span
                   key={item}
                   aria-current="page"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-zk-accent text-xs font-bold text-white shadow-sm"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-electric-blue-strong text-xs font-bold text-white"
                 >
                   {item}
                 </span>
@@ -78,7 +78,7 @@ export function PaginationControls({
                 <Link
                   key={item}
                   href={url}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zk-border bg-zk-surface text-xs font-medium text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zk-accent"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface text-xs font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
                 >
                   {item}
                 </Link>
