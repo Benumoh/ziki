@@ -50,7 +50,7 @@ export function DocsSidebar() {
       })}
 
       {openSection && openSection.pages.some((page) => page.ready) ? (
-        <div className="col-span-full mt-2 border-t border-zk-divider px-1 pt-3">
+        <div className="col-span-full mt-2 hidden border-t border-zk-divider px-1 pt-3 min-[1100px]:block">
           <p className="px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-zk-muted">
             {openSection.label}
           </p>
