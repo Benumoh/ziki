@@ -292,7 +292,7 @@ export function ScanList({
 
       {visible.length ? (
         <div role="table" aria-label="Your targets" className="border-t border-zk-border">
-          <div role="row" className="grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-border px-3 py-2.5 text-xs font-semibold text-zk-muted sm:px-5">
+          <div role="row" className="grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-border px-3 py-3 text-xs font-semibold text-zk-muted sm:px-5">
             <span role="columnheader" className="flex justify-center">
               <input
                 type="checkbox"
@@ -438,7 +438,7 @@ function TargetRow({
   return (
     <div
       role="row"
-      className={`group relative grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-divider px-3 py-2.5 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
+      className={`group relative grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-divider px-3 py-3 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
     >
       <span role="cell" className="relative z-10 flex justify-center">
         <input type="checkbox" aria-label={`Tick ${check.value}`} checked={ticked} onChange={onTick} className="h-4 w-4 accent-electric-blue-strong" />
