@@ -23,6 +23,8 @@ export function MarketingNav({ slug }: { slug: ProjectRef }) {
   const plans = marketingPath(slug, "plans");
   const newTask = marketingPath(slug, "tasks/new");
   const current = (href: string) => (pathname === href || pathname.startsWith(`${href}/`) ? "page" : undefined);
+  // The Marketing main page and its task form have no section header.
+  if (pathname === marketingPath(slug) || pathname === newTask) return null;
 
   return (
     <nav aria-label="Marketing" className="mx-auto mb-5 flex w-full max-w-6xl flex-wrap items-center justify-end gap-3">

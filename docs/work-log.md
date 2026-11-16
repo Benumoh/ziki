@@ -41,3 +41,7 @@
 ## 2026-11-15 — PR #730 review
 
 - Shared the simulated payment write between unlock and move. The move still writes the linked issue in the same transaction. Moved the page loader into server-only code and added tests for requester scope and mixed prices. Renamed the button to Pay and move.
+
+## 2026-11-16 — Bulk selection on the move page
+
+- Added Select all and Clear selection for findings that can still be moved. Updated the picker to use Zik and Ziks, the currency name in upstream main.

@@ -7,6 +7,7 @@ import { pageMetadata } from "@/lib/seo/site";
 import { OPEN_ISSUES_WHERE } from "@/lib/project-overview";
 import { DiscoverProjectCard, type DiscoverableProject } from "@/components/discover-project-card";
 import { DiscoverFilters } from "@/components/discover-filters";
+import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
 import {
   buildDirectoryAreas,
   filterDirectoryProjects,
@@ -86,7 +87,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
 
   const projects = await prisma.project.findMany({
     where,
-    orderBy: [{ isOpenForContributors: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ acceptsGuestIdeas: "desc" }, { isOpenForContributors: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       slug: true,
@@ -97,6 +98,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
       isOpenForContributors: true,
       acceptsGuestIdeas: true,
       contributorGuidelines: true,
+      rewardConfig: true,
       organisationId: true,
       organisation: {
         select: {
@@ -147,6 +149,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
       isOpenForContributors: p.isOpenForContributors,
       acceptsGuestIdeas: p.acceptsGuestIdeas,
       contributorGuidelines: p.contributorGuidelines,
+      rewardConfig: parseProjectRewardConfig(p.rewardConfig),
       organisation: p.organisation,
       _count: p._count,
       userStatus,
@@ -254,7 +257,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
           {cardsData.map((project) => (
             <DiscoverProjectCard key={project.id} project={project} />
           ))}

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const prisma = vi.hoisted(() => ({
   project: { findFirst: vi.fn(), findMany: vi.fn() },
   bug: { count: vi.fn() },
-  projectJoinRequest: { findUnique: vi.fn() },
+  projectJoinRequest: { findUnique: vi.fn(), findMany: vi.fn() },
 }));
 const canContributeToProject = vi.hoisted(() => vi.fn());
 const canManageProject = vi.hoisted(() => vi.fn());
@@ -61,6 +61,7 @@ describe("project overview access and data", () => {
     canContributeToProject.mockResolvedValue(false);
     canManageProject.mockResolvedValue(false);
     prisma.projectJoinRequest.findUnique.mockResolvedValue(null);
+    prisma.projectJoinRequest.findMany.mockResolvedValue([]);
   });
 
   it("shows a public project to visitors and signed-in people outside the organisation", async () => {
@@ -177,6 +178,55 @@ describe("project overview access and data", () => {
     await expect(loadProjectOverview("example", "tracker", null)).resolves.toMatchObject({
       project: { goal: null, contributorGuidelines: null },
     });
+  });
+
+  it("returns parsed reward rules and loads pending join requests only for maintainers", async () => {
+    const pending = [
+      {
+        id: "req-1",
+        message: "I can help with TypeScript bugs.",
+        createdAt: new Date("2026-11-14T12:00:00Z"),
+        user: { id: "user-2", name: "Dan", email: "dan@example.com", image: null },
+      },
+    ];
+    canContributeToProject.mockResolvedValue(true);
+    canManageProject.mockResolvedValue(true);
+    prisma.projectJoinRequest.findMany.mockResolvedValue(pending);
+    mockProject("public", {
+      rewardConfig: { reporter: 4, reviewer: 2, guidelines: "Security fixes pay up to $10." },
+    });
+
+    await expect(
+      loadProjectOverview("example", "tracker", { id: "owner-1", role: "user" }),
+    ).resolves.toMatchObject({
+      canManage: true,
+      pendingJoinRequests: pending,
+      project: {
+        hasCustomRewards: true,
+        rewardConfig: { reporter: 4, reviewer: 2, guidelines: "Security fixes pay up to $10." },
+      },
+    });
+    expect(prisma.projectJoinRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { projectId: "project-1", status: "pending" },
+      }),
+    );
+
+    vi.clearAllMocks();
+    canContributeToProject.mockResolvedValue(false);
+    canManageProject.mockResolvedValue(false);
+    prisma.projectJoinRequest.findUnique.mockResolvedValue(null);
+    prisma.projectJoinRequest.findMany.mockResolvedValue(pending);
+    mockProject("public", { rewardConfig: null });
+
+    await expect(
+      loadProjectOverview("example", "tracker", { id: "outsider", role: "user" }),
+    ).resolves.toMatchObject({
+      canManage: false,
+      pendingJoinRequests: [],
+      project: { hasCustomRewards: false },
+    });
+    expect(prisma.projectJoinRequest.findMany).not.toHaveBeenCalled();
   });
 });
 

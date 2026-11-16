@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { CoinError } from "@/lib/coins/ledger";
 import { fundIssue } from "@/lib/coins/fund";
 import { createPackCheckout } from "@/lib/coins/purchase";
+import { createSubscriptionCheckout, setSubscriptionEnding, subscribeFrom } from "@/lib/coins/subscription";
 import { startPayoutOnboarding, syncPayoutsEnabled, withdrawEarned } from "@/lib/coins/withdraw";
 
 /**
@@ -39,6 +40,41 @@ export async function buyZiksAction(formData: FormData): Promise<void> {
     redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
   }
   redirect(url);
+}
+
+/** Sends the person to Stripe Checkout to start a monthly Ziks plan. The Ziks come from the webhook, month by month. */
+export async function subscribeAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const from = subscribeFrom(formData.get("from"));
+  let url: string;
+  try {
+    url = await createSubscriptionCheckout(user.id, user.email ?? undefined, String(formData.get("planId") ?? ""), from);
+  } catch (error) {
+    const message = failure(error);
+    redirect(`/${from}?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
+  }
+  redirect(url);
+}
+
+/** Ends the person's plan at the end of the month they have paid for, or takes that back. */
+async function setEnding(ending: boolean): Promise<void> {
+  const user = await requireUser();
+  try {
+    await setSubscriptionEnding(user.id, ending);
+  } catch (error) {
+    const message = failure(error);
+    redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
+  }
+  revalidatePath("/coins");
+  redirect("/coins");
+}
+
+export async function endSubscriptionAction(): Promise<void> {
+  await setEnding(true);
+}
+
+export async function keepSubscriptionAction(): Promise<void> {
+  await setEnding(false);
 }
 
 /** Puts Ziks behind an issue. `requestId` is made when the form is drawn, so a double submit funds once. */

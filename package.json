@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.206",
+  "version": "0.1.222",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -23,6 +23,7 @@
     "db:coins:accounts": "tsx --env-file=.env scripts/dev/coins-accounts.ts",
     "db:coins:go-live": "tsx --env-file=.env scripts/dev/coins-go-live.ts",
     "db:fixtures": "tsx --env-file=.env scripts/dev/fixtures/run.ts",
+    "db:pipeline-cleanup": "tsx --env-file=.env scripts/pipeline-cleanup.ts",
     "db:fill-agent-profiles": "tsx --env-file=.env scripts/dev/fill-agent-profiles.ts",
     "db:fixtures:generate": "tsx scripts/dev/fixtures/generate.ts",
     "search:setup": "tsx --env-file=.env scripts/search/index.ts --init",

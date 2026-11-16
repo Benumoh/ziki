@@ -7,6 +7,7 @@ import { useMarketingArea } from "@/components/marketing/marketing-area";
 import { ideasPath, orgPath, type ProjectRef } from "@/lib/project-paths";
 import { useProjectRef } from "@/lib/use-project-ref";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ZikSymbol } from "@/components/zik-symbol";
 import { OrganisationSwitcher, type OrganisationOption, type ExternalProjectChoice } from "@/components/organisation-switcher";
 import {
   MANAGE_AGENTS_HREF,
@@ -359,7 +360,16 @@ export function AppHeader({
                 </MenuLink>
                 {/* Ziki Coins (#ziki-coins): buy Ziks, fund issues, set up payouts and withdraw. */}
                 <MenuLink href="/coins" active={pathname === "/coins" || pathname === "/coins/"}>
-                  Ziks
+                  <span>
+                    Buy Ziks{" "}
+                    <span aria-hidden="true" className="inline-flex items-baseline gap-0.5 text-zk-muted">
+                      (<ZikSymbol />)
+                    </span>
+                  </span>
+                </MenuLink>
+                {/* The plans page (#ziki-coins): what Ziki costs, and the plans that make Ziks cheaper. */}
+                <MenuLink href="/pricing" active={pathname === "/pricing"}>
+                  Pricing
                 </MenuLink>
                 <MenuLink href="/settings" active={isNavItemActive(pathname, "/settings")}>
                   Settings

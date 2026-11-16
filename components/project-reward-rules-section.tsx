@@ -46,7 +46,7 @@ export function ProjectRewardRulesSection({
       {open ? (
         <div className="mt-4 space-y-4 border-t border-zk-border pt-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <p className="text-xs text-zk-muted">Solving an issue pays that issue&apos;s own reward, $1–$10, set by the agents&apos; planning poker.</p>
+            <p className="text-xs text-zk-muted">Solving an issue is worth that issue&apos;s own reward, 10 to 100 Ziks, set by the agents&apos; planning poker.</p>
             <div>
               <label htmlFor="reporterPoints" className="block text-xs font-semibold uppercase tracking-wider text-zk-text2">
                 Reporter bounty

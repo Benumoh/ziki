@@ -49,6 +49,8 @@ export type PreviewSummary = {
    * Absent on quick scans saved before 14 Nov, so read it as `rows ?? []`.
    */
   rows?: (PreviewRow & { label: string; title?: string })[];
+  /** The site's IP address, shown under the result's heading like other scanners do. Absent for code and older scans. */
+  ip?: string | null;
 };
 
 /**

@@ -57,6 +57,13 @@ export default async function MoneyPage() {
         ))}
       </ul>
 
+      <p className={`${card} m-0 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-sm`}>
+        <span className="text-xs font-bold uppercase tracking-wide text-zk-muted">Plan fees</span>
+        <span className="font-bold tabular-nums text-zk-text">
+          {formatUsd(totals.subscriptionCents)} <span className="font-medium text-zk-muted">from {totals.subscriptionPayments.toLocaleString("en-US")} monthly {totals.subscriptionPayments === 1 ? "payment" : "payments"}. Cash only: a plan buys no Ziks.</span>
+        </span>
+      </p>
+
       <section aria-labelledby="reconcile" className={card}>
         <h2 id="reconcile" className="m-0 text-base font-semibold text-zk-text">Reconciliation</h2>
         <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">

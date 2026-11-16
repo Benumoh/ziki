@@ -8,6 +8,7 @@ import type { AgentLevel } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkModeFields } from "../work-mode-fields";
 import {
   agentsDangerBtn,
   agentsInputClass,
@@ -146,6 +147,7 @@ export function PairForm({
         <p className="rounded-2xl bg-zk-tint px-4 py-3 text-sm text-zk-text2">
           Only approve if you started this pairing yourself and the name matches your agent.
         </p>
+        <WorkModeFields />
         <div className="space-y-1.5">
           <label htmlFor="pair-instructions" className={agentsLabelClass}>
             Standing instructions <span className="font-normal text-zk-muted">(optional)</span>

@@ -33,6 +33,7 @@ import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } fr
 import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
 import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
+import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
 import { NEXT_STEP_COOKIE, organisationNextStep, type OrganisationNextStep } from "@/lib/organisation-next-step";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
@@ -727,8 +728,11 @@ export async function IssuesList({
       : [];
   // The next-step card (#agents-dock) where the empty agents bar used to be: the one next thing for you, from your role and what the
   // organisation has. Not while one of your agents is blocked (the agents bar says so), and dismissable per organisation.
+  // A project contributor who joined a public project (canContribute without an org-wide membershipRole) also gets the
+  // "Create an agent" card so they can start earning right after joining.
   let nextStep: OrganisationNextStep | null = null;
-  if (organisationId && userId && membershipRole && !isDeletedView) {
+  const nextStepRole: OrganisationRole | null = membershipRole ?? (canContribute ? "member" : null);
+  if (organisationId && userId && nextStepRole && !isDeletedView) {
     const dismissed = parseDismissed((await cookies()).get(NEXT_STEP_COOKIE)?.value).includes(organisationId);
     if (!dismissed) {
       const counts = await loadOrEmpty(
@@ -747,7 +751,7 @@ export async function IssuesList({
       if (counts) {
         nextStep = organisationNextStep({
           slug: ref,
-          membershipRole,
+          membershipRole: nextStepRole,
           appRole: effectiveRole,
           ...counts,
           blockedAgentCount: unconfiguredAgents.length,
@@ -1164,12 +1168,54 @@ export async function IssuesList({
     }
   }
 
+  let pendingJoinRequests: PendingJoinRequestItem[] = [];
+  if (
+    (isIdeasView || isYourWorkView) &&
+    !isDeletedView &&
+    organisationId &&
+    membershipRole &&
+    isOrganisationAdmin(membershipRole, effectiveRole)
+  ) {
+    try {
+      if (typeof prisma.projectJoinRequest?.findMany === "function") {
+        pendingJoinRequests = await prisma.projectJoinRequest.findMany({
+          where: { project: { organisationId, archivedAt: null }, status: "pending" },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            message: true,
+            createdAt: true,
+            project: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                organisation: { select: { slug: true } },
+              },
+            },
+            user: { select: { id: true, name: true, email: true, image: true } },
+          },
+        });
+      }
+    } catch {
+      // Keep the list working even if join requests couldn't be loaded.
+    }
+  }
+
   const listContent = (
     <div className="space-y-4">
         {statusParam === "resolved" && !isDeletedView ? <LiveRefresh /> : null}
 
         {/* #project-links: the site/code panel renders here (from ProjectLinks in the top right) while it is open. */}
         <div id={PROJECT_LINKS_SLOT_ID} className="empty:hidden" />
+
+        {pendingJoinRequests.length > 0 ? (
+          <ProjectPendingJoinRequestsBanner
+            requests={pendingJoinRequests}
+            orgRef={ref}
+            projectName={project.name}
+          />
+        ) : null}
 
         {/* Earnings (#earnings): the way to earn, on the page everyone lands on, closed with × like the panel above. */}
         {isIdeasView && !isDeletedView && earnProject ? <EarnPanel project={earnProject} line={earnBannerLine(earnProject)} /> : null}

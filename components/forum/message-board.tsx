@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { INITIAL_FORUM_MESSAGES, type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
 import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
@@ -13,6 +14,14 @@ function useSafeRouter() {
     return useRouter();
   } catch {
     return null;
+  }
+}
+
+function useSafePathname() {
+  try {
+    return usePathname();
+  } catch {
+    return "";
   }
 }
 
@@ -221,6 +230,7 @@ export function PublicMessageBoard({
   initialMessages,
 }: PublicMessageBoardProps = {}) {
   const router = useSafeRouter();
+  const pathname = useSafePathname();
 
   const [messages, setMessages] = useState<ForumMessage[]>(
     initialMessages ?? INITIAL_FORUM_MESSAGES
@@ -454,11 +464,19 @@ export function PublicMessageBoard({
       return 0;
     });
 
-  const handleOpenPost = (postId: string) => {
+  const handleOpenPost = (
+    postId: string,
+    postScope?: "platform" | "org" | "project",
+    postOrgSlug?: string,
+    postProjSlug?: string
+  ) => {
     setSelectedPostId(postId);
     setView("detail");
     if (router) {
-      router.push(scopedForumPostPath(scope, postId, orgSlug, projectSlug));
+      const targetScope = postScope ?? scope;
+      const targetOrg = postOrgSlug ?? orgSlug;
+      const targetProj = postProjSlug ?? projectSlug;
+      router.push(scopedForumPostPath(targetScope, postId, targetOrg, targetProj));
     }
   };
 
@@ -890,7 +908,7 @@ export function PublicMessageBoard({
                 <button
                   key={rel.id}
                   type="button"
-                  onClick={() => handleOpenPost(rel.id)}
+                  onClick={() => handleOpenPost(rel.id, rel.scope, rel.organisationSlug, rel.projectSlug)}
                   className="text-left p-2 rounded-lg bg-zk-bg/40 hover:bg-zk-chip/60 border border-zk-border transition-colors cursor-pointer group"
                 >
                   <span className="text-[12px] font-medium text-zk-text2 group-hover:text-zk-accent line-clamp-2 leading-snug">
@@ -916,15 +934,8 @@ export function PublicMessageBoard({
         <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
           Forum Scope
         </span>
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedScope({ type: "global", name: "Global Ziki Forum" });
-            setView("list");
-            if (router) {
-              router.push(scopedForumPath("platform"));
-            }
-          }}
+        <Link
+          href={scopedForumPath("platform")}
           className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
             selectedScope.type === "global"
               ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
@@ -941,7 +952,7 @@ export function PublicMessageBoard({
           <span className="font-mono text-[10px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
             All
           </span>
-        </button>
+        </Link>
       </div>
 
       {/* Scope 2: Organisations & Internal Projects */}
@@ -965,17 +976,12 @@ export function PublicMessageBoard({
                     : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedScope({
-                      type: "org",
-                      orgId: currentOrgSlug,
-                      name: org.name,
-                    });
-                    setView("list");
-                    if (router) {
-                      router.push(scopedForumPath("org", currentOrgSlug));
+                <Link
+                  href={scopedForumPath("org", currentOrgSlug)}
+                  onClick={(e) => {
+                    if (orgSlug && currentOrgSlug !== orgSlug) {
+                      e.preventDefault();
+                      window.location.href = scopedForumPath("org", currentOrgSlug);
                     }
                   }}
                   className="flex items-center gap-2 truncate flex-1 text-left py-0.5 focus:outline-none"
@@ -984,7 +990,7 @@ export function PublicMessageBoard({
                     <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 11h2M13 11h2M9 15h2M13 15h2" />
                   </Icon>
                   <span className="truncate">{org.name}</span>
-                </button>
+                </Link>
                 <button
                   type="button"
                   aria-label={`Toggle projects for ${org.name}`}
@@ -1008,19 +1014,13 @@ export function PublicMessageBoard({
                       (selectedScope.projectId === proj.id || selectedScope.projectId === currentProjSlug);
 
                     return (
-                      <button
+                      <Link
                         key={proj.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedScope({
-                            type: "project",
-                            orgId: currentOrgSlug,
-                            projectId: currentProjSlug,
-                            name: `${org.name} / ${proj.name}`,
-                          });
-                          setView("list");
-                          if (router) {
-                            router.push(scopedForumPath("project", currentOrgSlug, currentProjSlug));
+                        href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
+                        onClick={(e) => {
+                          if (orgSlug && currentOrgSlug !== orgSlug) {
+                            e.preventDefault();
+                            window.location.href = scopedForumPath("project", currentOrgSlug, currentProjSlug);
                           }
                         }}
                         className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
@@ -1033,7 +1033,7 @@ export function PublicMessageBoard({
                           <span className="w-1.5 h-1.5 rounded-full bg-zk-muted/60" />
                           <span className="truncate">{proj.name}</span>
                         </span>
-                      </button>
+                      </Link>
                     );
                   })}
                 </div>
@@ -1058,19 +1058,13 @@ export function PublicMessageBoard({
               (selectedScope.projectId === extProjSlug || selectedScope.projectId === ext.id);
 
             return (
-              <button
+              <Link
                 key={ext.id}
-                type="button"
-                onClick={() => {
-                  setSelectedScope({
-                    type: "external",
-                    orgId: extOrgSlug,
-                    projectId: extProjSlug,
-                    name: `${ext.name} (${ext.organisationName || extOrgSlug})`,
-                  });
-                  setView("list");
-                  if (router) {
-                    router.push(scopedForumPath("project", extOrgSlug, extProjSlug));
+                href={scopedForumPath("project", extOrgSlug, extProjSlug)}
+                onClick={(e) => {
+                  if (orgSlug && extOrgSlug !== orgSlug) {
+                    e.preventDefault();
+                    window.location.href = scopedForumPath("project", extOrgSlug, extProjSlug);
                   }
                 }}
                 className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -1090,7 +1084,7 @@ export function PublicMessageBoard({
                 <span className="text-[11px] text-zk-muted truncate font-mono">
                   {ext.organisationName}
                 </span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -1548,13 +1542,13 @@ export function PublicMessageBoard({
                   return (
                     <div
                       key={msg.id}
-                      onClick={() => handleOpenPost(msg.id)}
+                      onClick={() => handleOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          handleOpenPost(msg.id);
+                          handleOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug);
                         }
                       }}
                       className="cursor-pointer px-3.5 py-2.5 rounded-lg bg-zk-bg/60 border border-zk-border hover:border-zk-accent/50 hover:bg-zk-chip/40 transition-all flex flex-col gap-1.5 shadow-2xs"

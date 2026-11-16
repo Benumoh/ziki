@@ -136,8 +136,8 @@ It uses Ziki's AI (`ZIKI_CLAUDE_API_KEY`) and is shown only what a browser can s
 
 ## Move to your app
 
-Open /security/checks/<id>/fix from a posted report. Select findings, choose an eligible workspace project, and review the total before selecting **Pay and move**. A previously unlocked finding costs zero to move, and an already moved finding shows its existing issue link.
+Open /security/checks/<id>/fix from a posted report. Select findings individually or use **Select all** to pick every finding that can still be moved. Choose an eligible workspace project and review the total in Ziks before selecting **Pay and move**. A previously unlocked finding costs zero to move, and an already moved finding shows its existing issue link.
 
-The server checks report ownership, posting, project access, and result ownership. A transaction records simulated payment through the existing unlock timestamp, creates a private finding and a linked issue per new result, and sets the result's findingId. The report can use that link to show the issue. Repeat submissions reuse existing links. No real coins are debited.
+The server checks report ownership, posting, project access, and result ownership. A transaction debits the wallet for newly unlocked findings, creates a private finding and a linked issue per new result, and sets the result's findingId. The report can use that link to show the issue. Repeat submissions reuse existing links.
 
 Verify by moving a finding from a posted report, following its issue link, and reopening the move page to check the issue is still linked. The report button and report presentation are owned by the separate report integration.

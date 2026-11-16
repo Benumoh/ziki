@@ -71,11 +71,16 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
   });
 
   it("doesn't scan a site again that this person already scanned; it says so and shows its saved result", async () => {
-    mocks.findScannedCheck.mockResolvedValue({ checkId: "c-old", summary: null });
+    mocks.findScannedCheck.mockResolvedValue({ checkId: "c-old", summary: null, finished: false });
     const answer = await talkToSecurityAssistant(say("https://www.settle.ng"));
     expect(mocks.preview).not.toHaveBeenCalled();
     expect(mocks.addTargetAndCheck).not.toHaveBeenCalled();
-    expect(answer).toMatchObject({ kind: "scan", already: true, checkId: "c-old", summary: null, note: expect.stringContaining("settle.ng is already in your scans") });
+    expect(answer).toMatchObject({ kind: "scan", already: true, finished: false, checkId: "c-old", summary: null, note: expect.stringContaining("settle.ng is already in your scans") });
+  });
+
+  it("says a site already scanned is finished once its agents' report is posted, so the chat offers See results", async () => {
+    mocks.findScannedCheck.mockResolvedValue({ checkId: "c-old", summary: null, finished: true });
+    await expect(talkToSecurityAssistant(say("https://www.settle.ng"))).resolves.toMatchObject({ kind: "scan", already: true, finished: true, checkId: "c-old" });
   });
 
   it("refuses anyone who is not an owner or admin, before scanning, asking the AI or saving anything", async () => {

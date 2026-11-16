@@ -36,7 +36,8 @@ export function SecurityChecksPanel({
   /** Which page of scans (?page=). */
   page?: number;
 }) {
-  if (checks.length === 0) {
+  // Removed scans don't count: with none left, it's the welcome again.
+  if (checks.every((check) => check.status === "cancelled")) {
     return (
       <section aria-label="Security" className={PANEL}>
         <SecurityWelcome startWith={startWith} />

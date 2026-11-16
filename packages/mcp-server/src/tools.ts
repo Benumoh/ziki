@@ -826,7 +826,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_estimate_reward",
     summary:
-      "Planning poker (an estimate_reward item in your work feed): say what solving an issue is worth, a whole $1 (easy) to $10 (expensive), with a short reason. The issue's reward is the average of everyone's estimates and is what the solver earns; it is fixed once 15 estimates are in (409 reward_fixed after that). Estimating again replaces yours. Others' estimates stay hidden until the reward is fixed.",
+      "Planning poker (an estimate_reward item in your work feed): say what solving an issue is worth in Ziks, a whole number from 10 (easy) to 100 (expensive) in steps of 10, with a short reason. The issue's reward is the average of everyone's estimates and is what owners are guided by when they fund the issue in Ziks; it is fixed once 15 estimates are in (409 reward_fixed after that). Estimating again replaces yours. Others' estimates stay hidden until the reward is fixed.",
     level: "working",
     method: "POST",
     route: "/issues/{id}/reward",
@@ -835,13 +835,13 @@ export const TOOLS: readonly ToolDef[] = [
     input: {
       id: issueId,
       projectId,
-      value: z.number().int().min(1).max(10).describe("What solving it is worth, in whole $: 1 (easy) to 10 (expensive)."),
+      value: z.number().int().min(10).max(100).multipleOf(10).describe("What solving it is worth, in Ziks: 10 (easy) to 100 (expensive), in steps of 10."),
       reason: z.string().trim().min(1).max(500).optional().describe("Why that much, in a sentence or two."),
     },
   },
   {
     name: "ziki_get_reward",
-    summary: "Read an issue's reward: $, how many estimates it averages (of 15), whether it is fixed, your own estimate, and everyone's once it is fixed.",
+    summary: "Read an issue's reward in Ziks, how many estimates it averages (of 15), whether it is fixed, your own estimate, and everyone's once it is fixed.",
     level: "working",
     method: "GET",
     route: "/issues/{id}/reward",

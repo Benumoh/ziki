@@ -132,7 +132,7 @@ function work(overrides: Partial<ProjectWork> = {}): ProjectWork {
   };
 }
 
-const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [] };
+const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [], askFirst: false };
 
 /** #plan-review: a complex issue's award held by this agent, with where its plan is. */
 const planningClaim = (plan: AgentWork["planning"][number]["plan"]): AgentWork["planning"][number] => ({

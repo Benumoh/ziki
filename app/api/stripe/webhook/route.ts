@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { CoinError } from "@/lib/coins/ledger";
 import { recordPurchase } from "@/lib/coins/purchase";
 import { getStripe, webhookSecret } from "@/lib/coins/stripe";
+import { recordSubscriptionPayment, syncSubscriptionById } from "@/lib/coins/subscription";
 import { failWithdrawal, markWithdrawalPaid, recordAccountUpdate } from "@/lib/coins/withdraw";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,8 @@ export const runtime = "nodejs";
  * - `transfer.created`: a withdrawal's money is on its way, mark it paid.
  * - `transfer.reversed`: Stripe took a transfer back, return the Ziks.
  * - `account.updated`: a connected account's payout status changed.
+ * - `invoice.paid`: a month of a monthly Ziks plan was paid (the first, or a renewal), credit the wallet once.
+ * - `customer.subscription.created`, `.updated` and `.deleted`: a plan's status or end date changed, mirror it.
  *
  * Everything it does is idempotent, so Stripe's retries and duplicate
  * deliveries change nothing. Answering 2xx for an event it doesn't handle
@@ -56,6 +59,17 @@ export async function POST(request: Request) {
       case "account.updated": {
         await recordAccountUpdate(event.data.object);
         return NextResponse.json({ received: true });
+      }
+      case "invoice.paid": {
+        const outcome = await recordSubscriptionPayment(event.data.object);
+        return NextResponse.json({ received: true, outcome });
+      }
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        // Read the subscription afresh instead of trusting the event, so a late, old event can't undo a newer one.
+        const outcome = await syncSubscriptionById(event.data.object.id);
+        return NextResponse.json({ received: true, outcome });
       }
       default:
         return NextResponse.json({ received: true, ignored: true });

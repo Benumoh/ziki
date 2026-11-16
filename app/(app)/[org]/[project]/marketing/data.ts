@@ -1,17 +1,20 @@
 import "server-only";
 import type { Prisma, Status } from "@prisma/client";
 import type { IdeaListRow } from "@/components/ideas-list";
+import { HOME_GROUP_LIMIT, HOME_GROUPS, type HomeTaskGroup, type HomeTaskType, type MarketingHomeData } from "@/components/marketing/home/model";
 import { TASK_TABS, type TaskRow, type TasksBoardData, type TaskView } from "@/components/marketing/tasks/model";
 import { duplicatesWhere } from "@/lib/duplicates";
 import { ideaVotes, isBadIdea } from "@/lib/idea-rejection";
 import { ideaVoteTotals, NO_VOTES } from "@/lib/idea-vote-totals";
 import { issueHref } from "@/lib/issue-ref";
+import { stateLabel } from "@/lib/labels";
 import { getBugOrderBy } from "@/lib/issues-sort";
 import { getIdeaOrderBy } from "@/lib/list-sort";
 import { MARKETING_TRACK } from "@/lib/marketing/track";
 import { OPEN_BID_WHERE } from "@/lib/open-bids";
 import { calculatePagination } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import { ideaPath } from "@/lib/project-paths";
 import type { ProjectContext } from "@/lib/project-route";
 import { workflowFor } from "@/lib/workflow";
 
@@ -170,4 +173,74 @@ export async function readTasksBoard({ project, organisationId, user }: ProjectC
       to: pagination.to,
     },
   };
+}
+
+/**
+ * The Marketing home (#marketing-agent-home): the organisation's active marketing
+ * task types with this project's work in each, and the picked type's tasks and
+ * ideas grouped by where they are. No type picked, or an unknown one: the first.
+ */
+export async function readMarketingHome({ project, organisationId }: ProjectContext, typeId: string | null): Promise<MarketingHomeData> {
+  const issueScope: Prisma.BugWhereInput = { organisationId, projectId: project.id, isDeleted: false, ...MARKETING_TRACK, ...duplicatesWhere(false) };
+  const ideaScope: Prisma.IdeaWhereInput = { organisationId, projectId: project.id, isDeleted: false, ...MARKETING_TRACK, status: "open" };
+  const [typeRows, issueCounts, ideaCounts] = await Promise.all([
+    prisma.issueType.findMany({
+      where: { organisationId, ...MARKETING_TRACK, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, description: true, goal: true },
+    }),
+    prisma.bug.groupBy({ by: ["typeId"], where: issueScope, _count: { _all: true } }),
+    prisma.idea.groupBy({ by: ["typeId"], where: ideaScope, _count: { _all: true } }),
+  ]);
+  const countOf = (id: string) =>
+    (issueCounts.find((row) => row.typeId === id)?._count._all ?? 0) + (ideaCounts.find((row) => row.typeId === id)?._count._all ?? 0);
+  const types: HomeTaskType[] = typeRows.map((type) => ({ ...type, count: countOf(type.id) }));
+  const selected = types.find((type) => type.id === typeId) ?? types[0] ?? null;
+  if (!selected) return { types, selected: null, groups: [] };
+
+  const take = HOME_GROUP_LIMIT;
+  const groups = await Promise.all(HOME_GROUPS.map(async ({ key, heading }): Promise<HomeTaskGroup> => {
+    if (key === "ideas") {
+      const where = { ...ideaScope, typeId: selected.id };
+      const [rows, total] = await Promise.all([
+        prisma.idea.findMany({ where, orderBy: { updatedAt: "desc" }, take, select: { id: true, number: true, title: true, updatedAt: true, reporter: { select: { name: true } } } }),
+        prisma.idea.count({ where }),
+      ]);
+      return {
+        key,
+        heading,
+        more: Math.max(0, total - rows.length),
+        items: rows.map((row) => ({ id: row.id, title: row.title, href: ideaPath(project.ref, row.number), label: "Waiting for votes", agentName: row.reporter.name, updatedAt: row.updatedAt })),
+      };
+    }
+    const where = { ...issueScope, typeId: selected.id, status: key };
+    const [rows, total] = await Promise.all([
+      prisma.bug.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        take,
+        select: {
+          id: true, number: true, title: true, substatus: true, updatedAt: true,
+          project: { select: { slug: true, organisation: { select: { slug: true } } } },
+          claims: { where: { status: { in: ["active", "offered"] }, releasedAt: null }, orderBy: { createdAt: "desc" }, take: 1, select: { agent: { select: { name: true } } } },
+          deliveries: { orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 1, select: { agent: { select: { name: true } } } },
+        },
+      }),
+      prisma.bug.count({ where }),
+    ]);
+    return {
+      key,
+      heading,
+      more: Math.max(0, total - rows.length),
+      items: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        href: issueHref(row),
+        label: stateLabel(row.substatus),
+        agentName: row.claims[0]?.agent.name ?? row.deliveries[0]?.agent.name ?? null,
+        updatedAt: row.updatedAt,
+      })),
+    };
+  }));
+  return { types, selected, groups: groups.filter((group) => group.items.length > 0) };
 }

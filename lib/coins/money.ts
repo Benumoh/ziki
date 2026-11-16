@@ -17,17 +17,22 @@ export type MoneyTotals = {
   revenueFromFees: number;
   revenueFromChecks: number;
   pendingWithdrawals: number;
+  /** Plan fees paid, in cents. Cash in Stripe that buys no Ziks, so it is never in the ledger. */
+  subscriptionCents: number;
+  /** How many plan invoices that is. */
+  subscriptionPayments: number;
   /** Everything the ledger holds in accounts: wallets + escrow + revenue. */
   inLedger: number;
 };
 
 export async function moneyTotals(db: PrismaClient): Promise<MoneyTotals> {
-  const [byKind, byAccount, revenueByKind, wallets, pending] = await Promise.all([
+  const [byKind, byAccount, revenueByKind, wallets, pending, plans] = await Promise.all([
     db.coinEntry.groupBy({ by: ["kind"], where: { account: "wallet" }, _sum: { amount: true } }),
     db.coinEntry.groupBy({ by: ["account"], _sum: { amount: true } }),
     db.coinEntry.groupBy({ by: ["kind"], where: { account: "revenue" }, _sum: { amount: true } }),
     db.coinEntry.groupBy({ by: ["userId", "kind"], where: { account: "wallet" }, _sum: { amount: true } }),
     db.withdrawal.aggregate({ where: { status: "pending" }, _sum: { zik: true } }),
+    db.coinPurchase.aggregate({ where: { planId: { not: null } }, _sum: { amountCents: true }, _count: true }),
   ]);
   /** Wallet rows by kind: purchases, withdrawals and their reversals only ever touch a wallet. */
   const kind = (name: string) => byKind.find((row) => row.kind === name)?._sum.amount ?? 0;
@@ -63,6 +68,8 @@ export async function moneyTotals(db: PrismaClient): Promise<MoneyTotals> {
     revenueFromFees: revenueOf("fee"),
     revenueFromChecks: revenueOf("check_payment"),
     pendingWithdrawals: pending._sum.zik ?? 0,
+    subscriptionCents: plans._sum.amountCents ?? 0,
+    subscriptionPayments: plans._count,
     inLedger: account("wallet") + account("escrow") + account("revenue"),
   };
 }

@@ -3,17 +3,21 @@ import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/site-url";
 import { CoinError, appendRows, lockUser } from "./ledger";
 import { findPack, zikToCents } from "./math";
+import { discountedCents, isKnownDiscount } from "./plans";
 import { getStripe } from "./stripe";
+import { discountPercentFor } from "./subscription";
 
 /**
  * Buying Ziks (#ziki-coins). Checkout takes the money; the webhook
  * (`checkout.session.completed`) is the only thing that credits the wallet, so
  * a closed tab never loses a payment and a replayed event never doubles it.
+ * An owner with a paid-up plan pays the plan's discount less for the same Ziks.
  */
 
 export async function createPackCheckout(userId: string, email: string | undefined, packId: string): Promise<string> {
   const pack = findPack(packId);
   if (!pack) throw new CoinError("invalid_amount", "Choose one of the packs.");
+  const discountPercent = await discountPercentFor(userId);
   const session = await getStripe().checkout.sessions.create({
     mode: "payment",
     customer_email: email,
@@ -23,12 +27,15 @@ export async function createPackCheckout(userId: string, email: string | undefin
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: zikToCents(pack.zik),
-          product_data: { name: `${pack.zik.toLocaleString("en-US")} Ziks`, description: `Ziki Coins ${pack.label} pack` },
+          unit_amount: discountedCents(zikToCents(pack.zik), discountPercent),
+          product_data: {
+            name: `${pack.zik.toLocaleString("en-US")} Ziks`,
+            description: discountPercent > 0 ? `Ziki Coins ${pack.label} pack, ${discountPercent}% off with your plan` : `Ziki Coins ${pack.label} pack`,
+          },
         },
       },
     ],
-    metadata: { userId, packId: pack.id, zik: String(pack.zik) },
+    metadata: { userId, packId: pack.id, zik: String(pack.zik), discountPercent: String(discountPercent) },
     success_url: absoluteUrl("/coins?bought=1"),
     cancel_url: absoluteUrl("/coins"),
   });
@@ -62,8 +69,10 @@ export async function recordPurchase(session: Stripe.Checkout.Session): Promise<
   const userId = session.metadata?.userId ?? session.client_reference_id;
   const pack = findPack(session.metadata?.packId);
   if (!userId || !pack) return "ignored";
-  // Never credit more than was paid: the charge must be the pack's price.
-  if (session.amount_total !== zikToCents(pack.zik)) return "ignored";
+  // Never credit more than was paid: the charge must be the pack's price at full, or at one of the discounts a plan gives.
+  const discountPercent = Number(session.metadata?.discountPercent ?? 0);
+  if (!isKnownDiscount(discountPercent)) return "ignored";
+  if (session.amount_total !== discountedCents(zikToCents(pack.zik), discountPercent)) return "ignored";
   const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent?.id ?? null);
   const feeCents = await stripeFeeFor(paymentIntentId);
 
@@ -79,7 +88,7 @@ export async function recordPurchase(session: Stripe.Checkout.Session): Promise<
         stripePaymentIntentId: paymentIntentId,
         packId: pack.id,
         zik: pack.zik,
-        amountCents: session.amount_total ?? zikToCents(pack.zik),
+        amountCents: session.amount_total ?? discountedCents(zikToCents(pack.zik), discountPercent),
         stripeFeeCents: feeCents,
         currency: session.currency ?? "usd",
       },

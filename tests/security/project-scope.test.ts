@@ -591,4 +591,25 @@ describe("search engines see only public projects (#seo-pages)", () => {
     expect(projectFindMany.mock.calls[0][0].where).toMatchObject({ visibility: "public", archivedAt: null });
     expect(xml).toContain("/acme/web</loc>");
   });
+
+  it("lists only the issues a guest's public list shows, at their public address", async () => {
+    publishedTasks.mockReset();
+    publishedTasks.mockResolvedValueOnce([{ number: 870, updatedAt: new Date("2026-11-10"), project: { slug: "web", organisation: { slug: "acme" } } }]);
+    const xml = await sitemapSectionXml("issues-1.xml");
+    // Public, unarchived projects only; never deleted, a security finding or closed.
+    expect(publishedTasks.mock.calls[0][0].where).toEqual({
+      isDeleted: false,
+      securityFinding: { is: null },
+      status: { in: ["open", "in_progress", "done", "merge", "resolved"] },
+      project: { visibility: "public", archivedAt: null, organisation: { archivedAt: null } },
+    });
+    expect(xml).toContain("/acme/web/public-issues/870</loc>");
+  });
+
+  it("has no issues file past the last public issue", async () => {
+    publishedTasks.mockReset();
+    publishedTasks.mockResolvedValueOnce([]);
+    await expect(sitemapSectionXml("issues-2.xml")).resolves.toBeNull();
+    expect(publishedTasks.mock.calls[0][0]).toMatchObject({ skip: 10_000, take: 10_000 });
+  });
 });

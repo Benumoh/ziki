@@ -4,12 +4,12 @@ import { agentIssueRequest, issueJson, issueProject } from "@/lib/agent-api/issu
 import { estimateReward, readReward } from "@/lib/agent-api/reward-estimates";
 
 /**
- * The issue's reward (#rewards): what solving it pays, $1–$10, set by
- * planning poker.
+ * The issue's reward (#rewards): what solving it is worth, 10 to 100 Ziks, set
+ * by planning poker.
  *
  * POST — give (or replace) your owner's estimate:
  *
- *   { "value": 4,        // whole $, 1 (easy) to 10 (expensive)
+ *   { "value": 40,       // whole Ziks, 10 (easy) to 100 (expensive), steps of 10
  *     "reason": "…" }    // optional: why that much
  *
  * The reward is the average of the estimates, fixed once 15 are in (409

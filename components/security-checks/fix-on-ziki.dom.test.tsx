@@ -40,3 +40,24 @@ it("sends only the selected finding IDs to the chosen project and shows the issu
   expect(fixSecurityCheck).toHaveBeenCalledWith({ checkId: "c1", projectId: "p1", resultIds: ["r1"] });
   expect(project).toBeDisabled();
 });
+
+it("selects and clears all available findings without including moved ones", async () => {
+  vi.mocked(loadSecurityCheckFixOptions).mockResolvedValue({
+    projectId: "p1", projects: [{ id: "p1", name: "Web" }],
+  });
+  const user = userEvent.setup();
+  render(<FixOnZiki standalone checkId="c1" results={[
+    { id: "r1", severity: "high", title: "First finding", price: 3 },
+    { id: "r2", severity: "low", title: "Second finding", price: 1 },
+    { id: "r3", severity: "low", title: "Moved finding", moved: true, price: 1 },
+  ]} />);
+
+  await user.click(await screen.findByRole("button", { name: "Select all" }));
+  expect(screen.getByRole("checkbox", { name: "High First finding" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "Low Second finding" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "Low Moved finding" })).not.toBeChecked();
+  expect(screen.getByText("4 Ziks")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Clear selection" }));
+  expect(screen.getByRole("button", { name: "Pay and move" })).toBeDisabled();
+  expect(fixSecurityCheck).not.toHaveBeenCalled();
+});

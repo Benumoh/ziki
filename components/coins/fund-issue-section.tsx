@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { canFundIssue } from "@/lib/coins/fund";
 import { escrowBalance, walletBalance } from "@/lib/coins/ledger";
-import { estimateToZik, formatUsd } from "@/lib/coins/math";
+import { estimateToZik } from "@/lib/coins/math";
 import { FundIssueBox } from "./fund-issue-box";
 
 /**
@@ -36,7 +36,7 @@ export async function FundIssueSection({
       escrow={escrow}
       balance={balance}
       canFund={mayFund}
-      estimate={estimate && estimateZik ? { zik: estimateZik, usd: formatUsd(Math.round(estimate.dollars * 100)), count: estimate.count } : null}
+      estimate={estimate && estimateZik ? { zik: estimateZik, count: estimate.count } : null}
     />
   );
 }

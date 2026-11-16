@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fundIssueAction } from "@/app/actions/coins";
+import { ZikAmount } from "@/components/zik-symbol";
 
 /**
  * Fund an issue with Ziks (#ziki-coins), drawn inside the Reward card so the person who can fund it sees it with the
@@ -23,7 +24,7 @@ export function FundIssueBox({
   balance: number;
   canFund: boolean;
   /** The reward estimate agreed by planning poker, in Ziks and in dollars, once anyone has estimated. */
-  estimate?: { zik: number; usd: string; count: number } | null;
+  estimate?: { zik: number; count: number } | null;
 }) {
   const router = useRouter();
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
@@ -62,7 +63,7 @@ export function FundIssueBox({
       </p>
       {estimate ? (
         <p className="m-0 text-xs text-zk-text2">
-          Estimate {estimate.usd}, {estimate.zik.toLocaleString("en-US")} Ziks, from {estimate.count} {estimate.count === 1 ? "estimate" : "estimates"}.
+          Estimate <ZikAmount amount={estimate.zik} className="font-semibold text-zk-text" />, from {estimate.count} {estimate.count === 1 ? "estimate" : "estimates"}.
         </p>
       ) : null}
 

@@ -10,6 +10,7 @@ const typeFindFirst = vi.hoisted(() => vi.fn());
 const typeCreate = vi.hoisted(() => vi.fn());
 const typeUpdate = vi.hoisted(() => vi.fn());
 const typeDelete = vi.hoisted(() => vi.fn());
+const typeFindMany = vi.hoisted(() => vi.fn());
 const bugCount = vi.hoisted(() => vi.fn());
 const ideaCount = vi.hoisted(() => vi.fn());
 const bugActivityCreateMany = vi.hoisted(() => vi.fn());
@@ -64,7 +65,7 @@ vi.mock("@/lib/prisma", () => ({
     projectPreviewSettings: { upsert: previewUpsert, findUnique: previewSettingsFindUnique },
     previewBuild: { create: previewBuildCreate, update: previewBuildUpdate },
     projectAuditEvent: { create: auditCreate },
-    issueType: { findFirst: typeFindFirst, create: typeCreate, update: typeUpdate, delete: typeDelete },
+    issueType: { findFirst: typeFindFirst, findMany: typeFindMany, create: typeCreate, update: typeUpdate, delete: typeDelete },
     bug: { count: bugCount },
     idea: { count: ideaCount },
     bugActivity: { createMany: bugActivityCreateMany },
@@ -667,10 +668,10 @@ describe("saveMarketingSiteAction (#marketing-home)", () => {
     );
   });
 
-  it("refuses a member who is not an organisation admin", async () => {
+  it("lets a project member who is not an organisation admin set the site, for now (#marketing-agent-home)", async () => {
     requireProject.mockResolvedValue({ user: { id: "member" }, organisationId: "organisation-1", project: { id: "project-1" }, isOrgAdmin: false });
-    await expect(saveMarketingSiteAction(slug, undefined, site("https://acme.dev"))).resolves.toMatchObject({ error: expect.any(String) });
-    expect(transaction).not.toHaveBeenCalled();
+    await expect(saveMarketingSiteAction(slug, undefined, site("https://acme.dev"))).resolves.toEqual({ ok: true });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { siteUrl: "https://acme.dev" } });
   });
 
   it("refuses an empty, plain-http or example address", async () => {
@@ -680,13 +681,13 @@ describe("saveMarketingSiteAction (#marketing-home)", () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it("lets only organisation admins talk to the marketing assistant", async () => {
+  it("doesn't let anyone talk to the marketing assistant before the project has its website", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetchMock);
+    typeFindMany.mockResolvedValue([]);
     requireProject.mockResolvedValue({ user: { id: "member" }, organisationId: "organisation-1", project: { id: "project-1" }, isOrgAdmin: false });
     await expect(askMarketingAssistantAction(slug, [{ role: "user", text: "Why don't people sign up?" }])).resolves.toMatchObject({ ok: false });
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(projectFindUnique).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 

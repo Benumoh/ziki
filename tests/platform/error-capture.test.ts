@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appFrames, captureError, fingerprintError, groupErrors, normaliseRoute, redactText } from "@/lib/error-capture";
+import { appVersionLabel, deployedCommit } from "@/lib/deployed-version";
 
 /** Server errors are made safe and grouped before anything keeps them (#871). */
 const stack = [
@@ -36,5 +37,14 @@ describe("error capture", () => {
     const groups = groupErrors([one, two, one, one]);
     expect(groups.map((g) => g.count)).toEqual([3, 1]);
     expect(groups[0].sample.route).toBe("/a");
+  });
+});
+
+describe("deployed version label (no PR package.json conflicts)", () => {
+  it("uses build-time NEXT_PUBLIC_APP_VERSION or deployed commit SHA without requiring package.json edits", () => {
+    expect(appVersionLabel({ NODE_ENV: "production", NEXT_PUBLIC_APP_VERSION: "0.1.950" }, "0.1.190")).toBe("v0.1.950");
+    expect(appVersionLabel({ NODE_ENV: "production", SOURCE_COMMIT: "79e5b06c123456" }, "0.1.190")).toBe("v0.1.190+79e5b06");
+    expect(appVersionLabel({ NODE_ENV: "production" }, "0.1.190")).toBe("v0.1.190");
+    expect(deployedCommit({ NODE_ENV: "production", VERCEL_GIT_COMMIT_SHA: "abcdef123456" })).toBe("abcdef123456");
   });
 });

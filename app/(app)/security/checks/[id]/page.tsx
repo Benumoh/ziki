@@ -9,7 +9,7 @@ import { ReportLive } from "@/components/security-checks/report-live";
 import { ReportProgress } from "@/components/security-checks/report-progress";
 import { ReportResults } from "@/components/security-checks/report-results";
 import { ReportSummary } from "@/components/security-checks/report-summary";
-import { SiteChatToggle } from "@/components/security-checks/site-chat-box";
+import { SiteChatButton, SiteChatHolder, SiteChatPanel } from "@/components/security-checks/site-chat-box";
 import { requireUser } from "@/lib/auth-helpers";
 import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
@@ -42,6 +42,9 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
     <div className="flex w-full flex-col gap-4 pb-10 sm:gap-6">
       {/* Live until the report is posted; a cancelled check has nothing more to show. */}
       {working && !report.posted ? <ReportLive /> : null}
+      {/* The top row and, under it, the site's chat when it's opened from the icon by "More actions" (16 Nov): one block, so a closed chat adds no gap. */}
+      <SiteChatHolder checkId={report.checkId} site={report.target.value}>
+      <div className="flex flex-col">
       {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx), with the same "More actions" menu on the right. */}
       <div className="flex w-full items-center justify-between gap-3">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center px-0.5 text-[13px] text-zk-text2">
@@ -60,11 +63,17 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
       </nav>
       {/* Remove sits here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
       {report.status !== "cancelled" ? (
-        <IssueActionsMenu>
-          <RemoveScanButton checkId={report.checkId} site={report.target.value} posted={report.posted} />
-        </IssueActionsMenu>
+        <div className="flex shrink-0 items-center gap-2">
+          <SiteChatButton />
+          <IssueActionsMenu>
+            <RemoveScanButton checkId={report.checkId} site={report.target.value} posted={report.posted} />
+          </IssueActionsMenu>
+        </div>
       ) : null}
       </div>
+      {report.status !== "cancelled" ? <SiteChatPanel /> : null}
+      </div>
+      </SiteChatHolder>
 
       {/* Only while ownership proof is on: with it off, the report shows such a check as waiting to start. */}
       {report.status === "awaiting_ownership" ? (
@@ -98,8 +107,6 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
 
           {report.posted ? <ReportResults report={report} /> : null}
 
-          {/* Back into this site's saved chat (15 Nov call): closed until asked for. */}
-          {report.status !== "cancelled" ? <SiteChatToggle checkId={report.checkId} site={report.target.value} /> : null}
         </>
       )}
     </div>

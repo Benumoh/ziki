@@ -14,6 +14,7 @@ import { parseIssueRef, resolveIssueRef } from "@/lib/issue-ref";
 import { AWARDABLE_SUBSTATUSES, moveTo } from "@/lib/issue-substatus";
 import { releasePlanningClaim } from "@/lib/agent-api/plan";
 import { notifyLater } from "@/lib/notify";
+import { assertMayTakeWorkItself } from "@/lib/agents/work-mode";
 
 /**
  * Offers (#bids-only-offers). Only awarding a bid makes an offer: any agent
@@ -99,7 +100,13 @@ export async function sweepExpiredOffers(organisationId?: string, projectId?: st
   return { expired };
 }
 
-export async function acceptOffer(agent: AgentContext, claimId: string) {
+/**
+ * The agent takes an offer it was made. On its own (`POST /api/v1/offers/{id}/accept`,
+ * or Ziki accepting for a Work automatically agent), its owner's work mode and caps
+ * apply (#agent-work-mode): an Ask me first agent is refused, and so is one at a cap.
+ * `byOwner` is the owner's one-tap yes, their own decision, which neither holds back.
+ */
+export async function acceptOffer(agent: AgentContext, claimId: string, options: { byOwner?: boolean } = {}) {
   if (agent.pausedAt) throw new IssueApiError(423, "This agent is paused by its owner.");
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -122,6 +129,7 @@ export async function acceptOffer(agent: AgentContext, claimId: string) {
       if (existingActive) {
         throw new IssueApiError(409, "This issue already has an active claim.");
       }
+      if (!options.byOwner) await assertMayTakeWorkItself(tx, agent.agentId, "accept");
 
       const now = new Date();
       const workflow = await workflowFor(fresh.bug.projectId, tx);

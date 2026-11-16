@@ -25,6 +25,7 @@ export default async function OrgForumPage({
   return (
     <section className="space-y-6">
       <PublicMessageBoard
+        key={`org-${organisation.slug}`}
         scope="org"
         orgSlug={organisation.slug}
         orgName={organisation.name}

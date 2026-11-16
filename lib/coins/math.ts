@@ -11,9 +11,22 @@ export function zikToCents(zik: number): number {
   return zik * ZIK_CENTS;
 }
 
+/** How many Ziks make a dollar: 10, because a Zik is 10 cents. */
+export const ZIKS_PER_DOLLAR = 100 / ZIK_CENTS;
+
 /** An issue's reward estimate in dollars (the average of the planning-poker estimates), as whole Ziks. At least one. */
 export function estimateToZik(dollars: number): number {
   return Math.max(1, Math.round((dollars * 100) / ZIK_CENTS));
+}
+
+/** Ziks as the dollars the points economy stores an estimate in. `ziksToDollars(dollarsToZiks(n)) === n` for whole dollars. */
+export function ziksToDollars(ziks: number): number {
+  return ziks / ZIKS_PER_DOLLAR;
+}
+
+/** Dollars as whole Ziks, with no minimum: 0 stays 0. */
+export function dollarsToZiks(dollars: number): number {
+  return Math.round(dollars * ZIKS_PER_DOLLAR);
 }
 
 export function formatZik(zik: number): string {
