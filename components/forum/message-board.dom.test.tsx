@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+vi.mock("@/app/actions/forum", () => ({
+  switchForumOrganisationAction: vi.fn(),
+}));
+
 import { PublicMessageBoard } from "./message-board";
 
 describe("PublicMessageBoard", () => {
