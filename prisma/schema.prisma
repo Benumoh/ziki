@@ -446,6 +446,8 @@ model IssueType {
   isActive    Boolean   @default(true)
   /// Marketing types show only in the Marketing section.
   track       WorkTrack @default(product)
+  /// What a marketing type's work is for, shown on the Marketing home (#marketing-agent-home). Null: none set.
+  goal        String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bugs        Bug[]

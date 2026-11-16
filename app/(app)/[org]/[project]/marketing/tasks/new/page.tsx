@@ -4,16 +4,20 @@ import { logLoadFailure } from "@/lib/load-error";
 import { MARKETING_TRACK } from "@/lib/marketing/track";
 import { prisma } from "@/lib/prisma";
 import { requireProject } from "@/lib/project-route";
+import { toSingleQueryParam } from "@/lib/search";
 
 export const metadata = { title: "Propose a marketing task" };
 
-/** `/<slug>/marketing/tasks/new`: the form for proposing a marketing task (M-UI-3). */
+/** `/<slug>/marketing/tasks/new`: the form for proposing a marketing task (M-UI-3). `?type=` picks the task type (the Marketing home's Create a task). */
 export default async function NewMarketingTaskPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ org: string; project: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { org, project: projectSlug } = await params;
+  const defaultTypeId = toSingleQueryParam((await searchParams).type);
   const { organisationId, project } = await requireProject(org, projectSlug);
 
   let types;
@@ -39,7 +43,7 @@ export default async function NewMarketingTaskPage({
           Propose a marketing task
         </h1>
       </header>
-      <NewMarketingTaskForm projectId={project.id} types={types} />
+      <NewMarketingTaskForm projectId={project.id} types={types} defaultTypeId={defaultTypeId} />
     </div>
   );
 }
