@@ -4,36 +4,32 @@ import { requireProject } from "@/lib/project-route";
 import { projectPath } from "@/lib/project-paths";
 import { prisma } from "@/lib/prisma";
 import { LocalTime } from "@/components/local-time";
+import { agentsChipClass, agentsMutedClass, agentsPrimaryBtn, agentsSecondaryBtn, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
 import { INACTIVE_DAYS, MAX_NEW_CLUSTERS_PER_DAY, MAX_OPEN_CLUSTERS, listClusters, ownAgentsIn } from "@/lib/clusters";
+import { ClusterMark } from "@/components/clusters/cluster-mark";
 import { createClusterAction, joinClusterAction, leaveClusterAction } from "./actions";
 
 export const metadata = { title: "Agent clusters" };
 
-// The same pieces as the Ideas and Issues lists (components/ideas-list.tsx, components/idea-path.tsx).
-const CHIP = "inline-flex h-5 items-center gap-0.5 whitespace-nowrap rounded-[7px] border px-[5px] font-mono text-[10.5px] font-semibold";
-const CHIP_CURRENT = "border-transparent bg-blue-50 text-blue-700";
-const CHIP_DONE = "border-transparent bg-zk-chip text-zk-text2";
-const CHIP_MUTED = "border-dashed border-zk-border bg-zk-surface text-zk-muted";
-const ACT = "inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md border border-zk-ok-fg bg-zk-ok-fg px-2 text-[11.5px] font-bold text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] outline-none transition hover:brightness-110 focus:outline-none";
-const ACT_PLAIN = "inline-flex h-6 items-center whitespace-nowrap rounded-md border border-zk-border bg-zk-surface px-2 text-[11.5px] font-semibold text-zk-text2 outline-none hover:bg-zk-chip focus:outline-none";
-const TOOLBAR_BUTTON = "inline-flex h-9 shrink-0 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-2.5 text-[13px] font-semibold text-zk-text outline-none hover:bg-zk-chip focus:outline-none";
-const INPUT = "w-full rounded-lg border border-zk-border bg-zk-surface px-3 py-2 text-sm text-zk-text placeholder:text-zk-muted outline-none focus:outline-none focus:ring-0";
-const ARROW = <span aria-hidden="true" className="px-0.5 text-zk-muted">→</span>;
+// The agent pages' look (app/(app)/settings/agents/agents-ui.tsx), without the click focus ring.
+const INPUT = "w-full rounded-xl border border-zk-border bg-zk-surface px-3.5 py-2.5 text-sm text-zk-text placeholder:text-zk-muted outline-none focus:outline-none";
 
 /**
- * `/<org>/<project>/clusters` (#agent-clusters): the project's clusters as a list
- * like Ideas and Issues: a member count, the cluster and its meta line, when it
- * was last active, and where your agent stands with it. People create clusters,
- * accept invites and join through one of their own agents, as the agents do with
- * their keys. `?archived=1` adds archived clusters; `?error=` shows why an action failed.
+ * `/<org>/<project>/clusters` (#agent-clusters): the project's clusters, laid out
+ * like My agents: a title, the actions at the top right, then one row per cluster
+ * with its mark, name, status pill, details and the action that fits. People
+ * create clusters, accept invites and join through one of their own agents, as
+ * the agents do with their keys. `?archived=1` adds archived clusters; `?error=`
+ * shows why an action failed.
  */
 export default async function ClustersPage({ params, searchParams }: {
   params: Promise<{ org: string; project: string }>;
-  searchParams: Promise<{ archived?: string; error?: string }>;
+  searchParams: Promise<{ archived?: string; error?: string; new?: string }>;
 }) {
   const { org, project: slugParam } = await params;
   const query = await searchParams;
   const showArchived = query.archived === "1";
+  const creating = query.new === "1";
   const { user, organisationId, project, isOrgMember, isProjectMember } = await requireProject(org, slugParam);
   if (!isOrgMember && !isProjectMember && user.role !== "super_admin") notFound();
   const { items } = await listClusters({ organisationId, projectId: project.id, userId: user.id }, { includeArchived: showArchived });
@@ -47,6 +43,7 @@ export default async function ClustersPage({ params, searchParams }: {
     }),
   ]);
   const invitedAgent = new Map(invites.map((row) => [row.clusterId, row.agentId]));
+  const mine = items.filter((c) => c.myStatus === "active").length;
   // The agent that would join: the first of yours with one of the cluster's needed skills.
   const joiner = (needed: string[]) => myAgents.find((agent) => agent.skills.some((slug) => needed.includes(slug)));
   const hidden = (agentId: string, clusterId?: string) => (
@@ -59,134 +56,124 @@ export default async function ClustersPage({ params, searchParams }: {
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 caret-transparent [&_input]:[caret-color:auto] [&_textarea]:[caret-color:auto]">
-      {query.error ? (
-        <p role="alert" className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{query.error}</p>
-      ) : null}
-
-      <div className="rounded-[20px] border border-zk-border bg-zk-surface">
-        <div className="flex items-start justify-between gap-3 border-b border-zk-border px-4 py-3">
-          {myAgents.length ? (
-            <details className="min-w-0 flex-1">
-            <summary className={TOOLBAR_BUTTON}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-              New cluster
-            </summary>
-            <form action={createClusterAction} className="mt-3 grid gap-3">
-              <input type="hidden" name="projectId" value={project.id} />
-              <input type="hidden" name="back" value={listPath} />
-              <div className="grid gap-3 md:grid-cols-2">
-                <input name="name" required minLength={3} maxLength={80} placeholder="Cluster name, for example: Payments hardening" aria-label="Cluster name" className={INPUT} />
-                <select name="agentId" aria-label="Your agent that owns it" className={INPUT}>
-                  {myAgents.map((agent) => <option key={agent.id} value={agent.id}>Owned by {agent.name}</option>)}
-                </select>
-              </div>
-              <textarea name="purpose" required minLength={10} maxLength={500} rows={2} placeholder="What is it for? Everyone in the project can read this." aria-label="What it is for" className={INPUT} />
-              <fieldset className="grid gap-1.5">
-                <legend className="mb-1 text-xs font-semibold text-zk-muted">Skills it needs (at least one)</legend>
-                <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto">
-                  {tags.map((tag) => (
-                    <label key={tag.slug} className={`${CHIP} ${CHIP_MUTED} cursor-pointer has-[:checked]:border-transparent has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700`}>
-                      <input type="checkbox" name="skills" value={tag.slug} className="sr-only" />
-                      {tag.slug}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <p className="m-0 text-xs text-zk-muted">
-                An agent leads at most {MAX_OPEN_CLUSTERS} open clusters and starts at most {MAX_NEW_CLUSTERS_PER_DAY} a day. Clusters archive after {INACTIVE_DAYS} days without activity.
-              </p>
-              <div><button type="submit" className={ACT}>Create cluster</button></div>
-            </form>
-            </details>
-          ) : <span className="flex-1" />}
-          <Link href={showArchived ? listPath : `${listPath}?archived=1`} className={`${CHIP} ${showArchived ? CHIP_CURRENT : CHIP_MUTED} outline-none focus:outline-none`}>
+    <div className="mx-auto w-full max-w-5xl space-y-8 caret-transparent [&_input]:[caret-color:auto] [&_textarea]:[caret-color:auto]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0 space-y-1 sm:max-w-xl md:max-w-2xl">
+          <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">Clusters</h1>
+          <p className={agentsMutedClass}>
+            Groups of agents that help each other get tasks done in {project.name}. Any agent with a needed skill can join. {items.length}{" "}
+            {items.length === 1 ? "cluster" : "clusters"}, your agents are in {mine}.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href={showArchived ? listPath : `${listPath}?archived=1`} className={`${agentsSecondaryBtn} outline-none focus:outline-none`}>
             {showArchived ? "Hide archived" : "Show archived"}
           </Link>
+          {myAgents.length ? (
+            <Link href={creating ? listPath : `${listPath}?new=1`} className={`${agentsPrimaryBtn} outline-none focus:outline-none`}>
+              {creating ? "Cancel" : "Create cluster"}
+            </Link>
+          ) : null}
         </div>
-
-        {items.length ? (
-          <section className="issues-results flex flex-col gap-3.5 p-4" aria-label="Clusters">
-            <div className="issues-table relative">
-              <div>
-                <div className="flex items-center gap-2 border-b border-zk-divider px-2 pb-2.5 text-[13px] font-semibold text-zk-text2 lg:gap-4 lg:px-4">
-                  <span className="w-[52px]">Members</span>
-                  <span className="min-w-0 flex-1">Cluster</span>
-                  <span className="hidden w-24 shrink-0 md:block">Last update</span>
-                  <span className="shrink-0" style={{ width: 264, flexBasis: 264 }}><span className="sr-only">Status</span></span>
-                </div>
-                <ul>
-                  {items.map((cluster, index) => {
-                    const member = cluster.myStatus === "active";
-                    const href = projectPath(project.ref, `/clusters/${cluster.id}`);
-                    const creator = cluster.members.find((m) => m.agentId === cluster.creatorAgentId)?.name;
-                    const canJoin = joiner(cluster.neededSkills);
-                    const title = (
-                      <>
-                        <span className="issues-row-title text-sm font-semibold leading-snug text-zk-text">{cluster.name}</span>
-                        <span className="issues-row-meta flex flex-wrap items-center gap-2 text-xs text-zk-muted">
-                          <span>{cluster.purpose}</span>
-                        </span>
-                        <span className="issues-row-meta flex flex-wrap items-center gap-2 text-xs text-zk-muted">
-                          {creator ? <span>{creator}</span> : null}
-                          <span className="tabular-nums">{cluster.taskCount} task{cluster.taskCount === 1 ? "" : "s"}</span>
-                          {cluster.openBlockers ? <span className="tabular-nums text-zk-warn-fg">{cluster.openBlockers} open blocker{cluster.openBlockers === 1 ? "" : "s"}</span> : null}
-                          <span className="font-mono">
-                            {cluster.neededSkills.map((slug) => (cluster.missingSkills.includes(slug) ? `${slug} (wanted)` : slug)).join(" · ")}
-                          </span>
-                        </span>
-                      </>
-                    );
-                    return (
-                      <li key={cluster.id} className={`issues-row flex items-center gap-2 px-2 py-3.5 lg:gap-4 lg:px-4 ${index < items.length - 1 ? "border-b border-zk-divider" : ""} ${cluster.archived ? "opacity-70" : ""}`}>
-                        <div className="issues-vote flex w-[52px] shrink-0 flex-col items-center justify-center rounded-lg border border-zk-border py-1.5" title={`${cluster.members.length} members`}>
-                          <span className="text-sm font-bold tabular-nums text-zk-text">{cluster.members.length}</span>
-                        </div>
-                        {member ? (
-                          <Link href={href} className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-md text-left outline-none focus:outline-none">{title}</Link>
-                        ) : (
-                          <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">{title}</div>
-                        )}
-                        <span className="hidden w-24 shrink-0 text-xs text-zk-muted md:block"><LocalTime date={cluster.lastActivityAt} /></span>
-                        <span className="issues-status-cell" style={{ width: 264, flexBasis: 264 }}>
-                          <span className="flex w-full items-center justify-end gap-[3px]">
-                            {cluster.archived ? (
-                              <span className={`${CHIP} ${CHIP_DONE}`}>Archived</span>
-                            ) : member ? (
-                              <>
-                                <span className={`${CHIP} ${CHIP_CURRENT}`}>• Member</span>{ARROW}
-                                <Link href={href} className={ACT}>Open</Link>
-                              </>
-                            ) : invitedAgent.has(cluster.id) ? (
-                              <>
-                                <span className={`${CHIP} ${CHIP_CURRENT}`}>• Invited</span>{ARROW}
-                                <form action={joinClusterAction}>{hidden(invitedAgent.get(cluster.id) ?? "", cluster.id)}<button type="submit" className={ACT}>Accept</button></form>
-                                <form action={leaveClusterAction}>{hidden(invitedAgent.get(cluster.id) ?? "", cluster.id)}<button type="submit" className={ACT_PLAIN}>Decline</button></form>
-                              </>
-                            ) : canJoin ? (
-                              <>
-                                <span className={`${CHIP} ${CHIP_MUTED}`}>• Private</span>{ARROW}
-                                <form action={joinClusterAction}>{hidden(canJoin.id, cluster.id)}<button type="submit" className={ACT} title={`Join as ${canJoin.name}`}>Join</button></form>
-                              </>
-                            ) : (
-                              <span className={`${CHIP} ${CHIP_MUTED}`}>• Private · members only</span>
-                            )}
-                          </span>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <div className="px-4 py-12 text-center">
-            <p className="font-bold text-zk-text">Nothing here right now.</p>
-            <p className="mt-1.5 text-sm text-zk-muted">Clusters show up here once an agent starts one.</p>
-          </div>
-        )}
       </div>
+
+      {query.error ? (
+        <p role="alert" className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{query.error}</p>
+      ) : null}
+
+      {creating && myAgents.length ? (
+        <form action={createClusterAction} className={`${agentsSurface} grid gap-4 p-5 sm:p-6`}>
+          <input type="hidden" name="projectId" value={project.id} />
+          <input type="hidden" name="back" value={listPath} />
+          <h2 className="text-lg font-extrabold text-zk-text">Create a cluster</h2>
+          <label className="grid gap-1.5 text-sm font-semibold text-zk-text">
+            Name
+            <input name="name" required minLength={3} maxLength={80} placeholder="For example: Payments hardening" className={INPUT} />
+          </label>
+          <label className="grid gap-1.5 text-sm font-semibold text-zk-text">
+            What is it for?
+            <textarea name="purpose" required minLength={10} maxLength={500} rows={2} placeholder="Everyone in the project can read this." className={INPUT} />
+          </label>
+          <fieldset className="grid gap-1.5">
+            <legend className="mb-1.5 text-sm font-semibold text-zk-text">Skills it needs</legend>
+            <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+              {tags.map((tag) => (
+                <label key={tag.slug} className={`${agentsChipClass} cursor-pointer border border-transparent has-[:checked]:border-electric-blue has-[:checked]:bg-zk-tint has-[:checked]:text-zk-accent`}>
+                  <input type="checkbox" name="skills" value={tag.slug} className="sr-only" />
+                  {tag.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="grid gap-1.5 text-sm font-semibold text-zk-text">
+            Owned by
+            <select name="agentId" className={INPUT}>
+              {myAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+            </select>
+          </label>
+          <p className="m-0 text-xs text-zk-muted">
+            An agent owns at most {MAX_OPEN_CLUSTERS} open clusters and starts at most {MAX_NEW_CLUSTERS_PER_DAY} a day. Clusters archive after {INACTIVE_DAYS} days without activity.
+          </p>
+          <div><button type="submit" className={`${agentsPrimaryBtn} outline-none focus:outline-none`}>Create cluster</button></div>
+        </form>
+      ) : null}
+
+      {items.length ? (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {items.map((cluster) => {
+            const member = cluster.myStatus === "active";
+            const href = projectPath(project.ref, `/clusters/${cluster.id}`);
+            const owner = cluster.members.find((m) => m.agentId === cluster.creatorAgentId)?.name;
+            const canJoin = joiner(cluster.neededSkills);
+            const invited = invitedAgent.get(cluster.id);
+            return (
+              <li key={cluster.id} className={`${agentsSurface} group relative flex flex-col gap-4 p-4 transition hover:border-electric-blue/50 hover:shadow-[0_10px_28px_rgba(11,23,51,0.10)] sm:flex-row sm:items-center sm:gap-5 sm:p-5 ${cluster.archived ? "opacity-70" : ""}`}>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <ClusterMark name={cluster.name} size={48} />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {member ? (
+                        <Link href={href} className="break-words text-base font-extrabold text-zk-text outline-none after:absolute after:inset-0 after:rounded-[20px] after:content-[''] hover:text-zk-accent focus:outline-none">{cluster.name}</Link>
+                      ) : (
+                        <span className="break-words text-base font-extrabold text-zk-text">{cluster.name}</span>
+                      )}
+                      <span className={agentsChipClass}>{cluster.archived ? "Archived" : member ? "Member" : invited ? "Invited" : "Private"}</span>
+                    </div>
+                    <p className="m-0 text-xs text-zk-muted">
+                      {owner ? `Owned by ${owner} · ` : ""}{cluster.members.length} {cluster.members.length === 1 ? "member" : "members"} · {cluster.taskCount} {cluster.taskCount === 1 ? "task" : "tasks"}
+                      {cluster.openBlockers ? ` · ${cluster.openBlockers} open ${cluster.openBlockers === 1 ? "blocker" : "blockers"}` : ""} · active <LocalTime date={cluster.lastActivityAt} />
+                    </p>
+                    <p className="m-0 text-sm text-zk-text2 [overflow-wrap:anywhere]">{cluster.purpose}</p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {cluster.neededSkills.map((slug) => (
+                        <span key={slug} className={cluster.missingSkills.includes(slug) ? "inline-flex items-center rounded-full border border-dashed border-electric-blue px-2.5 py-0.5 text-xs font-bold text-zk-accent" : agentsChipClass}>
+                          {slug}{cluster.missingSkills.includes(slug) ? " · wanted" : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="relative z-10 flex flex-wrap items-center gap-2 sm:justify-end">
+                  {cluster.archived ? null : member ? (
+                    <Link href={href} className={`${agentsPrimaryBtn} outline-none focus:outline-none`}>Open</Link>
+                  ) : invited ? (
+                    <>
+                      <form action={leaveClusterAction}>{hidden(invited, cluster.id)}<button type="submit" className={`${agentsSecondaryBtn} outline-none focus:outline-none`}>Decline</button></form>
+                      <form action={joinClusterAction}>{hidden(invited, cluster.id)}<button type="submit" className={`${agentsPrimaryBtn} outline-none focus:outline-none`}>Accept invite</button></form>
+                    </>
+                  ) : canJoin ? (
+                    <form action={joinClusterAction}>{hidden(canJoin.id, cluster.id)}<button type="submit" className={`${agentsPrimaryBtn} outline-none focus:outline-none`} title={`Join as ${canJoin.name}`}>Join</button></form>
+                  ) : (
+                    <span className={agentsMutedClass}>Members only</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className={`${agentsMutedClass} ${agentsSurface} p-6`}>No clusters yet. Create one to bring agents together on a task.</p>
+      )}
     </div>
   );
 }

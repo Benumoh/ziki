@@ -3,9 +3,13 @@ import { notFound } from "next/navigation";
 import { requireProject } from "@/lib/project-route";
 import { projectPath } from "@/lib/project-paths";
 import { IssueApiError } from "@/lib/agent-api/errors";
-import { SkillLine } from "@/components/clusters/skill-line";
+import { LocalTime } from "@/components/local-time";
+import { ClusterMark } from "@/components/clusters/cluster-mark";
 import {
-  INACTIVE_DAYS, getClusterCard, listPending, listTasks, ownAgentsIn, readNotes, suggestInvites, type ClusterViewer,
+  agentsChipClass, agentsDangerBtn, agentsLink, agentsMutedClass, agentsPrimaryBtn, agentsSecondaryBtn, agentsSurface,
+} from "@/app/(app)/settings/agents/agents-ui";
+import {
+  INACTIVE_DAYS, getClusterCard, listClusters, listPending, listTasks, ownAgentsIn, readNotes, suggestInvites, type ClusterViewer,
 } from "@/lib/clusters";
 import {
   addBlockerAction, addTaskAction, deleteClusterAction, inviteAction, leaveClusterAction, removeMemberAction,
@@ -14,22 +18,29 @@ import {
 
 export const metadata = { title: "Cluster" };
 
-const INPUT = "w-full rounded-lg border border-zk-border bg-zk-surface px-3 py-2 text-sm text-zk-text placeholder:text-zk-muted focus:border-zk-accent focus:outline-none";
-const BUTTON = "inline-flex items-center justify-center rounded-lg border border-zk-border px-3 py-1.5 text-sm font-semibold text-zk-text hover:bg-zk-chip";
-const PRIMARY = "inline-flex items-center justify-center rounded-lg bg-zk-accent px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90";
-const DANGER = "inline-flex items-center justify-center rounded-lg border border-zk-bad-bd bg-zk-bad-bg px-3 py-1.5 text-sm font-semibold text-zk-bad-fg hover:opacity-90";
-const LABEL = "m-0 text-[11px] font-semibold uppercase tracking-wide text-zk-muted";
+// The agent profile's look (app/(app)/agent/[username]/agent-profile.tsx), without the click focus ring.
+const SECTION = "text-base font-extrabold text-zk-text";
+const INPUT = "w-full rounded-xl border border-zk-border bg-zk-surface px-3.5 py-2.5 text-sm text-zk-text placeholder:text-zk-muted outline-none focus:outline-none";
+const NOFOCUS = "outline-none focus:outline-none";
+const ROW = "group rounded-2xl border border-zk-border px-4 py-3 open:bg-zk-chip/40";
+const SUMMARY = "flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 outline-none focus:outline-none [&::-webkit-details-marker]:hidden";
+const TEXT_LINK = "text-xs font-bold outline-none hover:underline focus:outline-none";
 
-function when(date: Date) {
-  return date.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+function Chevron() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-zk-muted transition group-open:rotate-180" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
 }
 
 /**
- * `/<org>/<project>/clusters/<id>` (#agent-clusters): inside a cluster. The owners
- * of member agents work it through their agent: post tasks, share information,
- * raise and solve blockers, keep private notes. The cluster's owner (the creator
- * agent's owner) also removes members, cancels invites and deletes the cluster.
- * Anyone else sees only the public card and a lock: the content is never sent to them.
+ * `/<org>/<project>/clusters/<id>` (#agent-clusters): inside a cluster, laid out
+ * like an agent's profile: a strip of your clusters, the cluster's card (who owns
+ * it, what it is for, the skills it needs and its tasks), and side cards for its
+ * members and your agent's private notes. People work it through their agent; the
+ * cluster's owner (the creator agent's owner) also removes members, cancels
+ * invites and deletes it. Anyone else sees only the public card and a lock.
  */
 export default async function ClusterPage({ params, searchParams }: {
   params: Promise<{ org: string; project: string; clusterId: string }>;
@@ -51,11 +62,13 @@ export default async function ClusterPage({ params, searchParams }: {
   const listPath = projectPath(project.ref, "/clusters");
   const here = projectPath(project.ref, `/clusters/${clusterId}`);
   const member = cluster.myStatus === "active";
-  const myAgents = await ownAgentsIn(user.id, organisationId);
+  const [myAgents, all] = await Promise.all([ownAgentsIn(user.id, organisationId), listClusters(viewer)]);
+  const myClusters = all.items.filter((c) => c.myStatus === "active");
   const memberIds = new Set(cluster.members.map((m) => m.agentId));
   // Owners act as the creator agent when it is theirs; anyone else as their first member agent.
   const acting = myAgents.find((a) => a.id === cluster.creatorAgentId) ?? myAgents.find((a) => memberIds.has(a.id)) ?? null;
   const isOwner = acting?.id === cluster.creatorAgentId;
+  const owner = cluster.members.find((m) => m.agentId === cluster.creatorAgentId)?.name;
   const [tasks, notes, pending, suggestions] = member && acting
     ? await Promise.all([
       listTasks(viewer, clusterId), readNotes(viewer, clusterId), listPending(viewer, clusterId),
@@ -77,248 +90,289 @@ export default async function ClusterPage({ params, searchParams }: {
   };
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 caret-transparent [&_input]:[caret-color:auto] [&_textarea]:[caret-color:auto]">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm text-zk-text2">
-        <Link href={listPath} className="hover:text-zk-text">Clusters</Link>
-        <span aria-hidden="true">›</span>
-        <h1 aria-current="page" className="truncate font-semibold text-zk-text">{cluster.name}</h1>
-      </nav>
+    <div className="mx-auto max-w-6xl space-y-6 caret-transparent [&_input]:[caret-color:auto] [&_textarea]:[caret-color:auto]">
+      <div className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
+        <Link href={listPath} className={`justify-self-start text-sm ${agentsLink} ${NOFOCUS}`}>← Clusters</Link>
+        {myClusters.length > 1 ? (
+          <nav aria-label="Your clusters" className="-mx-4 min-w-0 overflow-x-auto px-4 sm:mx-0 sm:px-0 md:justify-self-center">
+            <ul className="m-0 flex w-max list-none gap-1 rounded-full bg-zk-seg p-1">
+              {myClusters.map((c) => {
+                const on = c.id === clusterId;
+                return (
+                  <li key={c.id}>
+                    <Link
+                      href={projectPath(project.ref, `/clusters/${c.id}`)}
+                      aria-current={on ? "page" : undefined}
+                      className={`inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full py-1 pl-1 pr-4 text-sm transition ${NOFOCUS} ${on ? "bg-zk-surface font-bold text-zk-text shadow-[0_1px_3px_rgba(21,18,31,0.12)]" : "font-medium text-zk-text2 hover:text-zk-text"}`}
+                    >
+                      <ClusterMark name={c.name} size={28} />
+                      {c.name}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        ) : <span />}
+      </div>
 
-      {error ? <p role="alert" className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{error}</p> : null}
 
-      <section className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4 sm:px-7">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold text-zk-text">{cluster.name}</h2>
-              <span className="rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Members only</span>
-              {cluster.archived ? <span className="rounded-full border border-zk-border px-2.5 py-0.5 text-xs font-semibold text-zk-muted">Archived</span> : null}
-            </div>
-            <p className="mt-1 max-w-3xl text-sm text-zk-text2 [overflow-wrap:anywhere]">{cluster.purpose}</p>
-          </div>
-          {isOwner ? (
-            <details className="relative">
-              <summary className={`${DANGER} cursor-pointer list-none`}>Delete cluster</summary>
-              <div className="absolute right-0 z-10 mt-2 w-72 rounded-xl border border-zk-border bg-zk-surface p-3 text-sm text-zk-text2 shadow-lg">
-                <p className="m-0">This deletes the cluster, its tasks, shared information and notes for every member. It can&apos;t be undone.</p>
-                <form action={deleteClusterAction} className="mt-3">
-                  {hidden({ afterDelete: listPath })}
-                  <button type="submit" className={DANGER}>Yes, delete it</button>
-                </form>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <section aria-label="Cluster" className={`${agentsSurface} min-w-0 space-y-8 p-5 sm:p-8`}>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <ClusterMark name={cluster.name} size={120} />
+            <div className="min-w-0 space-y-2.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <h1 className="break-words text-3xl font-extrabold tracking-tight text-zk-text">{cluster.name}</h1>
+                <span className="inline-flex items-center rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Members only</span>
+                {cluster.archived ? <span className={agentsChipClass}>Archived</span> : null}
               </div>
-            </details>
-          ) : null}
-        </div>
-        <SkillLine needed={cluster.neededSkills} missing={cluster.missingSkills} />
-        {cluster.archived ? (
-          <p className="mt-2 text-xs text-zk-muted">Archived after {INACTIVE_DAYS} days without activity: read-only until a member reopens it.</p>
-        ) : null}
-      </section>
-
-      {!member || !acting || !tasks || !notes || !pending || !suggestions ? (
-        <section className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-10 text-center">
-          <h3 className="text-base font-bold text-zk-text">This cluster is private</h3>
-          <p className="mx-auto mt-1 max-w-xl text-sm text-zk-text2">
-            Its tasks and shared information are only for its {cluster.members.length} member agents and their owners. One of
-            your agents with a needed skill can join from the <Link href={listPath} className="font-semibold text-zk-accent hover:underline">Clusters list</Link>.
-          </p>
-        </section>
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section aria-labelledby="cluster-tasks" className="min-w-0 rounded-[20px] border border-zk-border bg-zk-surface">
-            <div className="border-b border-zk-border px-5 py-4 sm:px-7">
-              <h3 id="cluster-tasks" className="text-base font-bold text-zk-text">Tasks</h3>
-              <p className="mt-1 text-sm text-zk-text2">Each task says what its agent is trying to achieve and what is blocking it. Members share the information that unblocks it. You act as {acting.name}.</p>
-              {open ? (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-sm font-bold text-zk-accent">+ Post a task</summary>
-                  <form action={addTaskAction} className="mt-3 grid gap-2">
-                    {hidden()}
-                    <input name="title" required minLength={3} maxLength={200} placeholder="Task title" className={INPUT} />
-                    <textarea name="tryingToAchieve" required minLength={3} rows={2} placeholder="What are you trying to achieve?" className={INPUT} />
-                    <textarea name="blockers" rows={2} placeholder="What is blocking you? One blocker per line." className={INPUT} />
-                    <input name="issueNumber" type="number" min={1} placeholder="Issue number (optional)" className={`${INPUT} sm:w-56`} />
-                    <div><button type="submit" className={PRIMARY}>Post task</button></div>
-                  </form>
-                </details>
-              ) : null}
+              <p className="text-base text-zk-text">{cluster.purpose}</p>
+              <p className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-zk-muted">
+                {owner ? <span>Owned by {owner}</span> : null}
+                <span>{cluster.members.length} {cluster.members.length === 1 ? "member" : "members"}</span>
+                <span>Active <LocalTime date={cluster.lastActivityAt} /></span>
+              </p>
+              {cluster.archived ? <p className="text-sm text-zk-muted">Archived after {INACTIVE_DAYS} days without activity: read-only until a member reopens it.</p> : null}
             </div>
-            {tasks.items.length ? (
-              <ol className="m-0 list-none divide-y divide-zk-border p-0 px-5 sm:px-7">
+          </div>
+
+          <div className="space-y-3">
+            <h2 className={SECTION}>Skills it needs</h2>
+            <div className="flex flex-wrap gap-2">
+              {cluster.neededSkills.map((slug) => {
+                const wanted = cluster.missingSkills.includes(slug);
+                return (
+                  <span key={slug} className={wanted ? "rounded-full border border-dashed border-electric-blue px-3 py-1 text-sm font-semibold text-zk-accent" : "rounded-full bg-zk-chip px-3 py-1 text-sm font-semibold text-zk-text"}>
+                    {slug}{wanted ? " · wanted" : ""}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          {!member || !acting || !tasks ? (
+            <div className="space-y-2">
+              <h2 className={SECTION}>Tasks</h2>
+              <p className={agentsMutedClass}>
+                This cluster is private: its tasks are only for its {cluster.members.length} member agents and their owners. One of your
+                agents with a needed skill can join from the <Link href={listPath} className={`${agentsLink} ${NOFOCUS}`}>Clusters list</Link>.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className={SECTION}>Tasks</h2>
+                <span className="text-xs text-zk-muted">You act as {acting.name}</span>
+              </div>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {open ? (
+                  <li>
+                    <details className={ROW}>
+                      <summary className={SUMMARY}>
+                        <span className="rounded-full bg-electric-blue-strong px-3 py-1 text-sm font-semibold text-white">+ Post a task</span>
+                        <span className="min-w-0 flex-1 text-sm text-zk-text2">Say what you are trying to achieve and what is blocking you.</span>
+                        <Chevron />
+                      </summary>
+                      <form action={addTaskAction} className="mt-3 grid gap-2">
+                        {hidden()}
+                        <input name="title" required minLength={3} maxLength={200} placeholder="Task title" className={INPUT} />
+                        <textarea name="tryingToAchieve" required minLength={3} rows={2} placeholder="What are you trying to achieve?" className={INPUT} />
+                        <textarea name="blockers" rows={2} placeholder="What is blocking you? One blocker per line." className={INPUT} />
+                        <input name="issueNumber" type="number" min={1} placeholder="Issue number (optional)" className={`${INPUT} sm:w-56`} />
+                        <div><button type="submit" className={`${agentsPrimaryBtn} ${NOFOCUS}`}>Post task</button></div>
+                      </form>
+                    </details>
+                  </li>
+                ) : null}
                 {tasks.items.map((task) => {
                   const blockerText = new Map(task.blockers.map((blocker) => [blocker.id, blocker.text]));
                   const mine = task.authorAgentId === acting.id;
                   const openBlockers = task.blockers.filter((blocker) => blocker.solvedAt === null);
                   return (
-                    <li key={task.id} className="py-5">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <h4 className="text-[15px] font-bold text-zk-text [overflow-wrap:anywhere]">
-                          {task.issueNumber ? (
-                            <Link href={projectPath(project.ref, `/${task.issueNumber}`)} className="mr-2 font-mono text-sm font-semibold text-zk-accent hover:underline">#{task.issueNumber}</Link>
-                          ) : null}
-                          {task.title}
-                        </h4>
-                        <span className="text-xs text-zk-muted">{task.authorName} · {when(task.createdAt)}</span>
-                      </div>
-                      <p className={`${LABEL} mt-2`}>Trying to achieve</p>
-                      <div className="mt-0.5 whitespace-pre-wrap text-sm text-zk-text [overflow-wrap:anywhere]">{task.body}</div>
-
-                      <p className={`${LABEL} mt-3`}>Blockers {task.blockers.length ? `· ${task.openBlockers} open` : ""}</p>
-                      {task.blockers.length ? (
-                        <ul className="m-0 mt-1 flex list-none flex-col gap-1.5 p-0">
-                          {task.blockers.map((blocker) => (
-                            <li key={blocker.id} className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${blocker.solvedAt ? "border-zk-border text-zk-muted" : "border-zk-warn-bd bg-zk-warn-bg text-zk-text"}`}>
-                              <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${blocker.solvedAt ? "bg-zk-chip text-zk-text2" : "bg-zk-surface text-zk-warn-fg"}`}>
-                                {blocker.solvedAt ? "Solved" : "Open"}
-                              </span>
-                              <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${blocker.solvedAt ? "line-through" : ""}`}>{blocker.text}</span>
-                              {mine && open ? (
-                                <form action={solveBlockerAction} className="shrink-0">
-                                  {hidden({ blockerId: blocker.id, solved: blocker.solvedAt ? "false" : "true" })}
-                                  <button type="submit" className="text-xs font-semibold text-zk-accent hover:underline">{blocker.solvedAt ? "Reopen" : "Mark solved"}</button>
-                                </form>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="m-0 mt-1 text-sm text-zk-muted">Nothing blocking it.</p>
-                      )}
-
-                      <p className={`${LABEL} mt-3`}>Shared information · {task.shared.length}</p>
-                      {task.shared.length ? (
-                        <ul aria-label="Shared information" className="m-0 mt-1 flex list-none flex-col gap-2 border-l-2 border-zk-divider p-0 pl-4">
-                          {task.shared.map((info) => (
-                            <li key={info.id}>
-                              <p className="m-0 flex flex-wrap items-center gap-x-2 text-[13px]">
-                                <b className="font-semibold text-zk-text">{info.authorName}</b>
-                                <time dateTime={info.createdAt.toISOString()} className="text-xs text-zk-muted">{when(info.createdAt)}</time>
-                                {info.blockerId && blockerText.has(info.blockerId) ? (
-                                  <span className="text-xs text-zk-accent">on blocker: {blockerText.get(info.blockerId)}</span>
-                                ) : null}
-                              </p>
-                              <div className="mt-0.5 whitespace-pre-wrap text-sm text-zk-text [overflow-wrap:anywhere]">{info.body}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="m-0 mt-1 text-sm text-zk-muted">No one has shared anything yet.</p>
-                      )}
-
-                      {open ? (
-                        <div className="mt-3 grid gap-2">
-                          <form action={shareAction} className="grid gap-2 rounded-xl border border-zk-border p-3">
-                            {hidden({ taskId: task.id })}
-                            <textarea name="body" required rows={2} placeholder="Share what you know to help with this task" className={INPUT} />
-                            <div className="flex flex-wrap items-center gap-2">
-                              {openBlockers.length ? (
-                                <select name="blockerId" defaultValue="" className={`${INPUT} w-auto max-w-full flex-1`}>
-                                  <option value="">Not about a specific blocker</option>
-                                  {openBlockers.map((blocker) => <option key={blocker.id} value={blocker.id}>Answers: {blocker.text}</option>)}
-                                </select>
-                              ) : null}
-                              <button type="submit" className={PRIMARY}>Share</button>
-                            </div>
-                          </form>
-                          <form action={addBlockerAction} className="flex flex-wrap gap-2">
-                            {hidden({ taskId: task.id })}
-                            <input name="text" required minLength={3} maxLength={1000} placeholder="Add a blocker" className={`${INPUT} flex-1`} />
-                            <button type="submit" className={BUTTON}>Add blocker</button>
-                          </form>
+                    <li key={task.id}>
+                      <details className={ROW}>
+                        <summary className={SUMMARY}>
+                          <span className="rounded-full bg-zk-chip px-3 py-1 text-sm font-semibold text-zk-text">
+                            {task.issueNumber ? `#${task.issueNumber} ` : ""}{task.title}
+                          </span>
+                          <span className="min-w-0 flex-1 text-sm text-zk-text2">
+                            {task.authorName} · {task.openBlockers ? `${task.openBlockers} open ${task.openBlockers === 1 ? "blocker" : "blockers"}` : "nothing blocking it"} · {task.shared.length} shared
+                          </span>
+                          <Chevron />
+                        </summary>
+                        <div className="mt-3 space-y-4 text-sm">
+                          <div className="space-y-1">
+                            <p className="m-0 font-bold text-zk-text">Trying to achieve</p>
+                            <p className="m-0 whitespace-pre-wrap leading-relaxed text-zk-text2 [overflow-wrap:anywhere]">{task.body}</p>
+                            {task.issueNumber ? <Link href={projectPath(project.ref, `/${task.issueNumber}`)} className={`${agentsLink} ${NOFOCUS} text-sm`}>Open issue #{task.issueNumber}</Link> : null}
+                          </div>
+                          <div className="space-y-1.5">
+                            <p className="m-0 font-bold text-zk-text">Blockers</p>
+                            {task.blockers.length ? (
+                              <ul className="m-0 grid list-none gap-1.5 p-0">
+                                {task.blockers.map((blocker) => (
+                                  <li key={blocker.id} className="flex items-start gap-2">
+                                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold ${blocker.solvedAt ? "bg-zk-chip text-zk-text2" : "bg-zk-warn-bg text-zk-warn-fg"}`}>{blocker.solvedAt ? "Solved" : "Open"}</span>
+                                    <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${blocker.solvedAt ? "text-zk-muted line-through" : "text-zk-text2"}`}>{blocker.text}</span>
+                                    {mine && open ? (
+                                      <form action={solveBlockerAction} className="shrink-0">
+                                        {hidden({ blockerId: blocker.id, solved: blocker.solvedAt ? "false" : "true" })}
+                                        <button type="submit" className={`${TEXT_LINK} text-zk-accent`}>{blocker.solvedAt ? "Reopen" : "Mark solved"}</button>
+                                      </form>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : <p className={agentsMutedClass}>Nothing blocking it.</p>}
+                            {open ? (
+                              <form action={addBlockerAction} className="flex flex-wrap gap-2 pt-1">
+                                {hidden({ taskId: task.id })}
+                                <input name="text" required minLength={3} maxLength={1000} placeholder="Add a blocker" className={`${INPUT} min-w-0 flex-1`} />
+                                <button type="submit" className={`${agentsSecondaryBtn} ${NOFOCUS}`}>Add</button>
+                              </form>
+                            ) : null}
+                          </div>
+                          <div className="space-y-1.5">
+                            <p className="m-0 font-bold text-zk-text">Shared information</p>
+                            {task.shared.length ? (
+                              <ul className="m-0 grid list-none gap-2 p-0">
+                                {task.shared.map((info) => (
+                                  <li key={info.id} className="rounded-xl bg-zk-surface px-3 py-2">
+                                    <p className="m-0 text-xs text-zk-muted">
+                                      <b className="font-bold text-zk-text">{info.authorName}</b> · <LocalTime date={info.createdAt} />
+                                      {info.blockerId && blockerText.has(info.blockerId) ? <> · on: {blockerText.get(info.blockerId)}</> : null}
+                                    </p>
+                                    <p className="m-0 mt-0.5 whitespace-pre-wrap text-zk-text2 [overflow-wrap:anywhere]">{info.body}</p>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : <p className={agentsMutedClass}>No one has shared anything yet.</p>}
+                            {open ? (
+                              <form action={shareAction} className="grid gap-2 pt-1">
+                                {hidden({ taskId: task.id })}
+                                <textarea name="body" required rows={2} placeholder="Share what you know to help with this task" className={INPUT} />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {openBlockers.length ? (
+                                    <select name="blockerId" defaultValue="" className={`${INPUT} w-auto min-w-0 flex-1`}>
+                                      <option value="">Not about a specific blocker</option>
+                                      {openBlockers.map((blocker) => <option key={blocker.id} value={blocker.id}>Answers: {blocker.text}</option>)}
+                                    </select>
+                                  ) : null}
+                                  <button type="submit" className={`${agentsPrimaryBtn} ${NOFOCUS}`}>Share</button>
+                                </div>
+                              </form>
+                            ) : null}
+                          </div>
                         </div>
-                      ) : null}
+                      </details>
                     </li>
                   );
                 })}
-              </ol>
-            ) : (
-              <p className="px-5 py-8 text-center text-sm text-zk-muted sm:px-7">No tasks yet. Post the first one above.</p>
-            )}
-          </section>
+              </ul>
+              {!tasks.items.length ? <p className={agentsMutedClass}>No tasks yet.</p> : null}
+            </div>
+          )}
+        </section>
 
-          <div className="flex min-w-0 flex-col gap-5">
-            <section aria-labelledby="cluster-members" className="rounded-[20px] border border-zk-border bg-zk-surface">
-              <div className="border-b border-zk-border px-5 py-4">
-                <h3 id="cluster-members" className="text-base font-bold text-zk-text">Members · {cluster.members.length}</h3>
-                <p className="mt-1 text-xs text-zk-muted">{isOwner ? "You own this cluster: you can remove members and cancel invites." : "The cluster's owner manages its members."}</p>
+        <aside className="space-y-4">
+          {isOwner ? (
+            <details className="group">
+              <summary className={`${agentsDangerBtn} w-full cursor-pointer list-none ${NOFOCUS} [&::-webkit-details-marker]:hidden`}>Delete cluster</summary>
+              <div className={`${agentsSurface} mt-2 space-y-3 p-4 text-sm text-zk-text2`}>
+                <p className="m-0">This deletes the cluster with its tasks, shared information and notes, for every member. It can&apos;t be undone.</p>
+                <form action={deleteClusterAction}>
+                  {hidden({ afterDelete: listPath })}
+                  <button type="submit" className={`${agentsDangerBtn} w-full ${NOFOCUS}`}>Yes, delete it</button>
+                </form>
               </div>
-              <ul className="m-0 list-none divide-y divide-zk-border p-0">
+            </details>
+          ) : null}
+
+          {member && acting && pending && suggestions ? (
+            <section aria-labelledby="cluster-members" className={`${agentsSurface} space-y-4 p-6`}>
+              <div className="space-y-1">
+                <h2 id="cluster-members" className="text-base font-extrabold text-zk-text">Members</h2>
+                <p className="m-0 text-sm text-zk-muted">{isOwner ? "You own this cluster: you can remove members." : "The cluster's owner manages its members."}</p>
+              </div>
+              <ul className="m-0 grid list-none gap-3 p-0">
                 {cluster.members.map((m) => (
-                  <li key={m.agentId} className="flex items-start gap-2 px-5 py-2.5">
+                  <li key={m.agentId} className="flex items-center gap-3">
+                    <ClusterMark name={m.name} size={36} />
                     <div className="min-w-0 flex-1">
-                      <p className="m-0 text-sm font-semibold text-zk-text">{m.name}{m.agentId === cluster.creatorAgentId ? <span className="ml-1.5 text-xs font-normal text-zk-muted">owner</span> : null}</p>
-                      {m.skills.length ? <p className="m-0 truncate text-xs text-zk-muted">{m.skills.join(", ")}</p> : null}
+                      <p className="m-0 truncate text-sm font-extrabold text-zk-text">{m.name}</p>
+                      <p className="m-0 truncate text-xs text-zk-muted">{m.agentId === cluster.creatorAgentId ? "Owner" : m.skills.slice(0, 3).join(", ") || "Member"}</p>
                     </div>
                     {isOwner && m.agentId !== cluster.creatorAgentId ? (
                       <form action={removeMemberAction}>
                         {hidden({ memberId: m.agentId, decision: "remove" })}
-                        <button type="submit" className="text-xs font-semibold text-zk-bad-fg hover:underline">Remove</button>
+                        <button type="submit" className={`${TEXT_LINK} text-zk-bad-fg`}>Remove</button>
                       </form>
                     ) : null}
                   </li>
                 ))}
               </ul>
               {pending.items.length ? (
-                <div className="border-t border-zk-border px-5 py-3">
-                  <p className={LABEL}>Invited</p>
-                  <ul className="m-0 mt-1 list-none space-y-1 p-0">
-                    {pending.items.map((p) => (
-                      <li key={p.agentId} className="flex items-center justify-between gap-2 text-sm text-zk-text2">
-                        <span className="truncate">{p.name}</span>
-                        {isOwner ? (
-                          <form action={removeMemberAction}>
-                            {hidden({ memberId: p.agentId, decision: "cancel_invite" })}
-                            <button type="submit" className="text-xs font-semibold text-zk-bad-fg hover:underline">Cancel</button>
-                          </form>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="space-y-2 border-t border-zk-divider pt-3">
+                  <p className="m-0 text-xs font-bold text-zk-muted">Invited</p>
+                  {pending.items.map((p) => (
+                    <div key={p.agentId} className="flex items-center justify-between gap-2 text-sm text-zk-text2">
+                      <span className="truncate">{p.name}</span>
+                      {isOwner ? (
+                        <form action={removeMemberAction}>
+                          {hidden({ memberId: p.agentId, decision: "cancel_invite" })}
+                          <button type="submit" className={`${TEXT_LINK} text-zk-bad-fg`}>Cancel</button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               {open && suggestions.items.length ? (
-                <form action={inviteAction} className="grid gap-2 border-t border-zk-border px-5 py-3">
+                <form action={inviteAction} className="space-y-2 border-t border-zk-divider pt-3">
                   {hidden()}
-                  <label className={LABEL} htmlFor="invitee">Invite for a missing skill</label>
-                  <div className="flex gap-2">
-                    <select id="invitee" name="invitee" className={`${INPUT} min-w-0 flex-1`}>
-                      {suggestions.items.map((s) => <option key={s.agentId} value={s.agentId}>{s.name} · {s.brings.join(", ")}</option>)}
-                    </select>
-                    <button type="submit" className={BUTTON}>Invite</button>
-                  </div>
+                  <label htmlFor="invitee" className="block text-xs font-bold text-zk-muted">Invite for a missing skill</label>
+                  <select id="invitee" name="invitee" className={INPUT}>
+                    {suggestions.items.map((s) => <option key={s.agentId} value={s.agentId}>{s.name} · {s.brings.join(", ")}</option>)}
+                  </select>
+                  <button type="submit" className={`${agentsSecondaryBtn} w-full ${NOFOCUS}`}>Invite</button>
                 </form>
               ) : null}
               {!isOwner ? (
-                <form action={leaveClusterAction} className="border-t border-zk-border px-5 py-3">
+                <form action={leaveClusterAction} className="border-t border-zk-divider pt-3">
                   {hidden({ back: listPath })}
-                  <button type="submit" className="text-xs font-semibold text-zk-muted hover:text-zk-bad-fg hover:underline">Leave cluster</button>
+                  <button type="submit" className={`${agentsSecondaryBtn} w-full ${NOFOCUS}`}>Leave cluster</button>
                 </form>
               ) : null}
             </section>
+          ) : null}
 
-            <section aria-labelledby="cluster-notes" className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4">
-              <h3 id="cluster-notes" className="text-base font-bold text-zk-text">Your agent&apos;s private notes</h3>
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm font-semibold text-zk-accent">
+          {member && acting && notes ? (
+            <section aria-labelledby="cluster-notes" className={`${agentsSurface} p-6`}>
+              <h2 id="cluster-notes" className="text-base font-extrabold text-zk-text">Private notes</h2>
+              <details className="group mt-2">
+                <summary className={`flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-zk-accent ${NOFOCUS} [&::-webkit-details-marker]:hidden`}>
                   {notes.items.length ? "Show notes" : "Add notes"}
+                  <Chevron />
                 </summary>
                 <p className="mt-2 text-xs text-zk-muted">Only the agent that wrote them, and you, can read these.</p>
                 {notes.items.map((note) => (
                   <div key={note.agentId} className="mt-2">
-                    <p className="m-0 text-xs font-semibold text-zk-text2">{note.agentName} · {when(note.updatedAt)}</p>
-                    <div className="mt-1 whitespace-pre-wrap text-sm text-zk-text [overflow-wrap:anywhere]">{note.body || "Empty."}</div>
+                    <p className="m-0 text-xs font-bold text-zk-text2">{note.agentName} · <LocalTime date={note.updatedAt} /></p>
+                    <p className="m-0 mt-1 whitespace-pre-wrap text-sm text-zk-text [overflow-wrap:anywhere]">{note.body || "Empty."}</p>
                   </div>
                 ))}
                 <form action={saveNoteAction} className="mt-3 grid gap-2">
                   {hidden()}
                   <textarea name="body" rows={4} defaultValue={notes.items.find((n) => n.agentId === acting.id)?.body ?? ""} placeholder={`Notes for ${acting.name}`} className={INPUT} />
-                  <div><button type="submit" className={BUTTON}>Save notes</button></div>
+                  <button type="submit" className={`${agentsSecondaryBtn} w-full ${NOFOCUS}`}>Save notes</button>
                 </form>
               </details>
             </section>
-          </div>
-        </div>
-      )}
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }
