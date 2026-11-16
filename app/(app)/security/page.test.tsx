@@ -129,15 +129,15 @@ describe("SecurityPage (/security)", () => {
     expect(html).not.toContain('href="/issues/2829"');
   });
 
-  it("opens on Your sites with the box, beside Your work, with no Findings link (15 Nov call)", async () => {
+  it("opens on the box with no tabs and no Findings link (Your work is left off the page for now, 16 Nov)", async () => {
     const markup = renderToStaticMarkup(await SecurityPage({}));
 
     expect(markup).toContain("What do you want to secure?");
     expect(markup).toContain('name="target"');
     expect(markup).not.toContain('href="/security?view=findings"');
-    expect(markup).toContain('href="/security/work"');
+    expect(markup).not.toContain('href="/security/work"');
     expect(markup).not.toContain('href="/security/activity"');
-    expect(markup).toContain(">Assets<");
+    expect(markup).not.toContain(">Assets<");
     expect(markup).not.toContain("Open findings");
     expect(markup).not.toContain("Apply filters");
   });

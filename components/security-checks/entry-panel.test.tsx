@@ -68,7 +68,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
       />,
     );
     // Once there are scans, the chat waits behind "+ Add asset", like "+ Add Idea".
-    expect(html).toContain("Add asset");
+    expect(html).toContain("Add target");
     expect(html).not.toContain("What do you want to secure?");
     expect(html).toContain("Scanning");
     expect(html).toContain("Report ready");
@@ -86,10 +86,9 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     // All unlocked and moved: the row still opens the report.
     expect(html).not.toContain('href="/security/checks/c4/pay"');
     expect(html).toContain('href="/security/checks/c4"');
-    expect(html).toContain("2 moved to your app");
-    // Ziki's list table (as Ideas and Issues), with headings; the row opens the page, so no See progress or Open report button.
-    expect(html).toContain("issues-table");
-    expect(html).toContain("Problems found");
+    // A targets table with headings that sort; the row opens the page, so no See progress or Open report button.
+    expect(html).toContain('role="table"');
+    expect(html).toContain("Sort by problems");
     expect(html).not.toContain("See progress");
     expect(html).not.toContain("Open report");
     expect(html).not.toContain('aria-label="Status"');
@@ -106,7 +105,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     const html = renderToStaticMarkup(
       <SecurityChecksPanel checks={[row({ preview: quick }), row({ id: "c2", targetId: "t2", value: "shop.ng", preview: quick })]} />,
     );
-    expect(html).toContain("Quick scan");
+    expect(html).toContain("from the quick scan.");
     // Always four boxes in the report's severity colours; empty ones faded.
     expect(html).toContain("security-severity--critical");
     expect(html).toContain("security-severity--low");
@@ -137,7 +136,6 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
       />,
     );
     // Counted from the agents' findings (1 high, 1 low); the findings themselves are on the scan's page.
-    expect(html).toContain("Agents&#x27; report");
     expect(html).toContain('title="1 high problem, from the agents&#x27; report.');
     expect(html).toContain('title="1 low problem, from the agents&#x27; report.');
     expect(html).not.toContain("Session cookie has no Secure flag");
