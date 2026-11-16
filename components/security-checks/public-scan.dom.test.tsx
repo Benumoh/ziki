@@ -47,14 +47,14 @@ async function scanSite(user: ReturnType<typeof userEvent.setup>) {
   });
 }
 
-it("signed in, Try now opens the Security page with the site ready to add (it asks which workspace if there's more than one)", async () => {
+it("signed in, Try now goes on to the scan's progress page (asking which workspace first if there's more than one)", async () => {
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   render(<PublicScan signedIn />);
   await scanSite(user);
 
   // The normal road: never added to whichever workspace happens to be open, unasked.
   const tryNow = await screen.findByRole("link", { name: "Try now" });
-  expect(tryNow).toHaveAttribute("href", "/security?target=settle.ng");
+  expect(tryNow).toHaveAttribute("href", "/security?target=settle.ng&progress=1");
 });
 
 it("signed out, Try now takes the site through sign-up to that same Security page", async () => {

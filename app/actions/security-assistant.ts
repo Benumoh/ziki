@@ -154,6 +154,24 @@ export async function talkToSecurityAssistant(history: AssistantTurn[]): Promise
 }
 
 /**
+ * Try now from the public page: add the site and start the agents' check, with no chat. The person asked for the
+ * agents already, so the Security page opens the scan's progress page straight from here (never the chat box).
+ * A site already in their scans goes to its page too.
+ */
+export async function startFromOutside(site: string): Promise<{ ok: true; checkId: string } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const access = await currentOrganisationAccess(user.id, user.role);
+  if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
+  const parsed = typeof site === "string" ? parseSecurityTarget(site) : null;
+  if (!parsed?.ok) return { ok: false, error: "That address can't be scanned. Try it again from the Security page." };
+  const answer = await scanAndAdd(access.organisationId, user.id, parsed.target, "");
+  if (answer.kind === "scan" && answer.checkId) return { ok: true, checkId: answer.checkId };
+  if (answer.kind === "scan") return { ok: false, error: answer.note ?? `Ziki couldn't reach ${parsed.target.value}.` };
+  return { ok: false, error: answer.kind === "error" ? answer.error : answer.reply };
+}
+
+/**
  * Every asset (a website, a server or a public repo) gets the quick scan, and
  * is added to the person's scans straight away, so the full check starts. A
  * site the scan couldn't reach isn't added; a private repo (the scan can't

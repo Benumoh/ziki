@@ -122,9 +122,9 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
           Want a deeper check? Ziki&apos;s agents test much more and show you how to fix it.
         </p>
         {signedIn ? (
-          // Signed in: Try now opens the Security page with the site ready to add (asking which workspace if they
-          // have more than one), not the scan's page straight away.
-          <Link href={addAssetPath(site)} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
+          // Signed in: Try now adds the site and opens its progress page, where the agents are already at work
+          // (asking which workspace first if they have more than one), the same as after signing up.
+          <Link href={tryNowPath(site)} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
             Try now
           </Link>
         ) : (
