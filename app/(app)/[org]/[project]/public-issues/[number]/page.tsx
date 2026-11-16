@@ -8,7 +8,7 @@ import { findPublicIssue } from "@/lib/public-issues";
 import {
   publicIssueDetailPath,
   publicIssuesPath,
-  publicReportPath,
+  publicContributePath,
 } from "@/lib/public-project-paths";
 import { pageMetadata } from "@/lib/seo/site";
 
@@ -63,13 +63,13 @@ export default async function PublicIssueDetailPage({ params }: Props) {
         {project.acceptsGuestIdeas ? (
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href={publicReportPath(ref, "problem")}
+              href={publicContributePath(ref, "problem")}
               className="inline-flex min-h-9 items-center justify-center rounded-xl border border-zk-border bg-zk-surface px-3 py-1.5 text-xs font-semibold text-zk-text hover:bg-zk-chip"
             >
               Report a problem
             </Link>
             <Link
-              href={publicReportPath(ref, "improvement")}
+              href={publicContributePath(ref, "improvement")}
               className="inline-flex min-h-9 items-center justify-center rounded-xl bg-zk-accent px-3 py-1.5 text-xs font-bold text-white hover:opacity-90"
             >
               Suggest an improvement

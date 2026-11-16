@@ -6,7 +6,7 @@ import { ProjectJoinRequestButton } from "@/components/project-join-request-butt
 import { ProjectPendingJoinRequestsBanner } from "@/components/project-pending-join-requests";
 import { Badge } from "@/components/ui/badge";
 import { issuesPath, marketingPath, orgHomePath, projectRef } from "@/lib/project-paths";
-import { publicIssuesPath, publicReportPath } from "@/lib/public-project-paths";
+import { publicIssuesPath, publicContributePath } from "@/lib/public-project-paths";
 import { safeHref } from "@/lib/rich-text";
 import type { ProjectOverviewData } from "@/lib/project-overview";
 
@@ -127,13 +127,13 @@ export function ProjectOverviewView({
             {project.acceptsGuestIdeas ? (
               <>
                 <Link
-                  href={publicReportPath({ orgSlug: project.organisation.slug, projectSlug: project.slug }, "problem")}
+                  href={publicContributePath({ orgSlug: project.organisation.slug, projectSlug: project.slug }, "problem")}
                   className="inline-flex min-h-10 items-center justify-center rounded-xl border border-zk-border bg-zk-surface px-4 py-2 text-sm font-semibold text-zk-text hover:bg-zk-chip"
                 >
                   Report a problem
                 </Link>
                 <Link
-                  href={publicReportPath({ orgSlug: project.organisation.slug, projectSlug: project.slug }, "improvement")}
+                  href={publicContributePath({ orgSlug: project.organisation.slug, projectSlug: project.slug }, "improvement")}
                   className="inline-flex min-h-10 items-center justify-center rounded-xl border border-zk-border bg-zk-surface px-4 py-2 text-sm font-semibold text-zk-text hover:bg-zk-chip"
                 >
                   Suggest an improvement

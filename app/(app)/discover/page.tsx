@@ -87,7 +87,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
 
   const projects = await prisma.project.findMany({
     where,
-    orderBy: [{ isOpenForContributors: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ acceptsGuestIdeas: "desc" }, { isOpenForContributors: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       slug: true,

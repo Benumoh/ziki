@@ -10,7 +10,7 @@ import { ProjectJoinRequestButton } from "@/components/project-join-request-butt
 import { formatZ, REPORTER_POINTS, REVIEWER_POINTS } from "@/lib/points/rules";
 import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
 import { projectPath, projectRef } from "@/lib/project-paths";
-import { publicReportPath } from "@/lib/public-project-paths";
+import { publicContributePath } from "@/lib/public-project-paths";
 
 export type DiscoverableProject = {
   id: string;
@@ -201,7 +201,7 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             {project.acceptsGuestIdeas ? (
-              <Link href={publicReportPath(publicRef)}>
+              <Link href={publicContributePath(publicRef)}>
                 <Button variant="secondary" className="text-xs font-semibold">
                   Report issue
                 </Button>
