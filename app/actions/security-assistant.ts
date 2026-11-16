@@ -9,6 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { previewScan } from "@/lib/security-checks/preview";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
+import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 import {
   ASSISTANT_HISTORY_MAX,
@@ -58,7 +59,7 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}` });
   if (!result.ok) return { ok: false, error: result.reason };
-  const summary = summarisePreview(result);
+  const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
   revalidatePath("/security");
   return { ok: true, summary };
@@ -194,7 +195,7 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
     };
   }
   const result = await previewScan(address, { visitor: `user:${userId}` });
-  const summary = result.ok ? summarisePreview(result) : null;
+  const summary = result.ok ? await withSiteAddress(summarisePreview(result)) : null;
   const addable = result.ok || target.kind === "repo" || result.retryAfterSeconds !== undefined;
   // Couldn't reach it: say so plainly, with no "here's a quick look" before it.
   if (!addable) return { kind: "scan", reply: "", target: address, summary: null, note: result.ok ? null : result.reason, checkId: null };
