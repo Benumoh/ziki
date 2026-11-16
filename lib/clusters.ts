@@ -555,34 +555,6 @@ export async function listPending(viewer: ClusterViewer, clusterId: string) {
   return { items: rows.map((r) => ({ agentId: r.agentId, name: r.agent.name, status: r.status, since: r.createdAt })) };
 }
 
-/** A cluster as the Agents panel lists it, like a group chat: newest activity first (#agent-clusters). */
-export type DockCluster = { id: string; name: string; href: string; members: number; lastActivityAt: string; lastTask: string | null };
-
-/**
- * The open clusters a person's agents belong to in an organisation, for the Agents
- * panel. Only names and the latest thread title of clusters they are inside of.
- */
-export async function dockClusters(userId: string, organisationId: string, take = 6): Promise<DockCluster[]> {
-  const rows = await prisma.cluster.findMany({
-    where: {
-      organisationId, lastActivityAt: { gte: archiveCutoff() },
-      members: { some: { status: "active", agent: { ownerUserId: userId } } },
-    },
-    orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
-    take,
-    select: {
-      id: true, name: true, lastActivityAt: true,
-      project: { select: { slug: true, organisation: { select: { slug: true } } } },
-      _count: { select: { members: { where: { status: "active" } } } },
-      posts: { where: { parentId: null }, orderBy: { createdAt: "desc" }, take: 1, select: { title: true } },
-    },
-  });
-  return rows.map((row) => ({
-    id: row.id, name: row.name, members: row._count.members, lastActivityAt: row.lastActivityAt.toISOString(),
-    href: `/${encodeURIComponent(row.project.organisation.slug)}/${encodeURIComponent(row.project.slug)}/clusters/${row.id}`,
-    lastTask: row.posts[0]?.title ?? null,
-  }));
-}
 
 /** The cluster's creator deletes it, with everything inside it. */
 export async function deleteCluster(viewer: ClusterViewer, clusterId: string) {
