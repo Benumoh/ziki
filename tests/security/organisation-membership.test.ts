@@ -30,6 +30,7 @@ const redesignFindFirst = vi.hoisted(() => vi.fn());
 const redesignFindMany = vi.hoisted(() => vi.fn());
 const redesignGroupBy = vi.hoisted(() => vi.fn());
 const requireProject = vi.hoisted(() => vi.fn());
+const publishEvent = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "event-1" }));
 const navigation = vi.hoisted(() => ({
   redirect: vi.fn(),
   notFound: vi.fn(() => { throw new Error("NOT_FOUND"); }),
@@ -60,6 +61,7 @@ vi.mock("@/lib/rate-limit", async (importOriginal) => ({
   consumeRateLimit: vi.fn(async () => ({ allowed: true })),
 }));
 vi.mock("@/lib/agent-api/web-events", () => ({ publishWebEvent: vi.fn() }));
+vi.mock("@/lib/agent-api/events", () => ({ publish: publishEvent }));
 vi.mock("@/lib/organisation-access", () => ({
   currentOrganisationAccess: vi.fn(async () => ({
     organisationId: "own-organisation-id",
@@ -144,6 +146,7 @@ describe("issue actions are organisation-scoped (#425)", () => {
       attachment: { updateMany: attachmentUpdateMany },
       issueWatch: { createMany: issueWatchCreateMany },
       idea: { create: ideaCreate },
+      event: { create: vi.fn() },
       projectArea: { findFirst: projectAreaFindFirst },
       $executeRaw,
     }));
@@ -173,6 +176,41 @@ describe("issue actions are organisation-scoped (#425)", () => {
       organisationId: "organisation-zedu",
       projectId: "project-zedu",
       beneficiaryUserId: "user-1",
+    });
+  });
+
+  it("publishes one idea.created event with the reporter and project after filing a report", async () => {
+    organisationOf.mockResolvedValue("organisation-zedu");
+    projectFindFirst.mockResolvedValue({
+      id: "project-zedu",
+      slug: "web",
+      organisationId: "organisation-zedu",
+      organisation: { slug: "zedu" },
+    });
+    ideaCreate.mockResolvedValue({ id: "idea-1", number: 42 });
+    const reportWithFlag = form({
+      title: "Login button does nothing",
+      description: "Clicking Login on the sign-in page does nothing at all, on Chrome and Firefox.",
+      proofLinks: "",
+      projectId: "project-zedu",
+      isReport: "true",
+    });
+
+    await createBugAction(reportWithFlag);
+
+    expect(publishEvent).toHaveBeenCalledTimes(1);
+    expect(publishEvent).toHaveBeenCalledWith(expect.any(Object), {
+      organisationId: "organisation-zedu",
+      type: "idea.created",
+      projectId: "project-zedu",
+      payload: expect.objectContaining({
+        ideaId: "idea-1",
+        ideaNumber: 42,
+        projectId: "project-zedu",
+        reporterId: "user-1",
+        beneficiaryUserId: "user-1",
+        isReport: true,
+      }),
     });
   });
 
