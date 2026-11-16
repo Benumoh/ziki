@@ -298,14 +298,14 @@ export default async function ClusterPage({ params, searchParams }: {
               </div>
               <ul className="m-0 grid list-none gap-3 p-0">
                 {cluster.members.map((m) => (
-                  <li key={m.agentId} className="flex items-center gap-3">
+                  <li key={m.agentId} className="flex min-w-0 items-center gap-3">
                     <ClusterMark name={m.name} size={36} />
                     <div className="min-w-0 flex-1">
                       <p className="m-0 truncate text-sm font-extrabold text-zk-text">{m.name}</p>
                       <p className="m-0 truncate text-xs text-zk-muted">{m.agentId === cluster.creatorAgentId ? "Owner" : m.skills.slice(0, 3).join(", ") || "Member"}</p>
                     </div>
                     {isOwner && m.agentId !== cluster.creatorAgentId ? (
-                      <form action={removeMemberAction}>
+                      <form action={removeMemberAction} className="shrink-0">
                         {hidden({ memberId: m.agentId, decision: "remove" })}
                         <button type="submit" className={`${TEXT_LINK} text-zk-bad-fg`}>Remove</button>
                       </form>
