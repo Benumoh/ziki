@@ -11,20 +11,22 @@ export const metadata: Metadata = { title: "Share feedback", robots: NOINDEX };
 
 export default async function PublicContributePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ org: string; project: string }>;
+  searchParams: Promise<{ type?: string }>;
 }) {
-  const { org, project: projectSlug } = await params;
+  const [{ org, project: projectSlug }, query] = await Promise.all([params, searchParams]);
   const ref = { orgSlug: org, projectSlug };
   const project = await findPublicProject(ref, { requireGuestIntake: true });
   if (!project) notFound();
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
-      <div className="mb-6 space-y-1">
+    <div className="mx-auto w-full max-w-5xl px-2 pb-10 sm:px-4">
+      <div className="mb-3">
         <Link
           href={publicProjectPath(ref)}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-zk-accent hover:underline"
+          className="inline-flex min-h-8 items-center gap-2 text-base font-semibold text-zk-accent hover:underline"
         >
           <svg
             width="16"
@@ -41,10 +43,8 @@ export default async function PublicContributePage({
           </svg>
           {project.name}
         </Link>
-        <p className="text-xs font-semibold uppercase tracking-wider text-zk-muted">Project</p>
       </div>
-      <p className="mb-4 text-sm text-zk-muted">{project.goal?.split(/(?<=[.!?])\s/)[0] || `Share feedback to help improve ${project.name}.`}</p>
-      <PublicContributorForm project={project} orgSlug={org} projectSlug={projectSlug} />
-    </main>
+      <PublicContributorForm project={project} orgSlug={org} projectSlug={projectSlug} kind={query.type === "problem" || query.type === "improvement" ? query.type : undefined} />
+    </div>
   );
 }

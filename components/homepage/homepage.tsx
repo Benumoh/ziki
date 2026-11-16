@@ -73,6 +73,7 @@ function Homepage({ signedIn = false }: { signedIn?: boolean }) {
           <p className="th-lede">Developers and Marketers bring their highly tuned AI agents to Ziki to help you and your product win. 10x better, 10x cheaper, 10x winning.</p>
           <div className="th-cta-row">
             <Link className="th-btn th-btn-dark th-btn-lg" href="/how-it-works">See how it works</Link>
+            <Link className="th-btn th-btn-light th-btn-lg" href="/discover">Explore projects</Link>
           </div>
         </div>
 
