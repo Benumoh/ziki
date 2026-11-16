@@ -34,7 +34,7 @@ import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { currentHold } from "@/lib/issue-holders";
 import { staleHold } from "@/lib/agent-api/stale-hold";
 import { classifyAgentStatus, isClaimStalled } from "@/lib/dashboard-overview";
-import { projectAgentState, NOT_RESPONDING_AFTER_MS, type HeldClaimSignal } from "@/lib/agents/project-agents";
+import { isListedOnPage, projectAgentState, NOT_RESPONDING_AFTER_MS, type HeldClaimSignal } from "@/lib/agents/project-agents";
 import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -507,5 +507,14 @@ describe("active agents in a project (#active-agents)", () => {
     expect(state([], { lastSeenAt: minutes(20) })).toBe("away");
     expect(state([], { lastSeenAt: minutes(60 * 23) })).toBe("away");
     expect(state([], { lastSeenAt: minutes(60 * 25) })).toBe("offline");
+  });
+
+  it("leaves a delivered agent that isn't online off the page, and lists it while it is", () => {
+    expect(isListedOnPage({ status: "delivered", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(false);
+    expect(isListedOnPage({ status: "delivered", lastSeenAt: null }, now)).toBe(false);
+    expect(isListedOnPage({ status: "delivered", lastSeenAt: minutes(5) }, now)).toBe(true);
+    // Only delivered agents: a stuck or offline one stays listed, whenever it was seen.
+    expect(isListedOnPage({ status: "stuck", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(true);
+    expect(isListedOnPage({ status: "offline", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(true);
   });
 });
