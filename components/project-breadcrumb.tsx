@@ -105,6 +105,8 @@ export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
   }
   const projectsHref = orgHomePath(project.orgSlug);
   const ref = project.slug ? projectRef(project.orgSlug, project.slug) : null;
+  // The Marketing main page and its task form have no breadcrumb.
+  if (ref && [marketingPath(ref), marketingPath(ref, "tasks/new")].includes(pathname.replace(/\/+$/, ""))) return null;
   const onProjects = !ref;
   const section = ref ? sectionOf(pathname, ref) : [];
   const width = ref && narrowPage(pathname, ref) ? "max-w-[920px]" : "max-w-6xl";

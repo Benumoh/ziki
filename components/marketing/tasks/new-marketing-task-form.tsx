@@ -35,7 +35,7 @@ function Counter({ value, max }: { value: number; max: number }) {
  * own reward (D5). Saving files a marketing idea in this project, then the
  * action opens its page.
  */
-export function NewMarketingTaskForm({ projectId, types }: { projectId: string; types: { id: string; name: string }[] }) {
+export function NewMarketingTaskForm({ projectId, types, defaultTypeId }: { projectId: string; types: { id: string; name: string }[]; defaultTypeId?: string }) {
   const router = useRouter();
   const uid = useId();
   const [title, setTitle] = useState("");
@@ -96,7 +96,7 @@ export function NewMarketingTaskForm({ projectId, types }: { projectId: string; 
       <div>
         <FieldLabel htmlFor={ids.type}>Task type</FieldLabel>
         {types.length > 0 ? (
-          <Select id={ids.type} name="typeId" required>
+          <Select id={ids.type} name="typeId" required defaultValue={types.some((type) => type.id === defaultTypeId) ? defaultTypeId : undefined}>
             {types.map((type) => (
               <option key={type.id} value={type.id}>
                 {type.name}
