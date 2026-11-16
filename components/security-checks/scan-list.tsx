@@ -81,6 +81,12 @@ function matchesFilter(check: WorkspaceCheckRow, filter: Filter): boolean {
   return found.some(([severity, n]) => (severity === "critical" || severity === "high") && n > 0);
 }
 
+/** When it was last scanned: its quick scan's date (Scan again updates it), else when it was added. */
+function lastScanned(check: WorkspaceCheckRow): Date {
+  const at = check.preview?.checkedAt ? new Date(check.preview.checkedAt) : null;
+  return at && !Number.isNaN(at.getTime()) ? at : new Date(check.createdAt);
+}
+
 /** The site's address without its scheme or path, for its icon. */
 function hostOf(value: string): string | null {
   try {
@@ -137,7 +143,7 @@ export function ScanList({
     return [...rows].sort((a, b) => {
       if (sort.key === "target") return a.value.localeCompare(b.value) * order;
       if (sort.key === "problems") return (problemsOf(a).weight - problemsOf(b).weight) * order;
-      return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * order;
+      return (lastScanned(a).getTime() - lastScanned(b).getTime()) * order;
     });
   }, [live, filter, words, sort]);
   // Numbered pages like the app's issue lists; a search looks through every page.
@@ -286,8 +292,8 @@ export function ScanList({
 
       {visible.length ? (
         <div role="table" aria-label="Your targets" className="border-t border-zk-border">
-          <div role="row" className="flex items-center gap-2 border-b border-zk-border px-3 py-2.5 text-xs font-semibold text-zk-muted sm:gap-3 sm:px-5">
-            <span role="columnheader" className="flex w-5 shrink-0 justify-center">
+          <div role="row" className="grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-border px-3 py-2.5 text-xs font-semibold text-zk-muted sm:px-5">
+            <span role="columnheader" className="flex justify-center">
               <input
                 type="checkbox"
                 aria-label={allTicked ? "Untick all targets on this page" : "Tick all targets on this page"}
@@ -299,12 +305,12 @@ export function ScanList({
                 className="h-4 w-4 accent-electric-blue-strong"
               />
             </span>
-            <span role="columnheader" className="min-w-0 flex-1">{sortButton("target", "Target")}</span>
-            <span role="columnheader" className="hidden w-28 shrink-0 md:block">Type</span>
-            <span role="columnheader" className="shrink-0 md:w-[132px]">{sortButton("problems", "Problems")}</span>
-            <span role="columnheader" className="hidden w-28 shrink-0 md:block">{sortButton("added", "Added")}</span>
-            <span role="columnheader" className="hidden w-28 shrink-0 md:block">Status</span>
-            <span role="columnheader" className="w-8 shrink-0"><span className="sr-only">More</span></span>
+            <span role="columnheader" className="min-w-0">{sortButton("target", "Target")}</span>
+            <span role="columnheader" className="hidden md:block">Type</span>
+            <span role="columnheader">{sortButton("problems", "Problems")}</span>
+            <span role="columnheader" className="hidden md:block">{sortButton("added", "Last scanned")}</span>
+            <span role="columnheader" className="hidden md:block">Status</span>
+            <span role="columnheader"><span className="sr-only">More</span></span>
           </div>
           {visible.map((check) => (
             <TargetRow
@@ -432,12 +438,12 @@ function TargetRow({
   return (
     <div
       role="row"
-      className={`group relative flex items-center gap-2 border-b border-zk-divider px-3 py-2.5 sm:gap-3 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
+      className={`group relative grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-divider px-3 py-2.5 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
     >
-      <span role="cell" className="relative z-10 flex w-5 shrink-0 justify-center">
+      <span role="cell" className="relative z-10 flex justify-center">
         <input type="checkbox" aria-label={`Tick ${check.value}`} checked={ticked} onChange={onTick} className="h-4 w-4 accent-electric-blue-strong" />
       </span>
-      <span role="cell" className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+      <span role="cell" className="flex min-w-0 items-center gap-2 sm:gap-2.5">
         {/* On a phone there's no Status column: a dot says it instead, where Intruder puts its status dot. */}
         <span aria-hidden="true" title={STAGE[stage].label} className={`h-2 w-2 shrink-0 rounded-full md:hidden ${STAGE[stage].dot} ${stage === "scanning" ? "animate-pulse" : ""}`} />
         <TargetIcon check={check} />
@@ -450,10 +456,10 @@ function TargetRow({
           <span className="sr-only">, {STAGE[stage].label}</span>
         </Link>
       </span>
-      <span role="cell" className="hidden w-28 shrink-0 md:block">
+      <span role="cell" className="hidden md:block">
         <span className="inline-flex rounded-md border border-zk-border px-1.5 py-0.5 text-xs text-zk-text2">{TARGET_KIND_LABEL[check.kind]}</span>
       </span>
-      <span role="cell" className="flex shrink-0 items-center gap-0.5 md:w-[132px] md:gap-1">
+      <span role="cell" className="flex items-center gap-0.5 md:gap-1">
         {nothing ? (
           <NoProblems />
         ) : found.length ? (
@@ -471,11 +477,11 @@ function TargetRow({
           <span className="text-xs text-zk-muted">Checking…</span>
         )}
       </span>
-      <span role="cell" className="hidden w-28 shrink-0 text-xs text-zk-muted md:block">
-        <LocalTime date={check.createdAt} />
+      <span role="cell" className="hidden text-xs text-zk-muted md:block">
+        <LocalTime date={lastScanned(check)} />
       </span>
-      <span role="cell" className={`hidden w-28 shrink-0 text-xs font-semibold md:block ${STAGE[stage].text}`}>{STAGE[stage].label}</span>
-      <span role="cell" className="relative z-10 flex w-7 shrink-0 justify-end sm:w-8">
+      <span role="cell" className={`hidden text-xs font-semibold md:block ${STAGE[stage].text}`}>{STAGE[stage].label}</span>
+      <span role="cell" className="relative z-10 flex justify-end">
         <RowMenu site={check.value} href={href} onScanAgain={onScanAgain} onRemove={onRemove} busy={busy} />
       </span>
     </div>
