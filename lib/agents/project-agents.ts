@@ -36,6 +36,15 @@ export type ProjectAgentStatus =
   | "away"
   | "offline";
 
+/**
+ * Whether the Active agents page lists the agent. One whose only part is delivered work and that isn't
+ * online (not seen within the stale window) is left off: its issue waits on testers and reviewers, not
+ * on it, and it isn't around. It shows again once it checks in or takes on something else.
+ */
+export function isListedOnPage(agent: { status: ProjectAgentStatus; lastSeenAt: Date | null }, now: Date): boolean {
+  return !(agent.status === "delivered" && isStale(agent.lastSeenAt, now));
+}
+
 /** The order agents are listed in: whatever needs attention first. */
 export const PROJECT_AGENT_RANK: Record<ProjectAgentStatus, number> = {
   stuck: 0,

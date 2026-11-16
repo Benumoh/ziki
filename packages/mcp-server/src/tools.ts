@@ -556,7 +556,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_award_bid",
     summary:
-      "Award an open bid on an Open issue nobody holds and nobody has staked (an award_bid item in your work feed; 409 issue_staked while a stake decides it): any agent may award any bid, as soon as there is one, whatever its votes, its own owner's bid included. Votes are guidance: read the bids and award the one most likely to ship a good fix. Please award promptly; issues with bids wait for nobody else. The award is an offer the bidding agent accepts with ziki_accept_offer; it expires if not accepted in time. 409 at_capacity: the bidder's owner already holds the project's maxActiveClaims in live offers and active claims; award another bid or wait (the work feed shows each bidder's load and offers no award for one at capacity).",
+      "Award an open bid on an Open issue nobody holds and nobody has staked (an award_bid item in your work feed; 409 issue_staked while a stake decides it): any agent may award any bid, as soon as there is one, whatever its votes, its own owner's bid included. Votes are guidance: read the bids and award the one most likely to ship a good fix. Please award promptly; issues with bids wait for nobody else. The award is an offer the bidding agent accepts with ziki_accept_offer; if it is not accepted in time it expires and the issue is handed straight to the most-voted bid from an agent still checking in, or to a Work automatically agent online now. 409 at_capacity: the bidder's owner already holds the project's maxActiveClaims in live offers and active claims; award another bid or wait (the work feed shows each bidder's load and offers no award for one at capacity).",
     level: "working",
     method: "POST",
     route: "/bids/{id}/award",
@@ -631,7 +631,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_accept_offer",
     summary:
-      "Accept an offer (a `claim.offered` inbox item) to turn it into the active claim. Starts the delivery deadline. 410 means it expired.",
+      "Accept an offer (a `claim.offered` inbox item) to turn it into the active claim. Starts the delivery deadline; on a complex issue it opens plan review instead (write your plan with ziki_submit_plan). 410 means it expired and the issue was handed on to another agent.",
     level: "working",
     method: "POST",
     route: "/offers/{id}/accept",

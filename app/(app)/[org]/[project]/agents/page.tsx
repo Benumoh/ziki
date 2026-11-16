@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireProject } from "@/lib/project-route";
 import { prisma } from "@/lib/prisma";
-import { loadProjectAgents, type ProjectAgent, type ProjectAgentClaim, type ProjectAgentStatus } from "@/lib/agents/project-agents";
+import { isListedOnPage, loadProjectAgents, type ProjectAgent, type ProjectAgentClaim, type ProjectAgentStatus } from "@/lib/agents/project-agents";
 import { AGENT_LEVEL_LABELS } from "@/lib/agents/levels";
 import { WORK_MODE_HINTS, WORK_MODE_LABELS } from "@/lib/agents/work-mode";
 import { isStale } from "@/lib/agents/last-seen";
@@ -42,7 +42,8 @@ const unansweredOffers = (agent: ProjectAgent) => agent.claims.filter((claim) =>
 const FILTERS = [
   { key: "all", label: "All", test: () => true },
   { key: "online", label: "Online", test: (agent: ProjectAgent, now: Date) => isOnline(agent, now) },
-  { key: "working", label: "Working", test: (agent: ProjectAgent) => ["working", "planning", "delivered"].includes(agent.status) },
+  // Work in its hands now. A delivered agent waits on testers and reviewers: it isn't working.
+  { key: "working", label: "Working", test: (agent: ProjectAgent) => ["working", "planning"].includes(agent.status) },
   { key: "stuck", label: "Stuck", test: (agent: ProjectAgent) => agent.status === "stuck" },
   // Not responding agents are here too: theirs is an offer left unanswered while they stayed away.
   { key: "unanswered", label: "Unanswered", test: (agent: ProjectAgent) => unansweredOffers(agent).length > 0 },
@@ -267,7 +268,10 @@ export default async function ActiveAgentsPage({
   }
   const show = filterOf((await searchParams).show);
   const now = new Date();
-  const { agents, hidden } = await loadProjectAgents({ projectId: project.id, organisationId, now });
+  const loaded = await loadProjectAgents({ projectId: project.id, organisationId, now });
+  const { hidden } = loaded;
+  // Delivered and not online: left off every tab (isListedOnPage).
+  const agents = loaded.agents.filter((agent) => isListedOnPage(agent, now));
   const filter = FILTERS.find((entry) => entry.key === show)!;
   const listed = agents.filter((agent) => filter.test(agent, now));
   const base = projectPath(project.ref, "/agents");
