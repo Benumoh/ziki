@@ -270,7 +270,10 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
       inputRef.current?.focus();
     });
   }
-  sendRef.current = send;
+  // Kept current after each render, for the suggestion buttons' listener.
+  useEffect(() => {
+    sendRef.current = send;
+  });
 
   function startOver() {
     setTurns([]);
