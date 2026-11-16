@@ -44,6 +44,8 @@ import { IdeasList, type IdeaListRow } from "@/components/ideas-list";
 import { WhimsicalEmptyState } from "@/components/whimsical-empty-state";
 import { isUnstructuredDraft } from "@/lib/ideas";
 import { workflowFor } from "@/lib/workflow";
+import { priorityNow, type PriorityNowIssue } from "@/lib/priority-now";
+import { PriorityNowStrip } from "@/components/priority-now-strip";
 import { OPEN_BID_WHERE } from "@/lib/open-bids";
 import { ideaVotes, isBadIdea } from "@/lib/idea-rejection";
 import { archiveReasonLabel } from "@/lib/idea-archive";
@@ -1102,6 +1104,13 @@ export async function IssuesList({
   const yourCall = stageIndex !== IN_PROGRESS_STAGE || !organisationId || !projectId || allProjects || !userId
     ? []
     : await loadOrEmpty("your call", () => loadYourCall(projectId, { userId, isAdmin: Boolean(membershipRole && isOrganisationAdmin(membershipRole, effectiveRole)) }), []);
+  // Priority now (#priority-now): the top Open issues and who each is offered to, at the top of In Progress.
+  const priorityIssues = stageIndex !== IN_PROGRESS_STAGE || isDeletedView || !organisationId || !projectId || allProjects
+    ? []
+    : await loadOrEmpty("priority now", async () => {
+      const { offerWindowSeconds } = await workflowFor(projectId);
+      return priorityNow({ organisationId, projectId, offerWindowSeconds });
+    }, [] as PriorityNowIssue[]);
   const statusCount = (value: string) =>
     value === YOUR_WORK_STATUS ? yourWorkCount : value === IDEAS_STATUS ? ideasCount : value === REJECTED_IDEAS_STATUS ? rejectedIdeasCount : value === ERROR_STATUS ? errorCount : value === POSSIBLY_DELIVERED ? possiblyDeliveredCount : countForStatus(value);
   const statusLink = (value: string) => (value === IDEAS_STATUS ? statusHref(null) : statusHref(value));
@@ -1221,6 +1230,8 @@ export async function IssuesList({
         {isIdeasView && !isDeletedView && earnProject ? <EarnPanel project={earnProject} line={earnBannerLine(earnProject)} /> : null}
 
         {nextStep && organisationId ? <OrganisationNextStepCard step={nextStep} organisationId={organisationId} /> : null}
+
+        {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
 
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}

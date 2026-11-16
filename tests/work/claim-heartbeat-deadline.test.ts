@@ -34,6 +34,7 @@ import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { currentHold } from "@/lib/issue-holders";
 import { staleHold } from "@/lib/agent-api/stale-hold";
 import { classifyAgentStatus, isClaimStalled } from "@/lib/dashboard-overview";
+import { projectAgentState, NOT_RESPONDING_AFTER_MS, type HeldClaimSignal } from "@/lib/agents/project-agents";
 import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -466,5 +467,45 @@ describe("owner pause and steering", () => {
     await expect(staleHold("issue", now)).resolves.toBeNull();
     db.issueClaim.findFirst.mockResolvedValue({ ...silent, agent: { pausedAt: null } });
     await expect(staleHold("issue", now)).resolves.toMatchObject({ kind: "silent" });
+  });
+});
+
+describe("active agents in a project (#active-agents)", () => {
+  const minutes = (n: number) => new Date(now.getTime() - n * 60_000);
+  const live: HeldClaimSignal = {
+    status: "active", issueNumber: 7, issueStatus: "in_progress", offeredAt: minutes(60), claimedAt: minutes(55),
+    lastHeartbeatAt: minutes(2), deliverBy: new Date(now.getTime() + 3_600_000), waitingOnOwnerSince: null, pullRequestUrl: null,
+  };
+  const offer: HeldClaimSignal = { ...live, status: "offered", issueNumber: 9, claimedAt: null, lastHeartbeatAt: null, deliverBy: null, offeredAt: minutes(10) };
+  const state = (claims: HeldClaimSignal[], extra: Partial<Parameters<typeof projectAgentState>[0]> = {}) =>
+    projectAgentState({ claims, openBids: 0, paused: false, hasUnansweredQuestion: false, lastSeenAt: minutes(1), now, ...extra }).status;
+
+  it("calls quiet or overdue work stuck, ahead of everything but a pause, and live work working", () => {
+    expect(state([live])).toBe("working");
+    expect(state([{ ...live, lastHeartbeatAt: minutes(40) }], { hasUnansweredQuestion: true })).toBe("stuck");
+    expect(state([{ ...live, deliverBy: minutes(1) }])).toBe("stuck");
+    expect(state([{ ...live, lastHeartbeatAt: minutes(40), pullRequestUrl: "https://github.com/o/r/pull/1" }])).toBe("working");
+    expect(state([{ ...live, lastHeartbeatAt: minutes(40) }], { paused: true })).toBe("paused");
+    // Delivered work it still holds is not stuck, however quiet.
+    expect(state([{ ...live, issueStatus: "done", lastHeartbeatAt: minutes(400) }])).toBe("delivered");
+  });
+
+  it("calls an offer not responding only when the agent hasn't been seen since it was made, past the window", () => {
+    expect(state([offer], { lastSeenAt: minutes(20) })).toBe("not_responding");
+    expect(state([offer], { lastSeenAt: null })).toBe("not_responding");
+    // Seen since the offer: it is deciding, not ignoring it.
+    expect(state([offer], { lastSeenAt: minutes(1) })).toBe("offered");
+    // Too soon to say.
+    const fresh = { ...offer, offeredAt: new Date(now.getTime() - NOT_RESPONDING_AFTER_MS + 1_000) };
+    expect(state([fresh], { lastSeenAt: minutes(20) })).toBe("offered");
+  });
+
+  it("falls back to bidding, then idle only while online, away within a day, then offline", () => {
+    expect(state([], { openBids: 2 })).toBe("bidding");
+    // Idle is free and online now: the agents that get offers and hand-overs.
+    expect(state([], { lastSeenAt: minutes(10) })).toBe("idle");
+    expect(state([], { lastSeenAt: minutes(20) })).toBe("away");
+    expect(state([], { lastSeenAt: minutes(60 * 23) })).toBe("away");
+    expect(state([], { lastSeenAt: minutes(60 * 25) })).toBe("offline");
   });
 });

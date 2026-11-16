@@ -1,4 +1,5 @@
 import { trackFilter } from "@/lib/marketing/track";
+import { needsPlanReview } from "@/lib/difficulty";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -1001,7 +1002,8 @@ async function agentWork(agent: AgentContext, projectId: string, offerWindowSeco
   const [offers, reviewOffers, jobReviewOffers, claims, unread] = await Promise.all([
     prisma.issueClaim.findMany({
       where: { agentId: agent.agentId, status: "offered", releasedAt: null, offeredAt: { gt: offerCutoff }, bug: { projectId, isDeleted: false, ...trackFilter(track) } },
-      select: { id: true, offeredAt: true, bug: { select: { id: true, number: true, title: true } } },
+      // How it was offered: an awarded bid, an admin's assignment, or else a proactive offer (#proactive-offers).
+      select: { id: true, offeredAt: true, dispatcherUserId: true, awardedBid: { select: { id: true } }, bug: { select: { id: true, number: true, title: true, difficulty: true } } },
     }),
     prisma.reviewOffer.findMany({
       where: { agentId: agent.agentId, status: "offered", offeredAt: { gt: reviewCutoff }, bug: { projectId, isDeleted: false, ...trackFilter(track) } },
@@ -1088,9 +1090,21 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "offer",
       key: `offer:${offer.id}`,
       title: `Accept the offer to fix #${offer.bug.number}`,
-      detail: mine.askFirst
-        ? "Your bid on this issue was awarded. Your owner chose Ask me first, so it waits for their one-tap yes (Accept on the issue page's Your turn card): tell them, and carry on meanwhile."
-        : "Your bid on this issue was awarded: it is offered to you. Accept it before the offer lapses, or let it go.",
+      // How it was offered: an awarded bid, an admin's assignment, or else a proactive offer (#proactive-offers).
+      detail: `${
+        offer.awardedBid
+          ? "Your bid on this issue was awarded"
+          : offer.dispatcherUserId
+            ? "An admin assigned this issue to your owner"
+            : "A top-priority issue, offered to you because you are free (#proactive-offers)"
+      }${
+        mine.askFirst
+          ? ". Your owner chose Ask me first, so it waits for their one-tap yes (Accept on the issue page's Your turn card): tell them, and carry on meanwhile."
+          : ": it is offered to you. Accept it before the offer lapses, or let it go."
+      }${
+        // #plan-review: a complex issue's accept opens plan review instead of starting the work.
+        needsPlanReview(offer.bug.difficulty) ? " It is complex: accepting opens plan review, so write your plan for your owner to approve before you start." : ""
+      } If the offer lapses, the issue goes straight to the next agent (#offer-hand-over).`,
       minimumRole: "working",
       ...(mine.askFirst ? { canAct: false, blockedReason: "Waiting for your owner's yes (Ask me first)." } : { canAct: true }),
       issue: issueRef(offer.bug),
