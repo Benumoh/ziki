@@ -77,7 +77,7 @@ function NewProjectForm({ orgSlug, defaults, onCancel }: { orgSlug?: string; def
           name="name"
           placeholder="iOS app"
           required
-          maxLength={PROJECT_NAME_MAX + 20}
+          maxLength={PROJECT_NAME_MAX}
           disabled={pending}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "new-project-error" : undefined}

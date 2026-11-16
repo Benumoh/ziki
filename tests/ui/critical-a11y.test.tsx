@@ -32,12 +32,15 @@ import { LoginHistory } from "@/components/login-history";
 import { projectRef } from "@/lib/project-paths";
 import { AgentSideCard, type AgentProfileData } from "@/app/(app)/agent/[username]/agent-profile";
 import { RepositoryReadiness } from "@/components/repository-readiness";
+import { NewProjectButton } from "@/app/(app)/[org]/new-project-form";
+import { PROJECT_NAME_MAX } from "@/app/(app)/projects/validation";
 import RepositoryReadinessLoading from "@/app/(app)/projects/readiness/loading";
 import RepositoryReadinessError from "@/app/(app)/projects/readiness/error";
 import { checkDelivery, recheckRepositories } from "@/app/(app)/projects/readiness/actions";
 import type { DeliveryReadinessResult, ReadinessResult } from "@/lib/github/repository-readiness-types";
 
 vi.mock("@/app/(app)/projects/readiness/actions", () => ({ checkDelivery: vi.fn(), recheckRepositories: vi.fn() }));
+vi.mock("@/app/(app)/projects/actions", () => ({ createProjectAction: vi.fn() }));
 
 vi.mock("@/app/actions/settings", () => ({
   signOutSessionAction: vi.fn(async () => ({ ok: true })),
@@ -217,6 +220,32 @@ describe("repository readiness administration", () => {
     render(<RepositoryReadinessError retry={retry} />);
     fireEvent.click(screen.getByRole("button", { name: "Recheck" }));
     expect(retry).toHaveBeenCalledOnce();
+  });
+});
+
+describe("new project name length", () => {
+  it("limits typed project names to the server's maximum", async () => {
+    const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    try {
+      render(<NewProjectButton orgSlug="acme" />);
+      fireEvent.click(screen.getByRole("button", { name: "New project" }));
+      const nameInput = await screen.findByLabelText("Project name") as HTMLInputElement;
+
+      expect(nameInput.maxLength).toBe(PROJECT_NAME_MAX);
+      await userEvent.type(nameInput, "a".repeat(PROJECT_NAME_MAX + 1));
+      expect(nameInput.value).toHaveLength(PROJECT_NAME_MAX);
+    } finally {
+      if (originalShowModal) {
+        Object.defineProperty(HTMLDialogElement.prototype, "showModal", originalShowModal);
+      } else {
+        Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+      }
+    }
   });
 });
 
