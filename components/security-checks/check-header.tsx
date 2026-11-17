@@ -7,6 +7,7 @@ import { CheckActivity, type CheckPhase } from "@/components/security-checks/che
 import { statusClass, substatusClass } from "@/lib/labels";
 import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
 import type { CheckReport } from "@/lib/security-checks/report";
+import { firstSentence } from "@/lib/security-checks/short-line";
 
 /** Ziki's issue status colours, by meaning: waiting on someone like Requires confirmation, working like In progress, finished like Live. */
 const STATUS_CLASS: Record<CheckReport["status"], string> = {
@@ -87,7 +88,7 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
         <h2 className={`text-lg font-bold sm:text-xl ${warn ? "text-red-800" : "text-zk-text"}`}>
           {report.total === 0 ? "No security problems found" : `${report.total} security ${report.total === 1 ? "problem" : "problems"} found${critical ? `, ${critical} of them critical` : ""}`}
         </h2>
-        {report.summary ? <p className={`break-words text-sm sm:text-base ${warn ? "text-red-950" : "text-zk-text2"}`}>{report.summary}</p> : null}
+        {report.summary ? <p className={`break-words text-sm sm:text-base ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
         {report.total > 0 ? (
           <ul aria-label="Findings by severity" className="flex flex-wrap gap-2">
             {SECURITY_SEVERITIES.filter((severity) => report.counts[severity] > 0).map((severity) => (
