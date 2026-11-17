@@ -24,8 +24,10 @@ export const metadata = { title: "Security check" };
  * The report never goes away; moved findings are marked. Only the person who
  * asked for the check sees it.
  */
-export default async function SecurityCheckPage({ params }: { params: Promise<{ id: string }> }) {
-  const [{ id }, user] = await Promise.all([params, requireUser()]);
+export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[] }> }) {
+  const [{ id }, query, user] = await Promise.all([params, searchParams, requireUser()]);
+  // `?fix=id1,id2`: tick these and open the fix panel ("Fix the critical one", a finding's "Fix it for me").
+  const initialFix = (Array.isArray(query.fix) ? query.fix.join(",") : query.fix ?? "").split(",").filter(Boolean).slice(0, 100);
   const access = await currentOrganisationAccess(user.id, user.role);
   if (!access.organisationId) notFound();
   const report = await loadCheckReport(id, access.organisationId, user.id);
@@ -87,7 +89,8 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
           {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
           <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
             <CheckHeader report={report} />
-            <CheckList checkId={report.checkId} tabs={checkListTabs(report)} />
+            {/* Keyed by `?fix`, so "Fix the critical one" on this same page ticks its findings afresh. */}
+            <CheckList key={initialFix.join(",")} checkId={report.checkId} tabs={checkListTabs(report)} initialFix={initialFix} />
           </section>
 
         </>

@@ -20,6 +20,8 @@ export type ListFinding = {
   area: string;
   howToFix: string | null;
   fix: ResultFix | null;
+  /** What sending it to the app costs now, in Ziks. */
+  price: number;
 };
 
 export type ListPending = { id: string; title: string; state: "checking" | "waiting" };
@@ -79,6 +81,7 @@ function deeperScanTab(report: CheckReport): ListTab {
     area: finding.area,
     howToFix: finding.howToFix ? shortLine(finding.howToFix) : null,
     fix: finding.fix,
+    price: finding.price,
   }));
   const withFindings = new Set(report.findings.map((finding) => finding.partId));
   const finished = (part: ReportPart) => part.status === "done" || part.status === "skipped";

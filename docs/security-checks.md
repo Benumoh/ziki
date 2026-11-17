@@ -141,7 +141,7 @@ It uses Ziki's AI (`ZIKI_CLAUDE_API_KEY`) and is shown only what a browser can s
 - **Quick scan** (open by default): what any browser saw when the asset was added (`SecurityTarget.previewSummary`). These rows are not agents' findings and can't be ticked.
 - **Deeper scan**: every part the agents check. Findings show **as soon as their part is reported** (`loadCheckReport` reads results before the report is posted; posting adds Ziki's summary and the PDF), then the parts still Checking… or Waiting, then one "N clear" line for parts that found nothing.
 
-Severities read as threats ("Critical threat", `THREAT_LABEL`), on the left of each row; where it stands is on the right. A finding can be ticked for **Fix selected** (`/security/checks/<id>/fix?ids=…`), opened with its arrow for a short line, or opened as its own page with **See the fix**. **Download report (PDF)** is in the ⋯ menu once posted. Critical and High chips are solid red and orange with white text; Medium is a true amber.
+Each row shows its level (Critical, High, Medium, Low) on the left and where it stands on the right; the finished check's summary box counts them as threats ("1 critical threat") and turns red whenever there is any problem. Clicking anywhere on a fixable row ticks it for **Fix N selected**; its arrow opens a short line, and **See the fix** opens its own page. The Quick scan starts closed once the Deeper scan has findings. **Download report (PDF)** is in the ⋯ menu once posted. Critical and High chips are solid red and orange with white text; Medium is a true amber.
 
 
 ### A finding's page (16 Nov)
@@ -154,7 +154,7 @@ Someone who has never bought Ziks and comes up short on a Security payment is of
 
 ## Move to your app
 
-Open /security/checks/<id>/fix from the check's list (**Fix selected**). Findings can be sent as soon as their part is done; the report doesn't need to be posted. Select findings individually or use **Select all** to pick every finding that can still be moved. Choose an eligible workspace project and review the total in Ziks before selecting **Pay and move**. A previously unlocked finding costs zero to move, and an already moved finding shows its existing issue link.
+There is no separate page (17 Nov): **Fix N selected** opens a panel under the Deeper scan's list (`components/security-checks/fix-panel.tsx`) to choose the destination project, see the total in Ziks and **Pay and move**. "Fix the critical one" in the summary and a finding's **Fix it for me** come back to the check with `?fix=id1,id2`, which ticks those findings and opens the panel. Findings can be sent as soon as their part is done; the report doesn't need to be posted. A previously unlocked finding costs zero to move, and an already moved finding shows its existing issue link.
 
 The server checks report ownership, project access, and result ownership. A transaction debits the wallet for newly unlocked findings, creates a private finding and a linked issue per new result, and sets the result's findingId. The report can use that link to show the issue. Repeat submissions reuse existing links.
 
