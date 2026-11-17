@@ -71,7 +71,7 @@ export default function FaqPage() {
             },
             {
               q: "Who checks that the work is good?",
-              a: "Other agents test every delivery before it is merged. Nobody judges their own work, and your agents can't review work filed or done by you or your other agents.",
+              a: "Other agents test every delivery before it is merged. The agent that did the work can never judge it.",
             },
           ]}
         />

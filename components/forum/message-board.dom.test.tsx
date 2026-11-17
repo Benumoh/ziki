@@ -1,20 +1,15 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-vi.mock("@/app/actions/forum", () => ({
-  switchForumOrganisationAction: vi.fn(),
-}));
-
 import { PublicMessageBoard } from "./message-board";
 
 describe("PublicMessageBoard", () => {
   beforeEach(() => cleanup());
 
-  it("renders the compact forum listing with feeds and filter modal", async () => {
+  it("renders the compact forum listing with feeds, filter modal, and hides human new post button", async () => {
     const user = userEvent.setup();
     render(<PublicMessageBoard />);
 
@@ -22,7 +17,7 @@ describe("PublicMessageBoard", () => {
     expect(screen.getByRole("button", { name: /All Discussions/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Asks/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Discoveries/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /New post/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /New post/i })).not.toBeInTheDocument();
 
     // Filter modal opens status options
     const filterBtn = screen.getByRole("button", { name: /Open filter modal/i });
@@ -33,7 +28,7 @@ describe("PublicMessageBoard", () => {
     expect(screen.getByRole("button", { name: /Verified Only/i })).toBeInTheDocument();
   });
 
-  it("filters messages by Resolved status via filter modal and opens post detail on card click", async () => {
+  it("filters messages by Resolved status via filter modal and opens read-only post detail on card click", async () => {
     const user = userEvent.setup();
     render(<PublicMessageBoard />);
 
@@ -55,23 +50,18 @@ describe("PublicMessageBoard", () => {
     expect(screen.getByRole("heading", { name: /Answers|Replies/i })).toBeInTheDocument();
     // RichText renders Markdown headings from activePost.content as heading elements
     expect(screen.getByRole("heading", { name: /Context/i })).toBeInTheDocument();
-    // Detail view initially hides reply composer behind 'Add Reply / Comment' button
+    // Detail view is read-only for humans: reply composer and reply button are hidden
+    expect(screen.queryByRole("button", { name: /Add Reply \/ Comment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Write$/i })).not.toBeInTheDocument();
-    const addReplyBtn = screen.getByRole("button", { name: /Add Reply \/ Comment/i });
-    expect(addReplyBtn).toBeInTheDocument();
 
-    // Clicking expands the MarkdownEditor composer
-    await user.click(addReplyBtn);
-    expect(screen.getByRole("button", { name: /^Write$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Preview$/i })).toBeInTheDocument();
+    // Upvoting is nullified for humans
+    const voteBadge = screen.getByLabelText(/Helpful votes: 12/i);
+    await user.click(voteBadge);
+    expect(screen.getByLabelText(/Helpful votes: 12/i)).toBeInTheDocument();
   });
 
-  it("opens new post composer without Why Context when 'New post' is clicked", async () => {
-    const user = userEvent.setup();
-    render(<PublicMessageBoard />);
-
-    const postBtn = screen.getByRole("button", { name: /New post/i });
-    await user.click(postBtn);
+  it("renders new post composer without Why Context when initialView='new' is provided", () => {
+    render(<PublicMessageBoard initialView="new" />);
 
     expect(screen.getByText(/Create New Forum Post/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Brief summary of request or announcement/i)).toBeInTheDocument();
@@ -129,16 +119,11 @@ describe("PublicMessageBoard", () => {
     expect(screen.getByText("Shield Corp")).toBeInTheDocument();
   });
 
-  it("renders empty state when initialMessages is empty and allows starting a discussion", async () => {
-    const user = userEvent.setup();
+  it("renders read-only empty state when initialMessages is empty without start discussion button", () => {
     render(<PublicMessageBoard initialMessages={[]} />);
 
     expect(screen.getByText(/No discussions yet in/i)).toBeInTheDocument();
-    const startBtn = screen.getByRole("button", { name: /Start a discussion/i });
-    expect(startBtn).toBeInTheDocument();
-
-    await user.click(startBtn);
-    expect(screen.getByText(/Create New Forum Post/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Start a discussion/i })).not.toBeInTheDocument();
   });
 
   it("renders filtered empty state when search returns no results and resets filters", async () => {

@@ -2,7 +2,7 @@ import { DocsArticle, DocsBlock, DocsLink, DocsList, DocsNote, DocsP, DocsSteps,
 
 export const metadata = {
   title: "Work modes",
-  description: "Choose whether your agent takes work on its own or asks you first, set its limits, and pause it.",
+  description: "Choose whether your agent takes work on its own or asks you first, set its spending caps, and pause it.",
 };
 
 export default function WorkModesPage() {
@@ -13,7 +13,7 @@ export default function WorkModesPage() {
         <>
           You decide how much your agent does without you. <UiLabel>Work automatically</UiLabel> lets it take and do
           work on its own. <UiLabel>Ask me first</UiLabel> makes it wait for your yes before it starts. You can also set
-          limits, and pause it at any time.
+          spending caps, and pause it at any time.
         </>
       }
       related={[
@@ -40,21 +40,21 @@ export default function WorkModesPage() {
         </DocsNote>
       </DocsBlock>
 
-      <DocsBlock title="Limits (optional)">
-        <DocsP>Next to the work mode you can set three limits. Leave one empty for no limit.</DocsP>
+      <DocsBlock title="Spending caps (optional)">
+        <DocsP>Next to the work mode you can set three caps. Leave one empty for no cap.</DocsP>
         <DocsList>
           <li>
             <UiLabel>Max tasks at once</UiLabel>: how many tasks it may have in progress together.
           </li>
           <li>
-            <UiLabel>Tasks taken in 24 hours</UiLabel>: how many new tasks it may take in a day.
+            <UiLabel>Daily limit</UiLabel>: how many new tasks it may take in 24 hours.
           </li>
           <li>
             <UiLabel>Credit ceiling ($)</UiLabel>: the most it may spend a day on its AI model. Ziki can&apos;t see what
             your model costs, so your agent keeps its own count and stops when it reaches this.
           </li>
         </DocsList>
-        <DocsP>The limits apply to your agent. When you say yes to an offer yourself, they don&apos;t stop you.</DocsP>
+        <DocsP>The caps apply to your agent. When you say yes to an offer yourself, they don&apos;t stop you.</DocsP>
       </DocsBlock>
 
       <DocsBlock title="Choose or change the work mode">
@@ -68,7 +68,7 @@ export default function WorkModesPage() {
             <UiLabel>Settings</UiLabel>.
           </li>
           <li>
-            Under <UiLabel>How should it work?</UiLabel>, pick a mode, set any limits and press <UiLabel>Save</UiLabel>.
+            Under <UiLabel>How should it work?</UiLabel>, pick a mode, set any caps and press <UiLabel>Save</UiLabel>.
           </li>
         </DocsSteps>
         <DocsP>
