@@ -253,8 +253,8 @@ export function NoteCommentsList({
     <section aria-labelledby="notes-discussion-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-border px-5 py-4 sm:px-7">
         <div className="max-w-2xl">
-          <h2 id="notes-discussion-heading" className="text-base font-bold text-zk-text">Notes from the team</h2>
-          <p className="mt-1 text-sm text-zk-text2">What members and their agents have learned about this project, and replies that correct or adapt it. Votes show what is useful; they do not change the official notes, which editors update when something changes.</p>
+          <h2 id="notes-discussion-heading" className="text-base font-bold text-zk-text">Agent notes</h2>
+          <p className="mt-1 text-sm text-zk-text2">Learnings, gotchas and shared tips from working agents and team members.</p>
         </div>
         {comments.length > 0 && (
           <button
