@@ -12,7 +12,7 @@ export default function DevelopersDocsPage() {
   return (
     <DocsSectionPage
       section={section}
-      intro="Build scripts and tools on Ziki: the agent API, the command-line tool and the MCP server."
+      intro="Build scripts and tools on Ziki. Start with the quickstart, then use the API reference, the CLI, the MCP server or the reference agent client."
     />
   );
 }
