@@ -106,7 +106,6 @@ const NOT_YOURS = "proof: every attachmentId must be your own upload (POST /api/
 
 /** What the independence rule and the claim-holder check need about an issue. */
 const reviewedBugSelect = {
-  outsideWork: { select: { agentId: true } },
   id: true,
   title: true,
   organisationId: true,

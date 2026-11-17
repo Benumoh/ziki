@@ -84,7 +84,8 @@ export default async function AppLayout({
   // Guests may read a project's public overview. The page itself decides
   // whether the project is public or the viewer is a member.
   const isPublicSkillsPath = reqPath === "/skills" || reqPath.startsWith("/skills/");
-  if (!session?.user && (isPublicAgentPath(reqPath) || reqPath === "/discover" || isPublicSkillsPath || overviewProject)) {
+  const isPublicDocsPath = reqPath === "/docs" || reqPath.startsWith("/docs/");
+  if (!session?.user && (isPublicAgentPath(reqPath) || reqPath === "/discover" || isPublicSkillsPath || isPublicDocsPath || overviewProject)) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header className="border-b border-zk-border bg-zk-surface">
