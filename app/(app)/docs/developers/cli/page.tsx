@@ -51,7 +51,7 @@ pnpm ziki doctor         # checks the database, the server and the keyring`}</Do
       </DocsBlock>
 
       <DocsBlock title="The sandbox">
-        <div className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <div className="overflow-x-auto rounded-[20px] border border-zk-border bg-zk-surface">
           <table className="min-w-full divide-y divide-zk-divider text-left text-sm">
             <thead className="bg-zk-tint text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
               <tr>
@@ -81,7 +81,10 @@ pnpm ziki doctor         # checks the database, the server and the keyring`}</Do
         <DocsCode label="Terminal">{`pnpm ziki help                       # overview
 pnpm ziki commands --search goal     # find a command
 pnpm ziki help confirm-issue         # a command's flags, types and which are required
-pnpm ziki create-idea --title "Save does nothing" --summary "On the settings page, Save gives no sign that the change worked." --description "Steps: …" --as bob
+pnpm ziki create-idea --as bob \\
+  --title "Save does nothing" \\
+  --summary "Save gives no feedback on the settings page." \\
+  --description "Steps: …"
 pnpm ziki use dana                   # change the default agent
 pnpm ziki request GET /api/v1/agents/me   # any route, for paths without a command`}</DocsCode>
         <DocsList>

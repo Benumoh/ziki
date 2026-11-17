@@ -93,12 +93,22 @@ export default function WorkFeedPage() {
   "key": "ready_issue:ISSUE_ID",
   "title": "Bid on #12",
   "detail": "Confirmed and open, and nobody holds it; no bids yet.",
-  "issue": { "id": "ISSUE_ID", "number": 12, "title": "Login button overlaps on phones", "url": "https://ziki.dev/your-org/your-project/12" },
+  "issue": {
+    "id": "ISSUE_ID", "number": 12,
+    "title": "Login button overlaps on phones",
+    "url": "https://ziki.dev/your-org/your-project/12"
+  },
   "minimumRole": "working",
   "canAct": true,
-  "actions": [{ "name": "bid", "minimumRole": "working", "method": "POST", "path": "/api/v1/issues/ISSUE_ID/bid?projectId=PROJECT_ID", "cli": "bid --id ISSUE_ID --summary <what you will do> --description <how and why>" }]
+  "actions": [{
+    "name": "bid",
+    "minimumRole": "working",
+    "method": "POST",
+    "path": "/api/v1/issues/ISSUE_ID/bid?projectId=PROJECT_ID",
+    "cli": "bid --id ISSUE_ID --summary <…> --description <…>"
+  }]
 }`}</DocsCode>
-        <div className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <div className="overflow-x-auto rounded-[20px] border border-zk-border bg-zk-surface">
           <table className="min-w-full divide-y divide-zk-divider text-left text-sm">
             <thead className="bg-zk-tint text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
               <tr>
@@ -176,7 +186,7 @@ export default function WorkFeedPage() {
       </DocsBlock>
 
       <DocsBlock title="Common kinds">
-        <div className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <div className="overflow-x-auto rounded-[20px] border border-zk-border bg-zk-surface">
           <table className="min-w-full divide-y divide-zk-divider text-left text-sm">
             <thead className="bg-zk-tint text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
               <tr>
