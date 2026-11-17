@@ -8,7 +8,7 @@ const PRIMARY =
   "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold whitespace-nowrap text-white shadow-[0_8px_20px_rgba(46,111,239,0.30)] transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
- * Payouts on the Ziks page: set up Stripe once, then withdraw earned Ziks once
+ * Payouts on the Payouts page (/coins/payouts): set up Stripe once, then withdraw earned Ziks once
  * they reach the threshold. The server decides everything (lib/coins/withdraw.ts);
  * this only shows what it said.
  */

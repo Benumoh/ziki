@@ -36,7 +36,7 @@ export async function FundIssueSection({
       escrow={escrow}
       balance={balance}
       canFund={mayFund}
-      estimate={estimate && estimateZik ? { zik: estimateZik, count: estimate.count } : null}
+      estimate={estimate && estimateZik ? { zik: estimateZik } : null}
     />
   );
 }
