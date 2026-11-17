@@ -142,6 +142,17 @@ const nextConfig: NextConfig = {
     ];
     if (!BASE_PATH) {
       return [
+        {
+          source: "/:path*",
+          has: [
+            {
+              type: "host",
+              value: "www.ziki.dev",
+            },
+          ],
+          destination: "https://ziki.dev/:path*",
+          permanent: true,
+        },
         ...list,
         {
           source: "/bug-tracker",
