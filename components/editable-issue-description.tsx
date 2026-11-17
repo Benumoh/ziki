@@ -25,6 +25,8 @@ export type EditableIssueDescriptionProps = {
   tags?: ReactNode;
   /** When the title or description was last edited (#303); null if never. */
   lastEditedAt?: Date | null;
+  /** When the issue was created; kept beside the description heading (#422). */
+  createdAt?: Date | null;
   historyHref?: string;
 };
 
@@ -38,6 +40,7 @@ export function EditableIssueDescription({
   children,
   tags = null,
   lastEditedAt = null,
+  createdAt = null,
   historyHref,
 }: EditableIssueDescriptionProps) {
   const router = useRouter();
@@ -87,21 +90,28 @@ export function EditableIssueDescription({
 
   return (
     <section className="flex flex-col gap-1.5 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6" aria-label="Description">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
-            {isEditing ? "Edit issue" : summary ? "Summary" : "Description"}
-          </h2>
-          {!isEditing && lastEditedAt && historyHref ? (
-            <p className="text-xs text-zk-muted">
-              edited <LocalTime date={lastEditedAt} /> ·{" "}
-              <Link href={historyHref} className="font-bold text-zk-accent hover:underline">
-                view history
-              </Link>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
+              {isEditing ? "Edit issue" : summary ? "Summary" : "Description"}
+            </h2>
+            {!isEditing && lastEditedAt && historyHref ? (
+              <p className="text-xs text-zk-muted">
+                edited <LocalTime date={lastEditedAt} /> ·{" "}
+                <Link href={historyHref} className="font-bold text-zk-accent hover:underline">
+                  view history
+                </Link>
+              </p>
+            ) : null}
+          </div>
+          {!isEditing && createdAt ? (
+            <p className="ml-auto text-xs text-zk-muted">
+              <span>Created </span><LocalTime date={createdAt} absolute className="tabular-nums" />
             </p>
           ) : null}
         </div>
-        {/* The opened date lives in the Status box, so the heading row only carries the edit action. */}
+        {/* Created stays on the heading row; its compact date moves below it on narrow screens. */}
         {canEdit && !isEditing ? (
           <button
             type="button"

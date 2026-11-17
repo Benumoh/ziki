@@ -122,6 +122,7 @@ import { AssignToItem, MoreTimeItem, StopMyAgentItem } from "@/components/issue-
 import { heldByMyAgent, webAgentFor } from "@/lib/web-agent";
 import { CopyIssueSummaryButton } from "@/components/copy-issue-summary-button";
 import { EditableIssueDescription } from "@/components/editable-issue-description";
+import { IssueMetadataPanel } from "@/components/issue-metadata-panel";
 import { SecurityFindingPanel } from "@/components/security-finding-panel";
 import { findingForBug, findingView } from "@/lib/security-findings";
 import { IssueLinks } from "@/components/issue-links";
@@ -2096,12 +2097,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               <AgentResolvedNotice bugId={bug.id} resolution={agentResolution} canReopen={canUpdateStatus} />
             ) : null}
 
-            {/* Taxonomy (#687). Status, stage and the opened date are in the Status box. */}
-            {bug.type ? (
-              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-zk-muted">
-                <span className={`${issueChipBaseClass} bg-zk-chip text-zk-text2`}>{bug.type.name}</span>
-              </p>
-            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <IssuePrioritySelect bugId={bug.id} priority={bug.priority} />
             </div>
@@ -2180,31 +2175,9 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             canEdit={canEdit && !(securityView && !securityView.disclosed)}
             users={users}
             lastEditedAt={lastRevision?.editedAt ?? null}
+            createdAt={bug.createdAt}
             historyHref={issueHref(bug, "/history")}
-            tags={
-              bug.area ? (
-                <span title="Area" className="inline-flex items-center rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2 ring-1 ring-zk-border">
-                  {bug.area.name}
-                </span>
-              ) : null
-            }
-          >
-            {bug.milestone ? (
-              <dl className="mt-4 grid grid-cols-1 gap-3 text-sm text-zk-text2 sm:grid-cols-2">
-                {bug.milestone ? (
-                  <div>
-                    <dt className="font-medium text-zk-muted">Milestone</dt>
-                    <dd className="flex flex-wrap items-center gap-2">
-                      <Link href={milestoneIssuesHref(refOf(bug.project), bug.milestone.id)} className="font-bold text-zk-accent hover:underline">
-                        {bug.milestone.title}
-                      </Link>
-                      <MilestoneDue due={dueDateValue(bug.milestone.dueDate) || null} isClosed={bug.milestone.isClosed} />
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            ) : null}
-          </EditableIssueDescription>
+          />
 
           {issueAttachments.length > 0 ? (
             <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
@@ -2539,6 +2512,37 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               </form>
             ) : null}
           </section>
+          <IssueMetadataPanel
+            reporter={{
+              id: bug.reporterId,
+              name: bug.reporter.name,
+              image: bug.reporter.image,
+              role: bug.reporter.role,
+              organisationRole: organisationRoles[bug.reporterId] ?? null,
+            }}
+            reporterAgent={bug.createdByAgent?.name ?? null}
+            assignee={assignee ? {
+              id: assignee.id,
+              name: assignee.name,
+              image: assignee.image,
+              role: assignee.role,
+              organisationRole: organisationRoles[assignee.id] ?? null,
+            } : null}
+            assigneeAgent={assignee ? hold?.agentName ?? null : null}
+            assigneeAction={canSelfAssign && (!assignee || isAssignee) ? (
+              <SelfAssignButton bugId={bug.id} isAssignedToMe={isAssignee} variant="ghost" size="xs" />
+            ) : null}
+            lastActivityAt={shownActivities[0]?.createdAt ?? bug.createdAt}
+            area={bug.area?.name ?? null}
+            type={bug.type?.name ?? null}
+            milestone={bug.milestone ? {
+              title: bug.milestone.title,
+              href: milestoneIssuesHref(refOf(bug.project), bug.milestone.id),
+              dueDate: dueDateValue(bug.milestone.dueDate) || null,
+              isClosed: bug.milestone.isClosed,
+            } : null}
+          />
+
           {checklist ? <MergeChecklistCard checklist={checklist} testCard={Boolean(testCard)} /> : null}
           {/* #rewards: the reward, your estimate, and everyone's. */}
           {rewardRow ? (
@@ -2553,55 +2557,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               <FundIssueSection bugId={bug.id} userId={user.id} estimate={fundingEstimate} />
             </IssueRewardPanel>
           ) : null}
-
-          {/* People, compact: one row each, label on the left. */}
-          <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
-            <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                {/* One line: a long name truncates rather than dropping under the avatar. */}
-                <UserNameWithBadges
-                  name={bug.reporter.name}
-                  image={bug.reporter.image}
-                  avatar="sm"
-                  className="min-w-0 !flex-nowrap text-xs"
-                  userId={bug.reporterId}
-                />
-                {/* The agent that filed it, on the right. */}
-                {bug.createdByAgent ? <AgentChip name={bug.createdByAgent.name} className="ml-auto" /> : null}
-              </div>
-            </div>
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-zk-muted">Assignee</span>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                {assignee ? (
-                  <UserNameWithBadges
-                    name={assignee.name}
-                    role={assignee.role}
-                    organisationRole={organisationRoles[assignee.id] ?? null}
-                    image={assignee.image}
-                    avatar="sm"
-                    className="min-w-0 !flex-nowrap text-xs"
-                    userId={assignee.id}
-                  />
-                ) : (
-                  <span className="text-xs text-zk-muted">Unassigned</span>
-                )}
-                {/* The agent doing the work for the assignee, on the right. */}
-                {assignee && hold?.agentName ? <AgentChip name={hold.agentName} className="ml-auto" /> : null}
-                {/* Only an unassigned issue offers Assign to me (and your own, Unassign). */}
-                {canSelfAssign && (!assignee || isAssignee) ? (
-                  <SelfAssignButton
-                    bugId={bug.id}
-                    isAssignedToMe={isAssignee}
-                    variant="ghost"
-                    size="xs"
-                  />
-                ) : null}
-              </div>
-            </div>
-          </section>
 
           {/* Links, under People: the GitHub PR (the linked one too) and the idea it came from. */}
           <IssueLinks

@@ -57,8 +57,71 @@ import { OutsideWorkForm, ExpressImportRequestQueue } from "@/components/outside
 import { decisionFor, type DecisionIssue, type DecisionSuggestion } from "@/lib/your-decision";
 import { designDecisionsFor } from "@/lib/design-view";
 import { DesignDecisionButtons } from "@/components/design-decision-buttons";
+import { EditableIssueDescription } from "@/components/editable-issue-description";
+import { IssueMetadataPanel } from "@/components/issue-metadata-panel";
 
 const PR = "https://github.com/emerjent/ziki/pull/42";
+
+describe("issue metadata layout (#456)", () => {
+  afterEach(cleanup);
+
+  it("keeps creation and activity times distinct alongside people and taxonomy", () => {
+    const createdAt = new Date("2026-10-21T19:49:37.346Z");
+    const lastActivityAt = new Date("2026-11-17T09:27:05.805Z");
+    const { container } = render(
+      <>
+        <EditableIssueDescription
+          bugId="issue-456"
+          initialTitle="Compact issue details"
+          initialDescription="Description body"
+          canEdit={false}
+          users={[]}
+          createdAt={createdAt}
+        />
+        <IssueMetadataPanel
+          reporter={{ id: "reporter-1", name: "Alex Reporter", image: null, role: "user", organisationRole: "member" }}
+          reporterAgent="Reporter Agent"
+          assignee={{ id: "assignee-1", name: "Jamie Fixer", image: null, role: "user", organisationRole: "admin" }}
+          assigneeAgent="Fixer Agent"
+          lastActivityAt={lastActivityAt}
+          area="Issue detail"
+          type="UI/UX"
+          milestone={{ title: "November polish", href: "/acme/web/milestones/m1", dueDate: "2026-11-30", isClosed: false }}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("Alex Reporter")).toBeVisible();
+    expect(screen.getByText("Jamie Fixer")).toBeVisible();
+    expect(screen.getByLabelText("Agent Reporter Agent")).toBeVisible();
+    expect(screen.getByLabelText("Agent Fixer Agent")).toBeVisible();
+    expect(screen.getByText("Issue detail")).toBeVisible();
+    expect(screen.getByText("UI/UX")).toBeVisible();
+    expect(screen.getByRole("link", { name: "November polish" })).toHaveAttribute("href", "/acme/web/milestones/m1");
+    expect([...container.querySelectorAll("time")].map((time) => time.dateTime)).toEqual([
+      createdAt.toISOString(),
+      lastActivityAt.toISOString(),
+    ]);
+  });
+
+  it("shows an unassigned issue and omits taxonomy that has no value", () => {
+    render(
+      <IssueMetadataPanel
+        reporter={{ id: "reporter-1", name: "Alex Reporter", image: null }}
+        assignee={null}
+        lastActivityAt={new Date("2026-11-17T09:27:05.805Z")}
+        area={null}
+        type={null}
+        milestone={null}
+      />,
+    );
+
+    expect(screen.getByText("Unassigned")).toBeVisible();
+    expect(screen.queryByText("Area")).not.toBeInTheDocument();
+    expect(screen.queryByText("Type")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target milestone")).not.toBeInTheDocument();
+  });
+});
 
 describe("outside-work import form and access requests (#788)", () => {
   afterEach(cleanup);
