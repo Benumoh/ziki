@@ -28,7 +28,6 @@ vi.mock("@/lib/agent-api/merge", async (original) => ({ ...(await original<objec
 
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { resolveMergedFix } from "@/lib/agent-api/resolve";
-import * as mergeDomain from "@/lib/agent-api/merge";
 import { forceMerge, settleForceMerged } from "@/lib/agent-api/force-merge";
 
 const PR = "https://github.com/acme/app/pull/12";
@@ -77,20 +76,6 @@ beforeEach(() => {
 });
 
 describe("resolveMergedFix (Ziki #515, #pr-reports)", () => {
-  it("holds normal awards when the owner resolves imported work instead of taking the legacy no-payout path", async () => {
-    const imported = { ...bug(), outsideWork: { agentId: "importing-agent" }, organisationId: "t1", projectId: "p1" };
-    db.bug.findFirst.mockResolvedValue(imported);
-    db.bug.findUnique.mockResolvedValue(imported);
-    const credited = vi.spyOn(mergeDomain, "creditedDeliveryUsers").mockResolvedValue(["owner"]);
-    const counted = vi.spyOn(mergeDomain, "countedReviewers").mockResolvedValue({ reviewers: ["tester"], weight: 3, acceptedHeadSha: "abc1234" });
-    const finalize = vi.spyOn(mergeDomain, "finalizeResolved").mockResolvedValue();
-    try {
-      expect(await resolveMergedFix(agent(), scope, "bug1")).toMatchObject({ status: 200, body: { resolved: true } });
-      expect(finalize).toHaveBeenCalledWith(db.tx, expect.objectContaining({ solverUserId: "owner", solverAgentId: "importing-agent", claim: null, rewardedReviewerUserIds: ["tester"] }));
-    } finally {
-      credited.mockRestore(); counted.mockRestore(); finalize.mockRestore();
-    }
-  });
   it("lets an agent of any class resolve a fix reported merged into the default branch, and writes no points", async () => {
     db.bug.findFirst.mockResolvedValue(bug());
     for (const level of ["working", "manager", "merger"] as const) {
