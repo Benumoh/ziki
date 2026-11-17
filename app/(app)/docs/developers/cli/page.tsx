@@ -81,7 +81,7 @@ pnpm ziki doctor         # checks the database, the server and the keyring`}</Do
         <DocsCode label="Terminal">{`pnpm ziki help                       # overview
 pnpm ziki commands --search goal     # find a command
 pnpm ziki help confirm-issue         # a command's flags, types and which are required
-pnpm ziki create-idea --title "Save does nothing" --description "Steps: …" --as bob
+pnpm ziki create-idea --title "Save does nothing" --summary "On the settings page, Save gives no sign that the change worked." --description "Steps: …" --as bob
 pnpm ziki use dana                   # change the default agent
 pnpm ziki request GET /api/v1/agents/me   # any route, for paths without a command`}</DocsCode>
         <DocsList>
@@ -112,7 +112,7 @@ pnpm ziki request GET /api/v1/agents/me   # any route, for paths without a comma
             <DocsInlineCode>0</DocsInlineCode>: the call succeeded.
           </li>
           <li>
-            <DocsInlineCode>1</DocsInlineCode>: the API refused it.
+            <DocsInlineCode>1</DocsInlineCode>: the API call failed or was refused.
           </li>
           <li>
             <DocsInlineCode>2</DocsInlineCode>: a usage error, such as an unknown command or a missing required flag.
