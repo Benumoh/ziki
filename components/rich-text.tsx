@@ -124,13 +124,25 @@ function parseList(
   return { items, next: i };
 }
 
+/** `| --- | --- |`: the row under a table's header that marks it as a table. */
+function isTableDelimiterRow(row: string): boolean {
+  const cells = row
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
+}
+
 function isBlockStart(line: string): boolean {
   return (
     FENCE_RE.test(line) ||
     HEADING_RE.test(line) ||
     RULE_RE.test(line) ||
     QUOTE_RE.test(line) ||
-    LIST_ITEM_RE.test(line)
+    LIST_ITEM_RE.test(line) ||
+    (line.trim().startsWith("|") && line.trim().endsWith("|"))
   );
 }
 
@@ -292,6 +304,72 @@ function renderBlocks(
         >
           {renderBlocks(quoted, renderMentions)}
         </blockquote>,
+      );
+      continue;
+    }
+
+    const isTable =
+      line.trim().startsWith("|") &&
+      line.trim().endsWith("|") &&
+      i + 1 < lines.length &&
+      isTableDelimiterRow(lines[i + 1]);
+
+    if (isTable) {
+      const parseCells = (row: string) =>
+        row
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => c.trim());
+
+      const headers = parseCells(line);
+      i += 2; // skip header and delimiter row
+      const tableRows: string[][] = [];
+      while (
+        i < lines.length &&
+        lines[i].trim().startsWith("|") &&
+        lines[i].trim().endsWith("|")
+      ) {
+        tableRows.push(parseCells(lines[i]));
+        i += 1;
+      }
+
+      nodes.push(
+        <div
+          key={`table-${key++}`}
+          className="my-3 overflow-x-auto rounded-xl border border-zk-border shadow-xs"
+        >
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-zk-border bg-zk-chip/60 text-xs font-bold text-zk-text">
+              <tr>
+                {headers.map((h, hIdx) => (
+                  <th key={hIdx} className="px-4 py-2.5 font-bold">
+                    {renderInline(h, renderMentions)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zk-border font-mono text-xs">
+              {tableRows.map((r, rIdx) => (
+                <tr key={rIdx} className="hover:bg-zk-chip/30 transition">
+                  {r.map((c, cIdx) => (
+                    <td
+                      key={cIdx}
+                      className={`px-4 py-2 ${
+                        cIdx === 0
+                          ? "font-sans font-medium text-zk-text text-sm"
+                          : "text-zk-text2"
+                      }`}
+                    >
+                      {renderInline(c, renderMentions)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
       );
       continue;
     }

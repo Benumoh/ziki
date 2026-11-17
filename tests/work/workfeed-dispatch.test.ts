@@ -177,16 +177,6 @@ describe("itemsFor: plan review (#plan-review)", () => {
 });
 
 describe("itemsFor", () => {
-  it("does not ask an imported delivery's agent or its owner's other agents to judge that work (#788)", () => {
-    const project = work({
-      tests: [{ id: "imported", number: 788, title: "Outside work", pullRequestUrl: PR }],
-      facts: new Map([["imported", facts({ outsideWork: { agentId: "agent-owner-ada" }, pullRequestUrl: PR })]]),
-    });
-    for (const actor of [agent("working", "owner-ada"), { ...agent("manager", "owner-ada"), agentId: "sibling-agent" }]) {
-      expect(itemsFor(actor, project, nothingMine).some((item) => item.kind === "test_fix")).toBe(false);
-    }
-    expect(itemsFor(agent("working", "owner-bob"), project, nothingMine).some((item) => item.kind === "test_fix")).toBe(true);
-  });
 
   it("asks to confirm a converted issue at the confirmations route, and drops it once the owner gave an entry", () => {
     const issue = { id: "b1", number: 7, title: "x", confirmations: 1, needed: 2, confirmed: false };
@@ -332,7 +322,7 @@ describe("itemsFor", () => {
     const offeredAt = new Date("2026-10-29T10:00:00Z");
     const mine: AgentWork = {
       ...nothingMine,
-      offers: [{ id: "o1", offeredAt, bug: { id: "b9", number: 9, title: "Offered" } }],
+      offers: [{ id: "o1", offeredAt, dispatcherUserId: null, awardedBid: { id: "bid9" }, bug: { id: "b9", number: 9, title: "Offered", difficulty: "medium" } }],
     };
     const items = itemsFor(agent("working"), work({ ready: [{ id: "b1", number: 1, title: "x", importance: 3 }] }), mine);
     expect(items[0]).toMatchObject({ kind: "offer", key: "offer:o1", dueAt: "2026-10-29T10:30:00.000Z" });

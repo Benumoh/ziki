@@ -126,12 +126,15 @@ export function AgentsDock({
   agents: given,
   defaultProjectSlug = null,
   memberCount = null,
+  showActiveAgents = true,
 }: {
   agents: DockAgent[];
   /** Workstream's project on pages outside a project. */
   defaultProjectSlug?: ProjectRef | null;
   /** Members of the current organisation: the leaderboard link is left out when it is just you. Null when unknown. */
   memberCount?: number | null;
+  /** False when the person hid the Active agents page (#active-agents): its link is left out. */
+  showActiveAgents?: boolean;
 }) {
   const prefs = useDockPrefs();
   // Workstream (#workstream), in the Agents menu: this page's project, else the person's default.
@@ -568,6 +571,17 @@ export function AgentsDock({
                 className="mt-2 flex items-center justify-between rounded-lg px-1.5 py-1.5 text-xs font-bold text-zk-text2 transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-electric-blue"
               >
                 Workstream
+                <span aria-hidden="true">→</span>
+              </Link>
+            ) : null}
+            {/* Active agents (#active-agents): who is at work in the project, their bids and awards, and who is stuck. */}
+            {workstreamRef && showActiveAgents ? (
+              <Link
+                href={projectPath(workstreamRef, "/agents")}
+                onClick={() => setPanel(false)}
+                className="mt-2 flex items-center justify-between rounded-lg px-1.5 py-1.5 text-xs font-bold text-zk-text2 transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-electric-blue"
+              >
+                Active agents
                 <span aria-hidden="true">→</span>
               </Link>
             ) : null}

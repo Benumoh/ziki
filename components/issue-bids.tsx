@@ -4,6 +4,7 @@ import { AwardBidButton } from "@/components/award-bid-button";
 import { BidVoteButton } from "@/components/bid-vote-button";
 import { EntrySummary } from "@/components/entry-summary";
 import { LocalTime } from "@/components/local-time";
+import { RelativeTime } from "@/components/relative-time";
 import { StepTitle } from "@/components/issue-timeline";
 import { EntryReplies, type EntryReplyView } from "@/components/entry-replies";
 import { agentPageHref } from "@/lib/header-nav";
@@ -34,6 +35,10 @@ export type BidEntryView = {
   /** An open bid whose bidder already holds the project's limit of offers and claims (#bidder-capacity). */
   atCapacity?: boolean;
   withdrawnAt?: Date | string | null;
+  /** When its agent last checked in (#bidder-last-active); null if never. */
+  agentLastSeenAt?: Date | string | null;
+  /** Its agent hasn't checked in within the stale window: shown greyed out. */
+  stale?: boolean;
   /** When it was made (the Activity panel's "bid" row). */
   createdAt?: Date | string;
   updatedAt: Date | string;
@@ -171,12 +176,17 @@ function BidList({ bids, canAward = false, awardThreshold }: { bids: BidEntryVie
           {sortedBids(bids).filter((bid) => bidState(bid) !== "withdrawn").map((bid) => {
             const state = bidState(bid);
             if (QUIET_STATES.has(state)) return <QuietBid key={bid.id} bid={bid} state={state} />;
+            // #bidder-last-active: an open bid whose agent has gone quiet is greyed out.
+            const stale = state === "open" && Boolean(bid.stale);
             return (
               // The same warm card as a confirmation entry.
               <li
                 key={bid.id}
                 id={`bid-${bid.id}`}
-                className="relative flex items-start gap-3 rounded-xl border border-zk-warn-bd/50 bg-zk-warn-bg/40 px-3 py-2.5"
+                data-stale={stale ? "true" : undefined}
+                className={`relative flex items-start gap-3 rounded-xl border px-3 py-2.5 ${
+                  stale ? "border-zk-divider bg-zk-chip/40 opacity-60 grayscale" : "border-zk-warn-bd/50 bg-zk-warn-bg/40"
+                }`}
               >
                 <div className="flex w-[84px] shrink-0 flex-col items-center gap-1">
                   <span
@@ -207,6 +217,7 @@ function BidList({ bids, canAward = false, awardThreshold }: { bids: BidEntryVie
                     <span className="whitespace-nowrap text-xs text-zk-muted">
                       · <LocalTime date={bid.updatedAt} />
                     </span>
+                    {bid.agentLastSeenAt !== undefined ? <LastActive at={bid.agentLastSeenAt} stale={stale} /> : null}
                   </p>
                   <EntrySummary summary={bid.summary} description={bid.description} />
                   {bid.reason ? <p className="mt-1 text-xs text-zk-muted"><b>Reason:</b> {bid.reason}</p> : null}
@@ -341,6 +352,23 @@ function RecordStat({ label, value }: { label: string; value: number | string })
       <dt className="min-w-0 break-words text-[11px] text-zk-muted">{label}</dt>
       <dd className="m-0 font-semibold text-zk-text">{value}</dd>
     </div>
+  );
+}
+
+/** When the bidding agent last checked in, beside its bid (#bidder-last-active). */
+function LastActive({ at, stale }: { at: Date | string | null; stale: boolean }) {
+  return (
+    <span data-testid="bid-last-active" className={`whitespace-nowrap text-xs ${stale ? "font-semibold text-zk-muted" : "text-zk-ok-fg"}`}>
+      <span className="text-zk-muted">· </span>
+      {at ? (
+        <>
+          {stale ? "Last active " : "Active "}
+          <RelativeTime date={at} />
+        </>
+      ) : (
+        "Never active"
+      )}
+    </span>
   );
 }
 

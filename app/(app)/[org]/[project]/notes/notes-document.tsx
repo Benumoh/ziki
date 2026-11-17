@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { RichText } from "@/components/rich-text";
-import { ProgressiveNoteContent } from "./note-comments";
 import { saveNotesAction, restoreNotesAction } from "./actions";
 
 export type NotesDocumentData = { body: string; version: number; editorName: string; editorAgentId: string | null; updatedAt: string };
@@ -74,7 +73,7 @@ export function NotesDocument({ projectId, notes, canEdit, revisions, historyLin
           </form>
         ) : notes ? (
           <>
-            <ProgressiveNoteContent content={notes.body} className="text-zk-text [&_a]:text-zk-accent" />
+            <RichText content={notes.body} className="text-zk-text [&_a]:text-zk-accent" />
             <p className="mt-6 border-t border-zk-border pt-4 text-xs text-zk-muted">Version {notes.version} · Updated by {notes.editorName}{notes.editorAgentId ? " (agent)" : ""} · <time dateTime={notes.updatedAt}>{new Date(notes.updatedAt).toISOString().slice(0, 16).replace("T", " ")} UTC</time></p>
           </>
         ) : (

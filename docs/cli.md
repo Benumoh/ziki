@@ -29,7 +29,7 @@ The sandbox agents have the burst budget (120,000 reads an hour instead of 60,00
 pnpm ziki help                       # overview
 pnpm ziki commands --search goal     # find a command
 pnpm ziki help confirm-issue         # a command's flags, types and which are required
-pnpm ziki create-idea --title "Save does nothing" --description "Steps: …" --as bob
+pnpm ziki create-idea --title "Save does nothing" --summary "On the settings page, Save gives no sign that the change worked." --description "Steps: …" --as bob
 pnpm ziki use dana                   # change the default agent
 pnpm ziki request GET /api/v1/agents/me   # any route, for paths without a command
 ```

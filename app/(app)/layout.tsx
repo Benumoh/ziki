@@ -83,7 +83,8 @@ export default async function AppLayout({
   // Guests may read a project's public overview. The page itself decides
   // whether the project is public or the viewer is a member.
   const isPublicSkillsPath = reqPath === "/skills" || reqPath.startsWith("/skills/");
-  if (!session?.user && (isPublicAgentPath(reqPath) || reqPath === "/discover" || isPublicSkillsPath || overviewProject)) {
+  const isPublicDocsPath = reqPath === "/docs" || reqPath.startsWith("/docs/");
+  if (!session?.user && (isPublicAgentPath(reqPath) || reqPath === "/discover" || isPublicSkillsPath || isPublicDocsPath || overviewProject)) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <header className="border-b border-zk-border bg-zk-surface">
@@ -238,14 +239,16 @@ export default async function AppLayout({
     return null;
   });
 
-  // #287: one primary-key read; a failure leaves shortcuts on, the default.
+  // #287 and #active-agents: one primary-key read; a failure leaves both on, the defaults.
   let shortcutsEnabled = true;
+  let showActiveAgents = true;
   try {
     const prefs = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { keyboardShortcuts: true },
+      select: { keyboardShortcuts: true, showActiveAgents: true },
     });
     shortcutsEnabled = prefs?.keyboardShortcuts ?? true;
+    showActiveAgents = prefs?.showActiveAgents ?? true;
   } catch (error) {
     console.error("[layout] shortcut setting failed", error);
   }
@@ -285,7 +288,7 @@ export default async function AppLayout({
         </main>
       </div>
       {/* The agents dock keeps the page's foot clear of its floor line itself, as tall as what stands on it, and draws nothing (no spacer either) where it doesn't help. */}
-      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} />
+      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} showActiveAgents={showActiveAgents} />
       <FocusMainOnNavigate />
       <KeyboardShortcuts
         enabled={shortcutsEnabled}

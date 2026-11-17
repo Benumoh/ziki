@@ -16,11 +16,11 @@
 .mk-video-studio fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .mk-video-studio legend { margin-bottom: 10px; font-size: 14px; font-weight: 700; }
 .mk-video-topBar, .mk-video-previewHeading, .mk-video-lengthHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.mk-video-topBar { margin-bottom: 18px; }
+.mk-video-topBar { margin-bottom: 12px; }
 .mk-video-studio .mk-video-tag { border: 1px solid var(--zk-border); border-radius: 999px; padding: 5px 10px; background: var(--zk-chip); color: var(--zk-text2); font-size: 12px; }
-.mk-video-tabs { display: inline-flex; flex-wrap: wrap; gap: 6px; max-width: 100%; margin-bottom: 28px; padding: 5px; border: 1px solid var(--zk-border); border-radius: 24px; background: var(--zk-surface); }
-.mk-video-tabs button { min-height: 42px; padding: 10px 18px; border: 0; border-radius: 999px; background: transparent; color: var(--zk-text2); font-size: 15px; }
-.mk-video-tabs button[aria-selected="true"] { background: var(--zk-text); color: var(--zk-bg); font-weight: 600; }
+.mk-video-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 100%; margin-bottom: 20px; padding: 4px; border: 1px solid var(--zk-border); border-radius: 999px; background: var(--zk-surface); }
+.mk-video-tabs button { min-height: 34px; padding: 6px 14px; border: 0; border-radius: 999px; background: transparent; color: var(--zk-text2); font-size: 14px; }
+.mk-video-tabs button[aria-selected="true"] { background: var(--color-electric-blue-strong); color: #fff; font-weight: 600; }
 .mk-video-subtitle { margin: 8px 0 24px; color: var(--zk-text2); font-size: 15px; line-height: 1.6; }
 .mk-video-workspace { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; gap: 24px; }
 .mk-video-studio .mk-video-leftColumn { display: grid; gap: 18px; }
@@ -136,8 +136,8 @@
   .mk-video-workspace { grid-template-columns: minmax(0, 1fr); }
   .mk-video-rightColumn { position: static; }
   .mk-video-studio h1 { font-size: 24px; }
-  .mk-video-tabs { display: flex; gap: 2px; border-radius: 20px; }
-  .mk-video-tabs button { flex: 1 1 auto; padding-inline: 10px; font-size: 13px; }
+  .mk-video-tabs { display: flex; gap: 2px; }
+  .mk-video-tabs button { flex: 1 1 auto; min-height: 32px; padding-inline: 10px; font-size: 13px; }
   .mk-video-card { padding: 20px; }
   .mk-video-libraryGrid { grid-template-columns: minmax(0, 1fr); }
   .mk-video-ideaPicture { flex-basis: 64px; }

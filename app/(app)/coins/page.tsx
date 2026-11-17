@@ -2,17 +2,15 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
-import { WITHDRAW_THRESHOLD } from "@/lib/earnings-threshold";
 import { walletSummary } from "@/lib/coins/ledger";
+import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
-import { WITHDRAW_MIN_ZIK, syncPayoutsEnabled } from "@/lib/coins/withdraw";
 import { LocalTime } from "@/components/local-time";
 import { ZikiPlans } from "@/components/coins/ziki-plans";
 import { discountedCents } from "@/lib/coins/plans";
 import { discountPercentFor, liveSubscriptionOf, syncUserSubscriptions } from "@/lib/coins/subscription";
 import { UrlNotice } from "@/components/coins/url-notice";
-import { PayoutsPanel } from "./payouts-panel";
 
 export const metadata = { title: "Ziks" };
 export const dynamic = "force-dynamic";
@@ -33,42 +31,36 @@ const KIND_LABEL = {
 } as const;
 
 /**
- * Ziks (#ziki-coins): your wallet, the packs you can buy with Stripe, payouts for
- * what you earn, and what moved. Buying is Stripe Checkout; the wallet is only
- * credited when Stripe's webhook says the payment went through.
+ * Ziks (#ziki-coins): your wallet, the packs you can buy with Stripe, your plan,
+ * and what moved. Buying is Stripe Checkout; the wallet is only credited when
+ * Stripe's webhook says the payment went through. Earning and withdrawing are on /coins/payouts (the Withdraw page).
  */
-type CoinsQuery = { bought?: string; subscribed?: string; payouts?: string; error?: string };
+type CoinsQuery = { bought?: string; subscribed?: string; error?: string };
 
 export default async function CoinsPage({ searchParams }: { searchParams?: Promise<CoinsQuery> }) {
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
-  // Coming back from Stripe's onboarding page: read the account now rather than wait for its webhook.
-  if (query.payouts === "return" && stripeConfigured()) await syncPayoutsEnabled(user.id).catch(() => false);
   // Coming back from subscribing: show the plan now rather than when the webhook gets there.
   if (query.subscribed === "1" && stripeConfigured()) await syncUserSubscriptions(user.id).catch(() => undefined);
   const [subscription, discountPercent] = await Promise.all([liveSubscriptionOf(user.id), discountPercentFor(user.id)]);
 
-  const [wallet, account, entries, withdrawals] = await Promise.all([
+  const [wallet, entries] = await Promise.all([
     walletSummary(prisma, user.id),
-    prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { stripeAccountId: true, payoutsEnabled: true } }),
     prisma.coinEntry.findMany({
-      where: { account: "wallet", userId: user.id },
+      // Buying and spending only; what was earned and withdrawn is on the Withdraw page.
+      where: { account: "wallet", userId: user.id, kind: { in: ["purchase", "fund_issue", "refund", "check_payment"] } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 12,
       select: { id: true, kind: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
     }),
-    prisma.withdrawal.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 5, select: { id: true, zik: true, amountCents: true, status: true, stripeTransferId: true, createdAt: true } }),
   ]);
-  // A withdrawal that is debited but not yet paid: either still waiting for Stripe's funds, or sent and on its way.
-  const open = withdrawals.find((withdrawal) => withdrawal.status === "pending");
-  const canWithdraw = wallet.withdrawable >= WITHDRAW_MIN_ZIK;
   const configured = stripeConfigured();
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
-      <Link href="/home" className="self-start text-sm font-semibold text-zk-accent hover:underline">← Back</Link>
+      <Link href="/home" className="self-start text-sm font-semibold text-zk-accent hover:underline">â† Back</Link>
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">Ziks</h1>
-        <p className="mt-1 text-sm text-zk-text2">Ziks fund issues, unlock security fixes and pay out what you earn. One Zik is {zikToCents(1)}¢.</p>
+        <p className="mt-1 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. One Zik is {zikToCents(1)}Â¢.</p>
       </div>
 
       {query.bought === "1" ? (
@@ -77,43 +69,19 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       {query.subscribed === "1" ? (
         <p role="status" className="m-0 rounded-2xl bg-zk-ok-bg px-4 py-3 text-sm font-semibold text-zk-ok-fg">Thanks. Your plan is on, and this month&apos;s Ziks arrive as soon as Stripe confirms the payment, usually within a few seconds.</p>
       ) : null}
-      {query.payouts === "return" ? (
-        <p role="status" className={`m-0 rounded-2xl px-4 py-3 text-sm font-semibold ${account.payoutsEnabled ? "bg-zk-ok-bg text-zk-ok-fg" : "bg-zk-warn-bg text-zk-warn-fg"}`}>
-          {account.payoutsEnabled ? "Payouts are set up." : "Stripe still needs a few details before you can withdraw."}
-        </p>
-      ) : null}
       {query.error ? <UrlNotice role="alert" className="m-0 rounded-2xl bg-zk-warn-bg px-4 py-3 text-sm font-semibold text-zk-warn-fg">{query.error}</UrlNotice> : null}
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <section aria-labelledby="wallet" className={`${card} bg-[linear-gradient(160deg,var(--color-zk-surface)_60%,var(--color-zk-tint))]`}>
-          <h2 id="wallet" className={label}>Your Ziks</h2>
-          <p className="mt-3 text-4xl font-extrabold tracking-tight tabular-nums text-zk-text sm:text-[44px]">{wallet.balance.toLocaleString("en-US")}</p>
-          <p className="mt-1 text-sm text-zk-text2">{formatUsd(zikToCents(wallet.balance))} in value</p>
-          <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-zk-divider pt-4">
-            <div><dt className="text-xs text-zk-muted">To spend</dt><dd className="mt-0.5 font-mono text-base font-bold tabular-nums text-zk-text">{(wallet.balance - wallet.withdrawable).toLocaleString("en-US")}</dd></div>
-            <div><dt className="text-xs text-zk-muted">Earned, can withdraw</dt><dd className="mt-0.5 font-mono text-base font-bold tabular-nums text-zk-ok-fg">{wallet.withdrawable.toLocaleString("en-US")}</dd></div>
-          </dl>
-        </section>
-
-        <section aria-labelledby="payouts" className={card}>
-          <h2 id="payouts" className={label}>Payouts</h2>
-          <div className="mt-3">
-            {configured ? (
-              <PayoutsPanel
-                payoutsReady={account.payoutsEnabled}
-                hasAccount={Boolean(account.stripeAccountId)}
-                withdrawable={wallet.withdrawable}
-                withdrawableUsd={formatUsd(zikToCents(wallet.withdrawable))}
-                thresholdUsd={WITHDRAW_THRESHOLD}
-                canWithdraw={canWithdraw}
-                inFlight={open ? { usd: formatUsd(open.amountCents), sent: Boolean(open.stripeTransferId) } : null}
-              />
-            ) : (
-              <p className="m-0 text-sm text-zk-text2">Payouts aren&apos;t available yet.</p>
-            )}
-          </div>
-        </section>
-      </div>
+      <section aria-labelledby="wallet" className={`${card} bg-[linear-gradient(160deg,var(--color-zk-surface)_60%,var(--color-zk-tint))]`}>
+        <h2 id="wallet" className={label}>Your Ziks</h2>
+        <p className="mt-3 text-4xl font-extrabold tracking-tight tabular-nums text-zk-text sm:text-[44px]">{wallet.balance.toLocaleString("en-US")}</p>
+        <p className="mt-1 text-sm text-zk-text2">{formatUsd(zikToCents(wallet.balance))} in value</p>
+        {/* A borrowed overdraft (lib/coins/loan.ts): the part below zero is paid back first by the next top-up. */}
+        {owedOf(wallet.balance) > 0 ? (
+          <p className="mt-1 text-sm font-semibold text-zk-text">
+            You owe {owedOf(wallet.balance).toLocaleString("en-US")} Ziks you borrowed. Your next top-up pays it back first.
+          </p>
+        ) : null}
+      </section>
 
       <section aria-labelledby="packs" className={card}>
         <h2 id="packs" className={label}>Buy Ziks</h2>
@@ -153,7 +121,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
               <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm text-zk-text">
                 <span className="flex-1">
                   {KIND_LABEL[entry.kind]}
-                  {entry.bug ? <span className="text-zk-muted"> · #{entry.bug.number} {entry.bug.title}</span> : null}
+                  {entry.bug ? <span className="text-zk-muted"> Â· #{entry.bug.number} {entry.bug.title}</span> : null}
                   <span className="block text-xs text-zk-muted"><LocalTime date={entry.createdAt} /></span>
                 </span>
                 <span className={`font-mono font-bold tabular-nums ${entry.amount < 0 ? "text-zk-text2" : "text-zk-ok-fg"}`}>
@@ -163,11 +131,6 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
             ))}
           </ul>
         )}
-        {withdrawals.length > 0 ? (
-          <p className="mb-0 mt-4 text-xs text-zk-muted">
-            Latest withdrawal: {formatZik(withdrawals[0].zik)}, {withdrawals[0].status === "paid" ? "paid" : withdrawals[0].status === "failed" ? "returned to your wallet" : "on its way"}.
-          </p>
-        ) : null}
       </section>
     </div>
   );

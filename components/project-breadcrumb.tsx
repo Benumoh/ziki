@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { designPath, ideasPath, marketingPath, orgHomePath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
+import { designPath, ideasPath, isVideoStudio, marketingPath, orgHomePath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
 
 /** The organisation's slug, and the project (none on the organisation's own page). */
 export type BreadcrumbProject = { orgSlug: string; slug?: string; name?: string };
@@ -76,7 +76,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
     if (second) return [{ label: "Forum", href: projectPath(ref, "/forum") }, { label: "Discussion" }];
     return named("Forum");
   }
-  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", report: "Report an issue", import: "Import delivered work" };
+  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", agents: "Active agents", report: "Report an issue" };
   return pages[first] ? named(pages[first]) : [];
 }
 
@@ -87,7 +87,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
  */
 function narrowPage(pathname: string, ref: ProjectRef): boolean {
   const [first, second] = pathname.slice(projectPath(ref).length).replace(/^\/+|\/+$/g, "").split("/");
-  if (first === "workstream") return true;
+  if (first === "workstream" || first === "agents") return true;
   return first === "ideas" && !(second && /^[0-9]+$/.test(second));
 }
 
@@ -103,6 +103,8 @@ export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
   if (/(?:^|\/)forum(?:\/|$)/.test(pathname)) {
     return null;
   }
+  // The video studio opens on its own Back to Marketing link.
+  if (isVideoStudio(pathname)) return null;
   const projectsHref = orgHomePath(project.orgSlug);
   const ref = project.slug ? projectRef(project.orgSlug, project.slug) : null;
   // The Marketing main page and its task form have no breadcrumb.
@@ -140,7 +142,6 @@ export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
           </>
         )}
       </ol>
-      {ref ? <Link href={`${projectPath(ref)}/import`} className={`${crumb} ml-auto shrink-0 text-zk-accent`}>Import work</Link> : null}
     </nav>
   );
 }
