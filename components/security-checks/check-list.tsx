@@ -13,7 +13,8 @@ const FIX_STATE: Record<ResultFix["bucket"], string> = { fixing: "Being fixed", 
 export function CheckList({ checkId, tabs }: { checkId: string; tabs: [ListTab, ListTab] }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [quick, checks] = tabs;
-  const selected = (checks.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id)).map(({ id }) => id);
+  // Only this scan's own findings move to the app from here; an earlier scan's still-there finding moves from its own scan.
+  const selected = (checks.findings ?? []).filter(({ id, fix, checkId: from }) => !fix && from === checkId && picked.includes(id)).map(({ id }) => id);
   const toggle = (id: string) => setPicked((old) => old.includes(id) ? old.filter((item) => item !== id) : [...old, id]);
   const fixHref = `/security/checks/${encodeURIComponent(checkId)}/fix?ids=${selected.map(encodeURIComponent).join(",")}`;
 
@@ -47,9 +48,10 @@ export function CheckList({ checkId, tabs }: { checkId: string; tabs: [ListTab, 
 function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: ListTab; selected: string[]; onToggle: (id: string) => void }) {
   const scanRows = tab.scanRows ?? [];
   const findings = tab.findings ?? [];
+  const fixed = tab.fixed ?? [];
   const pending = tab.pending ?? [];
   const clear = tab.clear ?? [];
-  const empty = !scanRows.length && !findings.length && !pending.length && !clear.length;
+  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length;
   return (
     <ul className="m-0 mt-2 list-none divide-y divide-zk-border border-t border-zk-border p-0">
       {scanRows.map((row, i) => (
@@ -61,6 +63,19 @@ function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: L
       {findings.map((finding) => (
         <li key={finding.id}>
           <FindingRow checkId={checkId} finding={finding} checked={selected.includes(finding.id)} onToggle={() => onToggle(finding.id)} />
+        </li>
+      ))}
+      {/* A rescan's earlier findings its agents found gone (#security-rescan): kept in view, never counted or priced. */}
+      {fixed.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Fixed since the last scan · {fixed.length}</li> : null}
+      {fixed.map((finding) => (
+        <li key={finding.id}>
+          <Row
+            severity={finding.severity}
+            title={finding.title}
+            sub={finding.line}
+            lead={null}
+            right={<span className="whitespace-nowrap rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Fixed</span>}
+          />
         </li>
       ))}
       {pending.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Still checking · {pending.length}</li> : null}
@@ -108,12 +123,19 @@ function Row({ severity, title, sub, right, lead }: { severity: SecuritySeverity
 
 function FindingRow({ checkId, finding, checked, onToggle }: { checkId: string; finding: ListFinding; checked: boolean; onToggle: () => void }) {
   const [open, setOpen] = useState(false);
-  const href = `/security/checks/${encodeURIComponent(checkId)}/findings/${encodeURIComponent(finding.id)}`;
-  const lead: ReactNode = finding.fix ? null : (
+  // An earlier scan's finding (a rescan rechecking it) opens under, and moves to the app from, the scan that found it.
+  const href = `/security/checks/${encodeURIComponent(finding.checkId)}/findings/${encodeURIComponent(finding.id)}`;
+  const earlier = finding.checkId !== checkId;
+  const lead: ReactNode = finding.fix || earlier ? null : (
     <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Fix ${finding.title}`} className="size-4 cursor-pointer accent-electric-blue-strong" />
   );
   const right = (
     <span className="flex items-center gap-2">
+      {finding.recheck === "checking" ? (
+        <span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Rechecking</span>
+      ) : finding.recheck === "still_there" ? (
+        <span className="whitespace-nowrap rounded-full bg-zk-warn-bg px-2.5 py-0.5 text-xs font-semibold text-zk-warn-fg">Still there</span>
+      ) : null}
       {finding.fix ? (
         <Link href={finding.fix.issue?.href ?? finding.fix.findingHref} className="whitespace-nowrap text-xs font-semibold text-zk-accent hover:underline">
           {finding.fix.issue ? `Issue #${finding.fix.issue.number}` : "In your app"} · {FIX_STATE[finding.fix.bucket]}

@@ -2,21 +2,27 @@
 
 import { useEffect, useId, useRef, useState, useTransition, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { removeScan, replaceScan } from "@/app/actions/security-assistant";
+import { removeScan } from "@/app/actions/security-assistant";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { useRescan } from "./use-rescan";
 
 /**
- * "More actions" on a scan's own page (17 Nov): Scan again, Download report (PDF) once the report is posted, and
+ * "More actions" on a scan's own page (17 Nov): Scan again (with agents, paid, after a confirm: useRescan) once the
+ * report is posted and on the newest scan of the site, Download report (PDF) once the report is posted, and
  * Remove scan last in red after a line, as the Assets row menu (scan-list.tsx) and GitHub, Linear and Vercel order
  * their menus: one row per action, an icon then its name, the destructive one set apart at the bottom.
  */
-export function ScanActionsMenu({ checkId, site, posted }: { checkId: string; site: string; posted: boolean }) {
+export function ScanActionsMenu({ checkId, site, posted, nextCheckId }: { checkId: string; site: string; posted: boolean; nextCheckId: string | null }) {
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
+  const [removing, start] = useTransition();
+  const { rescan, pending: rescanning } = useRescan();
+  const pending = removing || rescanning;
+  // Scan again (#security-rescan) follows a finished scan, and only the newest one of a site.
+  const canRescan = posted && !nextCheckId;
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -59,16 +65,7 @@ export function ScanActionsMenu({ checkId, site, posted }: { checkId: string; si
 
   function scanAgain() {
     setOpen(false);
-    toast(`Scanning ${site} again…`);
-    start(async () => {
-      const answer = await replaceScan(checkId);
-      if (answer.ok) {
-        toast("Scanned again.");
-        router.refresh();
-      } else {
-        toast(answer.error, "error");
-      }
-    });
+    rescan([checkId]);
   }
 
   async function remove() {
@@ -125,13 +122,15 @@ export function ScanActionsMenu({ checkId, site, posted }: { checkId: string; si
           onKeyDown={moveFocus}
           className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border border-zk-border bg-zk-surface py-1.5 shadow-[0_16px_40px_rgba(11,23,51,0.18)]"
         >
-          <button role="menuitem" type="button" disabled={pending} className={`${row} text-zk-text`} onClick={scanAgain}>
-            <MenuIcon>
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <path d="M21 4v5h-5" />
-            </MenuIcon>
-            {pending ? "Working…" : "Scan again"}
-          </button>
+          {canRescan ? (
+            <button role="menuitem" type="button" disabled={pending} className={`${row} text-zk-text`} onClick={scanAgain}>
+              <MenuIcon>
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 4v5h-5" />
+              </MenuIcon>
+              {rescanning ? "Working…" : "Scan again"}
+            </button>
+          ) : null}
           {/* The PDF is a secondary action (16 Nov call): people want things fixed, not a file. */}
           {posted ? (
             <a role="menuitem" href={`/security/checks/${checkId}/report.pdf`} className={`${row} text-zk-text hover:no-underline`} onClick={() => setOpen(false)}>
