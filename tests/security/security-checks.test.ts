@@ -264,7 +264,7 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
     const [crit, high, low] = report.findings;
     expect(crit).toMatchObject({ title: "crit title", howToFix: "crit fix", fix: { bucket: "fixing", issue: { number: 150, href: "/acme/web/150" } } });
     // Not paid for: shown in full, without how to fix, and without the agent that found it.
-    expect(high).toEqual({ id: "high", partId: "i3", severity: "high", area: "Headers", title: "high title", description: "high description", howToFix: null, fix: null });
+    expect(high).toEqual({ id: "high", partId: "i3", severity: "high", area: "Headers", title: "high title", description: "high description", howToFix: null, fix: null, price: 3 });
     expect(low).toMatchObject({ area: "CORS", howToFix: null });
     expect(report.counts).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
     expect(report.clearParts).toEqual(["Cookies"]);
