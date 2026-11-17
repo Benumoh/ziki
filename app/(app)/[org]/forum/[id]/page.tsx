@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PublicMessageBoard } from "@/components/forum/message-board";
-import { requireOrg } from "@/lib/project-route";
+import { requireForumOrg } from "@/lib/forum-route";
 import { getForumMessageById, listForumMessages, getUserAccessibleScopes } from "@/lib/forum";
 
 export const metadata = {
@@ -14,7 +14,7 @@ export default async function OrgForumPostDetailPage({
   params: Promise<{ org: string; id: string }>;
 }) {
   const { org, id } = await params;
-  const { user, organisation } = await requireOrg(org);
+  const { user, organisation } = await requireForumOrg(org);
   if (!organisation) notFound();
 
   const [post, messages, scopes] = await Promise.all([
