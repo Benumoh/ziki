@@ -1,14 +1,13 @@
 import "server-only";
 
 import type { Prisma, PrismaClient, SecuritySeverity } from "@prisma/client";
-import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { z } from "zod";
 import { convertClientVettedIdea } from "@/lib/agent-api/idea-verdicts";
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
 import { CoinError } from "@/lib/coins/ledger";
-import { findingPrice, payForFindings } from "@/lib/security-checks/payment";
+import { payForFindings } from "@/lib/security-checks/payment";
 import { createFinding, PLACEHOLDER_DESCRIPTION, PLACEHOLDER_SUMMARY, placeholderTitle } from "@/lib/security-findings";
 
 const id = z.string().trim().min(1).max(128);
@@ -163,38 +162,4 @@ async function createResultIssue(tx: Prisma.TransactionClient, client: Client, p
   const issue = await convertClientVettedIdea(tx, scope, idea.id, client.userId);
   await tx.securityCheckResult.update({ where: { id: result.id }, data: { findingId: finding.id } });
   return issue.issueNumber;
-}
-
-export async function loadMovePage(client: Client, checkId: string, db = prisma) {
-  const parsed = fixCheckId.safeParse(checkId);
-  if (!parsed.success) return null;
-  const check = await db.securityCheck.findFirst({
-    where: { id: parsed.data, organisationId: client.organisationId, requestedById: client.userId },
-    select: { postedAt: true, target: { select: { value: true } } },
-  });
-  if (!check) return null;
-  const results = await db.securityCheckResult.findMany({
-    where: { checkId: parsed.data },
-    select: {
-      id: true, severity: true, title: true, priceCoins: true, unlockedAt: true, findingId: true,
-      finding: { select: { bug: { select: {
-        number: true, project: { select: { slug: true, organisation: { select: { slug: true } } } },
-      } } } },
-    },
-    orderBy: { id: "asc" },
-  });
-  return {
-    asset: check.target.value,
-    posted: Boolean(check.postedAt),
-    results: results.sort((a, b) => SECURITY_SEVERITIES.indexOf(a.severity) - SECURITY_SEVERITIES.indexOf(b.severity))
-      .map((result) => {
-        const issue = result.finding?.bug;
-        return {
-          id: result.id, severity: result.severity, title: result.title,
-          price: result.unlockedAt || result.findingId ? 0 : findingPrice(result),
-          moved: Boolean(result.findingId),
-          issue: issue && { number: issue.number, href: issuePath(refOf(issue.project), issue.number) },
-        };
-      }),
-  };
 }
