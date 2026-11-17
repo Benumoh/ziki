@@ -16,6 +16,7 @@ import { refOf } from "@/lib/project-paths";
 import { isReportPosted, isTargetProven } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { findingPrice } from "@/lib/security-checks/payment";
+import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
 
 /**
  * What a client may see of one security check (#security-checks, 12 and 14
@@ -68,7 +69,7 @@ export type ReportFinding = {
 /** Where an earlier finding stands on a rescan. */
 export type RecheckStatus = "checking" | "still_there" | "fixed";
 
-export type FixBucket = "fixing" | "fixed" | "closed";
+export type { FixBucket } from "@/lib/security-checks/fix-bucket";
 
 /** A moved problem's fix, read from its private finding (#security-findings). */
 export type ResultFix = {
@@ -92,17 +93,10 @@ type FindingRow = {
 export function fixOf(finding: FindingRow | null): ResultFix | null {
   if (!finding) return null;
   const bug = finding.bug && !finding.bug.isDeleted ? finding.bug : null;
-  const idea = finding.idea && !finding.idea.isDeleted ? finding.idea : null;
   const latest = finding.verifications[0];
-  const bucket: FixBucket =
-    bug?.status === "resolved"
-      ? "fixed"
-      : bug?.status === "closed" || (!bug && (idea?.status === "rejected" || idea?.status === "archived"))
-        ? "closed"
-        : "fixing";
   return {
     findingHref: `/security/findings/${finding.id}`,
-    bucket,
+    bucket: fixBucketOf(finding),
     issue: bug ? { number: bug.number, href: issuePath(refOf(finding.project), bug.number) } : null,
     recheck: latest ? { passed: latest.passed, by: latest.reviewer?.name ?? null } : null,
   };

@@ -23,8 +23,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   const [picked, setPicked] = useState<string[]>(initialFix);
   const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
   const [quick, checks] = tabs;
-  // Only this scan's own findings move to the app from here; an earlier scan's still-there finding (a rescan) moves from its own scan.
-  const fixable = (checks.findings ?? []).filter(({ id, fix, checkId: from }) => !fix && from === checkId && picked.includes(id));
+  // Every finding not already in the app can be sent from here, a rescan's earlier ones still there included (18 Nov, Tolu).
+  const fixable = (checks.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id));
   const selected = fixable.map(({ id }) => id);
   const toggle = (id: string) => {
     const next = picked.includes(id) ? picked.filter((item) => item !== id) : [...picked, id];
@@ -48,14 +48,14 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
         <summary className={SECTION_HEADING}>
           Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
         </summary>
-        <TabRows checkId={checkId} tab={quick} selected={selected} onToggle={toggle} />
+        <TabRows tab={quick} selected={selected} onToggle={toggle} />
       </details>
       <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
         </summary>
-        <TabRows checkId={checkId} tab={checks} selected={selected} onToggle={toggle} />
+        <TabRows tab={checks} selected={selected} onToggle={toggle} />
         {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
         {selected.length && !panelOpen ? (
           <div className="flex items-center justify-between gap-3 border-t border-zk-border bg-zk-tint px-4 py-3 sm:px-6">
@@ -82,7 +82,7 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   );
 }
 
-function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: ListTab; selected: string[]; onToggle: (id: string) => void }) {
+function TabRows({ tab, selected, onToggle }: { tab: ListTab; selected: string[]; onToggle: (id: string) => void }) {
   const scanRows = tab.scanRows ?? [];
   const findings = tab.findings ?? [];
   const fixed = tab.fixed ?? [];
@@ -99,7 +99,7 @@ function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: L
       {findings.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Ready to fix · {findings.filter((finding) => !finding.fix).length}</li> : null}
       {findings.map((finding) => (
         <li key={finding.id}>
-          <FindingRow checkId={checkId} finding={finding} checked={selected.includes(finding.id)} onToggle={() => onToggle(finding.id)} />
+          <FindingRow finding={finding} checked={selected.includes(finding.id)} onToggle={() => onToggle(finding.id)} />
         </li>
       ))}
       {/* A rescan's earlier findings its agents found gone (#security-rescan): kept in view, never counted or priced. */}
@@ -158,12 +158,11 @@ function Row({ severity, title, sub, right, lead }: { severity: SecuritySeverity
   );
 }
 
-function FindingRow({ checkId, finding, checked, onToggle }: { checkId: string; finding: ListFinding; checked: boolean; onToggle: () => void }) {
+function FindingRow({ finding, checked, onToggle }: { finding: ListFinding; checked: boolean; onToggle: () => void }) {
   const [open, setOpen] = useState(false);
-  // An earlier scan's finding (a rescan rechecking it) opens under, and moves to the app from, the scan that found it.
+  // An earlier scan's finding (a rescan rechecking it) opens under the scan that found it, and is ticked here like any other.
   const href = `/security/checks/${encodeURIComponent(finding.checkId)}/findings/${encodeURIComponent(finding.id)}`;
-  const earlier = finding.checkId !== checkId;
-  const lead: ReactNode = finding.fix || earlier ? null : (
+  const lead: ReactNode = finding.fix ? null : (
     <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Fix ${finding.title}`} className="size-4 cursor-pointer accent-electric-blue-strong" />
   );
   const right = (

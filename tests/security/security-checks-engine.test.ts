@@ -186,6 +186,10 @@ describe("starting a check: Ziki's AI splits it", () => {
       { id: "r1", title: "Admin page open", item: { title: "Admin pages" } },
       { id: "r2", title: "Debug page open", item: { title: "Admin pages" } },
       { id: "r3", title: "Session cookie not Secure", item: { title: "Cookies" } },
+      // Sent to fix and still being fixed (18 Nov): not rechecked while its issue is worked on.
+      { id: "r4", title: "Search built from input", item: { title: "Admin pages" }, finding: { bug: { status: "in_progress", isDeleted: false }, idea: null } },
+      // Its issue is resolved: rechecked, which confirms the fix.
+      { id: "r5", title: "Cookie readable by scripts", item: { title: "Cookies" }, finding: { bug: { status: "resolved", isDeleted: false }, idea: null } },
     ]);
     db.securityCheckItem.create.mockResolvedValueOnce({ id: "recheck-admin" }).mockResolvedValueOnce({ id: "recheck-cookies" });
     const parts = Array.from({ length: 8 }, (_, i) => ({ title: `Part ${i + 1}`, instructions: "Look at it." }));
@@ -200,11 +204,12 @@ describe("starting a check: Ziki's AI splits it", () => {
     expect(db.securityCheckItem.create.mock.calls.map(([call]) => call.data.title)).toEqual(["Recheck: Admin pages", "Recheck: Cookies"]);
     expect(db.securityCheckResult.updateMany.mock.calls.map(([call]) => [call.where.id.in, call.data.recheckItemId])).toEqual([
       [["r1", "r2"], "recheck-admin"],
-      [["r3"], "recheck-cookies"],
+      [["r3", "r5"], "recheck-cookies"],
     ]);
     // The new parts are still planned, and Ziki's AI is told what is already being rechecked.
     expect(db.securityCheckItem.createMany.mock.calls[0][0].data).toHaveLength(8);
     expect(calls[0]!.user).toContain("Admin page open");
+    expect(calls[0]!.user).not.toContain("Search built from input");
   });
 
   it("puts a check whose split failed back to waiting at once, so the next sweep starts it, instead of leaving it stuck for ten minutes", async () => {
@@ -312,6 +317,16 @@ describe("reporting a part", () => {
     stray.securityCheckResult.findMany.mockResolvedValue([{ id: "r1" }]);
     await expect(submitReport(asDb(stray), "agentA", "item1", [], now, [], [{ id: "someone-elses", state: "fixed" }])).rejects.toMatchObject({ status: 400 });
     expect(stray.securityCheckResult.update).not.toHaveBeenCalled();
+
+    // A recheck part takes no new results (18 Nov): re-filing the earlier findings listed every problem twice.
+    const refiled = fakeDb();
+    refiled.securityCheckItem.findUnique.mockResolvedValue(heldItem({ checkId: "rescan1" }));
+    refiled.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
+    refiled.securityCheckResult.findMany.mockResolvedValue([{ id: "r1" }]);
+    const copy = [{ severity: "medium" as const, title: "No Content Security Policy", description: "Same as before.", howToFix: "Add one." }];
+    await expect(submitReport(asDb(refiled), "agentA", "item1", copy, now, [], [{ id: "r1", state: "still_there" }])).rejects.toMatchObject({ status: 400, code: "recheck_only" });
+    expect(refiled.securityCheckResult.createMany).not.toHaveBeenCalled();
+    expect(refiled.securityCheckItem.updateMany).not.toHaveBeenCalled();
   });
 
   it("adds no parts when the part is no longer the agent's (a late report adds nothing)", async () => {

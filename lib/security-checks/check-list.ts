@@ -96,9 +96,11 @@ function deeperScanTab(report: CheckReport): ListTab {
   const withFindings = new Set([...report.findings, ...report.fixed].map((finding) => finding.partId));
   const finished = (part: ReportPart) => part.status === "done" || part.status === "skipped";
   const done = parts.filter(finished).length;
-  // A cancelled check doesn't list its unfinished parts as still being checked.
+  // A cancelled check doesn't list its unfinished parts as still being checked. Nor does a rescan (18 Nov, Tolu):
+  // its list is the earlier findings, each Rechecking until answered, with anything new added as agents find it;
+  // the parts still to do are only the progress bar's count.
   const pending =
-    report.status === "cancelled"
+    report.status === "cancelled" || report.previousCheckId !== null
       ? []
       : parts.filter((part) => !finished(part)).map((part) => ({ id: part.id, title: part.title, state: part.status === "checking" ? ("checking" as const) : ("waiting" as const) }));
   const clear = parts.filter((part) => part.status === "done" && !withFindings.has(part.id)).map((part) => part.title);

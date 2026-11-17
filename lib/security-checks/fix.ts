@@ -26,7 +26,8 @@ export type FixOutcome =
 
 type Client = { userId: string; organisationId: string; superAdmin: boolean };
 type Check = { postedAt: Date | null; projectId: string | null };
-type Result = { id: string; severity: SecuritySeverity; finding: { bug: { number: number } | null } | null };
+/** `checkId` is the scan that found it: this one, or for a rescan an earlier scan whose finding it rechecks. */
+type Result = { id: string; checkId: string; severity: SecuritySeverity; finding: { bug: { number: number } | null } | null };
 
 const unavailable = { ok: false, error: "This check is unavailable in your workspace." } as const;
 
@@ -90,19 +91,26 @@ export async function sendCheckFindings(
       return { ok: false, error: "This check already has a destination project. Refresh and choose that project." };
     }
 
+    // This check's own findings, and on a rescan the earlier findings it rechecks and didn't find fixed (18 Nov, Tolu):
+    // a problem still there can be sent to fix from the rescan. The rescan's own part holds them, so they're this
+    // person's, in this workspace, through the check row locked above.
     const results = await tx.securityCheckResult.findMany({
-      where: { checkId, id: { in: resultIds } },
-      select: { id: true, severity: true, finding: { select: { bug: { select: { number: true } } } } },
+      where: {
+        id: { in: resultIds },
+        OR: [{ checkId }, { recheckItem: { checkId }, NOT: { recheckState: "fixed" } }],
+      },
+      select: { id: true, checkId: true, severity: true, finding: { select: { bug: { select: { number: true } } } } },
     });
     if (results.length !== resultIds.length) {
       return { ok: false, error: "One or more selected findings are unavailable in this check." };
     }
 
-    // The findings being sent are paid for in Ziks from the client's wallet, in this same transaction. Short of Ziks,
-    // nothing is charged, unlocked or created.
+    // The findings being sent are paid for in Ziks from the client's wallet, in this same transaction, all in one
+    // payment whichever scan found them. Short of Ziks, nothing is charged, unlocked or created.
     let paid;
     try {
-      paid = await payForFindings(tx, client.userId, checkId, results.filter((result) => !result.finding).map((result) => result.id));
+      const sources = [...new Set(results.map((result) => result.checkId))];
+      paid = await payForFindings(tx, client.userId, sources, results.filter((result) => !result.finding).map((result) => result.id));
     } catch (error) {
       if (error instanceof CoinError && error.code === "closed") return { ok: false, error: "These findings changed while you were sending them. Try again." };
       throw error;
@@ -117,7 +125,7 @@ export async function sendCheckFindings(
     for (const result of results) {
       const number = result.finding
         ? result.finding.bug?.number
-        : await createResultIssue(tx, client, projectId, checkId, result);
+        : await createResultIssue(tx, client, projectId, result.checkId, result);
       if (!result.finding) created += 1;
       if (number !== undefined) issues.push({ resultId: result.id, number, href: issuePath(refOf(project), number) });
     }

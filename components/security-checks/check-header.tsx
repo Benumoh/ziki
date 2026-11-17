@@ -74,8 +74,8 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
   const critical = report.counts.critical;
   // Any problem at all gets the warning look, even a single low one (17 Nov, Hamzat: "something scary").
   const warn = report.total > 0;
-  // This scan's own findings; on a rescan, an earlier scan's still-there finding moves to the app from that scan.
-  const remaining = report.findings.filter((finding) => !finding.fix && finding.checkId === report.checkId);
+  // Every finding not already in the app, a rescan's earlier ones still there included (18 Nov, Tolu).
+  const remaining = report.findings.filter((finding) => !finding.fix);
   const criticalRemaining = remaining.filter((finding) => finding.severity === "critical");
   const selection = criticalRemaining.length ? criticalRemaining : remaining;
   const fixLabel = criticalRemaining.length === 1 ? "Fix the critical one"
