@@ -166,12 +166,12 @@ export function defaultSummary(target: { value: string }, results: ReadonlyArray
 }
 
 const SummarySchema = z.object({
-  summary: z.string().describe("2 to 5 short sentences for a non-technical owner."),
+  summary: z.string().describe("One short sentence for a non-technical owner, at most 30 words."),
 });
 
 const SUMMARY_SYSTEM = `${LOOK_ONLY}
 
-You write the short summary at the top of a security report, for an owner who may not be technical. It is shown BEFORE the owner unlocks the findings, so: give the number of problems by severity and the general areas they are in, say what to deal with first, and never explain how a problem works or how to fix it. Don't invent problems that aren't in the list. Plain words, no jargon, no headings.`;
+You write the one-sentence summary at the top of a security report, for an owner who may not be technical (17 Nov: one sentence, not a story). It is shown BEFORE the owner unlocks the findings, so in ONE short sentence say what matters most and what to deal with first; the counts by severity are shown next to it, so don't list them. Never explain how a problem works or how to fix it. Don't invent problems that aren't in the list. Plain words, no jargon, no headings.`;
 
 /**
  * The summary posted with the report. Ziki's AI writes it from each finding's

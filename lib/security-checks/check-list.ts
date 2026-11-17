@@ -24,6 +24,8 @@ export type ListFinding = {
   checkId: string;
   /** On a rescan: an earlier finding still being rechecked, or still there. Null for this scan's own findings. */
   recheck: RecheckStatus | null;
+  /** What sending it to the app costs now, in Ziks. */
+  price: number;
 };
 
 export type ListPending = { id: string; title: string; state: "checking" | "waiting" };
@@ -85,6 +87,7 @@ function deeperScanTab(report: CheckReport): ListTab {
     area: finding.area,
     howToFix: finding.howToFix ? shortLine(finding.howToFix) : null,
     fix: finding.fix,
+    price: finding.price,
     checkId: finding.checkId,
     recheck: finding.recheck,
   });

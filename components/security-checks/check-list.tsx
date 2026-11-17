@@ -1,46 +1,83 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import "@/components/security-finding.css";
-import { THREAT_LABEL, type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
+import { FixPanel } from "@/components/security-checks/fix-panel";
+import { type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
+import { SEVERITY_LABEL } from "@/lib/security-severity";
 import type { ResultFix } from "@/lib/security-checks/report";
 
 /** Stack the browser preview and agent results so both are visible from the same page. */
+/** A section heading that opens and closes it: no disclosure arrow, in any browser. */
+const SECTION_HEADING = "cursor-pointer list-none px-4 py-4 font-semibold text-zk-text sm:px-6 [&::-webkit-details-marker]:hidden";
+
 const FIX_STATE: Record<ResultFix["bucket"], string> = { fixing: "Being fixed", fixed: "Fixed", closed: "Closed" };
 
-export function CheckList({ checkId, tabs }: { checkId: string; tabs: [ListTab, ListTab] }) {
-  const [picked, setPicked] = useState<string[]>([]);
+/**
+ * `initialFix`: findings to tick with the fix panel already open, when "Fix the critical one" or a finding's
+ * "Fix it for me" brings the person here (`?fix=id1,id2`).
+ */
+export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string; tabs: [ListTab, ListTab]; initialFix?: string[] }) {
+  const [picked, setPicked] = useState<string[]>(initialFix);
+  const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
   const [quick, checks] = tabs;
-  // Only this scan's own findings move to the app from here; an earlier scan's still-there finding moves from its own scan.
-  const selected = (checks.findings ?? []).filter(({ id, fix, checkId: from }) => !fix && from === checkId && picked.includes(id)).map(({ id }) => id);
-  const toggle = (id: string) => setPicked((old) => old.includes(id) ? old.filter((item) => item !== id) : [...old, id]);
-  const fixHref = `/security/checks/${encodeURIComponent(checkId)}/fix?ids=${selected.map(encodeURIComponent).join(",")}`;
+  // Only this scan's own findings move to the app from here; an earlier scan's still-there finding (a rescan) moves from its own scan.
+  const fixable = (checks.findings ?? []).filter(({ id, fix, checkId: from }) => !fix && from === checkId && picked.includes(id));
+  const selected = fixable.map(({ id }) => id);
+  const toggle = (id: string) => {
+    const next = picked.includes(id) ? picked.filter((item) => item !== id) : [...picked, id];
+    setPicked(next);
+    // Nothing ticked: the panel closes, and the next tick starts again from the blue bar.
+    if (!next.length) setFixOpen(false);
+  };
+  const panelOpen = fixOpen && selected.length > 0;
+  // Arriving with findings to fix: bring the panel into view once it has loaded its projects.
+  useEffect(() => {
+    if (!initialFix.length) return;
+    const timer = setTimeout(() => document.getElementById("fix-panel")?.scrollIntoView({ block: "center", behavior: "smooth" }), 400);
+    return () => clearTimeout(timer);
+  }, [initialFix.length]);
 
   return (
     <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
-      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <summary className="cursor-pointer px-4 py-4 font-semibold text-zk-text sm:px-6">
+      {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
+      {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
+      <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <summary className={SECTION_HEADING}>
           Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
         </summary>
         <TabRows checkId={checkId} tab={quick} selected={selected} onToggle={toggle} />
       </details>
-      <section aria-labelledby="quick-checks-heading" className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 sm:px-6">
-          <h2 id="quick-checks-heading" className="font-semibold text-zk-text">Deeper scan</h2>
+      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
+          <span>Deeper scan</span>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
-        </header>
+        </summary>
         <TabRows checkId={checkId} tab={checks} selected={selected} onToggle={toggle} />
-        {selected.length ? (
+        {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
+        {selected.length && !panelOpen ? (
           <div className="flex items-center justify-between gap-3 border-t border-zk-border bg-zk-tint px-4 py-3 sm:px-6">
             <span role="status" className="text-sm font-semibold text-zk-accent">{selected.length} selected</span>
-            <Link href={fixHref} className="rounded-full bg-electric-blue-strong px-4 py-2 text-sm font-bold text-white hover:brightness-105">
+            <button
+              type="button"
+              onClick={() => setFixOpen(true)}
+              className="rounded-full bg-electric-blue-strong px-4 py-2 text-sm font-bold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
+            >
               Fix {selected.length} selected
-            </Link>
+            </button>
           </div>
         ) : null}
-      </section>
+        {/* Choosing the project and paying happen right here, under the list (17 Nov, Hamzat). */}
+        {panelOpen ? (
+          <FixPanel
+            checkId={checkId}
+            findings={fixable.map(({ id, price }) => ({ id, price }))}
+            onDone={() => { setPicked([]); setFixOpen(false); }}
+          />
+        ) : null}
+      </details>
     </div>
   );
 }
@@ -108,7 +145,7 @@ function Row({ severity, title, sub, right, lead }: { severity: SecuritySeverity
       {/* The tick-box column only where a tab has tick boxes (the deeper scan), so the quick scan has no empty gap. */}
       {lead !== undefined ? <span className="flex w-4 shrink-0 justify-center pt-0.5 sm:pt-0">{lead}</span> : null}
       <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
-        <span className="block shrink-0 sm:w-[7.5rem]">
+        <span className="block shrink-0 sm:w-[5.5rem]">
           {severity ? <ThreatChip severity={severity} /> : <span className="text-sm text-zk-muted" aria-label="Not checked yet">—</span>}
         </span>
         <div className="mt-1 min-w-0 flex-1 sm:mt-0">
@@ -158,11 +195,14 @@ function FindingRow({ checkId, finding, checked, onToggle }: { checkId: string; 
       </button>
     </span>
   );
+  // A click anywhere on a fixable row ticks it (17 Nov, Hamzat): the row is the box's label, so the browser does
+  // it, and the links and the details button inside keep their own clicks.
+  const row = <Row severity={finding.severity} title={finding.title} sub={finding.area} right={right} lead={lead} />;
   return (
     <div>
-      <Row severity={finding.severity} title={finding.title} sub={finding.area} right={right} lead={lead} />
+      {finding.fix ? row : <label className={`block cursor-pointer ${checked ? "bg-zk-tint" : "hover:bg-zk-tint/60"}`}>{row}</label>}
       {open ? (
-        <div className="space-y-1 px-4 pb-3 sm:pl-[calc(1.5rem+1rem+7.5rem+1.5rem)] sm:pr-6">
+        <div className="space-y-1 px-4 pb-3 sm:pl-[calc(1.5rem+1rem+5.5rem+1.5rem)] sm:pr-6">
           <p className="m-0 text-sm text-zk-text2">{finding.line}</p>
           {finding.howToFix ? (
             <p className="m-0 text-sm text-zk-text">
@@ -212,7 +252,7 @@ function ClearLine({ titles }: { titles: string[] }) {
 function ThreatChip({ severity }: { severity: SecuritySeverity }) {
   return (
     <span className={`security-severity security-severity--${severity} inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold`}>
-      {THREAT_LABEL[severity]}
+      {SEVERITY_LABEL[severity]}
     </span>
   );
 }
