@@ -32,7 +32,7 @@ export default async function SecurityFindingPage({ params }: { params: Promise<
   const finding = await loadCheckFinding(id, resultId, access.organisationId, user.id);
   if (!finding) notFound();
 
-  const fixHref = `/security/checks/${encodeURIComponent(finding.checkId)}/fix?ids=${encodeURIComponent(finding.id)}`;
+  const fixHref = `/security/checks/${encodeURIComponent(finding.checkId)}?fix=${encodeURIComponent(finding.id)}#fix-panel`;
   const connected = finding.projects.some((project) => project.codeConnected);
   const firstProject = finding.projects[0];
 

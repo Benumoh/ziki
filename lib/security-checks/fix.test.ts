@@ -6,7 +6,7 @@ vi.mock("@/lib/agent-api/idea-verdicts", () => ({ convertClientVettedIdea: vi.fn
 
 import { convertClientVettedIdea } from "@/lib/agent-api/idea-verdicts";
 import { PLACEHOLDER_DESCRIPTION, PLACEHOLDER_SUMMARY } from "@/lib/security-findings";
-import { listFixProjects, loadMovePage, sendCheckFindings } from "./fix";
+import { listFixProjects, sendCheckFindings } from "./fix";
 
 const client = { userId: "u1", organisationId: "o1", superAdmin: false };
 const selection = { checkId: "c1", projectId: "p1", resultIds: ["r1"] };
@@ -77,20 +77,6 @@ describe("Fix on Ziki", () => {
     expect(tx.securityCheckResult.updateMany).not.toHaveBeenCalled();
     expect(tx.coinEntry.createMany).not.toHaveBeenCalled();
     expect(tx.idea.create).not.toHaveBeenCalled();
-  });
-
-  it("does not load another person's check in the same workspace", async () => {
-    const otherCheck = { id: "c1", organisationId: "o1", requestedById: "u2" };
-    const lookup = {
-      securityCheck: { findFirst: vi.fn(({ where }) =>
-        Object.entries(where).every(([key, value]) => otherCheck[key as keyof typeof otherCheck] === value)
-          ? { postedAt: new Date(), target: { value: "example.test" } } : null,
-      ) },
-      securityCheckResult: { findMany: vi.fn().mockResolvedValue([]) },
-    };
-    await expect(loadMovePage(client, "c1", lookup as never)).resolves.toBeNull();
-    expect(lookup.securityCheckResult.findMany).not.toHaveBeenCalled();
-    await expect(loadMovePage({ ...client, userId: "u2" }, "c1", lookup as never)).resolves.toMatchObject({ posted: true });
   });
 
   it("offers projects for a posted report", async () => {

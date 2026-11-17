@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
 import { isReportPosted, isTargetProven } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
+import { findingPrice } from "@/lib/security-checks/payment";
 
 /**
  * What a client may see of one security check (#security-checks, 12 and 14
@@ -51,6 +52,8 @@ export type ReportFinding = {
   howToFix: string | null;
   /** Where its fix is, once it was moved to the client's app and became a private finding; null until then. */
   fix: ResultFix | null;
+  /** What sending it to the app costs now, in Ziks: 0 once unlocked or moved. */
+  price: number;
 };
 
 export type FixBucket = "fixing" | "fixed" | "closed";
@@ -231,6 +234,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       itemId: true,
       severity: true,
       unlockedAt: true,
+      priceCoins: true,
       createdAt: true,
       title: true,
       description: true,
@@ -263,6 +267,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
         description: row.description,
         howToFix: howToFix.get(row.id) ?? null,
         fix: fixOf(row.finding),
+        price: row.unlockedAt || row.finding ? 0 : findingPrice(row),
       }),
     ),
   };
