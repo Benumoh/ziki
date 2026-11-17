@@ -446,7 +446,9 @@ function TargetRow({
   return (
     <div
       role="row"
-      className={`group relative grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-divider px-3 py-3 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
+      // While its "…" menu is open the row is lifted above the rows below (17 Nov): each row's cells sit at z-10,
+      // so without this the next rows' boxes, links and "…" buttons showed through the open menu.
+      className={`group relative has-[[aria-expanded=true]]:z-30 grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-divider px-3 py-3 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
     >
       <span role="cell" className="relative z-10 flex justify-center">
         <input type="checkbox" aria-label={`Tick ${check.value}`} checked={ticked} onChange={onTick} className="h-4 w-4 accent-electric-blue-strong" />
@@ -476,7 +478,10 @@ function TargetRow({
       <span role="cell" className="hidden md:block">
         <span className="inline-flex rounded-md border border-zk-border px-1.5 py-0.5 text-xs text-zk-text2">{TARGET_KIND_LABEL[check.kind]}</span>
       </span>
-      <span role="cell" className="flex items-center gap-0.5 md:gap-1">
+      <span role="cell" className="flex items-center">
+        {/* Above the row's covering link, so every box's hover says what it counts (17 Nov): under it, only the faded
+            zero boxes (opacity lifts them) showed theirs. Still opens the scan; out of the Tab order, the row link is the stop. */}
+        <Link href={href} tabIndex={-1} className="relative z-10 flex items-center gap-0.5 md:gap-1">
         {nothing ? (
           <NoProblems />
         ) : found.length ? (
@@ -493,6 +498,7 @@ function TargetRow({
         ) : (
           <span className="text-xs text-zk-muted">Checking…</span>
         )}
+        </Link>
       </span>
       <span role="cell" className="hidden text-xs text-zk-muted md:block">
         <LocalTime date={lastScanned(check)} />
