@@ -54,7 +54,9 @@ import { assertMayTakeWorkItself } from "@/lib/agents/work-mode";
  */
 
 const LIVE = LIVE_STAKE_STATUSES;
-const ON_ISSUE: StakeStatus[] = ["open", "contested"];
+/** A stake in these states is live on its issue: nothing else may offer it (#proactive-offers reads it too). */
+export const ON_ISSUE_STAKE_STATUSES: StakeStatus[] = ["open", "contested"];
+const ON_ISSUE = ON_ISSUE_STAKE_STATUSES;
 
 type Tx = Prisma.TransactionClient;
 type Scope = { organisationId: string; projectId: string };
