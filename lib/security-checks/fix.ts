@@ -7,7 +7,6 @@ import { convertClientVettedIdea } from "@/lib/agent-api/idea-verdicts";
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
-import { isReportPosted } from "@/lib/security-checks";
 import { CoinError } from "@/lib/coins/ledger";
 import { findingPrice, payForFindings } from "@/lib/security-checks/payment";
 import { createFinding, PLACEHOLDER_DESCRIPTION, PLACEHOLDER_SUMMARY, placeholderTitle } from "@/lib/security-findings";
@@ -24,7 +23,7 @@ export type FixProject = { id: string; name: string };
 export type FixOptions = { projects: FixProject[]; projectId: string | null };
 export type FixOutcome =
   | { ok: true; created: number; reused: number; coins: number; issues: { resultId: string; number: number; href: string }[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; canBorrow?: boolean };
 
 type Client = { userId: string; organisationId: string; superAdmin: boolean };
 type Check = { postedAt: Date | null; projectId: string | null };
@@ -56,7 +55,8 @@ export async function listFixProjects(client: Client, checkId: string, db = pris
     },
     select: { postedAt: true, projectId: true },
   });
-  if (!check || !isReportPosted(check)) return null;
+  // A finding can be sent as soon as its part is done (16 Nov call); a result exists only once reported.
+  if (!check) return null;
   const projects = await db.project.findMany({
     where: { ...eligibleProjects(client), ...(check.projectId ? { id: check.projectId } : {}) },
     orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -82,7 +82,6 @@ export async function sendCheckFindings(
       FOR NO KEY UPDATE
     `;
     if (!check) return unavailable;
-    if (!isReportPosted(check)) return { ok: false, error: "Wait for the report to be posted before sending findings." };
     const project = await tx.project.findFirst({
       where: { ...eligibleProjects(client), id: projectId },
       select: { slug: true, organisation: { select: { slug: true } } },
@@ -110,7 +109,7 @@ export async function sendCheckFindings(
       throw error;
     }
     if (!paid.ok) {
-      return { ok: false, error: `You need ${paid.needed.toLocaleString("en-US")} Ziks to send these findings and have ${paid.balance.toLocaleString("en-US")}. Buy Ziks on your Ziks page.` };
+      return { ok: false, error: `You need ${paid.needed.toLocaleString("en-US")} Ziks to send these findings and have ${paid.balance.toLocaleString("en-US")}. Buy Ziks on your Ziks page.`, canBorrow: paid.canBorrow };
     }
     const { coins } = paid;
 
@@ -174,7 +173,7 @@ export async function loadMovePage(client: Client, checkId: string, db = prisma)
     select: { postedAt: true, target: { select: { value: true } } },
   });
   if (!check) return null;
-  const results = check.postedAt ? await db.securityCheckResult.findMany({
+  const results = await db.securityCheckResult.findMany({
     where: { checkId: parsed.data },
     select: {
       id: true, severity: true, title: true, priceCoins: true, unlockedAt: true, findingId: true,
@@ -183,7 +182,7 @@ export async function loadMovePage(client: Client, checkId: string, db = prisma)
       } } } },
     },
     orderBy: { id: "asc" },
-  }) : [];
+  });
   return {
     asset: check.target.value,
     posted: Boolean(check.postedAt),

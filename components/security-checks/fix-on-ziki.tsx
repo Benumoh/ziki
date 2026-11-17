@@ -5,11 +5,14 @@ import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import { fixSecurityCheck, loadSecurityCheckFixOptions } from "@/app/actions/security-check-fix";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
+import { BorrowZiks } from "@/components/coins/borrow-ziks";
 import "@/components/security-finding.css";
 import type { FixOptions, FixOutcome } from "@/lib/security-checks/fix";
 
 type Props = {
   standalone?: boolean;
+  /** Findings already ticked on the check's list ("Fix selected"); any that can't be sent are ignored. */
+  initialSelected?: readonly string[];
   checkId: string;
   results: readonly { id: string; severity: SecuritySeverity; title: string; price?: number; moved?: boolean; issue?: { number: number; href: string } | null }[];
 };
@@ -19,10 +22,12 @@ export function FixOnZiki(props: Props) {
   return <FixPicker key={props.checkId} {...props} />;
 }
 
-function FixPicker({ checkId, results, standalone }: Props) {
+function FixPicker({ checkId, results, standalone, initialSelected = [] }: Props) {
   const [options, setOptions] = useState<FixOptions | null | undefined>();
   const [projectId, setProjectId] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() =>
+    initialSelected.filter((id) => results.some((result) => result.id === id && !result.moved && !result.issue)),
+  );
   const [outcome, setOutcome] = useState<FixOutcome>();
   const [loadingAttempt, setLoadingAttempt] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -45,7 +50,11 @@ function FixPicker({ checkId, results, standalone }: Props) {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!projectId || !selected.length || pending) return;
+    send();
+  }
+
+  function send() {
+    if (!projectId || !selected.length) return;
     startTransition(async () => {
       try {
         const reply = await fixSecurityCheck({ checkId, projectId, resultIds: selected });
@@ -69,7 +78,7 @@ function FixPicker({ checkId, results, standalone }: Props) {
       {standalone ? null : <h2 className="font-semibold text-zk-text">Move to your app</h2>}
       {options === undefined ? <p role="status">Loading projects…</p> : options === null ? (
         <p role="status">
-          You can move findings to your app once the report is posted.{" "}
+          Couldn&apos;t load your projects.{" "}
           <button type="button" className="underline" onClick={() => {
             setOptions(undefined);
             setLoadingAttempt((attempt) => attempt + 1);
@@ -146,6 +155,8 @@ function FixPicker({ checkId, results, standalone }: Props) {
         </>
       )}
       {outcome && !outcome.ok ? <p role="alert">{outcome.error}</p> : null}
+      {/* Never bought Ziks: offer the one-time loan, then send again (16 Nov call). */}
+      {outcome && !outcome.ok && outcome.canBorrow ? <BorrowZiks onBorrowed={send} /> : null}
       {outcome?.ok ? (
         <div role="status" className="space-y-2 rounded-2xl border border-zk-border bg-zk-surface p-4 text-sm text-zk-ok-fg">
           <p>{outcome.created} moved. {outcome.reused} already moved. {standalone ? `${outcome.coins} ${outcome.coins === 1 ? "Zik" : "Ziks"} paid.` : null}</p>

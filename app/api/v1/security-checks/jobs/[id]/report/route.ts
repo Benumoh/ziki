@@ -3,7 +3,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { readJson, reportBodySchema, securityJobRequest } from "@/lib/security-checks/agent-api";
-import { assignWaitingJobs, postReportIfComplete, submitReport } from "@/lib/security-checks/engine";
+import { postReportIfComplete, submitReport } from "@/lib/security-checks/engine";
 
 export const runtime = "nodejs";
 
@@ -26,8 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         () => logger.error("[security-checks] posting a report failed; the sweep retries it"),
       ),
     );
-    // Parts the agent added are given out at once (the sweep would do it within a minute anyway).
-    if (result.addedParts > 0) after(() => assignWaitingJobs(prisma).then(() => undefined, () => logger.error("[security-checks] giving out added parts failed; the sweep retries it")));
+    // Parts the agent added wait for the next agent that asks for work (agents ask every few seconds).
     return NextResponse.json(result, { status: 201 });
   });
 }

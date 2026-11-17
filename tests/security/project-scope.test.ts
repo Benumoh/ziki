@@ -36,6 +36,7 @@ const skillSubmissionUpdate = vi.hoisted(() => vi.fn());
 const projectFindMany = vi.hoisted(() => vi.fn());
 const redesignFindFirst = vi.hoisted(() => vi.fn());
 const redesignFindMany = vi.hoisted(() => vi.fn());
+const userFindUnique = vi.hoisted(() => vi.fn(async (): Promise<{ showActiveAgents: boolean } | null> => null));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -45,6 +46,7 @@ vi.mock("@/lib/prisma", () => ({
     idea: { count: proposalCount, findMany: proposals, findFirst: ideaFindFirst },
     ideaVerdict: { groupBy: proposalVotes, findMany: myVerdicts },
     agent: { findMany: proposalAgents },
+    user: { findUnique: userFindUnique },
     membership: { findUnique: membershipFindUnique, findMany: membershipFindMany },
     projectMembership: { findUnique: projectMembershipFindUnique, upsert: projectMembershipUpsert },
     projectJoinRequest: { findUnique: projectJoinRequestFindUnique, upsert: projectJoinRequestUpsert, updateMany: projectJoinRequestUpdateMany },
@@ -67,13 +69,16 @@ vi.mock("next/cache", () => ({
 
 const section = vi.hoisted(() => ({
   notFound: vi.fn(() => { throw new Error("NOT_FOUND"); }),
+  forbidden: vi.fn(() => { throw new Error("FORBIDDEN"); }),
+  loadProjectAgents: vi.fn(async () => ({ agents: [], hidden: 0, offerWindowSeconds: 1800 })),
   redirect: vi.fn((to: string) => { throw new Error(`REDIRECT ${to}`); }),
   requireProject: vi.fn(),
   firstProjectRefFor: vi.fn(),
   requireUser: vi.fn(async () => ({ id: "ada" })),
   requireSuperAdmin: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ notFound: section.notFound, redirect: section.redirect, permanentRedirect: section.redirect }));
+vi.mock("next/navigation", () => ({ notFound: section.notFound, forbidden: section.forbidden, redirect: section.redirect, permanentRedirect: section.redirect }));
+vi.mock("@/lib/agents/project-agents", () => ({ loadProjectAgents: section.loadProjectAgents }));
 vi.mock("@/lib/project-route", () => ({ requireProject: section.requireProject, firstProjectRefFor: section.firstProjectRefFor }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: section.requireUser, requireSuperAdmin: section.requireSuperAdmin }));
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "viewer" } })) }));
@@ -110,6 +115,7 @@ import { generateMetadata as projectOverviewMetadata } from "@/app/(app)/[org]/[
 import { sitemapSectionXml } from "@/lib/seo/sitemap";
 import IssueHistoryPage from "@/app/(app)/[org]/[project]/[number]/history/page";
 import ProjectIssueLayout from "@/app/(app)/[org]/[project]/[number]/layout";
+import ActiveAgentsPage from "@/app/(app)/[org]/[project]/agents/page";
 
 const agent = {
   agentId: "agent1",
@@ -611,5 +617,34 @@ describe("search engines see only public projects (#seo-pages)", () => {
     publishedTasks.mockResolvedValueOnce([]);
     await expect(sitemapSectionXml("issues-2.xml")).resolves.toBeNull();
     expect(publishedTasks.mock.calls[0][0]).toMatchObject({ skip: 10_000, take: 10_000 });
+  });
+});
+
+describe("the Active agents page (#active-agents)", () => {
+  const open = () => ActiveAgentsPage({ params: Promise.resolve({ org: "acme", project: "web" }), searchParams: Promise.resolve({}) });
+  const context = (isOrgAdmin: boolean) => ({
+    user: { id: "ada" }, organisationId: "org-1", isOrgAdmin, isOrgMember: true, isProjectMember: false, canContribute: true,
+    project: { id: "p-1", slug: "web", name: "Web", orgSlug: "acme", ref: projectRef("acme", "web") },
+  });
+  beforeEach(() => vi.clearAllMocks());
+
+  it("opens for anyone who can open the project, not only the organisation's owners and admins", async () => {
+    section.requireProject.mockResolvedValue(context(false));
+    await expect(open()).resolves.toBeTruthy();
+    expect(section.loadProjectAgents).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p-1", organisationId: "org-1" }));
+  });
+
+  it("reads no agents for someone who hid it, and offers to show it again (only for them)", async () => {
+    section.requireProject.mockResolvedValue(context(false));
+    userFindUnique.mockResolvedValueOnce({ showActiveAgents: false });
+    await expect(open()).resolves.toBeTruthy();
+    expect(userFindUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "ada" } }));
+    expect(section.loadProjectAgents).not.toHaveBeenCalled();
+  });
+
+  it("is refused, before any agent is read, to someone who can't open the project", async () => {
+    section.requireProject.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
+    await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(section.loadProjectAgents).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { scopedForumPath, scopedForumPostPath } from "@/lib/project-paths";
+import { switchForumOrganisationAction } from "@/app/actions/forum";
 
 function useSafeRouter() {
   try {
@@ -231,6 +232,26 @@ export function PublicMessageBoard({
 }: PublicMessageBoardProps = {}) {
   const router = useSafeRouter();
   const pathname = useSafePathname();
+  const [, startOrgTransition] = React.useTransition();
+
+  const handleCrossOrgNavigation = (
+    e: React.MouseEvent,
+    targetOrgIdentifier: string,
+    targetPath: string
+  ) => {
+    if (orgSlug && targetOrgIdentifier !== orgSlug) {
+      e.preventDefault();
+      startOrgTransition(async () => {
+        try {
+          await switchForumOrganisationAction(targetOrgIdentifier, targetPath);
+        } catch {
+          if (typeof window !== "undefined") {
+            window.location.href = targetPath;
+          }
+        }
+      });
+    }
+  };
 
   const [messages, setMessages] = useState<ForumMessage[]>(
     initialMessages ?? INITIAL_FORUM_MESSAGES
@@ -470,13 +491,14 @@ export function PublicMessageBoard({
     postOrgSlug?: string,
     postProjSlug?: string
   ) => {
-    setSelectedPostId(postId);
-    setView("detail");
     if (router) {
       const targetScope = postScope ?? scope;
       const targetOrg = postOrgSlug ?? orgSlug;
       const targetProj = postProjSlug ?? projectSlug;
       router.push(scopedForumPostPath(targetScope, postId, targetOrg, targetProj));
+    } else {
+      setSelectedPostId(postId);
+      setView("detail");
     }
   };
 
@@ -978,12 +1000,13 @@ export function PublicMessageBoard({
               >
                 <Link
                   href={scopedForumPath("org", currentOrgSlug)}
-                  onClick={(e) => {
-                    if (orgSlug && currentOrgSlug !== orgSlug) {
-                      e.preventDefault();
-                      window.location.href = scopedForumPath("org", currentOrgSlug);
-                    }
-                  }}
+                  onClick={(e) =>
+                    handleCrossOrgNavigation(
+                      e,
+                      org.id || currentOrgSlug,
+                      scopedForumPath("org", currentOrgSlug)
+                    )
+                  }
                   className="flex items-center gap-2 truncate flex-1 text-left py-0.5 focus:outline-none"
                 >
                   <Icon size={14} className="text-zk-muted shrink-0">
@@ -1017,12 +1040,13 @@ export function PublicMessageBoard({
                       <Link
                         key={proj.id}
                         href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
-                        onClick={(e) => {
-                          if (orgSlug && currentOrgSlug !== orgSlug) {
-                            e.preventDefault();
-                            window.location.href = scopedForumPath("project", currentOrgSlug, currentProjSlug);
-                          }
-                        }}
+                        onClick={(e) =>
+                          handleCrossOrgNavigation(
+                            e,
+                            org.id || currentOrgSlug,
+                            scopedForumPath("project", currentOrgSlug, currentProjSlug)
+                          )
+                        }
                         className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
                           isProjSelected
                             ? "bg-zk-chip text-zk-accent font-semibold"
@@ -1061,12 +1085,13 @@ export function PublicMessageBoard({
               <Link
                 key={ext.id}
                 href={scopedForumPath("project", extOrgSlug, extProjSlug)}
-                onClick={(e) => {
-                  if (orgSlug && extOrgSlug !== orgSlug) {
-                    e.preventDefault();
-                    window.location.href = scopedForumPath("project", extOrgSlug, extProjSlug);
-                  }
-                }}
+                onClick={(e) =>
+                  handleCrossOrgNavigation(
+                    e,
+                    ext.organisationId || extOrgSlug,
+                    scopedForumPath("project", extOrgSlug, extProjSlug)
+                  )
+                }
                 className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
                   isExtSelected
                     ? "bg-zk-tint text-zk-accent border border-zk-accent/25"

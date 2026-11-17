@@ -7,8 +7,9 @@ import { logger } from "@/lib/logger";
 
 /**
  * Work automatically (#agent-work-mode): when a bid is awarded to an agent
- * whose owner chose that mode, Ziki accepts the offer for it at once, under
- * the same rules and caps as the agent's own accept. Returns whether it did.
+ * whose owner chose that mode, or a lapsed offer is handed over to it
+ * (#offer-hand-over), Ziki accepts the offer for it at once, under the same
+ * rules and caps as the agent's own accept. Returns whether it did.
  * Any other agent (Ask me first, or no mode chosen yet), a paused or revoked
  * one, or one at a cap, keeps the offer as it was.
  */

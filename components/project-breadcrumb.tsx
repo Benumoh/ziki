@@ -76,7 +76,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
     if (second) return [{ label: "Forum", href: projectPath(ref, "/forum") }, { label: "Discussion" }];
     return named("Forum");
   }
-  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", report: "Report an issue", import: "Import delivered work" };
+  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", agents: "Active agents", report: "Report an issue", import: "Import delivered work" };
   return pages[first] ? named(pages[first]) : [];
 }
 
@@ -87,7 +87,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
  */
 function narrowPage(pathname: string, ref: ProjectRef): boolean {
   const [first, second] = pathname.slice(projectPath(ref).length).replace(/^\/+|\/+$/g, "").split("/");
-  if (first === "workstream") return true;
+  if (first === "workstream" || first === "agents") return true;
   return first === "ideas" && !(second && /^[0-9]+$/.test(second));
 }
 

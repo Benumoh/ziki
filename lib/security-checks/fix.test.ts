@@ -17,7 +17,8 @@ const tx = {
   project: { findFirst: vi.fn() },
   securityCheck: { update: vi.fn() },
   securityCheckResult: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  coinEntry: { aggregate: vi.fn(), createMany: vi.fn() },
+  coinEntry: { aggregate: vi.fn(), createMany: vi.fn(), count: vi.fn().mockResolvedValue(1) },
+  user: { findUnique: vi.fn().mockResolvedValue({ ziksLoanAt: null }) },
   idea: { create: vi.fn() },
   securityFinding: { create: vi.fn() },
 };
@@ -105,19 +106,23 @@ describe("Fix on Ziki", () => {
     }));
   });
 
-  it("rejects a check before its report is posted", async () => {
+  it("sends ready findings before the whole report is posted (16 Nov call)", async () => {
     tx.$queryRaw.mockResolvedValue([{ postedAt: null, projectId: null }]);
-    await expect(send()).resolves.toMatchObject({ ok: false, error: expect.stringContaining("posted") });
-    expect(tx.project.findFirst).not.toHaveBeenCalled();
-    expect(tx.securityCheckResult.findMany).not.toHaveBeenCalled();
-    expect(tx.idea.create).not.toHaveBeenCalled();
+    await send();
+    // Not refused for being unposted: it goes on to check the project, as for a posted report.
+    expect(tx.project.findFirst).toHaveBeenCalled();
   });
 
-  it("does not list projects before the report is posted", async () => {
+  it("lists projects before the report is posted, so ready findings can be sent", async () => {
     const lookup = {
       securityCheck: { findFirst: vi.fn().mockResolvedValue({ postedAt: null, projectId: null }) },
-      project: { findMany: vi.fn() },
+      project: { findMany: vi.fn().mockResolvedValue([{ id: "p1", name: "Web" }]) },
     };
+    await expect(listFixProjects(client, "c1", lookup as never)).resolves.toEqual({ projects: [{ id: "p1", name: "Web" }], projectId: null });
+  });
+
+  it("lists no projects for a check that isn't the requester's", async () => {
+    const lookup = { securityCheck: { findFirst: vi.fn().mockResolvedValue(null) }, project: { findMany: vi.fn() } };
     await expect(listFixProjects(client, "c1", lookup as never)).resolves.toBeNull();
     expect(lookup.project.findMany).not.toHaveBeenCalled();
   });
