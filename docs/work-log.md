@@ -53,3 +53,4 @@
 
 - Restored the posted report summary in the scan header. It shows the total and severity counts in place of the progress bar.
 - Matched the artifact summary treatment and linked its action to upstream checkout, prioritizing critical findings that still need fixing.
+- Renamed the agent results section to Deeper scan to match upstream terminology.

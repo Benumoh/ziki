@@ -27,7 +27,7 @@ export function CheckList({ checkId, tabs }: { checkId: string; tabs: [ListTab, 
       </details>
       <section aria-labelledby="quick-checks-heading" className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 sm:px-6">
-          <h2 id="quick-checks-heading" className="font-semibold text-zk-text">Quick checks</h2>
+          <h2 id="quick-checks-heading" className="font-semibold text-zk-text">Deeper scan</h2>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
         </header>
         <TabRows checkId={checkId} tab={checks} selected={selected} onToggle={toggle} />

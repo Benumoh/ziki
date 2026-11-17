@@ -162,6 +162,6 @@ Verify by moving a finding from the check's list, following its issue link, and 
 
 ### Scan results on one page
 
-Expand **Quick scan** to see the browser preview. Under **Quick checks**, select completed findings and choose **Fix selected** to open checkout with those findings. Unfinished checks appear under **Still checking**.
+Expand **Quick scan** to see the browser preview. Under **Deeper scan**, select completed findings and choose **Fix selected** to open checkout with those findings. Unfinished checks appear under **Still checking**.
 
 When the report is posted, the scan header replaces its progress bar with the total findings and their severity counts.
