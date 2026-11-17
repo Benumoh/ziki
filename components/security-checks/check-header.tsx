@@ -1,3 +1,6 @@
+import Link from "next/link";
+import "@/components/security-finding.css";
+import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
 import { Badge } from "@/components/ui/badge";
 import { LocalTime } from "@/components/local-time";
 import { CheckActivity, type CheckPhase } from "@/components/security-checks/check-activity";
@@ -41,7 +44,9 @@ export function CheckHeader({ report }: { report: CheckReport }) {
         </span>
       </p>
       <CheckActivity site={report.target.value} phase={phase} done={done} total={total} />
-      <div>
+      {report.posted ? (
+        <FindingsSummary report={report} />
+      ) : <div>
         <div
           role="progressbar"
           aria-label="Check progress"
@@ -59,7 +64,42 @@ export function CheckHeader({ report }: { report: CheckReport }) {
         <p className="mt-1.5 text-xs font-semibold tabular-nums text-zk-text">
           {total ? `${done} of ${total} parts done · ${percent}%` : "Planning the checks…"}
         </p>
-      </div>
+      </div>}
     </div>
+  );
+}
+
+function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: true }> }) {
+  const critical = report.counts.critical;
+  const remaining = report.findings.filter((finding) => !finding.fix);
+  const criticalRemaining = remaining.filter((finding) => finding.severity === "critical");
+  const selection = criticalRemaining.length ? criticalRemaining : remaining;
+  const fixLabel = criticalRemaining.length === 1 ? "Fix the critical one"
+    : criticalRemaining.length > 1 ? "Fix critical findings" : "Fix remaining findings";
+  const fixHref = `/security/checks/${encodeURIComponent(report.checkId)}/fix?ids=${selection.map(({ id }) => encodeURIComponent(id)).join(",")}`;
+
+  return (
+    <section aria-label="Findings summary" className={`flex flex-col gap-4 rounded-[20px] border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${critical ? "border-zk-bad-fg/30 bg-zk-bad-bg/50" : "border-zk-border bg-zk-surface"}`}>
+      <div className="min-w-0 space-y-2">
+        <h2 className={`text-lg font-bold sm:text-xl ${critical ? "text-zk-bad-fg" : "text-zk-text"}`}>
+          {report.total === 0 ? "No security problems found" : `${report.total} security ${report.total === 1 ? "problem" : "problems"} found${critical ? `, ${critical} of them critical` : ""}`}
+        </h2>
+        {report.summary ? <p className="break-words text-sm text-zk-text2 sm:text-base">{report.summary}</p> : null}
+        {report.total > 0 ? (
+          <ul aria-label="Findings by severity" className="flex flex-wrap gap-2">
+            {SECURITY_SEVERITIES.filter((severity) => report.counts[severity] > 0).map((severity) => (
+              <li key={severity} className={`security-severity security-severity--${severity} rounded-full px-3 py-1 text-xs font-bold`}>
+                {report.counts[severity]} {SEVERITY_LABEL[severity].toLowerCase()}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {selection.length ? (
+        <Link href={fixHref} className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-full bg-electric-blue-strong px-5 py-2 text-sm font-bold text-white hover:brightness-105 sm:self-center">
+          {fixLabel}
+        </Link>
+      ) : null}
+    </section>
   );
 }

@@ -7,68 +7,39 @@ import "@/components/security-finding.css";
 import { THREAT_LABEL, type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
 import type { ResultFix } from "@/lib/security-checks/report";
 
-/**
- * A check's results under its header (16 Nov, Hamzat): two horizontal tabs, the
- * **Quick scan** (open by default) and the **Deeper scan**. Each row puts the
- * threat on the left and where it stands on the right. Agents' findings can be
- * ticked for "Fix selected", opened with the arrow for a short line, or opened
- * as their own page ("See the fix").
- */
-
+/** Stack the browser preview and agent results so both are visible from the same page. */
 const FIX_STATE: Record<ResultFix["bucket"], string> = { fixing: "Being fixed", fixed: "Fixed", closed: "Closed" };
 
 export function CheckList({ checkId, tabs }: { checkId: string; tabs: [ListTab, ListTab] }) {
-  const [active, setActive] = useState<ListTab["key"]>("quick");
-  const [selected, setSelected] = useState<string[]>([]);
-  const toggle = (id: string) => setSelected((old) => (old.includes(id) ? old.filter((x) => x !== id) : [...old, id]));
-  const tab = tabs.find((t) => t.key === active) ?? tabs[0];
+  const [picked, setPicked] = useState<string[]>([]);
+  const [quick, checks] = tabs;
+  const selected = (checks.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id)).map(({ id }) => id);
+  const toggle = (id: string) => setPicked((old) => old.includes(id) ? old.filter((item) => item !== id) : [...old, id]);
   const fixHref = `/security/checks/${encodeURIComponent(checkId)}/fix?ids=${selected.map(encodeURIComponent).join(",")}`;
 
   return (
-    <div className="border-t border-zk-border">
-      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 border-b border-zk-border px-4 sm:px-6">
-        <div role="tablist" aria-label="Scan results" className="-mb-px flex gap-1">
-          {tabs.map((t) => {
-            const on = t.key === active;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                id={`tab-${t.key}`}
-                aria-selected={on}
-                aria-controls={`panel-${t.key}`}
-                onClick={() => setActive(t.key)}
-                className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-2 py-3 text-sm font-semibold sm:px-3 focus-visible:outline-2 focus-visible:outline-zk-accent ${
-                  on ? "border-electric-blue-strong text-zk-text" : "border-transparent text-zk-text2 hover:text-zk-text"
-                }`}
-              >
-                {t.title}
-                <span className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${on ? "bg-electric-blue-strong text-white" : "bg-zk-chip text-zk-text2"}`}>{t.count}</span>
-              </button>
-            );
-          })}
-        </div>
+    <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
+      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <summary className="cursor-pointer px-4 py-4 font-semibold text-zk-text sm:px-6">
+          Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
+        </summary>
+        <TabRows checkId={checkId} tab={quick} selected={selected} onToggle={toggle} />
+      </details>
+      <section aria-labelledby="quick-checks-heading" className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 sm:px-6">
+          <h2 id="quick-checks-heading" className="font-semibold text-zk-text">Deeper scan</h2>
+          <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
+        </header>
+        <TabRows checkId={checkId} tab={checks} selected={selected} onToggle={toggle} />
         {selected.length ? (
-          <Link
-            href={fixHref}
-            className="mb-2 inline-flex h-9 items-center justify-center rounded-full bg-electric-blue-strong px-4 text-sm font-bold text-white hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2"
-          >
-            Fix selected ({selected.length})
-          </Link>
+          <div className="flex items-center justify-between gap-3 border-t border-zk-border bg-zk-tint px-4 py-3 sm:px-6">
+            <span role="status" className="text-sm font-semibold text-zk-accent">{selected.length} selected</span>
+            <Link href={fixHref} className="rounded-full bg-electric-blue-strong px-4 py-2 text-sm font-bold text-white hover:brightness-105">
+              Fix {selected.length} selected
+            </Link>
+          </div>
         ) : null}
-      </div>
-
-      <div role="tabpanel" id={`panel-${tab.key}`} aria-labelledby={`tab-${tab.key}`}>
-        <p className="m-0 px-4 pt-3 text-xs text-zk-muted sm:px-6">
-          {tab.key === "quick"
-            ? "What any browser can see, checked the moment you added it."
-            : tab.state.tone === "done"
-              ? "Agents checked each part. Tick the threats you want fixed."
-              : `Agents are checking each part (${tab.state.label.toLowerCase()}). Threats show here as each part finishes.`}
-        </p>
-        <TabRows checkId={checkId} tab={tab} selected={selected} onToggle={toggle} />
-      </div>
+      </section>
     </div>
   );
 }
@@ -86,11 +57,13 @@ function TabRows({ checkId, tab, selected, onToggle }: { checkId: string; tab: L
           <Row severity={row.severity} title={row.title} sub={row.area} />
         </li>
       ))}
+      {findings.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Ready to fix · {findings.filter((finding) => !finding.fix).length}</li> : null}
       {findings.map((finding) => (
         <li key={finding.id}>
           <FindingRow checkId={checkId} finding={finding} checked={selected.includes(finding.id)} onToggle={() => onToggle(finding.id)} />
         </li>
       ))}
+      {pending.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Still checking · {pending.length}</li> : null}
       {pending.map((part) => (
         <li key={part.id}>
           <Row severity={null} title={part.title} right={<PartState state={part.state} />} lead={null} />
