@@ -98,6 +98,15 @@ export function marketingPath(slug: ProjectRef, section = ""): string {
   return projectPath(slug, section ? `/marketing/${section}` : "/marketing");
 }
 
+/**
+ * The video studio, `/<org>/<project>/marketing/video`. It brings its own
+ * chrome: the page opens on "← Back to Marketing", so the project breadcrumb
+ * and the Marketing action bar leave it alone and every other page keeps them.
+ */
+export function isVideoStudio(pathname: string): boolean {
+  return /\/marketing\/video\/?$/.test(pathname);
+}
+
 /** Filing a new report (it starts as an idea). */
 export function newIssuePath(slug: ProjectRef, query?: URLSearchParams | string): string {
   return withQuery(projectPath(slug, "/issues/new"), query);

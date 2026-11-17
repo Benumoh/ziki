@@ -1,4 +1,4 @@
-import { requireProject } from "@/lib/project-route";
+import { requireForumProject } from "@/lib/forum-route";
 import { listForumMessages, getUserAccessibleScopes } from "@/lib/forum";
 import { PublicMessageBoard } from "@/components/forum/message-board";
 
@@ -13,7 +13,7 @@ export default async function ProjectForumPage({
   params: Promise<{ org: string; project: string }>;
 }) {
   const { org, project } = await params;
-  const ctx = await requireProject(org, project);
+  const ctx = await requireForumProject(org, project);
 
   const [messages, scopes] = await Promise.all([
     listForumMessages({ scope: "project", projectId: ctx.project.id }),
@@ -23,9 +23,10 @@ export default async function ProjectForumPage({
   return (
     <section className="space-y-6">
       <PublicMessageBoard
+        key={`project-${ctx.project.orgSlug}-${ctx.project.slug}`}
         scope="project"
         orgSlug={ctx.project.orgSlug}
-        orgName={ctx.project.orgSlug}
+        orgName={ctx.project.orgName}
         projectSlug={ctx.project.slug}
         projectName={ctx.project.name}
         initialMessages={messages}

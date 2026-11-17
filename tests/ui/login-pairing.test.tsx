@@ -125,11 +125,19 @@ describe("pairing an agent (#431)", () => {
     pairAgentAction.mockResolvedValue({ ok: false, error: "Open an organisation first." });
     renderForm("Focus on desktop bugs.");
     fireEvent.change(screen.getByLabelText(/Standing instructions/), { target: { value: "Owner-edited brief." } });
+    // #agent-work-mode: the owner must choose how it works before it can be approved.
+    fireEvent.click(screen.getByRole("button", { name: "Approve agent" }));
+    expect(pairAgentAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("radio", { name: /Ask me first/ }));
+    fireEvent.change(screen.getByLabelText("Max tasks at once"), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "Approve agent" }));
     await screen.findByText("Open an organisation first.");
     fireEvent.click(screen.getByRole("button", { name: "Approve agent" }));
     await waitFor(() => expect(pairAgentAction).toHaveBeenCalledTimes(2));
-    expect((pairAgentAction.mock.calls[1][1] as FormData).get("instructions")).toBe("Owner-edited brief.");
+    const resubmitted = pairAgentAction.mock.calls[1][1] as FormData;
+    expect(resubmitted.get("instructions")).toBe("Owner-edited brief.");
+    expect(resubmitted.get("workMode")).toBe("ask_first");
+    expect(resubmitted.get("maxActiveTasks")).toBe("2");
   });
 
   it("formats the pairing code and won't continue until it is valid", () => {

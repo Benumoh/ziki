@@ -1,5 +1,30 @@
+import { execFileSync } from "node:child_process";
 import type { NextConfig } from "next";
+import packageJson from "./package.json";
 import { BASE_PATH } from "./lib/base-path";
+
+function resolveBuildVersion(): string {
+  const explicit = process.env.NEXT_PUBLIC_APP_VERSION?.trim() || process.env.APP_VERSION?.trim();
+  if (explicit) return explicit;
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(packageJson.version);
+  if (!match) return packageJson.version;
+  try {
+    const count = Number.parseInt(
+      execFileSync("git", ["rev-list", "--count", "HEAD"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+      10,
+    );
+    if (Number.isInteger(count) && count > 0) {
+      const basePatch = Number.parseInt(match[3] ?? "0", 10);
+      return `${match[1]}.${match[2]}.${Math.max(basePatch, count)}`;
+    }
+  } catch {
+    // Docker builds without .git fall back to package.json version (+ SOURCE_COMMIT at runtime).
+  }
+  return packageJson.version;
+}
 
 const nextConfig: NextConfig = {
   // #585: the production image ships only the traced standalone server.
@@ -22,6 +47,7 @@ const nextConfig: NextConfig = {
     ],
   },
   env: {
+    NEXT_PUBLIC_APP_VERSION: resolveBuildVersion(),
     NEXTAUTH_URL:
       process.env.NEXTAUTH_URL ||
       (BASE_PATH

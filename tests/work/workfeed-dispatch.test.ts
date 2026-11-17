@@ -132,7 +132,7 @@ function work(overrides: Partial<ProjectWork> = {}): ProjectWork {
   };
 }
 
-const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [] };
+const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [], askFirst: false };
 
 /** #plan-review: a complex issue's award held by this agent, with where its plan is. */
 const planningClaim = (plan: AgentWork["planning"][number]["plan"]): AgentWork["planning"][number] => ({
@@ -332,7 +332,7 @@ describe("itemsFor", () => {
     const offeredAt = new Date("2026-10-29T10:00:00Z");
     const mine: AgentWork = {
       ...nothingMine,
-      offers: [{ id: "o1", offeredAt, bug: { id: "b9", number: 9, title: "Offered" } }],
+      offers: [{ id: "o1", offeredAt, dispatcherUserId: null, awardedBid: { id: "bid9" }, bug: { id: "b9", number: 9, title: "Offered", difficulty: "medium" } }],
     };
     const items = itemsFor(agent("working"), work({ ready: [{ id: "b1", number: 1, title: "x", importance: 3 }] }), mine);
     expect(items[0]).toMatchObject({ kind: "offer", key: "offer:o1", dueAt: "2026-10-29T10:30:00.000Z" });

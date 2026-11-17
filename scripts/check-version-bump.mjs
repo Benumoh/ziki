@@ -27,17 +27,17 @@ if (!baseParts) {
   process.exit(0);
 }
 
-const higher =
+const notLower =
   headParts[0] !== baseParts[0] ? headParts[0] > baseParts[0]
   : headParts[1] !== baseParts[1] ? headParts[1] > baseParts[1]
-  : headParts[2] > baseParts[2];
+  : headParts[2] >= baseParts[2];
 
-if (!higher) {
+if (!notLower) {
   const [major, minor, patch] = baseParts;
   console.error(
-    `The app version must go up with every pull request: package.json says ${head}, the base branch has ${base}. ` +
-      `Set "version" to ${major}.${minor}.${patch + 1} (or higher) in package.json.`,
+    `The app version must not regress: package.json says ${head}, the base branch has ${base}. ` +
+      `Set "version" to at least ${major}.${minor}.${patch} in package.json.`,
   );
   process.exit(1);
 }
-console.log(`Version raised: ${base} -> ${head}.`);
+console.log(`Version check passed: ${base} -> ${head}.`);

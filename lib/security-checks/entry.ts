@@ -116,7 +116,7 @@ export async function removeOwnScan(organisationId: string, userId: string, chec
  * A site this person has already scanned in this workspace (#security-checks):
  * its latest check that wasn't cancelled, so the same site isn't scanned again.
  */
-export async function findScannedCheck(organisationId: string, userId: string, target: ParsedTarget): Promise<{ checkId: string; summary: PreviewSummary | null } | null> {
+export async function findScannedCheck(organisationId: string, userId: string, target: ParsedTarget): Promise<{ checkId: string; summary: PreviewSummary | null; finished: boolean } | null> {
   const check = await prisma.securityCheck.findFirst({
     where: {
       organisationId,
@@ -125,10 +125,11 @@ export async function findScannedCheck(organisationId: string, userId: string, t
       target: { organisationId, kind: target.kind, value: target.value },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, target: { select: { previewSummary: true } } },
+    select: { id: true, postedAt: true, target: { select: { previewSummary: true } } },
   });
-  // Its saved quick scan, so the person sees that result again instead of a new scan.
-  return check ? { checkId: check.id, summary: readQuickScan(check.target.previewSummary) } : null;
+  // Its saved quick scan, so the person sees that result again instead of a new scan,
+  // and whether the agents' report is posted, so the chat offers "See results" rather than "See progress".
+  return check ? { checkId: check.id, summary: readQuickScan(check.target.previewSummary), finished: check.postedAt !== null } : null;
 }
 
 /** One of this person's scans in this workspace, with its site, for replacing its quick scan. */

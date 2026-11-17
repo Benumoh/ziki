@@ -9,6 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { previewScan } from "@/lib/security-checks/preview";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
+import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 import {
   ASSISTANT_HISTORY_MAX,
@@ -36,8 +37,11 @@ import { prisma } from "@/lib/prisma";
 export type ChatAnswer =
   | { kind: "reply"; reply: string }
   | { kind: "go"; reply: string; href: string }
-  /** The quick scan of a site, already added to the person's scans (`checkId`) unless it couldn't be reached. `summary` is null when the scan couldn't run. */
-  | { kind: "scan"; reply: string; target: string; summary: PreviewSummary | null; note: string | null; checkId: string | null; already?: boolean }
+  /**
+   * The quick scan of a site, already added to the person's scans (`checkId`) unless it couldn't be reached. `summary` is null when the scan couldn't run.
+   * `finished` is true when the agents' report is already posted (a site scanned before), so the chat offers "See results".
+   */
+  | { kind: "scan"; reply: string; target: string; summary: PreviewSummary | null; note: string | null; checkId: string | null; already?: boolean; finished?: boolean }
   | { kind: "error"; error: string };
 
 /**
@@ -55,14 +59,14 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}` });
   if (!result.ok) return { ok: false, error: result.reason };
-  const summary = summarisePreview(result);
+  const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
   revalidatePath("/security");
   return { ok: true, summary };
 }
 
-/** A site's saved chat, as the card shows it. */
-export type SiteChatAnswer = { ok: true; messages: { id: string; role: "user" | "assistant"; text: string }[] } | { ok: false; error: string };
+/** A site's saved chat, as the card shows it, and whether its agents' report is posted ("See results" rather than "See progress"). */
+export type SiteChatAnswer = { ok: true; messages: { id: string; role: "user" | "assistant"; text: string }[]; finished: boolean } | { ok: false; error: string };
 
 /** The saved chat under one of your scans (#security-checks): loaded when its result opens. */
 export async function siteChat(checkId: string): Promise<SiteChatAnswer> {
@@ -73,7 +77,7 @@ export async function siteChat(checkId: string): Promise<SiteChatAnswer> {
   const scan = typeof checkId === "string" ? await siteChatScan(access.organisationId, user.id, checkId) : null;
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   const messages = await loadSiteChat(access.organisationId, user.id, scan.targetId);
-  return { ok: true, messages: messages.map(({ id, role, text }) => ({ id, role, text })) };
+  return { ok: true, messages: messages.map(({ id, role, text }) => ({ id, role, text })), finished: scan.report.posted };
 }
 
 /**
@@ -100,7 +104,7 @@ export async function askSite(checkId: string, question: string): Promise<SiteCh
     "I can't answer just now. Try again in a moment, or open the report for the agents' findings.";
   await saveSiteMessage(organisationId, user.id, scan.targetId, "assistant", reply);
   const messages = await loadSiteChat(organisationId, user.id, scan.targetId);
-  return { ok: true, messages: messages.map(({ id, role, text: said }) => ({ id, role, text: said })) };
+  return { ok: true, messages: messages.map(({ id, role, text: said }) => ({ id, role, text: said })), finished: scan.report.posted };
 }
 
 /** Remove a scan from the person's list, only while its report isn't posted. */
@@ -151,6 +155,24 @@ export async function talkToSecurityAssistant(history: AssistantTurn[]): Promise
 }
 
 /**
+ * Try now from the public page: add the site and start the agents' check, with no chat. The person asked for the
+ * agents already, so the Security page opens the scan's progress page straight from here (never the chat box).
+ * A site already in their scans goes to its page too.
+ */
+export async function startFromOutside(site: string): Promise<{ ok: true; checkId: string } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const access = await currentOrganisationAccess(user.id, user.role);
+  if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
+  const parsed = typeof site === "string" ? parseSecurityTarget(site) : null;
+  if (!parsed?.ok) return { ok: false, error: "That address can't be scanned. Try it again from the Security page." };
+  const answer = await scanAndAdd(access.organisationId, user.id, parsed.target, "");
+  if (answer.kind === "scan" && answer.checkId) return { ok: true, checkId: answer.checkId };
+  if (answer.kind === "scan") return { ok: false, error: answer.note ?? `Ziki couldn't reach ${parsed.target.value}.` };
+  return { ok: false, error: answer.kind === "error" ? answer.error : answer.reply };
+}
+
+/**
  * Every asset (a website, a server or a public repo) gets the quick scan, and
  * is added to the person's scans straight away, so the full check starts. A
  * site the scan couldn't reach isn't added; a private repo (the scan can't
@@ -169,10 +191,11 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
       note: `${target.value} is already in your scans. This is its saved result. Replace it with a new scan?`,
       checkId: scanned.checkId,
       already: true,
+      finished: scanned.finished,
     };
   }
   const result = await previewScan(address, { visitor: `user:${userId}` });
-  const summary = result.ok ? summarisePreview(result) : null;
+  const summary = result.ok ? await withSiteAddress(summarisePreview(result)) : null;
   const addable = result.ok || target.kind === "repo" || result.retryAfterSeconds !== undefined;
   // Couldn't reach it: say so plainly, with no "here's a quick look" before it.
   if (!addable) return { kind: "scan", reply: "", target: address, summary: null, note: result.ok ? null : result.reason, checkId: null };

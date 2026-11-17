@@ -11,7 +11,7 @@ const MESSAGE_MAX = 600;
 /**
  * The way back into a site's saved chat from its scan page (16 Nov): an icon
  * beside "More actions" at the top, and the chat opening as the page's first
- * section under it, growing open with a soft settle. The holder shares whether
+ * section under it, growing open in place. The holder shares whether
  * it's open between the two; it adds nothing to the page itself.
  */
 type SiteChatState = {
@@ -19,16 +19,27 @@ type SiteChatState = {
   site: string;
   /** What the button shows: open as soon as it's clicked. */
   open: boolean;
-  /** The chat has been built (the first time it opens), and stays built after. */
+  /** The chat has been built (pointed at, focused or opened), and stays built after. */
   opened: boolean;
-  /** Shown a frame after it's built, so even the first opening animates from closed. */
+  /** Shown once the saved chat is in (or a short wait is over), so even the first opening animates from closed to its full height. */
   shown: boolean;
   /** Fully open: focus rings and the card's edge aren't clipped any more. */
   settled: boolean;
   setSettled: (settled: boolean) => void;
   toggle: (open: boolean) => void;
+  /** Build the chat early, closed, so its saved messages are loading before it's clicked. */
+  prepare: () => void;
+  /** The saved chat has loaded the first time (or failed to): the first opening can go. */
+  markReady: () => void;
   buttonRef: RefObject<HTMLButtonElement | null>;
 };
+
+/**
+ * How long the first opening waits for the saved chat. Opening before the
+ * messages arrive made it grow to the empty box's height and then jump taller
+ * (16 Nov). After this it opens anyway, so a slow load never feels stuck.
+ */
+const FIRST_OPEN_WAIT_MS = 400;
 const SiteChatContext = createContext<SiteChatState | null>(null);
 
 function useSiteChat(): SiteChatState {
@@ -44,6 +55,10 @@ export function SiteChatHolder({ checkId, site, children }: { checkId: string; s
   const [settled, setSettled] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const waits = useRef<{ frames: number[]; timer?: ReturnType<typeof setTimeout> }>({ frames: [] });
+  /** The saved chat has loaded once. A ref, so the load finishing and a click never read a stale value. */
+  const ready = useRef(false);
+  /** Clicked open while the saved chat was still loading. */
+  const waitingToShow = useRef(false);
 
   function clearWaits() {
     waits.current.frames.forEach((frame) => cancelAnimationFrame(frame));
@@ -51,17 +66,10 @@ export function SiteChatHolder({ checkId, site, children }: { checkId: string; s
     waits.current = { frames: [] };
   }
 
-  function toggle(next: boolean) {
+  // Two frames, so the closed chat is drawn first and opening it animates; the
+  // timer is a backup for a tab whose frames are paused (hidden in the background).
+  function showSoon() {
     clearWaits();
-    setOpen(next);
-    if (!next) {
-      setShown(false);
-      setSettled(false);
-      return;
-    }
-    setOpened(true);
-    // Two frames, so the closed chat is drawn first and opening it animates; the
-    // timer is a backup for a tab whose frames are paused (hidden in the background).
     const show = () => {
       clearWaits();
       setShown(true);
@@ -70,22 +78,62 @@ export function SiteChatHolder({ checkId, site, children }: { checkId: string; s
     waits.current.timer = setTimeout(show, 120);
   }
 
+  function toggle(next: boolean) {
+    clearWaits();
+    waitingToShow.current = false;
+    setOpen(next);
+    if (!next) {
+      setShown(false);
+      setSettled(false);
+      return;
+    }
+    setOpened(true);
+    if (ready.current) {
+      showSoon();
+      return;
+    }
+    // The first time, wait for the saved messages so it opens once, to its full height.
+    waitingToShow.current = true;
+    waits.current.timer = setTimeout(() => {
+      if (!waitingToShow.current) return;
+      waitingToShow.current = false;
+      showSoon();
+    }, FIRST_OPEN_WAIT_MS);
+  }
+
+  function prepare() {
+    setOpened(true);
+  }
+
+  function markReady() {
+    if (ready.current) return;
+    ready.current = true;
+    if (!waitingToShow.current) return;
+    waitingToShow.current = false;
+    showSoon();
+  }
+
   useEffect(() => clearWaits, []);
 
   return (
-    <SiteChatContext.Provider value={{ checkId, site, open, opened, shown, settled, setSettled, toggle, buttonRef }}>{children}</SiteChatContext.Provider>
+    <SiteChatContext.Provider value={{ checkId, site, open, opened, shown, settled, setSettled, toggle, prepare, markReady, buttonRef }}>
+      {children}
+    </SiteChatContext.Provider>
   );
 }
 
 /** The chat icon, the same size and look as the "More actions" button beside it. */
 export function SiteChatButton() {
-  const { checkId, site, open, toggle, buttonRef } = useSiteChat();
+  const { checkId, site, open, toggle, prepare, buttonRef } = useSiteChat();
   const label = open ? "Close chat" : `Chat about ${site}`;
   return (
     <button
       ref={buttonRef}
       type="button"
       onClick={() => toggle(!open)}
+      // Start loading the saved chat on the way to a click (GitHub and Linear preload on hover the same way).
+      onPointerEnter={prepare}
+      onFocus={prepare}
       aria-expanded={open}
       aria-controls={`site-chat-panel-${checkId}`}
       aria-label={label}
@@ -102,12 +150,13 @@ export function SiteChatButton() {
 }
 
 /**
- * The chat itself, as the first section under the top row. It's built the
- * first time it opens (so the saved chat loads only when asked for) and kept
- * after, so closing and opening again keeps the conversation and its motion.
+ * The chat itself, as the first section under the top row. It's built, closed,
+ * when the icon is pointed at, focused or clicked (so the saved chat loads only
+ * when it's likely wanted, and is usually in before the click) and kept after,
+ * so closing and opening again keeps the conversation and its motion.
  */
 export function SiteChatPanel() {
-  const { checkId, site, opened, shown, settled, setSettled, toggle, buttonRef } = useSiteChat();
+  const { checkId, site, opened, shown, settled, setSettled, toggle, markReady, buttonRef } = useSiteChat();
   const panel = useRef<HTMLDivElement>(null);
 
   // Opening puts you in the box, ready to type.
@@ -141,7 +190,7 @@ export function SiteChatPanel() {
       <div ref={panel} className="site-chat-drawer__inner" inert={!shown}>
         {opened ? (
           <div className="site-chat-drawer__card">
-            <SiteChatBox checkId={checkId} site={site} />
+            <SiteChatBox checkId={checkId} site={site} active={shown} onLoaded={markReady} />
           </div>
         ) : null}
       </div>
@@ -155,13 +204,33 @@ export function SiteChatPanel() {
  * a refresh or on another device. Just the messages and the box; loads when the
  * result opens.
  */
-export function SiteChatBox({ checkId, site }: { checkId: string; site: string }) {
+export function SiteChatBox({
+  checkId,
+  site,
+  active = true,
+  onLoaded,
+}: {
+  checkId: string;
+  site: string;
+  /** Open and in view: reread the saved chat when it opens again and when the page comes back into view. */
+  active?: boolean;
+  /** Called once the first load is in (or has failed), so a holder can open it at its full height. */
+  onLoaded?: () => void;
+}) {
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const log = useRef<HTMLOListElement>(null);
+  const onLoadedRef = useRef(onLoaded);
+  useEffect(() => {
+    onLoadedRef.current = onLoaded;
+  }, [onLoaded]);
+  /** The first time it's active, the load made when it was built is fresh enough. */
+  const firstActive = useRef(true);
 
+  // The saved chat is the record (16 Nov). Read it as soon as the chat is built,
+  // even while it's still closed, so it opens with its messages already in.
   useEffect(() => {
     let live = true;
     siteChat(checkId)
@@ -170,14 +239,46 @@ export function SiteChatBox({ checkId, site }: { checkId: string; site: string }
         if (answer.ok) setMessages(answer.messages);
         else setError(answer.error);
       })
-      .catch(() => live && setError("This chat couldn't load just now."));
+      .catch(() => live && setError("This chat couldn't load just now."))
+      .finally(() => live && onLoadedRef.current?.());
     return () => {
       live = false;
     };
   }, [checkId]);
 
+  // While open, read it again each time it opens and whenever the page comes back
+  // into view, so what was said in the Assets chat shows here.
   useEffect(() => {
-    log.current?.lastElementChild?.scrollIntoView({ block: "nearest" });
+    if (!active) return;
+    let live = true;
+    const load = () => {
+      siteChat(checkId)
+        .then((answer) => {
+          if (!live) return;
+          if (answer.ok) setMessages(answer.messages);
+          else setError(answer.error);
+        })
+        .catch(() => live && setError("This chat couldn't load just now."));
+    };
+    if (firstActive.current) firstActive.current = false;
+    else load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", load);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      live = false;
+      window.removeEventListener("focus", load);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [checkId, active]);
+
+  // Keep the newest message in view by scrolling the list itself, never the page
+  // (the list can update while the chat is closed).
+  useEffect(() => {
+    const list = log.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [messages, pending]);
 
   function send() {

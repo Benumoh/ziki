@@ -5,11 +5,14 @@ import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import { fixSecurityCheck, loadSecurityCheckFixOptions } from "@/app/actions/security-check-fix";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
+import { BorrowZiks } from "@/components/coins/borrow-ziks";
 import "@/components/security-finding.css";
 import type { FixOptions, FixOutcome } from "@/lib/security-checks/fix";
 
 type Props = {
   standalone?: boolean;
+  /** Findings already ticked on the check's list ("Fix selected"); any that can't be sent are ignored. */
+  initialSelected?: readonly string[];
   checkId: string;
   results: readonly { id: string; severity: SecuritySeverity; title: string; price?: number; moved?: boolean; issue?: { number: number; href: string } | null }[];
 };
@@ -19,10 +22,12 @@ export function FixOnZiki(props: Props) {
   return <FixPicker key={props.checkId} {...props} />;
 }
 
-function FixPicker({ checkId, results, standalone }: Props) {
+function FixPicker({ checkId, results, standalone, initialSelected = [] }: Props) {
   const [options, setOptions] = useState<FixOptions | null | undefined>();
   const [projectId, setProjectId] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() =>
+    initialSelected.filter((id) => results.some((result) => result.id === id && !result.moved && !result.issue)),
+  );
   const [outcome, setOutcome] = useState<FixOutcome>();
   const [loadingAttempt, setLoadingAttempt] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -38,11 +43,18 @@ function FixPicker({ checkId, results, standalone }: Props) {
   }, [checkId, loadingAttempt]);
 
   const [movedIssues, setMovedIssues] = useState<Record<string, { number: number; href: string }>>({});
+  const selectableIds = results.filter((result) => !result.moved && !result.issue && !movedIssues[result.id])
+    .map((result) => result.id);
+  const allSelected = selectableIds.every((id) => selected.includes(id));
   const total = results.reduce((sum, result) => selected.includes(result.id) ? sum + (result.price ?? 0) : sum, 0);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!projectId || !selected.length || pending) return;
+    send();
+  }
+
+  function send() {
+    if (!projectId || !selected.length) return;
     startTransition(async () => {
       try {
         const reply = await fixSecurityCheck({ checkId, projectId, resultIds: selected });
@@ -66,7 +78,7 @@ function FixPicker({ checkId, results, standalone }: Props) {
       {standalone ? null : <h2 className="font-semibold text-zk-text">Move to your app</h2>}
       {options === undefined ? <p role="status">Loading projects…</p> : options === null ? (
         <p role="status">
-          You can move findings to your app once the report is posted.{" "}
+          Couldn&apos;t load your projects.{" "}
           <button type="button" className="underline" onClick={() => {
             setOptions(undefined);
             setLoadingAttempt((attempt) => attempt + 1);
@@ -76,7 +88,15 @@ function FixPicker({ checkId, results, standalone }: Props) {
         <>
           <fieldset disabled={pending} className="min-w-0 rounded-2xl border border-zk-border bg-zk-surface">
             <legend className="sr-only">Choose findings</legend>
-            <h2 className="border-b border-zk-divider px-4 py-4 text-base font-semibold text-zk-text sm:px-5">Choose findings</h2>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-zk-divider px-4 py-3 sm:px-5">
+              <h2 className="text-base font-semibold text-zk-text">Choose findings</h2>
+              {selectableIds.length > 1 ? (
+                <button type="button" className="min-h-8 text-sm font-semibold text-zk-accent hover:underline disabled:opacity-50"
+                  onClick={() => setSelected(allSelected ? [] : selectableIds)}>
+                  {allSelected ? "Clear selection" : "Select all"}
+                </button>
+              ) : null}
+            </div>
             <ul className="divide-y divide-zk-divider">
               {results.map((result) => {
                 const issue = movedIssues[result.id] ?? result.issue;
@@ -101,7 +121,7 @@ function FixPicker({ checkId, results, standalone }: Props) {
                     </label>
                     {issue ? <Link className="shrink-0 text-sm font-semibold text-zk-accent hover:underline" href={issue.href}>Issue #{issue.number}</Link>
                       : moved ? <span className="text-xs font-semibold text-zk-ok-fg">Moved</span>
-                      : standalone ? <span className="shrink-0 text-sm tabular-nums text-zk-text2">{price} {price === 1 ? "coin" : "coins"}</span> : null}
+                      : standalone ? <span className="shrink-0 text-sm tabular-nums text-zk-text2">{price} {price === 1 ? "Zik" : "Ziks"}</span> : null}
                   </li>
                 );
               })}
@@ -122,9 +142,9 @@ function FixPicker({ checkId, results, standalone }: Props) {
               <div role="status" className="flex items-center justify-between gap-3 border-t border-zk-divider pt-4">
                 <div className="text-sm text-zk-text2">
                   <p>{selected.length} selected</p>
-                  <p className="text-xs text-zk-muted">Simulated payment</p>
+                  <p className="text-xs text-zk-muted">Paid from your Ziks wallet</p>
                 </div>
-                <span className="font-semibold tabular-nums text-zk-text">{total} {total === 1 ? "coin" : "coins"}</span>
+                <span className="font-semibold tabular-nums text-zk-text">{total} {total === 1 ? "Zik" : "Ziks"}</span>
               </div>
             ) : null}
             <button type="submit" disabled={pending || !projectId || !selected.length}
@@ -135,9 +155,11 @@ function FixPicker({ checkId, results, standalone }: Props) {
         </>
       )}
       {outcome && !outcome.ok ? <p role="alert">{outcome.error}</p> : null}
+      {/* Never bought Ziks: offer the one-time loan, then send again (16 Nov call). */}
+      {outcome && !outcome.ok && outcome.canBorrow ? <BorrowZiks onBorrowed={send} /> : null}
       {outcome?.ok ? (
         <div role="status" className="space-y-2 rounded-2xl border border-zk-border bg-zk-surface p-4 text-sm text-zk-ok-fg">
-          <p>{outcome.created} moved. {outcome.reused} already moved. {standalone ? `${outcome.coins} coins simulated.` : null}</p>
+          <p>{outcome.created} moved. {outcome.reused} already moved. {standalone ? `${outcome.coins} ${outcome.coins === 1 ? "Zik" : "Ziks"} paid.` : null}</p>
           {outcome.issues.length ? <ul>
             {outcome.issues.map((issue) => <li key={issue.number}>
               <Link className="underline" href={issue.href}>Issue #{issue.number}</Link>

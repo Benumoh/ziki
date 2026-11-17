@@ -68,20 +68,23 @@ export function PublicContributorForm({
   project,
   orgSlug,
   projectSlug,
+  kind,
 }: {
   project: { name: string; slug: string; goal?: string | null };
   orgSlug: string;
   projectSlug: string;
+  kind?: "problem" | "improvement";
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const token = useRef<string | null>(null);
 
   const [description, setDescription] = useState("");
-  const [title, setTitle] = useState("");
-  const [summary, setSummary] = useState("");
-  const [hasUserEditedTitle, setHasUserEditedTitle] = useState(false);
-  const [hasUserEditedSummary, setHasUserEditedSummary] = useState(false);
+  const title = draftTitle(description);
+  const summary = draftSummary(description);
+  const isImprovement = kind === "improvement";
 
+  const [improvementLocation, setImprovementLocation] = useState("");
+  const [improvementReason, setImprovementReason] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   const [stepsToReproduce, setStepsToReproduce] = useState("");
   const [expectedBehavior, setExpectedBehavior] = useState("");
@@ -144,12 +147,6 @@ export function PublicContributorForm({
 
   function handleDescriptionChange(value: string) {
     setDescription(value);
-    if (!hasUserEditedTitle) {
-      setTitle(draftTitle(value));
-    }
-    if (!hasUserEditedSummary) {
-      setSummary(draftSummary(value));
-    }
     setAcknowledgeSimilar(false);
   }
 
@@ -213,7 +210,9 @@ export function PublicContributorForm({
         body: JSON.stringify({
           title: finalTitle,
           summary: finalSummary,
-          description: description.trim(),
+          description: isImprovement
+            ? [description.trim(), improvementLocation.trim() && `Where to add it: ${improvementLocation.trim()}`, improvementReason.trim() && `Why it helps: ${improvementReason.trim()}`].filter(Boolean).join("\n\n")
+            : description.trim(),
           stepsToReproduce: stepsToReproduce.trim(),
           expectedBehavior: expectedBehavior.trim(),
           actualBehavior: actualBehavior.trim(),
@@ -294,7 +293,7 @@ export function PublicContributorForm({
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-zk-text">Report received</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-zk-text sm:text-4xl">Report received</h2>
           <p className="mt-1 text-sm text-zk-muted">
             Thank you for contributing to {project.name}.
           </p>
@@ -302,14 +301,14 @@ export function PublicContributorForm({
           <div className="mt-6 rounded-xl border border-zk-border bg-zk-chip/40 p-4 text-left">
             <h3 className="font-semibold text-zk-text">{submittedData.title}</h3>
             <div className="mt-2">
-              <span className="inline-flex items-center rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+              <span className="inline-flex items-center rounded-full bg-blue-500/15 px-2.5 py-0.5 text-sm font-semibold text-blue-600 dark:text-blue-400">
                 Awaiting review
               </span>
             </div>
           </div>
 
           <div className="mt-6 rounded-xl border border-zk-border bg-zk-chip/40 p-4 text-left space-y-2">
-            <label htmlFor="tracking-link-input" className="block text-xs font-bold uppercase tracking-wider text-zk-text2">
+            <label htmlFor="tracking-link-input" className="block text-sm font-bold uppercase tracking-wider text-zk-text2">
               Your private tracking link
             </label>
             <div className="flex items-center gap-2">
@@ -317,7 +316,7 @@ export function PublicContributorForm({
                 id="tracking-link-input"
                 readOnly
                 value={submittedData.trackingPath}
-                className="bg-zk-surface font-mono text-xs text-zk-text"
+                className="bg-zk-surface font-mono text-sm text-zk-text"
               />
               <Button
                 type="button"
@@ -331,11 +330,11 @@ export function PublicContributorForm({
                 {copiedTrackingLink ? "Copied" : "Copy link"}
               </Button>
             </div>
-            <p className="text-xs text-zk-muted">Save this link to check progress. Keep it private.</p>
+            <p className="text-sm text-zk-muted">Save this link to check progress. Keep it private.</p>
             <Link href={submittedData.trackingPath} className="text-sm font-semibold text-zk-accent hover:underline">Track your report</Link>
           </div>
 
-          <p className="mt-6 text-xs text-zk-muted">
+          <p className="mt-6 text-sm text-zk-muted">
             Open your private tracking link to see the current status of your report.
           </p>
 
@@ -361,10 +360,10 @@ export function PublicContributorForm({
         <input id="contributor-report-website" name="website" tabIndex={-1} autoComplete="off" />
       </div>
 
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-zk-text">What could be better?</h1>
-        <p className="text-sm text-zk-muted">
-          Share a problem or suggest an improvement. No account required.
+      <div className="max-w-3xl space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight text-zk-text sm:text-4xl">{isImprovement ? "Suggest an improvement" : "Report a problem"}</h1>
+        <p className="text-base leading-relaxed text-zk-muted">
+          {isImprovement ? "Tell us what would make this project better and who it would help." : "Tell us what went wrong, what you did, and what you expected to happen."}
         </p>
       </div>
 
@@ -374,32 +373,54 @@ export function PublicContributorForm({
         </div>
       ) : null}
 
-      <div className="space-y-4 rounded-2xl border border-zk-border bg-zk-surface p-6 shadow-sm">
+      <div className="space-y-7 rounded-2xl border border-zk-border bg-zk-surface p-5 shadow-sm sm:p-7">
         {/* Required Description */}
-        <div className="space-y-1.5">
-          <label htmlFor="contributor-description" className="block text-sm font-semibold text-zk-text">
-            Describe the problem or your idea <span className="text-zk-accent">*</span>
+        <div className="space-y-3">
+          <label htmlFor="contributor-description" className="block text-base font-semibold leading-relaxed text-zk-text">
+            {isImprovement ? "What would you like to improve?" : "Summary of what went wrong"} <span className="text-zk-accent">*</span>
           </label>
           <Textarea
             id="contributor-description"
             name="description"
             value={description}
             onChange={(e) => handleDescriptionChange(e.target.value)}
-            rows={5}
+            rows={7}
             required
             minLength={10}
-            maxLength={2400}
-            placeholder="The Save button does not respond on my phone."
-            className="w-full text-sm"
+            maxLength={isImprovement ? 1800 : 2400}
+            placeholder={isImprovement ? "I would like to export reports as CSV so I can share them with my team." : "When I tap Save on my phone, nothing happens and my changes are lost."}
+            className="min-h-44 w-full text-base leading-relaxed"
           />
-          <div className="flex items-center justify-between text-xs text-zk-muted">
-            <span>Plain text description</span>
-            <CharacterCounter length={description.length} max={2400} />
+          <div className="flex items-center justify-between text-sm text-zk-muted">
+            <CharacterCounter length={description.length} max={isImprovement ? 1800 : 2400} />
           </div>
           {fieldError("description") ? (
-            <span className="block text-xs text-zk-bad-fg">{fieldError("description")}</span>
+            <span className="block text-sm text-zk-bad-fg">{fieldError("description")}</span>
           ) : null}
         </div>
+
+        {isImprovement ? (
+          <div className="space-y-5 border-t border-zk-border pt-5">
+            <button type="button" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails} aria-controls="improvement-details" className="flex min-h-10 items-center gap-2 text-base font-semibold text-zk-text hover:text-zk-accent">
+              <span aria-hidden="true">{showDetails ? "−" : "+"}</span>
+              Add more detail (optional)
+            </button>
+            {showDetails ? <div id="improvement-details" className="grid gap-6 sm:grid-cols-2">
+            <div className="space-y-3">
+              <label htmlFor="improvement-location" className="block text-sm font-semibold text-zk-text">
+                Where should this be added? <span className="font-normal text-zk-muted">(optional)</span>
+              </label>
+              <Textarea id="improvement-location" value={improvementLocation} onChange={(e) => setImprovementLocation(e.target.value)} maxLength={200} rows={4} placeholder="For example, on the Reports page, next to Download." className="text-base leading-relaxed" />
+            </div>
+            <div className="space-y-3">
+              <label htmlFor="improvement-reason" className="block text-sm font-semibold text-zk-text">
+                Why would it help? <span className="font-normal text-zk-muted">(optional)</span>
+              </label>
+              <Textarea id="improvement-reason" value={improvementReason} onChange={(e) => setImprovementReason(e.target.value)} maxLength={300} rows={4} placeholder="For example, my team could share reports without copying the data by hand." className="text-base leading-relaxed" />
+            </div>
+            </div> : null}
+          </div>
+        ) : null}
 
         {/* Screenshot Upload */}
         <div className="space-y-2 pt-1">
@@ -416,21 +437,21 @@ export function PublicContributorForm({
               type="button"
               variant="secondary"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 text-xs"
+              className="flex items-center gap-2 text-sm"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
               </svg>
-              Attach screenshot
+              Add a screenshot (optional)
             </Button>
-            <span className="text-xs text-zk-muted">One image · up to 5 MB</span>
+            <span className="text-sm text-zk-muted">PNG, JPG, GIF or WebP · up to 5 MB</span>
           </div>
 
           {screenshotError ? (
-            <p className="text-xs text-zk-bad-fg">{screenshotError}</p>
+            <p className="text-sm text-zk-bad-fg">{screenshotError}</p>
           ) : null}
           {fieldError("screenshot") ? (
-            <p className="text-xs text-zk-bad-fg">{fieldError("screenshot")}</p>
+            <p className="text-sm text-zk-bad-fg">{fieldError("screenshot")}</p>
           ) : null}
 
           {screenshot ? (
@@ -442,8 +463,8 @@ export function PublicContributorForm({
                 className="h-12 w-12 rounded object-cover border border-zk-border"
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-zk-text">{screenshot.filename}</p>
-                <p className="text-[11px] text-zk-muted">
+                <p className="truncate text-sm font-semibold text-zk-text">{screenshot.filename}</p>
+                <p className="text-sm text-zk-muted">
                   {(screenshot.size / 1024).toFixed(1)} KB
                 </p>
               </div>
@@ -462,93 +483,95 @@ export function PublicContributorForm({
           ) : null}
         </div>
 
-        {/* Add more detail accordion */}
-        <div className="pt-2 border-t border-zk-border">
-          <button
-            type="button"
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-1.5 text-xs font-semibold text-zk-text hover:text-zk-accent"
-          >
-            <svg
-              className={`h-4 w-4 transition-transform ${showDetails ? "rotate-90" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
+        {/* Optional troubleshooting details for problems only. */}
+        {!isImprovement ? (
+          <div className="pt-2 border-t border-zk-border">
+            <button
+              type="button"
+              onClick={() => setShowDetails(!showDetails)}
+              className="flex items-center gap-1.5 text-sm font-semibold text-zk-text hover:text-zk-accent"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            Add more detail
-          </button>
+              <svg
+                className={`h-4 w-4 transition-transform ${showDetails ? "rotate-90" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Add steps and details (optional)
+            </button>
 
-          {showDetails ? (
-            <div className="mt-3 space-y-3 pl-5 border-l-2 border-zk-border">
-              <div className="space-y-1">
-                <label htmlFor="contributor-steps" className="block text-xs font-medium text-zk-text">
-                  Steps to reproduce <span className="text-zk-muted">(optional)</span>
-                </label>
-                <Textarea
-                  id="contributor-steps"
-                  value={stepsToReproduce}
-                  onChange={(e) => setStepsToReproduce(e.target.value)}
-                  maxLength={1000}
-                  rows={3}
-                  placeholder="1. Open app&#10;2. Click Save&#10;3. Notice no action"
-                  className="text-xs"
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label htmlFor="contributor-expected" className="block text-xs font-medium text-zk-text">
-                    Expected behaviour <span className="text-zk-muted">(optional)</span>
+            {showDetails ? (
+              <div className="mt-3 space-y-3 pl-5 border-l-2 border-zk-border">
+                <div className="space-y-2">
+                  <label htmlFor="contributor-steps" className="block text-sm font-medium text-zk-text">
+                    How can we repeat the problem? <span className="text-zk-muted">(optional)</span>
                   </label>
                   <Textarea
-                    id="contributor-expected"
-                    value={expectedBehavior}
-                    onChange={(e) => setExpectedBehavior(e.target.value)}
-                    maxLength={700}
+                    id="contributor-steps"
+                    value={stepsToReproduce}
+                    onChange={(e) => setStepsToReproduce(e.target.value)}
+                    maxLength={1000}
                     rows={3}
-                    placeholder="Changes should save immediately"
-                    className="text-xs"
+                    placeholder="1. Open app&#10;2. Click Save&#10;3. Notice no action"
+                    className="text-base leading-relaxed"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label htmlFor="contributor-actual" className="block text-xs font-medium text-zk-text">
-                    Actual behaviour <span className="text-zk-muted">(optional)</span>
-                  </label>
-                  <Textarea
-                    id="contributor-actual"
-                    value={actualBehavior}
-                    onChange={(e) => setActualBehavior(e.target.value)}
-                    maxLength={700}
-                    rows={3}
-                    placeholder="Button is unresponsive"
-                    className="text-xs"
-                  />
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label htmlFor="contributor-expected" className="block text-sm font-medium text-zk-text">
+                      What should have happened? <span className="text-zk-muted">(optional)</span>
+                    </label>
+                    <Textarea
+                      id="contributor-expected"
+                      value={expectedBehavior}
+                      onChange={(e) => setExpectedBehavior(e.target.value)}
+                      maxLength={700}
+                      rows={3}
+                      placeholder="Changes should save immediately"
+                      className="text-base leading-relaxed"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="contributor-actual" className="block text-sm font-medium text-zk-text">
+                      What happened instead? <span className="text-zk-muted">(optional)</span>
+                    </label>
+                    <Textarea
+                      id="contributor-actual"
+                      value={actualBehavior}
+                      onChange={(e) => setActualBehavior(e.target.value)}
+                      maxLength={700}
+                      rows={3}
+                      placeholder="Button is unresponsive"
+                      className="text-base leading-relaxed"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Duplicate suggestions */}
         {state.matches.length > 0 ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              Is it one of these?
+            <h2 className="text-sm font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              Has this already been reported?
             </h2>
             <ul className="divide-y divide-amber-500/20">
               {state.matches.map((match) => (
                 <li key={`${match.kind}-${match.number}`} className="py-2 first:pt-0 last:pb-0">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-zk-text">
+                      <p className="truncate text-sm font-semibold text-zk-text">
                         {match.title}
                       </p>
-                      <p className="text-[11px] text-zk-muted">
-                        Similar report from another contributor (public)
+                      <p className="text-sm text-zk-muted">
+                        Existing public issue
                       </p>
                     </div>
                     <svg className="h-4 w-4 shrink-0 text-zk-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -561,73 +584,21 @@ export function PublicContributorForm({
           </div>
         ) : null}
         {searching ? (
-          <p className="text-xs text-zk-muted">Checking for similar reports…</p>
+          <p className="text-sm text-zk-muted">Checking for similar reports…</p>
         ) : null}
 
-        {/* Review your report */}
-        <div className="space-y-3 pt-3 border-t border-zk-border">
-          <h2 className="text-sm font-bold text-zk-text">Review your report</h2>
-
-          <div className="space-y-1">
-            <label htmlFor="contributor-title" className="block text-xs font-medium text-zk-text">
-              Title
-            </label>
-            <Input
-              id="contributor-title"
-              name="title"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setHasUserEditedTitle(true);
-              }}
-              required
-              minLength={3}
-              maxLength={200}
-              placeholder="Save button does not respond on mobile"
-              className="text-xs"
-            />
-            {fieldError("title") ? (
-              <span className="block text-xs text-zk-bad-fg">{fieldError("title")}</span>
-            ) : null}
-          </div>
-
-          <div className="space-y-1">
-            <label htmlFor="contributor-summary" className="block text-xs font-medium text-zk-text">
-              Summary
-            </label>
-            <Textarea
-              id="contributor-summary"
-              name="summary"
-              value={summary}
-              onChange={(e) => {
-                setSummary(e.target.value);
-                setHasUserEditedSummary(true);
-              }}
-              required
-              minLength={20}
-              maxLength={300}
-              rows={2}
-              placeholder="Tapping Save does not save my changes."
-              className="text-xs"
-            />
-            {fieldError("summary") ? (
-              <span className="block text-xs text-zk-bad-fg">{fieldError("summary")}</span>
-            ) : null}
-          </div>
-        </div>
-
         {/* Submission Button */}
-        <div className="pt-2 space-y-2">
+        <div className="flex flex-col gap-3 border-t border-zk-border pt-6">
           <Button
             type="submit"
             variant="primary"
             disabled={pending}
-            className="w-full text-sm font-semibold"
+            className="min-h-12 w-full text-base font-semibold sm:ml-auto sm:w-auto sm:min-w-52"
           >
-            {pending ? "Sending…" : acknowledgeSimilar ? "Send as a new report" : "Send report"}
+            {pending ? "Sending…" : isImprovement ? "Send suggestion" : "Send report"}
           </Button>
-          <p className="text-center text-[11px] text-zk-muted">
-            Private to the project team until converted into an issue.
+          <p className="text-center text-sm text-zk-muted">
+            Only the project team can see your submission until it becomes an issue.
           </p>
         </div>
       </div>

@@ -101,6 +101,8 @@ vi.mock("@/lib/idea-structuring", () => ({ structureIdea: vi.fn(async (input: un
 vi.mock("@/app/actions/issues", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/app/actions/issues")>()), addCommentAction: vi.fn(async () => ({ ok: true })) }));
 // Your call (#your-call) asks the database for the split issues on every view (for its step's count): the layout tests below read the list's own queries, so it gets an empty answer here.
 vi.mock("@/lib/your-call", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/your-call")>()), loadYourCall: vi.fn(async () => []) }));
+// The Priority now strip (#priority-now) runs its own issue query; the list cases read the list's query.
+vi.mock("@/lib/priority-now", () => ({ priorityNow: vi.fn(async () => []) }));
 import { IssuesList } from "@/app/(app)/[org]/[project]/issues/_list/issues-list";
 import { requireProject } from "@/lib/project-route";
 import { organisationAccessFor } from "@/lib/organisation-access";

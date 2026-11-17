@@ -71,6 +71,7 @@ import {
 import { IssueEscalations, type TicketEscalation } from "@/components/issue-escalations";
 import { listBugEscalations } from "@/lib/agent-questions";
 import { IssueBidsPanel, type BidEntryView } from "@/components/issue-bids";
+import { agentsLastSeen, isStale } from "@/lib/agents/last-seen";
 import { BidButton } from "@/components/bid-button";
 import { awardingAgentOf } from "@/lib/bid-award-permission";
 import { bidHistoryEntries } from "@/lib/agent-api/bid";
@@ -520,7 +521,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     // While Open, an open bid whose bidder is at the project's capacity says so (#bidder-capacity).
     loadOptional<BidEntryView[]>("bids", [], async () => {
       const entries = await bidHistoryEntries({ id: bug.id, areaId: bug.areaId ?? null });
-      const [withCapacity, records] = await Promise.all([
+      const [withCapacity, records, lastSeen] = await Promise.all([
         bug.status === "open" ? markAtCapacity({ organisationId: bug.organisationId, projectId: bug.projectId }, entries) : entries,
         bidderRecordsForBids(
           { organisationId: bug.organisationId, areaId: bug.areaId ?? null, areaName: bug.area?.name ?? null },
@@ -529,8 +530,22 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           logLoadFailure("[issue] bidder records query failed", error);
           return null;
         }),
+        // #bidder-last-active: when each bidder last checked in; one quiet past the stale window is greyed out.
+        agentsLastSeen(entries.map((entry) => entry.agentId)).catch((error: unknown) => {
+          logLoadFailure("[issue] bidder last seen query failed", error);
+          return null;
+        }),
       ]);
-      return withCapacity.map((entry) => ({ ...entry, record: records?.get(entry.beneficiaryUserId) }));
+      const seenNow = new Date();
+      return withCapacity.map((entry) => {
+        const agentLastSeenAt = lastSeen?.get(entry.agentId) ?? null;
+        return {
+          ...entry,
+          record: records?.get(entry.beneficiaryUserId),
+          agentLastSeenAt,
+          stale: lastSeen ? isStale(agentLastSeenAt, seenNow) : false,
+        };
+      });
     }),
     // Every offer or claim, newest first: the timeline's Award step (#issue-timeline) is the
     // newest, held or since released; the Activity panel lists each award and release.

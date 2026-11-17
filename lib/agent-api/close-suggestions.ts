@@ -108,7 +108,7 @@ export type CloseSuggestionInput = z.infer<typeof closeSuggestionSchema>;
 export type CloseIssueInput = z.infer<typeof closeIssueSchema>;
 
 /** Who closes, reopens or withdraws: a person, through one of their agents or in the web app. */
-type Actor = { organisationId: string; userId: string; agentId: string | null; agentName: string | null };
+export type Actor = { organisationId: string; userId: string; agentId: string | null; agentName: string | null };
 
 function agentActor(agent: AgentContext): Actor {
   return { organisationId: agent.organisationId, userId: agent.ownerId, agentId: agent.agentId, agentName: agent.name };
@@ -133,7 +133,7 @@ const lockedSelect = {
 } satisfies Prisma.BugSelect;
 
 /** Locks the issue row and reads it again, inside the transaction. */
-async function lockedRow(tx: Prisma.TransactionClient, bugId: string) {
+export async function lockedRow(tx: Prisma.TransactionClient, bugId: string) {
   await tx.$queryRaw`SELECT "id" FROM "Bug" WHERE "id" = ${bugId} FOR UPDATE`;
   const bug = await tx.bug.findUnique({ where: { id: bugId }, select: lockedSelect });
   if (!bug || bug.isDeleted) throw new IssueApiError(404, "Issue not found in this project.");
@@ -305,7 +305,7 @@ function duplicateRefused(error: unknown): never {
  * A manager's close, the suggestion that reaches the threshold in a
  * threshold-only project (`decision`) and the owner's withdrawal all end here.
  */
-async function closeInTransaction(
+export async function closeInTransaction(
   tx: Prisma.TransactionClient,
   actor: Actor,
   projectId: string,

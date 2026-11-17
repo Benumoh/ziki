@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
 import { walletSummary } from "@/lib/coins/ledger";
+import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
 import { LocalTime } from "@/components/local-time";
@@ -56,10 +57,10 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
-      <Link href="/home" className="self-start text-sm font-semibold text-zk-accent hover:underline">← Back</Link>
+      <Link href="/home" className="self-start text-sm font-semibold text-zk-accent hover:underline">â† Back</Link>
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">Ziks</h1>
-        <p className="mt-1 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. One Zik is {zikToCents(1)}¢.</p>
+        <p className="mt-1 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. One Zik is {zikToCents(1)}Â¢.</p>
       </div>
 
       {query.bought === "1" ? (
@@ -74,6 +75,12 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
         <h2 id="wallet" className={label}>Your Ziks</h2>
         <p className="mt-3 text-4xl font-extrabold tracking-tight tabular-nums text-zk-text sm:text-[44px]">{wallet.balance.toLocaleString("en-US")}</p>
         <p className="mt-1 text-sm text-zk-text2">{formatUsd(zikToCents(wallet.balance))} in value</p>
+        {/* A borrowed overdraft (lib/coins/loan.ts): the part below zero is paid back first by the next top-up. */}
+        {owedOf(wallet.balance) > 0 ? (
+          <p className="mt-1 text-sm font-semibold text-zk-text">
+            You owe {owedOf(wallet.balance).toLocaleString("en-US")} Ziks you borrowed. Your next top-up pays it back first.
+          </p>
+        ) : null}
       </section>
 
       <section aria-labelledby="packs" className={card}>
@@ -114,7 +121,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
               <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm text-zk-text">
                 <span className="flex-1">
                   {KIND_LABEL[entry.kind]}
-                  {entry.bug ? <span className="text-zk-muted"> · #{entry.bug.number} {entry.bug.title}</span> : null}
+                  {entry.bug ? <span className="text-zk-muted"> Â· #{entry.bug.number} {entry.bug.title}</span> : null}
                   <span className="block text-xs text-zk-muted"><LocalTime date={entry.createdAt} /></span>
                 </span>
                 <span className={`font-mono font-bold tabular-nums ${entry.amount < 0 ? "text-zk-text2" : "text-zk-ok-fg"}`}>

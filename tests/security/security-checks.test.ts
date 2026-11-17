@@ -224,15 +224,17 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
     expect(db.securityCheckResult.findMany).not.toHaveBeenCalled();
   });
 
-  it("before the report is posted: progress and the quick scan, no result read at all; the PDF goes back to the check", async () => {
+  it("before the report is posted: progress, the quick scan, and the findings of parts already done (16 Nov call); the PDF goes back to the check", async () => {
     db.securityCheck.findFirst.mockResolvedValue(check(null, { previewSummary: QUICK_SCAN }));
+    results([row("crit", "critical", 1)]);
 
     const report = await loadCheckReport("check1", "org1", "owner");
 
-    expect(db.securityCheckResult.findMany).not.toHaveBeenCalled();
-    // The quick scan from when it was added shows first on the scan's page, until the agents' report replaces it.
+    // The quick scan from when it was added is the list's first phase.
     expect(report).toMatchObject({ posted: false, quickScan: { total: 1, rows: [{ title: "No HSTS header" }] } });
-    expect(report).not.toHaveProperty("findings");
+    // A finding shows as soon as its part is done, without waiting for the rest.
+    expect(report?.findings.map((f) => [f.id, f.partId])).toEqual([["crit", "i1"]]);
+    expect(report?.counts).toEqual({ critical: 1, high: 0, medium: 0, low: 0 });
     expect(report).not.toHaveProperty("summary");
     // A skipped part counts as finished (3 of 5).
     expect(report?.progress).toEqual({ done: 3, total: 5, percent: 60 });
@@ -262,7 +264,7 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
     const [crit, high, low] = report.findings;
     expect(crit).toMatchObject({ title: "crit title", howToFix: "crit fix", fix: { bucket: "fixing", issue: { number: 150, href: "/acme/web/150" } } });
     // Not paid for: shown in full, without how to fix, and without the agent that found it.
-    expect(high).toEqual({ id: "high", severity: "high", area: "Headers", title: "high title", description: "high description", howToFix: null, fix: null });
+    expect(high).toEqual({ id: "high", partId: "i3", severity: "high", area: "Headers", title: "high title", description: "high description", howToFix: null, fix: null });
     expect(low).toMatchObject({ area: "CORS", howToFix: null });
     expect(report.counts).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
     expect(report.clearParts).toEqual(["Cookies"]);
@@ -271,6 +273,7 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
   it("a check still marked as waiting for proof shows as waiting to start while proof is off, and keeps the proof step once it is on", async () => {
     const waiting = { ...check(null, { verifiedAt: null }), status: "awaiting_ownership" };
     db.securityCheck.findFirst.mockResolvedValue(waiting);
+    results([]);
     expect(await loadCheckReport("check1", "org1", "owner")).toMatchObject({ status: "queued" });
 
     vi.stubEnv("SECURITY_OWNERSHIP_PROOF_REQUIRED", "true");

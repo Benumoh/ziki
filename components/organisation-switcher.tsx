@@ -259,6 +259,23 @@ export function OrganisationSwitcher({
               </div>
             ) : null}
 
+            {externalProjects.length > 0 ? (
+              <div className="mt-1 border-t border-zk-divider pt-1">
+                <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zk-muted">Joined projects</p>
+                {externalProjects.map((proj) => (
+                  <Link
+                    key={proj.id}
+                    href={projectPath(projectRef(proj.organisationSlug, proj.slug))}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs text-zk-text2 hover:bg-zk-chip hover:text-zk-text"
+                  >
+                    <span className="truncate">{proj.name}</span>
+                    <span className="shrink-0 text-[10px] text-zk-muted">{proj.organisationName}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+
             {/* Outside the listbox: a link, not an option. */}
             <div className={`mt-1 border-t pt-1 ${chrome ? "border-surface-border" : bar ? "border-zk-divider" : "border-slate-200"}`}>
               <Link

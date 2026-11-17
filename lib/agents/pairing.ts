@@ -9,6 +9,7 @@ import { agentModelSchema, agentNameSchema, countActiveAgents, insertAgentWithKe
 import { AGENT_LIMIT_MESSAGE, MAX_ACTIVE_AGENTS_PER_OWNER } from "@/lib/agents/registry-limits";
 import { logger } from "@/lib/logger";
 import { AGENT_INSTRUCTIONS_MAX } from "@/lib/agent-messages";
+import { workSettingsData, type WorkSettings } from "@/lib/agents/work-mode";
 
 /**
  * Pairing an agent with its owner (#427), like a TV signing in to an account:
@@ -142,7 +143,9 @@ async function organisationForApproval(userId: string, organisationId?: string |
  * The signed-in owner approves. Single use: the first approval wins.
  * `organisationId` is the organisation they are in now. `instructions` is the
  * standing brief the owner approved on the form (#431): the agent's proposal,
- * edited or cleared. Left out, the agent starts with none.
+ * edited or cleared. Left out, the agent starts with none. `work` is the work
+ * mode and caps the owner chose on the same form (#agent-work-mode); left out,
+ * the agent has none until they choose.
  */
 export async function approvePairing(
   owner: Actor,
@@ -150,6 +153,7 @@ export async function approvePairing(
   now = new Date(),
   organisationId?: string | null,
   instructions?: unknown,
+  work?: WorkSettings,
 ): Promise<ApprovePairingResult> {
   const code = normalizeUserCode(userCode);
   if (!code) return { ok: false, error: CODE_NOT_FOUND };
@@ -180,6 +184,7 @@ export async function approvePairing(
       proposedModel: pairing.proposedModel,
       proposedLevel: pairing.proposedLevel,
       instructions: approvedInstructions.instructions,
+      work: work ? workSettingsData(work, now) : undefined,
       ownerUserId: owner.id,
       organisationId: organisation,
     });
@@ -230,6 +235,8 @@ async function attachApprovedAgent(
     proposedLevel: AgentLevel | null;
     /** The brief the owner approved (#431); never the agent's unreviewed proposal. */
     instructions?: string | null;
+    /** The work mode and caps the owner chose on approval (#agent-work-mode). */
+    work?: ReturnType<typeof workSettingsData>;
     ownerUserId: string;
     organisationId: string;
   },
@@ -246,6 +253,7 @@ async function attachApprovedAgent(
       // #user-agents: active in the organisation that approved it.
       activations: { create: { organisationId: pairing.organisationId, level: pairing.proposedLevel ?? DEFAULT_AGENT_LEVEL } },
       ...(pairing.instructions ? { instructions: pairing.instructions } : {}),
+      ...(pairing.work ?? {}),
     },
     select: { id: true },
   });
@@ -269,6 +277,7 @@ async function attachApprovedAgent(
       level: pairing.proposedLevel ?? DEFAULT_AGENT_LEVEL,
       via: "pairing",
       instructionsLength: pairing.instructions?.length ?? 0,
+      ...(pairing.work ? { workMode: pairing.work.workMode } : {}),
     },
     { actorUserId: pairing.ownerUserId, db: tx },
   );

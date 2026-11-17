@@ -10,6 +10,7 @@ import { currentOrganisationIdFor } from "@/lib/organisation-context";
 import { activateAgent, createAgent, deactivateAgent, deleteAgent, regenerateKey, revokeAgent, setAgentAreaPreferences, setAgentLevel } from "@/lib/agents/registry";
 import { RATE_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { isAgentPlatformEnabled } from "@/lib/feature-flags";
+import { parseWorkSettings } from "@/lib/agents/work-mode";
 
 /** Shown when the platform is off (#505): no new agents or keys get issued. */
 const PLATFORM_OFF = "The agent platform is turned off on this site.";
@@ -172,12 +173,16 @@ export async function pairAgentAction(
 
   const code = String(formData.get("code") ?? "");
   if (formData.get("intent") === "approve") {
+    // #agent-work-mode: the owner chooses how it works, and its caps, before it gets a key.
+    const work = parseWorkSettings(formData);
+    if (!work.ok) return { ok: false, error: work.error };
     const result = await approvePairing(
       user,
       code,
       new Date(),
       await currentOrganisationIdFor(user.id),
       formData.get("instructions") ?? undefined,
+      work.settings,
     );
     if (!result.ok) return result;
     revalidatePath("/agents/mine");

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { SCAN_STEP_MS } from "./scan-progress";
@@ -23,6 +22,11 @@ export function addAssetPath(target: string): string {
   return `/security?target=${encodeURIComponent(target)}`;
 }
 
+/** Try now: the site goes into the person's scans and its page opens, where the agents' progress shows. */
+export function tryNowPath(target: string): string {
+  return `${addAssetPath(target)}&progress=1`;
+}
+
 /**
  * The box on the public Ziki Security page (#security-checks, part C2): one
  * field, no AI. Dave's quick scan looks at the site and the result shows the
@@ -31,7 +35,6 @@ export function addAssetPath(target: string): string {
  * more than one) and starts the scan.
  */
 export function PublicScan({ signedIn }: { signedIn: boolean }) {
-  const router = useRouter();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [site, setSite] = useState<string | null>(null);
@@ -42,7 +45,6 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
   const [step, setStep] = useState(0);
   const STEPS = repo ? REPO_STEPS : SITE_STEPS;
   const [pending, startTransition] = useTransition();
-  const [adding, setAdding] = useState(false);
   // The result opens below the header, like the prototype: in the page's own slot, not over the photo.
   // Only after a scan starts, so the first render matches the server's.
   const open = pending || summary !== null || (note !== null && site !== null);
@@ -61,9 +63,13 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
   function scan(event: React.FormEvent) {
     event.preventDefault();
     if (pending) return;
-    const parsed = parseSecurityTarget(text);
+    start(text);
+  }
+
+  function start(input: string) {
+    const parsed = parseSecurityTarget(input);
     if (!parsed.ok) {
-      setError(text.trim() ? "Enter a valid URL, like yourshop.com" : "Enter your URL first.");
+      setError(input.trim() ? "Enter a valid URL, like yourshop.com" : "Enter your URL first.");
       return;
     }
     setError(null);
@@ -72,6 +78,8 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
     // A repo goes by its GitHub address: it is what the scan reads back.
     const address = targetAddress(parsed.target);
     setSite(address);
+    // The result gets its own address, so it can be shared or reopened: the page stays, only the address changes.
+    window.history.replaceState(null, "", `${window.location.pathname}?site=${encodeURIComponent(address)}`);
     setStep(0);
     setRepo(parsed.target.kind === "repo");
     // The bar runs through every area before the result drops, even when the scan answers sooner.
@@ -88,41 +96,44 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
     });
   }
 
-  /**
-   * Signed in: the same road a new sign-up takes, so the Security page decides what to ask (which workspace
-   * it goes in, or to make one) and then starts the scan. It used to add the site to whichever workspace
-   * happened to be open, with no question asked (15 Nov call).
-   */
-  function addToScans() {
-    if (!site || adding) return;
-    setAdding(true);
-    router.push(addAssetPath(site));
-  }
 
+  // A shared result's address (?site=…) runs that scan again when it's opened, the way SecurityHeaders' "?q=" and
+  // SSL Labs' "?d=" links do. Read once on load, after the first render, so it matches the server's.
+  useEffect(() => {
+    const shared = new URLSearchParams(window.location.search).get("site");
+    if (!shared) return;
+    const timer = setTimeout(() => {
+      setText(shared);
+      start(shared);
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The summary's last row, the way other scanners end their result: SecurityHeaders' "Advanced: … Try Now" row and
+  // Sucuri's "sign up for a complete scan" line. Signed out, Try now signs up first, then the Security page; signed
+  // in, straight to the Security page with the site ready to add.
   const next = site ? (
-    signedIn ? (
-      <div className="flex flex-wrap items-center gap-3 border-t border-zk-divider pt-3">
-        <p className="m-0 min-w-[12rem] flex-1 text-[13px] leading-snug text-zk-muted">
-          Add {site} to your scans and agents check it properly.
+    <div className="grid gap-x-6 gap-y-2 py-1 sm:grid-cols-[96px_1fr] sm:items-center">
+      <p className="m-0 text-sm font-semibold text-zk-text">Advanced</p>
+      {/* Text and Try now on one line when there's room (SecurityHeaders' Advanced row); the button drops under it on a phone. */}
+      <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <p className="m-0 text-sm leading-relaxed text-zk-text2">
+          Want a deeper check? Ziki&apos;s agents test much more and show you how to fix it.
         </p>
-        <button type="button" onClick={addToScans} disabled={adding} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white hover:brightness-105 disabled:opacity-60">
-          {adding ? "Adding…" : "Add to your scans"}
-        </button>
-      </div>
-    ) : (
-      <div className="flex flex-col items-center gap-2 rounded-xl bg-zk-tint px-4 py-4 text-center">
-        <p className="m-0 text-base font-bold text-zk-text">Sign up to see your report</p>
-        <p className="m-0 max-w-sm text-[13px] text-zk-text2">{site} comes with you to your Security page, where agents check it properly and you can unlock each fix.</p>
-        <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
-          <Link href={`/signup?callbackUrl=${encodeURIComponent(addAssetPath(site))}`} className="inline-flex h-10 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
-            Sign up
+        {signedIn ? (
+          // Signed in: Try now adds the site and opens its progress page, where the agents are already at work
+          // (asking which workspace first if they have more than one), the same as after signing up.
+          <Link href={tryNowPath(site)} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
+            Try now
           </Link>
-          <Link href={`/login?callbackUrl=${encodeURIComponent(addAssetPath(site))}`} className="text-sm font-semibold text-zk-accent hover:underline">
-            I have an account
+        ) : (
+          <Link href={`/signup?callbackUrl=${encodeURIComponent(tryNowPath(site))}`} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
+            Try now
           </Link>
-        </div>
+        )}
       </div>
-    )
+    </div>
   ) : null;
 
   return (

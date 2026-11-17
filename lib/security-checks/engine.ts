@@ -15,8 +15,10 @@ import { realNetwork } from "./ownership";
  *    proven) with `startCheck`, called when it is added, or by the sweep: Ziki's own AI splits it into parts. It is
  *    not an agent and earns nothing.
  * 2. Each part goes to a security-cleared agent (its owner's `User.securityClearedAt`)
- *    that is online and not quiet: on-call agents first, then agents in the
- *    client's workspace, then the least busy. A few parts at a time each.
+ *    when that agent asks for security work (`listAgentJobs`), never pushed by the
+ *    sweep: an agent that only does normal Ziki work would hold a part it never sees
+ *    (16 Nov call). On-call agents first, then agents in the client's workspace, then
+ *    the least busy. A few parts at a time each.
  * 3. Each part's agent reports what it found. Each result's price is set from
  *    its severity (`SEVERITY_PRICE`).
  * 4. When every part is in, Ziki's AI writes the summary from severities and
@@ -145,7 +147,7 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
     await db.securityCheck.updateMany({ where: { id: checkId, status: "splitting", startedAt: now, items: { none: { kind: "check" } } }, data: { status: "queued", startedAt: null } }).catch(() => undefined);
     throw error;
   }
-  if (saved) await assignWaitingJobs(db, new Date());
+  // The parts wait for agents that ask for work (they ask every few seconds); none are pushed (16 Nov call).
   return saved;
 }
 
@@ -244,11 +246,13 @@ export async function availableAgents(db: Db, now = new Date(), onlyAgentId?: st
 }
 
 /**
- * Gives waiting parts, oldest first, to available agents. With `onlyAgentId`
- * (an agent asking for work), only that agent is considered.
+ * Gives waiting parts, oldest first, to the agent asking for security work, if it is available and has room.
+ * Only an agent that asks gets a part (16 Nov call): before, the sweep handed parts to any cleared agent seen
+ * in the last 15 minutes, including ones that never ask for security work, and those parts sat for
+ * JOB_TIMEOUT_MINUTES with nobody checking them.
  */
-export async function assignWaitingJobs(db: Db, now = new Date(), onlyAgentId?: string): Promise<number> {
-  const agents = await availableAgents(db, now, onlyAgentId);
+export async function assignWaitingJobs(db: Db, now: Date, agentId: string): Promise<number> {
+  const agents = await availableAgents(db, now, agentId);
   if (agents.length === 0) return 0;
   // Real agents get a part only while it is young: after the fallback time only Ziki's own agent takes it
   // (lib/security-checks/fallback.ts), so an agent that keeps failing can't hold on to old parts for ever.
@@ -518,13 +522,14 @@ export async function payUnlockedFindings(db: EngineDb, now = new Date()): Promi
 // The sweep, run by the platform cron (every minute). It recovers and catches up;
 // the fast path is startCheck after proof and agents polling for work.
 
-export type SecurityCheckSweep = { started: number; reclaimed: number; skipped: number; assigned: number; posted: number; paid: number };
+export type SecurityCheckSweep = { started: number; reclaimed: number; skipped: number; posted: number; paid: number };
 
 export async function sweepSecurityChecks(db: EngineDb, now = new Date(), deps: EngineDeps = {}): Promise<SecurityCheckSweep> {
   const started = await startWaitingChecks(db, now, deps);
   const { reclaimed, skipped } = await reclaimStaleJobs(db, now);
-  const assigned = await assignWaitingJobs(db, now);
+  // No handing out here: parts go only to agents that ask (listAgentJobs), and Ziki's own agent takes
+  // any still waiting after the fallback time (fallback.ts).
   const posted = await postFinishedReports(db, now, deps);
   const paid = await payUnlockedFindings(db, now);
-  return { started, reclaimed, skipped, assigned, posted, paid };
+  return { started, reclaimed, skipped, posted, paid };
 }

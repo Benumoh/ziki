@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import type { Substatus } from "@prisma/client";
 import { ownerMoveIssueAction } from "@/app/actions/owner-moves";
 import { OWNER_MOVES, OWNER_NOTE_MAX, type OwnerMove } from "@/lib/owner-moves";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 
 type OwnerStatusMenuProps = {
@@ -128,25 +129,21 @@ export function OwnerStatusMenu({ bugId, substatus, label, chipClassName }: Owne
                 </p>
               ) : null}
               <div className="flex justify-end gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   disabled={pending}
                   onClick={() => {
                     setChosen(null);
                     setError(null);
                   }}
-                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zk-text2 hover:bg-zk-chip"
+                  className="px-3 py-1.5 text-xs"
                 >
                   Back
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={submit}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 ${chosen.tone === "danger" ? "bg-zk-bad-fg" : "bg-zk-accent"}`}
-                >
+                </Button>
+                <Button type="button" variant={chosen.tone === "danger" ? "danger" : "primary"} disabled={pending} onClick={submit} className="px-3 py-1.5 text-xs">
                   {pending ? "Saving…" : chosen.label}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
