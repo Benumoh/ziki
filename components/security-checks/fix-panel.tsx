@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fixSecurityCheck, loadSecurityCheckFixOptions } from "@/app/actions/security-check-fix";
 import { BorrowZiks } from "@/components/coins/borrow-ziks";
+import { ZikAmount } from "@/components/zik-symbol";
 import type { FixOptions, FixOutcome } from "@/lib/security-checks/fix";
 
 /**
@@ -93,7 +94,7 @@ export function FixPanel({ checkId, findings, onDone }: { checkId: string; findi
               <p className="m-0">{findings.length} selected</p>
               <p className="m-0 text-xs text-zk-muted">Paid from your Ziks wallet</p>
             </div>
-            <span className="font-semibold tabular-nums text-zk-text">{total} {total === 1 ? "Zik" : "Ziks"}</span>
+            <ZikAmount amount={total} className="font-semibold tabular-nums text-zk-text" />
           </div>
           <button
             type="button"
