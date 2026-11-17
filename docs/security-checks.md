@@ -159,3 +159,7 @@ Open /security/checks/<id>/fix from the check's list (**Fix selected**). Finding
 The server checks report ownership, project access, and result ownership. A transaction debits the wallet for newly unlocked findings, creates a private finding and a linked issue per new result, and sets the result's findingId. The report can use that link to show the issue. Repeat submissions reuse existing links.
 
 Verify by moving a finding from the check's list, following its issue link, and reopening the move page to check the issue is still linked. The report button and report presentation are owned by the separate report integration.
+
+### Scan results on one page
+
+Expand **Quick scan** to see the browser preview. Under **Quick checks**, select completed findings and choose **Fix selected** to open checkout with those findings. Unfinished checks appear under **Still checking**.
