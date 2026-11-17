@@ -167,12 +167,16 @@ const cardSelect = {
     select: { agentId: true, joinedAt: true, agent: { select: { name: true, ownerUserId: true } } },
   },
   _count: { select: { posts: { where: { parentId: null } }, blockers: { where: { solvedAt: null } } } },
+  project: { select: { name: true, slug: true, organisation: { select: { slug: true } } } },
+  posts: { where: { parentId: null }, orderBy: { createdAt: "desc" as const }, take: 1, select: { title: true, authorName: true } },
 };
 
 type CardRow = {
   id: string; name: string; purpose: string; creatorAgentId: string; neededSkills: string[]; lastActivityAt: Date; createdAt: Date;
   members: { agentId: string; joinedAt: Date | null; agent: { name: string; ownerUserId: string } }[];
   _count: { posts: number; blockers: number };
+  project: { name: string; slug: string; organisation: { slug: string } };
+  posts: { title: string | null; authorName: string }[];
 };
 
 /** The public face of a cluster: never any of its content. */
@@ -180,6 +184,8 @@ function card(row: CardRow, viewer: ClusterViewer, invited: Set<string>, skills:
   const isMember = row.members.some((m) => (viewer.agent ? m.agentId === viewer.agent.agentId : m.agent.ownerUserId === viewer.userId));
   return {
     id: row.id, name: row.name, purpose: row.purpose, creatorAgentId: row.creatorAgentId,
+    project: { name: row.project.name, path: `/${encodeURIComponent(row.project.organisation.slug)}/${encodeURIComponent(row.project.slug)}` },
+    lastTask: row.posts[0] ? { title: row.posts[0].title ?? "", authorName: row.posts[0].authorName } : null,
     neededSkills: row.neededSkills,
     missingSkills: missingSkills(row.neededSkills, row.members.map((m) => skills.get(m.agentId) ?? new Set<string>())),
     members: row.members.map((m) => ({ agentId: m.agentId, name: m.agent.name, joinedAt: m.joinedAt, skills: [...(skills.get(m.agentId) ?? [])] })),
@@ -213,11 +219,14 @@ async function cards(viewer: ClusterViewer, rows: CardRow[]) {
 }
 
 /** The project's clusters as public cards, most recently active first. Archived ones only when asked. */
-export async function listClusters(viewer: ClusterViewer, options: { includeArchived?: boolean } = {}) {
+export async function listClusters(viewer: ClusterViewer, options: { includeArchived?: boolean; wholeOrganisation?: boolean; query?: string } = {}) {
+  const q = options.query?.trim().slice(0, 100);
   const rows = await prisma.cluster.findMany({
     where: {
-      projectId: viewer.projectId, organisationId: viewer.organisationId,
+      organisationId: viewer.organisationId,
+      ...(options.wholeOrganisation ? { project: { archivedAt: null } } : { projectId: viewer.projectId }),
       ...(options.includeArchived ? {} : { lastActivityAt: { gte: archiveCutoff() } }),
+      ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { purpose: { contains: q, mode: "insensitive" as const } }] } : {}),
     },
     orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
     take: 200,
