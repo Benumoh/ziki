@@ -6,6 +6,7 @@ import type { SecuritySeverity } from "@prisma/client";
 import { fixSecurityCheck, loadSecurityCheckFixOptions } from "@/app/actions/security-check-fix";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
 import { BorrowZiks } from "@/components/coins/borrow-ziks";
+import { ZikAmount } from "@/components/zik-symbol";
 import "@/components/security-finding.css";
 import type { FixOptions, FixOutcome } from "@/lib/security-checks/fix";
 
@@ -121,7 +122,7 @@ function FixPicker({ checkId, results, standalone, initialSelected = [] }: Props
                     </label>
                     {issue ? <Link className="shrink-0 text-sm font-semibold text-zk-accent hover:underline" href={issue.href}>Issue #{issue.number}</Link>
                       : moved ? <span className="text-xs font-semibold text-zk-ok-fg">Moved</span>
-                      : standalone ? <span className="shrink-0 text-sm tabular-nums text-zk-text2">{price} {price === 1 ? "Zik" : "Ziks"}</span> : null}
+                      : standalone ? <ZikAmount amount={price} className="shrink-0 text-sm tabular-nums text-zk-text2" /> : null}
                   </li>
                 );
               })}
@@ -144,7 +145,7 @@ function FixPicker({ checkId, results, standalone, initialSelected = [] }: Props
                   <p>{selected.length} selected</p>
                   <p className="text-xs text-zk-muted">Paid from your Ziks wallet</p>
                 </div>
-                <span className="font-semibold tabular-nums text-zk-text">{total} {total === 1 ? "Zik" : "Ziks"}</span>
+                <ZikAmount amount={total} className="font-semibold tabular-nums text-zk-text" />
               </div>
             ) : null}
             <button type="submit" disabled={pending || !projectId || !selected.length}
@@ -159,7 +160,7 @@ function FixPicker({ checkId, results, standalone, initialSelected = [] }: Props
       {outcome && !outcome.ok && outcome.canBorrow ? <BorrowZiks onBorrowed={send} /> : null}
       {outcome?.ok ? (
         <div role="status" className="space-y-2 rounded-2xl border border-zk-border bg-zk-surface p-4 text-sm text-zk-ok-fg">
-          <p>{outcome.created} moved. {outcome.reused} already moved. {standalone ? `${outcome.coins} ${outcome.coins === 1 ? "Zik" : "Ziks"} paid.` : null}</p>
+          <p>{outcome.created} moved. {outcome.reused} already moved. {standalone ? <><ZikAmount amount={outcome.coins} /> paid.</> : null}</p>
           {outcome.issues.length ? <ul>
             {outcome.issues.map((issue) => <li key={issue.number}>
               <Link className="underline" href={issue.href}>Issue #{issue.number}</Link>

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { THREAT_LABEL } from "@/lib/security-checks/check-list";
 import { loadCheckFinding } from "@/lib/security-checks/finding-page";
+import { ZikAmount } from "@/components/zik-symbol";
 
 export const metadata = { title: "Security finding" };
 
@@ -79,7 +80,7 @@ export default async function SecurityFindingPage({ params }: { params: Promise<
           ) : (
             <>
               <Link href={fixHref} className={PRIMARY}>
-                {finding.price ? `Fix it for me · ${finding.price} ${finding.price === 1 ? "Zik" : "Ziks"}` : "Fix it for me"}
+                {finding.price ? <span>Fix it for me · <ZikAmount amount={finding.price} /></span> : "Fix it for me"}
               </Link>
               {!connected && firstProject ? (
                 <p className="m-0 text-xs text-zk-text2">
