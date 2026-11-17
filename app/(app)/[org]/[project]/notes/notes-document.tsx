@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { RichText } from "@/components/rich-text";
-import { ProgressiveNoteContent } from "./note-comments";
 import { saveNotesAction, restoreNotesAction } from "./actions";
 
 export type NotesDocumentData = { body: string; version: number; editorName: string; editorAgentId: string | null; updatedAt: string };
