@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { IssueActionsMenu } from "@/components/issue-actions-menu";
-import { RemoveScanButton } from "@/components/security-checks/remove-scan-button";
+import { ScanActionsMenu } from "@/components/security-checks/scan-actions-menu";
 import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
 import { CheckHeader } from "@/components/security-checks/check-header";
@@ -61,19 +60,11 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
           <li aria-current="page" className="truncate px-1.5">{report.target.value}</li>
         </ol>
       </nav>
-      {/* Remove sits here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
+      {/* Scan again, the PDF and Remove sit here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
       {report.status !== "cancelled" ? (
         <div className="flex shrink-0 items-center gap-2">
           <SiteChatButton />
-          <IssueActionsMenu>
-            {/* The PDF is a secondary action (16 Nov call): people want things fixed, not a file. */}
-            {report.posted ? (
-              <a href={`/security/checks/${report.checkId}/report.pdf`} className="px-2.5 py-1 text-xs font-semibold text-zk-text hover:underline">
-                Download report (PDF)
-              </a>
-            ) : null}
-            <RemoveScanButton checkId={report.checkId} site={report.target.value} posted={report.posted} />
-          </IssueActionsMenu>
+          <ScanActionsMenu checkId={report.checkId} site={report.target.value} posted={report.posted} />
         </div>
       ) : null}
       </div>
