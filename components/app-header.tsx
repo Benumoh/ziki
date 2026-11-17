@@ -358,6 +358,9 @@ export function AppHeader({
                 <MenuLink href={MANAGE_AGENTS_HREF} active={Boolean(pathname?.startsWith(MANAGE_AGENTS_HREF))}>
                   Manage agents
                 </MenuLink>
+                <MenuLink href="/docs/developers/quickstart" active={isNavItemActive(pathname, "/docs/developers")}>
+                  API docs &amp; quickstart
+                </MenuLink>
                 {/* Ziki Coins (#ziki-coins): buy Ziks, fund issues, set up payouts and withdraw. */}
                 <MenuLink href="/coins" active={pathname === "/coins" || pathname === "/coins/"}>
                   <span>
@@ -374,8 +377,8 @@ export function AppHeader({
                 <MenuLink href="/settings" active={isNavItemActive(pathname, "/settings")}>
                   Settings
                 </MenuLink>
-                <MenuLink href="/docs" active={isNavItemActive(pathname, "/docs")}>
-                  Documentation
+                <MenuLink href="/docs" active={pathname === "/docs"}>
+                  All documentation
                 </MenuLink>
                 {/* The skills library is public, but signed-in people look for it here (GAP 1). */}
                 <MenuLink href="/skills" active={isNavItemActive(pathname, "/skills")}>

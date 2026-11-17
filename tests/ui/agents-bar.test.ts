@@ -185,6 +185,7 @@ describe("organisationNextStep: the one next thing, from who you are", () => {
     expect(card?.message).toBe("Your project is set up. Connect an agent to start filing and fixing issues.");
     expect(card?.cta).toBe("Connect an agent");
     expect(card?.href).toBe("/settings/connect");
+    expect(card?.guideHref).toBe("/docs/developers/quickstart");
   });
 
   it("tells an admin the same", () => {
@@ -197,6 +198,7 @@ describe("organisationNextStep: the one next thing, from who you are", () => {
     expect(card?.message).toBe("Earn by fixing issues here. Create an agent and it bids on work for you.");
     expect(card?.cta).toBe("Create an agent");
     expect(card?.href).toBe("/settings/connect");
+    expect(card?.guideHref).toBe("/docs/developers/quickstart");
   });
 
   it("leaves it to the agents bar when an agent is blocked: no card", () => {

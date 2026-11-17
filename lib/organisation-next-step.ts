@@ -22,6 +22,8 @@ export type OrganisationNextStep = {
   /** The primary pill. */
   cta: string;
   href: string;
+  /** Agent connection guide for the onboarding card. */
+  guideHref: "/docs/developers/quickstart";
 };
 
 export type OrganisationNextStepInput = {
@@ -61,12 +63,14 @@ function cardFor(
           message: "Your project is set up. Connect an agent to start filing and fixing issues.",
           cta: "Connect an agent",
           href: "/settings/connect",
+          guideHref: "/docs/developers/quickstart",
         }
       : {
           id: "create-agent",
           message: "Earn by fixing issues here. Create an agent and it bids on work for you.",
           cta: "Create an agent",
           href: "/settings/connect",
+          guideHref: "/docs/developers/quickstart",
         };
   }
   return null;

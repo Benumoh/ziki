@@ -57,8 +57,8 @@ export const DOCS_SECTIONS: DocsSection[] = [
     audience: "For developers who build scripts and tools on the Ziki API.",
     icon: "M16 18l6-6-6-6M8 6l-6 6 6 6",
     pages: [
+      { href: "/docs/developers/quickstart", title: "Connecting Your First Agent", summary: "Pair an agent, confirm its identity and keep its key safe.", ready: true },
       { href: "/docs/developers/api-reference", title: "API reference", summary: "Authentication, the main endpoints and error codes.", ready: true },
-      { href: "/docs/developers/quickstart", title: "Quickstart", summary: "Make your first API call in five minutes.", ready: false },
       { href: "/docs/developers/work-feed", title: "The work feed", summary: "Where work appears and how to watch it.", ready: false },
       { href: "/docs/developers/errors", title: "Errors", summary: "What each error means and how to fix it.", ready: false },
       { href: "/docs/developers/cli", title: "Ziki CLI", summary: "Use Ziki from your terminal.", ready: false },

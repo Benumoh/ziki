@@ -32,6 +32,10 @@ import { LoginHistory } from "@/components/login-history";
 import { projectRef } from "@/lib/project-paths";
 import { AgentSideCard, type AgentProfileData } from "@/app/(app)/agent/[username]/agent-profile";
 import { RepositoryReadiness } from "@/components/repository-readiness";
+import { AppHeader } from "@/components/app-header";
+import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
+import DocsHomePage from "@/app/(app)/docs/page";
+import AgentQuickstartPage from "@/app/(app)/docs/developers/quickstart/page";
 import RepositoryReadinessLoading from "@/app/(app)/projects/readiness/loading";
 import RepositoryReadinessError from "@/app/(app)/projects/readiness/error";
 import { checkDelivery, recheckRepositories } from "@/app/(app)/projects/readiness/actions";
@@ -43,6 +47,10 @@ vi.mock("@/app/actions/settings", () => ({
   signOutSessionAction: vi.fn(async () => ({ ok: true })),
   signOutOtherSessionsAction: vi.fn(async () => ({ ok: true })),
 }));
+vi.mock("@/app/actions/onboarding", () => ({ dismissNextStepAction: vi.fn() }));
+vi.mock("@/components/sign-out-button", () => ({ SignOutButton: () => null }));
+vi.mock("@/app/(app)/organisations/actions", () => ({ selectOrganisationAction: vi.fn() }));
+vi.mock("@/app/(app)/earnings/withdraw-actions", () => ({ withdrawDetailsAction: vi.fn() }));
 
 vi.mock("@/app/(app)/[org]/[project]/marketing/settings/actions", () => ({
   createMarketingIssueTypeAction: vi.fn(),
@@ -620,6 +628,71 @@ describe("component accessibility (axe)", () => {
 
       fireEvent.click(toggleBtn);
       expect(screen.getAllByText(/Ziki Support Guide/i).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("agent setup quickstart", () => {
+    it("puts the first-agent guide on the docs home and API reference", async () => {
+      const { default: ApiReferencePage } = await import("@/app/(app)/docs/developers/api-reference/page");
+
+      const { unmount } = render(<DocsHomePage />);
+      expect(screen.getByRole("link", { name: "Open the API quickstart" })).toHaveAttribute(
+        "href",
+        "/docs/developers/quickstart",
+      );
+      unmount();
+
+      const user = userEvent.setup();
+      render(<AppHeader userName="Ada Lovelace" userId="user-1" />);
+      await user.click(screen.getByRole("button", { name: /Account menu for/ }));
+      expect(screen.getByRole("link", { name: "API docs & quickstart" })).toHaveAttribute(
+        "href",
+        "/docs/developers/quickstart",
+      );
+      cleanup();
+
+      render(<ApiReferencePage />);
+      expect(screen.getByRole("link", { name: /Connecting Your First Agent/ })).toHaveAttribute(
+        "href",
+        "/docs/developers/quickstart",
+      );
+    });
+
+    it("copies the pairing request from the first-agent guide", async () => {
+      const user = userEvent.setup();
+      const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+      try {
+        render(<AgentQuickstartPage />);
+        await user.click(screen.getAllByRole("button", { name: "Copy command" })[0]);
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining("/api/v1/agents/pairing"));
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"level":"working"'));
+        expect(await screen.findAllByRole("button", { name: "Copied" })).toHaveLength(1);
+      } finally {
+        if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
+        else delete (navigator as { clipboard?: Clipboard }).clipboard;
+      }
+    });
+
+    it("links the no-agent onboarding card to the quickstart", () => {
+      render(
+        <OrganisationNextStepCard
+          organisationId="organisation-1"
+          step={{
+            id: "connect-agent",
+            message: "Your project is set up. Connect an agent to start filing and fixing issues.",
+            cta: "Connect an agent",
+            href: "/settings/connect",
+            guideHref: "/docs/developers/quickstart",
+          }}
+        />,
+      );
+      expect(screen.getByRole("link", { name: "Read the quickstart" })).toHaveAttribute(
+        "href",
+        "/docs/developers/quickstart",
+      );
     });
   });
 

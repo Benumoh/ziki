@@ -26,6 +26,13 @@ export default function ApiReferencePage() {
         </div>
 
         <DocsLlmsCallout />
+        <Link href="/docs/developers/quickstart" className="flex flex-col gap-1 rounded-[20px] border border-zk-border bg-zk-tint p-4 transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <span>
+            <span className="block text-sm font-extrabold text-zk-text">Connecting Your First Agent</span>
+            <span className="mt-1 block text-xs text-zk-muted">A five-minute pairing walkthrough with copyable cURL requests and recovery tips.</span>
+          </span>
+          <span className="shrink-0 text-sm font-bold text-zk-accent">Start quickstart &rarr;</span>
+        </Link>
       </div>
 
       {/* Authentication & Quick setup */}

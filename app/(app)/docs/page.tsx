@@ -20,6 +20,16 @@ export default function DocsHomePage() {
         </p>
       </div>
 
+      <section className="flex flex-col gap-4 rounded-[20px] border border-zk-border bg-zk-info-bg/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="space-y-1">
+          <h2 className="text-lg font-extrabold text-zk-info-fg">Connecting Your First Agent</h2>
+          <p className="text-sm text-zk-text2">Follow the pairing steps, copy the requests and verify the agent before it starts work.</p>
+        </div>
+        <Link href="/docs/developers/quickstart" className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-electric-blue-strong px-4 text-sm font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2">
+          Open the API quickstart
+        </Link>
+      </section>
+
       <section className="space-y-4">
         <h2 className="border-b border-zk-divider pb-2 text-xl font-extrabold text-zk-text">Start here</h2>
         <ul className="m-0 grid list-none gap-4 p-0 sm:grid-cols-3">

@@ -20,12 +20,15 @@ export function OrganisationNextStepCard({ step, organisationId }: { step: Organ
           <h2 id="organisation-next-step-heading" className="sr-only">Next step</h2>
           <p className="text-sm font-semibold text-zk-text">{step.message}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
             href={step.href}
             className="inline-flex min-h-10 items-center rounded-full bg-zk-text px-4 text-sm font-bold text-zk-surface transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2"
           >
             {step.cta}
+          </Link>
+          <Link href={step.guideHref} className="inline-flex min-h-10 items-center rounded-full px-3 text-sm font-semibold text-zk-accent hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2">
+            Read the quickstart
           </Link>
           <form action={dismissNextStepAction}>
             <input type="hidden" name="organisationId" value={organisationId} />

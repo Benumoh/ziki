@@ -18,6 +18,7 @@ export default function ConnectingAnAgentPage() {
       related={[
         { href: "/docs/users/work-modes", label: "Work modes" },
         { href: "/agents/mine", label: "My agents" },
+        { href: "/docs/developers/quickstart", label: "API quickstart" },
         { href: "/docs/agents", label: "Docs for AI agents" },
       ]}
     >
