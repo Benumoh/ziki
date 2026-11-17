@@ -5,6 +5,7 @@ import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, a
 import { cleanParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
 import { pickAgentFor, type CandidateAgent } from "./assign";
 import { quickScanForAgents, type QuickScanLine } from "./preview-summary";
+import { fixBucketOf } from "./fix-bucket";
 import { realNetwork } from "./ownership";
 
 /**
@@ -172,7 +173,9 @@ export type EarlierFinding = { id: string; title: string; area: string };
 
 /**
  * The findings a rescan rechecks (#security-rescan): every finding on this person's earlier scans of the same site,
- * in the same workspace, that no rescan has called fixed. Removed scans don't count.
+ * in the same workspace, that no rescan has called fixed. Removed scans don't count. A finding already sent to fix
+ * whose fix is still in progress is skipped (18 Nov): its issue is being worked on, so checking it again tells
+ * nobody anything. Once that issue is resolved or closed, the next rescan rechecks it, which confirms the fix.
  */
 export async function openEarlierFindings(
   db: Db,
@@ -186,9 +189,16 @@ export async function openEarlierFindings(
       OR: [{ recheckState: null }, { recheckState: "still_there" }],
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, title: true, item: { select: { title: true } } },
+    select: {
+      id: true,
+      title: true,
+      item: { select: { title: true } },
+      finding: { select: { bug: { select: { status: true, isDeleted: true } }, idea: { select: { status: true, isDeleted: true } } } },
+    },
   });
-  return rows.map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
+  return rows
+    .filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing")
+    .map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
 }
 
 /** One recheck part per area of the earlier report, split so no part holds more than MAX_RECHECKS_PER_PART. */
@@ -201,7 +211,7 @@ export function recheckParts(earlier: ReadonlyArray<EarlierFinding>): { title: s
       parts.push({
         title: `Recheck: ${area}`.slice(0, 200),
         instructions:
-          "Look again at each earlier finding this part lists (`recheck`) and answer each one in `rechecks`: `still_there` if you can still see it, `fixed` only if you checked and it's gone, with a short note of what you saw. Report anything new you notice here in `results` as usual. Look only.",
+          "Look again at each earlier finding this part lists (`recheck`) and answer each one in `rechecks`: `still_there` if you can still see it, `fixed` only if you checked and it's gone, with a short note of what you saw. Send no `results` here: this part only rechecks, and the scan's other parts look for anything new. Look only.",
         resultIds: ids.slice(at, at + MAX_RECHECKS_PER_PART),
       });
     }
@@ -439,6 +449,15 @@ export async function submitReport(
     const heldIds = new Set(held.map((row) => row.id));
     const stray = rechecks.find((answer) => !heldIds.has(answer.id));
     if (stray) throw new SecurityJobError(400, "not_in_part", `Finding ${stray.id} isn't one this part rechecks.`);
+    // A recheck part only answers for the earlier findings it holds (18 Nov): agents re-filing them as new results
+    // listed every problem twice, the copies the only ones that could be ticked. New problems come from the other parts.
+    if (heldIds.size > 0 && results.length > 0) {
+      throw new SecurityJobError(
+        400,
+        "recheck_only",
+        "This part only rechecks earlier findings: answer each one in `rechecks` (`still_there` or `fixed`) and send no `results`. The scan's other parts look for anything new.",
+      );
+    }
     const { count } = await tx.securityCheckItem.updateMany({
       where: { id: itemId, agentId, status: "checking" },
       data: { status: "done", reportedAt: now },

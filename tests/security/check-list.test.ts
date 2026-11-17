@@ -74,6 +74,14 @@ describe("the check's list: Quick scan and Deeper scan tabs (16 Nov)", () => {
     expect(checkListTabs(cancelled)[1].pending).toEqual([]);
   });
 
+  it("a rescan lists no parts under Still checking: only its findings, the progress bar counts the parts (18 Nov)", () => {
+    const rescan = { ...report([{ id: "p1", title: "Recheck: Login", status: "waiting" }, { id: "p2", title: "Cookies", status: "checking" }], [{ checkId: "c0", recheck: "checking" }]), previousCheckId: "c0" } as CheckReport;
+    const [, deep] = checkListTabs(rescan);
+    expect(deep.pending).toEqual([]);
+    expect(deep.findings!.map((f) => [f.title, f.recheck])).toEqual([["Admin open", "checking"]]);
+    expect(deep.state).toEqual({ label: "0 of 2 done", tone: "working" });
+  });
+
   it("names severities as threats", () => {
     expect(THREAT_LABEL).toEqual({ critical: "Critical threat", high: "High threat", medium: "Medium threat", low: "Low threat" });
   });
