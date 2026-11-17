@@ -64,13 +64,26 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
       {report.status !== "cancelled" ? (
         <div className="flex shrink-0 items-center gap-2">
           <SiteChatButton />
-          <ScanActionsMenu checkId={report.checkId} site={report.target.value} posted={report.posted} />
+          <ScanActionsMenu checkId={report.checkId} site={report.target.value} posted={report.posted} nextCheckId={report.nextCheckId} />
         </div>
       ) : null}
       </div>
       {report.status !== "cancelled" ? <SiteChatPanel /> : null}
       </div>
       </SiteChatHolder>
+
+      {/* Scanned again (#security-rescan): an older scan points to the newest, and a rescan to the scan it followed. */}
+      {report.nextCheckId ? (
+        <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
+          This site was scanned again since.{" "}
+          <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
+        </p>
+      ) : report.previousCheckId ? (
+        <p className="m-0 px-0.5 text-sm text-zk-text2">
+          A rescan: agents recheck what the last scan found and look for anything new.{" "}
+          <Link href={`/security/checks/${encodeURIComponent(report.previousCheckId)}`} className={linkClass}>See the earlier scan</Link>
+        </p>
+      ) : null}
 
       {/* Only while ownership proof is on: with it off, the report shows such a check as waiting to start. */}
       {report.status === "awaiting_ownership" ? (

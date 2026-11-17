@@ -30,7 +30,10 @@ function report(parts: CheckReport["parts"], findings: Partial<CheckReport["find
     ...base,
     parts,
     progress: { done: 0, total: parts.length, percent: 0 },
-    findings: findings.map((f, i) => ({ id: `r${i}`, partId: "p1", severity: "critical", area: "Login", title: "Admin open", description: "The admin page opens without a password.", howToFix: null, fix: null, ...f })),
+    findings: findings.map((f, i) => ({ id: `r${i}`, partId: "p1", severity: "critical", area: "Login", title: "Admin open", description: "The admin page opens without a password.", howToFix: null, fix: null, checkId: "c1", recheck: null, recheckNote: null, ...f })),
+    fixed: [],
+    previousCheckId: null,
+    nextCheckId: null,
   } as unknown as CheckReport;
 }
 

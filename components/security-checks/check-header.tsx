@@ -74,7 +74,8 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
   const critical = report.counts.critical;
   // Any problem at all gets the warning look, even a single low one (17 Nov, Hamzat: "something scary").
   const warn = report.total > 0;
-  const remaining = report.findings.filter((finding) => !finding.fix);
+  // This scan's own findings; on a rescan, an earlier scan's still-there finding moves to the app from that scan.
+  const remaining = report.findings.filter((finding) => !finding.fix && finding.checkId === report.checkId);
   const criticalRemaining = remaining.filter((finding) => finding.severity === "critical");
   const selection = criticalRemaining.length ? criticalRemaining : remaining;
   const fixLabel = criticalRemaining.length === 1 ? "Fix the critical one"
@@ -88,6 +89,11 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
         <h2 className={`text-lg font-bold sm:text-xl ${warn ? "text-red-800" : "text-zk-text"}`}>
           {report.total === 0 ? "No security problems found" : `${report.total} security ${report.total === 1 ? "problem" : "problems"} found${critical ? `, ${critical} of them critical` : ""}`}
         </h2>
+        {report.fixed.length ? (
+          <p className="m-0 text-sm font-semibold text-zk-ok-fg">
+            {report.fixed.length} {report.fixed.length === 1 ? "problem" : "problems"} from the last scan fixed
+          </p>
+        ) : null}
         {report.summary ? <p className={`break-words text-sm sm:text-base ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
         {report.total > 0 ? (
           <ul aria-label="Findings by severity" className="flex flex-wrap gap-2">

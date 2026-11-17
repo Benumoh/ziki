@@ -121,7 +121,7 @@ The routes aren't workspace-scoped: a part is served to the agent holding it, wh
 | Route | What it does |
 | --- | --- |
 | `GET /api/v1/security-checks/jobs` | The parts this agent holds, each with the target, what to check and `reportBy`. Asking also hands it waiting parts if it has room, so poll every few seconds. |
-| `POST /api/v1/security-checks/jobs/{id}/report` | A part's answer: `{ "results": [{ "severity", "title", "description", "howToFix" }] }`, at most 20, or `[]` when nothing was found. Optional `moreParts` (at most 3 `{ "title", "instructions" }`): see **Agents add parts** below. The answer carries `addedParts`. |
+| `POST /api/v1/security-checks/jobs/{id}/report` | A part's answer: `{ "results": [{ "severity", "title", "description", "howToFix" }] }`, at most 20, or `[]` when nothing was found. Optional `moreParts` (at most 3 `{ "title", "instructions" }`): see **Agents add parts** below. On a rescan's recheck part, `rechecks` (see **Scan again** below). The answer carries `addedParts` and `rechecked`. |
 | `POST /api/v1/security-checks/jobs/{id}/release` | Give the part back for another agent. |
 
 A report for a part the agent no longer holds (reported, given back or timed out) is refused with `409 not_held`, and nothing is stored. Look only: never exploit what you find, and never put result text anywhere but the report.
@@ -151,6 +151,15 @@ Each finding opens `/security/checks/<id>/findings/<resultId>` (`lib/security-ch
 ### Borrowing 20 Ziks to try it (16 Nov call)
 
 Someone who has never bought Ziks and comes up short on a Security payment is offered **Borrow 20 Ziks and continue** (`components/coins/borrow-ziks.tsx`, `borrowZiks`), in the fix step. Nothing is borrowed until they click. It's an overdraft, not a gift (`lib/coins/loan.ts`): `User.ziksLoanAt` is set and **Security payments only** may take the wallet down to −20 (`assertCanSpendOnSecurity`); no ledger row is written. Their first purchase pays it back by itself, since a balance is the sum of its rows, and ends the overdraft. Funding an issue's reward still refuses to go below zero, so borrowed Ziks can never be earned and withdrawn. The Ziks page says what's owed.
+
+### Scan again (17 Nov)
+
+**Scan again** (the scan page's ⋯ menu and the Assets list) is a paid follow-up, not a fresh job (`lib/security-checks/rescan.ts`, `components/security-checks/use-rescan.ts`). It follows the newest scan of a site once its report is in, and costs `RESCAN_PRICE_ZIKS` (10), shown in a confirm first, with the loan offer above when the wallet is short. Paying and creating the new check happen in one transaction; a scan can be followed once (`SecurityCheck.previousCheckId` is unique), so a double click makes one rescan. A followed scan leaves the Assets list and points to the newest.
+
+- **Recheck parts.** The engine (`startCheck`) gathers every finding on the person's earlier scans of the site that no rescan called fixed (`openEarlierFindings`) and makes one `Recheck: <area>` part per area (`recheckParts`), each holding its findings (`SecurityCheckResult.recheckItemId`). The agent gets them as `recheck` and answers each with `rechecks`: `still_there` or `fixed`. One left out counts as still there.
+- **New problems.** The usual parts are planned too, and Ziki's AI is told the earlier titles so they look for what's new (`planParts` `earlier`).
+- **The finding stays its own row.** A recheck sets `recheckState`, `recheckNote`, `recheckedAt` and `recheckCheckId` on the earlier finding, so its unlock, price and moved issue carry over and nothing is paid twice. The rescan's page lists still-there findings with the new ones (they open, and move to the app, from the scan that found them), and the fixed ones in **Fixed since the last scan**, which aren't counted, priced or in the summary.
+- **The quick scan runs again** with the rescan. A site's quick scan is reused for 10 minutes, unless a finding on it was unlocked or moved to the app since (`fixPaidSinceQuickScan`): then it looks afresh.
 
 ## Move to your app
 
