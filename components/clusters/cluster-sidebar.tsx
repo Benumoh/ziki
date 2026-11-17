@@ -82,7 +82,7 @@ export function ClusterSidebar({ clusters, currentId, searchPath, query, newHref
           className="h-10 w-full rounded-full border border-zk-border bg-zk-chip/50 px-4 text-sm text-zk-text placeholder:text-zk-muted outline-none focus:outline-none"
         />
       </form>
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-zk-border">
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-zk-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {mine.length ? (
           <>
             <p className="m-0 px-4 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wide text-zk-muted">Your clusters</p>

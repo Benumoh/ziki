@@ -110,6 +110,10 @@ export default async function ClusterPage({ params, searchParams }: {
             {member ? (
               <Link href={showInfo ? here : `${here}?info=1`} className={`${agentsSecondaryBtn} min-h-9 px-4 ${NOFOCUS}`}>{showInfo ? "Close info" : "Group info"}</Link>
             ) : null}
+            {/* Close the chat: back to the list with nothing open, as in a messenger. */}
+            <Link href={listPath} title="Close chat" aria-label="Close chat" className={`hidden h-9 w-9 shrink-0 place-items-center rounded-full text-zk-muted hover:bg-zk-chip hover:text-zk-text md:grid ${NOFOCUS}`}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </Link>
           </header>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-zk-bg/40 px-4 py-4 sm:px-6">
