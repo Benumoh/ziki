@@ -97,7 +97,7 @@ export async function setUpPayoutsAction(): Promise<void> {
     url = await startPayoutOnboarding(user.id, user.email ?? undefined);
   } catch (error) {
     const message = failure(error);
-    redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
+    redirect(`/coins/payouts?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
   }
   redirect(url);
 }
@@ -107,7 +107,7 @@ export async function refreshPayoutsAction(): Promise<boolean> {
   const user = await requireUser();
   try {
     const enabled = await syncPayoutsEnabled(user.id);
-    revalidatePath("/coins");
+    revalidatePath("/coins/payouts");
     return enabled;
   } catch {
     return (await prisma.user.findUnique({ where: { id: user.id }, select: { payoutsEnabled: true } }))?.payoutsEnabled ?? false;
@@ -120,6 +120,7 @@ export async function withdrawZiksAction(): Promise<CoinActionResult> {
   try {
     const outcome = await withdrawEarned(user.id);
     revalidatePath("/coins");
+    revalidatePath("/coins/payouts");
     if (outcome.status === "failed") return { ok: false, error: "Stripe couldn't send the money. Your Ziks are back in your wallet." };
     const amount = `$${(outcome.amountCents / 100).toFixed(2)}`;
     if (outcome.waiting) {

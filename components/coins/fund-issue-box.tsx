@@ -23,8 +23,8 @@ export function FundIssueBox({
   escrow: number;
   balance: number;
   canFund: boolean;
-  /** The reward estimate agreed by planning poker, in Ziks and in dollars, once anyone has estimated. */
-  estimate?: { zik: number; count: number } | null;
+  /** The reward estimate agreed by planning poker, in Ziks, once anyone has estimated. It sets the least the issue can be funded with. */
+  estimate?: { zik: number } | null;
 }) {
   const router = useRouter();
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
@@ -54,18 +54,15 @@ export function FundIssueBox({
   };
 
   return (
-    <div className="flex flex-col gap-5 rounded-2xl border border-zk-border bg-zk-chip px-5 py-5" data-testid="fund-issue">
-      <p className="m-0 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 pb-0.5">
-        <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Funded</span>
-        <span className="text-sm font-bold tabular-nums text-zk-text">
-          {escrow.toLocaleString("en-US")} <span className="font-medium text-zk-muted">{escrow === 1 ? "Zik" : "Ziks"} held</span>
-        </span>
-      </p>
-      {estimate ? (
-        <p className="m-0 text-xs text-zk-text2">
-          Estimate <ZikAmount amount={estimate.zik} className="font-semibold text-zk-text" />, from {estimate.count} {estimate.count === 1 ? "estimate" : "estimates"}.
+    <div className="flex flex-col gap-4 rounded-2xl border border-zk-border bg-zk-chip px-5 py-5" data-testid="fund-issue">
+      {/* The one place an issue shows it is funded: what is held behind it, or that nothing is yet. */}
+      {escrow > 0 ? (
+        <p className="m-0 text-sm font-bold text-zk-ok-fg" data-testid="funded">
+          Funded · <ZikAmount amount={escrow} />
         </p>
-      ) : null}
+      ) : (
+        <p className="m-0 text-sm font-semibold text-zk-muted" data-testid="funded">Not funded yet</p>
+      )}
 
       {canFund ? (
         <form

@@ -98,6 +98,7 @@ import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/pr
 import { IssueRowStatus } from "@/components/issue-row-status";
 import { BidsVoteBadge, ImportanceVoteBadge } from "@/components/vote-badge";
 import { RewardBadge } from "@/components/reward-badge";
+import { escrowByBug } from "@/lib/coins/ledger";
 import { mergePathOf } from "@/lib/merge-history";
 import { IssuesToolsToggle } from "@/components/issues-tools-toggle";
 import { LoadError } from "@/components/load-error";
@@ -657,6 +658,8 @@ export async function IssuesList({
     return issuesQueryError(listed.reference);
   }
   const bugs = listed.bugs;
+  // #ziki-coins: which rows on this page have Ziks behind them, for the Funded badge.
+  const funded = await loadOrEmpty("funded", () => escrowByBug(prisma, bugs.map((bug) => bug.id)), new Map<string, number>());
   // #live-check: where each Live row on this page has its fix.
   const liveChecks = await loadOrEmpty("live checks", () => loadLiveChecks(bugs.filter((bug) => bug.status === "resolved")), new Map<string, LiveCheck>());
   // #live-confirm: what each agent found, for the Live rows on this page, shown when a row is opened.
@@ -1404,7 +1407,7 @@ export async function IssuesList({
                         details={liveFix ? <LiveRowDetails check={liveFix} confirmations={liveConfirmations.get(bug.id) ?? []} /> : null}
                       >
                         <div className="issues-vote w-[76px] shrink-0">
-                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} />
+                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} funded={funded.has(bug.id)} />
                         </div>
                         {isMyWorkTab ? (
                           <span className="hidden w-10 shrink-0 items-center lg:flex">

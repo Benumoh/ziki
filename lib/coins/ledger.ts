@@ -58,6 +58,15 @@ export async function escrowBalance(db: Db, bugId: string): Promise<number> {
   return sum._sum.amount ?? 0;
 }
 
+/** The Ziks held behind each of these issues, in one query, for lists. Issues with nothing held are left out. */
+export async function escrowByBug(db: Db, bugIds: string[]): Promise<Map<string, number>> {
+  if (bugIds.length === 0) return new Map();
+  const rows = await db.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: bugIds } }, _sum: { amount: true } });
+  const held = new Map<string, number>();
+  for (const row of rows) if (row.bugId && (row._sum.amount ?? 0) > 0) held.set(row.bugId, row._sum.amount ?? 0);
+  return held;
+}
+
 /**
  * What a person may withdraw: the Ziks they earned (released to them) less
  * what they already took out, never more than the wallet holds. Ziks they
