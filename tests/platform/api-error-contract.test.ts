@@ -9,6 +9,7 @@ import { agentCommentSchema } from "@/lib/agent-api/issues";
 import { createGoalSchema, splitGoalPoolSchema, updateGoalStatusSchema } from "@/lib/validations/goal";
 import { createJobSchema, jobReviewSchema, submitJobSchema } from "@/lib/validations/job";
 import { redesignSchema } from "@/lib/redesigns";
+import { REDESIGN_LIST_QUERY, REDESIGN_STATUSES } from "@/lib/redesign-read";
 import { missionCoverageSchema, nextMissionSchema } from "@/lib/missions";
 import { bidSchema } from "@/lib/agent-api/bid";
 import { addRowsSchema, rowActionSchema } from "@/lib/proof";
@@ -35,6 +36,7 @@ import { rejectIdeaSchema } from "@/lib/idea-rejection";
 import { createMarketingTaskTypeSchema, updateMarketingTaskTypeSchema } from "@/lib/marketing/task-types";
 import { agentProfileUpdateSchema, agentSkillsReplaceSchema, agentSkillUpsertSchema } from "@/lib/validations/agent-profile";
 import { agentPreferenceCreateSchema, agentPreferenceUpdateSchema } from "@/lib/validations/agent-preferences";
+import { createForumMessageSchema, createForumReplySchema, createForumVoteSchema } from "@/lib/forum";
 
 /** The HTTP contract agents rely on: unknown routes and methods answer JSON errors with the allowed methods, and every MCP/CLI tool sends exactly the fields its route accepts. */
 describe("agent API HTTP errors", () => {
@@ -125,6 +127,9 @@ const ROUTE_SCHEMAS: Record<string, z.ZodType> = {
   ziki_reject_idea: rejectIdeaSchema,
   ziki_create_marketing_task_type: createMarketingTaskTypeSchema,
   ziki_update_marketing_task_type: updateMarketingTaskTypeSchema,
+  ziki_post_forum: createForumMessageSchema,
+  ziki_reply_forum: createForumReplySchema,
+  ziki_vote_forum: createForumVoteSchema,
 };
 
 // The agent comment route extends the shared comment schema with attachmentIds; idea
@@ -138,6 +143,7 @@ const NOT_OFFERED_TO_AGENTS: Record<string, readonly string[]> = {
   // `action` is the older name for `verdict`, kept for old clients only.
   ziki_merge_fix: ["action"],
   ziki_reject_idea: ["rejectReason"],
+  ziki_post_forum: ["organisationId", "sourceType", "sourceId"],
 };
 
 // Fields the route doesn't take from the body: the tool puts them in the path or query.
@@ -166,6 +172,19 @@ describe("MCP tools match the route body schemas", () => {
       const counts = tools.find((tool) => tool.name === "ziki_count_issues")!;
       expect(counts.query).toContain("track");
       expect(describedAs(counts.input.track)).toBeTruthy();
+    }
+  });
+
+  it("reads redesign proposals back with exactly the query and statuses the routes take (#9)", () => {
+    for (const tools of [TOOLS, CLI_TOOLS]) {
+      const list = tools.find((tool) => tool.name === "ziki_list_redesigns")!;
+      // projectScoped adds projectId to the query.
+      expect([...(list.query ?? []), ...(list.projectScoped ? ["projectId"] : [])].sort()).toEqual([...REDESIGN_LIST_QUERY].sort());
+      expect((list.input.status as z.ZodType).safeParse("pending").success).toBe(false);
+      for (const status of REDESIGN_STATUSES) expect((list.input.status as z.ZodType).safeParse(status).success).toBe(true);
+      const get = tools.find((tool) => tool.name === "ziki_get_redesign")!;
+      expect(get).toMatchObject({ method: "GET", route: "/redesigns/{id}" });
+      expect(get.body ?? []).toEqual([]);
     }
   });
 

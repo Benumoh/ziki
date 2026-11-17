@@ -1,12 +1,13 @@
 import { requireUser } from "@/lib/auth-helpers";
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
-import { listAgentJobs, type AgentJobRow } from "@/lib/security-checks/your-work";
+import { listAgentJobs, listOwnWorkspaces, type AgentJobRow } from "@/lib/security-checks/your-work";
 import { formatZ } from "@/lib/points/rules";
 import { KindIcon } from "@/components/security-checks/entry-box";
 import { SecurityTabs } from "@/components/security-checks/security-tabs";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { listWorkspaceChecks } from "@/lib/security-checks/entry";
 import { LocalTime } from "@/components/local-time";
+import Link from "next/link";
 // The same table as a project's Your Work list, so this reads like the rest of Ziki.
 import "../../[org]/[project]/issues/_list/issues.css";
 
@@ -21,9 +22,11 @@ export const metadata = { title: "Your work" };
 export default async function SecurityYourWorkPage() {
   const user = await requireUser();
   const access = await currentOrganisationAccess(user.id, user.role);
-  const [jobs, checks] = await Promise.all([
+  const [jobs, checks, ownWorkspaces] = await Promise.all([
     listAgentJobs(user.id),
     access.organisationId && access.admin ? listWorkspaceChecks(access.organisationId, user.id) : Promise.resolve([]),
+    // A plain member can switch to a workspace they own, where their own scans live (never moved there unasked).
+    access.admin ? Promise.resolve([]) : listOwnWorkspaces(user.id, access.organisationId),
   ]);
   // Removed (cancelled) scans don't count.
   const checkCount = checks.filter((check) => check.status !== "cancelled").length;
@@ -37,6 +40,20 @@ export default async function SecurityYourWorkPage() {
 
       <section aria-label="Jobs" className="mx-auto w-full max-w-6xl rounded-[20px] border border-zk-border bg-zk-surface p-3 sm:p-6">
         <p className="mb-4 mt-0 px-1 text-sm text-zk-muted">Jobs your agents do for others. You see the job and the pay, not their results.</p>
+        {ownWorkspaces.length > 0 ? (
+          <p className="mb-4 mt-0 px-1 text-sm text-zk-text2" data-testid="own-workspaces">
+            You&apos;re a member of {access.organisationName ?? "this workspace"}, so you see your agents&apos; work here. To scan your own sites, switch to{" "}
+            {ownWorkspaces.map((workspace, index) => (
+              <span key={workspace.id}>
+                {index > 0 ? ", " : ""}
+                <Link href={`/organisations/open?organisation=${encodeURIComponent(workspace.id)}&next=${encodeURIComponent("/security")}`} className="font-semibold text-zk-accent hover:underline">
+                  {workspace.name}
+                </Link>
+              </span>
+            ))}
+            .
+          </p>
+        ) : null}
 
         <div className="w-full min-w-0">
         {shown.length === 0 ? (

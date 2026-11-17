@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/site-url";
 import { agentPageHref, agentsSkillHref } from "@/lib/header-nav";
@@ -6,6 +7,8 @@ import { comparisonHref, COMPARE_HREF } from "@/lib/compare/slug";
 import { listComparisonCards } from "@/lib/compare/data";
 import { projectPath, projectRef } from "@/lib/project-paths";
 import { getSkills } from "@/app/(app)/skills/skills-data";
+import { PUBLIC_ISSUE_STATUSES } from "@/lib/public-issues";
+import { publicIssueDetailPath } from "@/lib/public-project-paths";
 
 /**
  * The sitemap, in sections (#seo-sitemap). /sitemap.xml is an index of them;
@@ -17,6 +20,7 @@ import { getSkills } from "@/app/(app)/skills/skills-data";
  *   skills.xml         /agents/skill/{tag} for every skill a listed agent has
  *   library.xml        /skills/{slug} for every skill in the skills library
  *   projects.xml       /<org>/<project> for every public project
+ *   issues-{n}.xml     /<org>/<project>/public-issues/{number} for every issue a guest's public list shows, ISSUES_PER_FILE a file
  *   agents-{n}.xml     /agent/{username} for every listed agent, AGENTS_PER_FILE a file
  *
  * Only public, indexable pages are listed: an agent that is revoked or still
@@ -25,6 +29,21 @@ import { getSkills } from "@/app/(app)/skills/skills-data";
 
 /** Agents per sitemap file; search engines accept up to 50,000 URLs a file. */
 export const AGENTS_PER_FILE = 10_000;
+/** Public issues per sitemap file. */
+export const ISSUES_PER_FILE = 10_000;
+
+/**
+ * The issues a guest can browse (#seo-sitemap): the same rule as the public issue
+ * list, `lib/public-issues.ts`. The project is public and neither it nor its
+ * organisation is archived; the issue isn't deleted, isn't a security finding
+ * and isn't closed. Nothing in a private project is ever listed.
+ */
+export const publicIssueWhere = {
+  isDeleted: false,
+  securityFinding: { is: null },
+  status: { in: [...PUBLIC_ISSUE_STATUSES] },
+  project: { visibility: "public", archivedAt: null, organisation: { archivedAt: null } },
+} satisfies Prisma.BugWhereInput;
 
 type Entry = { path: string; lastModified?: Date; changeFrequency?: "hourly" | "daily" | "weekly"; priority?: number };
 
@@ -49,17 +68,21 @@ function urlset(entries: Entry[]): string {
 
 /** The sections, for the index: their file names and when each last changed. */
 export async function sitemapSections(): Promise<Array<{ file: string; lastModified?: Date }>> {
-  const [agentCount, newestAgent] = await Promise.all([
+  const [agentCount, newestAgent, issueCount, newestIssue] = await Promise.all([
     prisma.agent.count({ where: listedAgentWhere }),
     prisma.agent.findFirst({ where: listedAgentWhere, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+    prisma.bug.count({ where: publicIssueWhere }),
+    prisma.bug.findFirst({ where: publicIssueWhere, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
   ]);
   const agentFiles = Math.max(1, Math.ceil(agentCount / AGENTS_PER_FILE));
+  const issueFiles = Math.max(1, Math.ceil(issueCount / ISSUES_PER_FILE));
   return [
     { file: "pages.xml" },
     { file: "compare.xml" },
     { file: "skills.xml", lastModified: newestAgent?.updatedAt },
     { file: "library.xml" },
     { file: "projects.xml" },
+    ...Array.from({ length: issueFiles }, (_, index) => ({ file: `issues-${index + 1}.xml`, lastModified: newestIssue?.updatedAt })),
     ...Array.from({ length: agentFiles }, (_, index) => ({ file: `agents-${index + 1}.xml`, lastModified: newestAgent?.updatedAt })),
   ];
 }
@@ -87,7 +110,7 @@ export async function sitemapSectionXml(file: string): Promise<string | null> {
   if (file === "pages.xml") {
     return urlset([
       { path: "/", changeFrequency: "weekly", priority: 1 },
-      ...["/how-it-works", "/security", "/for-agents", "/developers"].map((path) => ({ path, changeFrequency: "weekly" as const, priority: 0.8 })),
+      ...["/how-it-works", "/security", "/for-agents", "/developers", "/pricing"].map((path) => ({ path, changeFrequency: "weekly" as const, priority: 0.8 })),
       // New agents join all the time.
       { path: "/agents", changeFrequency: "hourly", priority: 0.9 },
       { path: COMPARE_HREF, changeFrequency: "weekly", priority: 0.8 },
@@ -116,6 +139,26 @@ export async function sitemapSectionXml(file: string): Promise<string | null> {
       select: { slug: true, updatedAt: true, organisation: { select: { slug: true } } },
     });
     return urlset(projects.map((project) => ({ path: projectPath(projectRef(project.organisation.slug, project.slug)), lastModified: project.updatedAt, changeFrequency: "daily" as const, priority: 0.6 })));
+  }
+  const issuesMatch = /^issues-([1-9][0-9]{0,5})\.xml$/.exec(file);
+  if (issuesMatch) {
+    const page = Number(issuesMatch[1]);
+    const issues = await prisma.bug.findMany({
+      where: publicIssueWhere,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      skip: (page - 1) * ISSUES_PER_FILE,
+      take: ISSUES_PER_FILE,
+      select: { number: true, updatedAt: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } },
+    });
+    if (issues.length === 0 && page > 1) return null;
+    return urlset(
+      issues.map((issue) => ({
+        path: publicIssueDetailPath({ orgSlug: issue.project.organisation.slug, projectSlug: issue.project.slug }, issue.number),
+        lastModified: issue.updatedAt,
+        changeFrequency: "daily" as const,
+        priority: 0.5,
+      })),
+    );
   }
   const match = /^agents-([1-9][0-9]{0,5})\.xml$/.exec(file);
   if (match) {

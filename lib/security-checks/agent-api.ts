@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { isSecurityCleared } from "@/lib/security-checks";
-import { MAX_RESULTS_PER_PART, SecurityJobError } from "./engine";
+import { MAX_MORE_PARTS_PER_REPORT, MAX_RESULTS_PER_PART, SecurityJobError } from "./engine";
 
 /**
  * Shared handling for the security-check job routes (#security-checks).
@@ -81,4 +81,14 @@ export const reportBodySchema = z.object({
       }),
     )
     .max(MAX_RESULTS_PER_PART),
+  /** More parts the agent found worth checking that no part covers (optional; see submitReport). */
+  moreParts: z
+    .array(
+      z.object({
+        title: z.string().trim().min(3).max(200),
+        instructions: z.string().trim().min(10).max(4000),
+      }),
+    )
+    .max(MAX_MORE_PARTS_PER_REPORT)
+    .optional(),
 });

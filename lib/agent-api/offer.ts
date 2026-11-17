@@ -14,15 +14,27 @@ import { parseIssueRef, resolveIssueRef } from "@/lib/issue-ref";
 import { AWARDABLE_SUBSTATUSES, moveTo } from "@/lib/issue-substatus";
 import { releasePlanningClaim } from "@/lib/agent-api/plan";
 import { notifyLater } from "@/lib/notify";
+import { assertMayTakeWorkItself } from "@/lib/agents/work-mode";
+import { needsPlanReview } from "@/lib/difficulty";
 
 /**
- * Offers (#bids-only-offers). Only awarding a bid makes an offer: any agent
- * awards a bid whose votes reached the project's awardThreshold
- * (lib/agent-api/bid.ts `awardBid`), or in a threshold-only project the vote
- * that reaches it does. Nothing else offers an issue. An offer the agent does not accept in the
- * project's window expires, and a declined, expired or released offer leaves
- * the issue in Open for bids.
+ * Offers (#bids-only-offers). Awarding a bid makes an offer: any agent awards
+ * a bid (lib/agent-api/bid.ts `awardBid`), or in a threshold-only project the
+ * vote that reaches the project's awardThreshold does. An admin's direct
+ * assignment and the proactive-offer sweep (lib/agents/proactive-offers.ts)
+ * make the same offer. An offer the agent does not accept in the project's
+ * window expires and is handed straight on (lib/agent-api/hand-over.ts); a
+ * declined or released offer leaves the issue in Open for bids.
  */
+
+/**
+ * #offer-hand-over: a lapsed offer's issue goes straight to the next agent. Loaded only when
+ * an offer lapses: hand-over.ts awards through bid.ts, which imports this module.
+ */
+async function handOverAfterLapse(bugId: string): Promise<void> {
+  const { handOverAfterLapse: handOver } = await import("@/lib/agent-api/hand-over");
+  await handOver(bugId);
+}
 
 /** Pure helper/tests default; requests use the project's offerWindowSeconds. */
 export const OFFER_TTL_MS = DEFAULT_PROJECT_WORKFLOW.offerWindowSeconds * 1000;
@@ -60,10 +72,12 @@ export async function expireOffer(claimId: string): Promise<boolean> {
     await tx.issueClaim.update({ where: { id: claimId }, data: { status: "released", releasedAt: now, releaseReason: "expired" } });
     await publish(tx, { organisationId: fresh.bug.organisationId, type: "claim.released", actorAgentId: fresh.agentId, bugId: fresh.bugId,
       payload: { claimId, issueId: fresh.bugId, beneficiaryUserId: fresh.beneficiaryUserId, reason: "expired" } });
-    // The issue stays Open for bids; nobody is offered it in turn.
-    return { released: true };
+    return { released: true, bugId: fresh.bugId };
   });
-  return Boolean(result);
+  if (!result) return false;
+  // #offer-hand-over: the issue goes straight to the next bidder, or to an automatic agent online now.
+  await handOverAfterLapse(result.bugId);
+  return true;
 }
 
 /**
@@ -99,18 +113,24 @@ export async function sweepExpiredOffers(organisationId?: string, projectId?: st
   return { expired };
 }
 
-export async function acceptOffer(agent: AgentContext, claimId: string) {
+/**
+ * The agent takes an offer it was made. On its own (`POST /api/v1/offers/{id}/accept`,
+ * or Ziki accepting for a Work automatically agent), its owner's work mode and caps
+ * apply (#agent-work-mode): an Ask me first agent is refused, and so is one at a cap.
+ * `byOwner` is the owner's one-tap yes, their own decision, which neither holds back.
+ */
+export async function acceptOffer(agent: AgentContext, claimId: string, options: { byOwner?: boolean } = {}) {
   if (agent.pausedAt) throw new IssueApiError(423, "This agent is paused by its owner.");
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const claim = await tx.issueClaim.findUnique({ where: { id: claimId }, include: { beneficiary: { select: { name: true } }, bug: { select: { id: true, title: true, substatus: true, assigneeId: true, organisationId: true, projectId: true, areaId: true, voteCount: true, assignee: { select: { name: true } } } } } });
+      const claim = await tx.issueClaim.findUnique({ where: { id: claimId }, include: { beneficiary: { select: { name: true } }, bug: { select: { id: true, title: true, substatus: true, difficulty: true, assigneeId: true, organisationId: true, projectId: true, areaId: true, voteCount: true, assignee: { select: { name: true } } } } } });
       if (!claim || claim.bug.organisationId !== agent.organisationId) throw new IssueApiError(404, "Offer not found.");
       const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Bug" WHERE "id" = ${claim.bugId} AND "organisationId" = ${agent.organisationId} FOR UPDATE`;
       if (!locked.length) throw new IssueApiError(404, "Offer not found.");
       const agents = await tx.$queryRaw<{ pausedAt: Date | null }[]>`SELECT "pausedAt" FROM "Agent" WHERE "id" = ${agent.agentId} FOR UPDATE`;
       if (agents[0]?.pausedAt) throw new IssueApiError(423, "This agent is paused by its owner.");
       await tx.$queryRaw`SELECT "id" FROM "IssueClaim" WHERE "id" = ${claimId} FOR UPDATE`;
-      const fresh = await tx.issueClaim.findUnique({ where: { id: claimId }, include: { beneficiary: { select: { name: true } }, bug: { select: { id: true, title: true, substatus: true, assigneeId: true, organisationId: true, projectId: true, areaId: true, voteCount: true, assignee: { select: { name: true } } } } } });
+      const fresh = await tx.issueClaim.findUnique({ where: { id: claimId }, include: { beneficiary: { select: { name: true } }, bug: { select: { id: true, title: true, substatus: true, difficulty: true, assigneeId: true, organisationId: true, projectId: true, areaId: true, voteCount: true, assignee: { select: { name: true } } } } } });
       if (!fresh || fresh.agentId !== agent.agentId) throw new IssueApiError(409, "This offer is no longer available to this agent.");
       if (fresh.status === "released" && fresh.releaseReason === "expired") throw new IssueApiError(410, "This offer expired and has been released.");
       if (fresh.status !== "offered" || fresh.releasedAt) throw new IssueApiError(409, "This offer is no longer available to this agent.");
@@ -122,6 +142,7 @@ export async function acceptOffer(agent: AgentContext, claimId: string) {
       if (existingActive) {
         throw new IssueApiError(409, "This issue already has an active claim.");
       }
+      if (!options.byOwner) await assertMayTakeWorkItself(tx, agent.agentId, "accept");
 
       const now = new Date();
       const workflow = await workflowFor(fresh.bug.projectId, tx);
@@ -129,7 +150,7 @@ export async function acceptOffer(agent: AgentContext, claimId: string) {
         await tx.issueClaim.update({ where: { id: fresh.id }, data: { status: "released", releasedAt: now, releaseReason: "expired" } });
         await publish(tx, { organisationId: agent.organisationId, type: "claim.released", actorAgentId: agent.agentId, bugId: fresh.bugId,
           payload: { claimId: fresh.id, issueId: fresh.bugId, beneficiaryUserId: fresh.beneficiaryUserId, reason: "expired" } });
-        return { expired: true as const };
+        return { expired: true as const, bugId: fresh.bugId };
       }
       await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${fresh.beneficiaryUserId} FOR UPDATE`;
       const activeClaims = await tx.issueClaim.count({ where: {
@@ -149,6 +170,21 @@ export async function acceptOffer(agent: AgentContext, claimId: string) {
           payload: { claimId: fresh.id, issueId: fresh.bugId, beneficiaryUserId: fresh.beneficiaryUserId, reason: "unavailable" } });
         return { unavailable: true as const };
       }
+      // #plan-review: accepting an offer on a complex issue (a proactive offer, a hand-over or an
+      // assignment; an award opens plan review itself) opens plan review instead of starting the
+      // work. The claim is held (`planning`), its plan window runs from now, and the agent writes
+      // its plan for its owner to approve, as after an award.
+      if (needsPlanReview(fresh.bug.difficulty)) {
+        const planBy = new Date(now.getTime() + workflow.planReviewSeconds * 1000);
+        await tx.issueClaim.update({ where: { id: fresh.id }, data: { status: "planning", offeredAt: now } });
+        const issue = await tx.bug.update({ where: { id: fresh.bugId }, data: moveTo("plan_review"), select: { id: true, assigneeId: true, status: true, substatus: true } });
+        await tx.bugActivity.createMany({ data: [
+          { bugId: fresh.bugId, actorId: fresh.beneficiaryUserId, type: "status_changed", summary: statusChangedSummary(fresh.bug.substatus, "plan_review"), metadata: { field: "status", from: fresh.bug.substatus, to: "plan_review", via: "accept", claimId: fresh.id } },
+        ] });
+        await publish(tx, { organisationId: agent.organisationId, type: "claim.accepted", actorAgentId: agent.agentId, bugId: fresh.bugId,
+          payload: { claimId: fresh.id, issueId: fresh.bugId, projectId: fresh.bug.projectId, beneficiaryUserId: fresh.beneficiaryUserId, planning: true, planBy: planBy.toISOString() } });
+        return { expired: false as const, claim: { ...fresh, status: "planning", offeredAt: now }, issue, planBy: planBy.toISOString() };
+      }
       const deliverBy = deliveryDeadline(now, deliveryWindowMinutes(workflow.deliveryMinutes));
       await tx.issueClaim.update({ where: { id: fresh.id }, data: { status: "active", claimedAt: now, lastHeartbeatAt: now, deliverBy } });
       const issue = await tx.bug.update({ where: { id: fresh.bugId }, data: { assigneeId: fresh.beneficiaryUserId, ...moveTo("in_progress") }, select: { id: true, assigneeId: true, status: true, substatus: true } });
@@ -166,6 +202,8 @@ export async function acceptOffer(agent: AgentContext, claimId: string) {
       return { expired: false as const, claim: { ...fresh, status: "active", claimedAt: now, deliverBy }, issue };
     }, { maxWait: 10000, timeout: 15000 });
     if ("expired" in result && result.expired) {
+      // #offer-hand-over: an accept that came too late hands the issue on, as the expiry sweep does.
+      await handOverAfterLapse(result.bugId);
       throw new IssueApiError(410, "This offer expired and has been released.");
     }
     if ("unavailable" in result) {
@@ -198,7 +236,8 @@ export const releaseSchema = z.object({
  * - An active claim's issue goes back to open and unassigned, unless a person
  *   has reassigned or resolved it since.
  * - Nobody is offered it in turn: the issue waits in Open for bids, and once
- *   a bid has enough votes any agent awards it.
+ *   a bid has enough votes any agent awards it. (Only an offer that lapses is
+ *   handed on, lib/agent-api/hand-over.ts.)
  */
 export async function releaseClaim(agent: AgentContext, projectId: string, issueRef: string, reason?: string) {
   let reopenedBug: { id: string; title: string; reporterId: string } | null = null;

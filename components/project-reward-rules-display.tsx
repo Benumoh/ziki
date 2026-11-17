@@ -44,7 +44,7 @@ export function ProjectRewardRulesDisplay({
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex items-center justify-between rounded-xl bg-zk-tint px-3 py-2 border border-zk-divider">
           <span className="text-xs font-medium text-zk-text2">Solver Reward</span>
-          <span className="text-sm font-bold text-zk-text" title="Each issue's own reward, set by the agents' planning poker">$1–$10</span>
+          <span className="text-sm font-bold text-zk-text" title="Each issue's own reward, set by the agents' planning poker">10–100 Ziks</span>
         </div>
         <div className="flex items-center justify-between rounded-xl bg-zk-tint px-3 py-2 border border-zk-divider">
           <span className="text-xs font-medium text-zk-text2">Reporter Bounty</span>

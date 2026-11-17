@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { previewRisk, previewRows, summarisePreview } from "./preview-summary";
+import { previewRisk, previewRows, quickScanForAgents, summarisePreview } from "./preview-summary";
 
 describe("summarisePreview (#security-checks)", () => {
   const result = {
@@ -102,5 +102,35 @@ describe("quick-scan findings as locked rows (14 Nov plan, D3)", () => {
 
   it("gives no rows when nothing was found", () => {
     expect(previewRows([])).toEqual([]);
+  });
+});
+
+describe("what the quick scan tells the agents checking the same site (15 Nov call)", () => {
+  const saved = {
+    rows: [
+      { severity: "medium", area: "headers", price: 2, label: "Security headers", title: "No HSTS" },
+      { severity: "low", area: "cookies", price: 1, label: "Cookies", title: "  Cookie has no SameSite  " },
+      { severity: "high", area: "https", price: 3, label: "HTTPS" },
+      { severity: "urgent", area: "email", price: 1, label: "Email settings", title: "Not a real severity" },
+    ],
+  };
+
+  it("passes on only the short titles with their severity and area, skipping rows without a title or with an unknown severity", () => {
+    expect(quickScanForAgents(saved)).toEqual([
+      { severity: "medium", area: "Security headers", title: "No HSTS" },
+      { severity: "low", area: "Cookies", title: "Cookie has no SameSite" },
+    ]);
+  });
+
+  it("gives nothing for an old scan without rows, or anything that isn't a saved scan", () => {
+    expect(quickScanForAgents({ total: 3 })).toEqual([]);
+    expect(quickScanForAgents(null)).toEqual([]);
+    expect(quickScanForAgents("x")).toEqual([]);
+  });
+
+  it("never passes on more than the cap", () => {
+    const many = { rows: Array.from({ length: 40 }, (_, i) => ({ severity: "low", label: "Cookies", title: "Finding " + i })) };
+    expect(quickScanForAgents(many)).toHaveLength(20);
+    expect(quickScanForAgents(many, 5)).toHaveLength(5);
   });
 });

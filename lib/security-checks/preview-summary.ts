@@ -1,5 +1,6 @@
 import type { SecuritySeverity, SecurityTargetKind } from "@prisma/client";
 import { SEVERITY_PRICE } from "@/lib/security-checks";
+import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import type { PreviewArea, PreviewFinding, PreviewResult } from "./preview";
 
 /**
@@ -48,6 +49,8 @@ export type PreviewSummary = {
    * Absent on quick scans saved before 14 Nov, so read it as `rows ?? []`.
    */
   rows?: (PreviewRow & { label: string; title?: string })[];
+  /** The site's IP address, shown under the result's heading like other scanners do. Absent for code and older scans. */
+  ip?: string | null;
 };
 
 /**
@@ -90,4 +93,27 @@ export function summarisePreview(result: Extract<PreviewResult, { ok: true }>): 
       .sort((a, b) => WORST_FIRST[a.severity] - WORST_FIRST[b.severity])
       .map((finding) => ({ ...previewRows([finding])[0], label: PREVIEW_AREA_LABEL[finding.area], title: finding.title })),
   };
+}
+
+/** One finding of the quick scan as an agent is told about it: how serious, where, and its short title. */
+export type QuickScanLine = { severity: SecuritySeverity; area: string; title: string };
+
+/**
+ * What the quick scan saw, for the agents checking the same site (15 Nov call): so the agents' report
+ * and the quick scan agree where they look at the same thing, instead of the numbers changing for no
+ * reason the client can see. Only the short titles any browser can see (never a finding's detail), read
+ * safely from what was saved: older scans without titles give nothing.
+ */
+export function quickScanForAgents(saved: unknown, max = 20): QuickScanLine[] {
+  const rows = (saved as { rows?: unknown } | null)?.rows;
+  if (!Array.isArray(rows)) return [];
+  const lines: QuickScanLine[] = [];
+  for (const row of rows as Array<{ severity?: unknown; label?: unknown; title?: unknown }>) {
+    const title = typeof row?.title === "string" ? row.title.trim().slice(0, 200) : "";
+    const severity = SECURITY_SEVERITIES.find((level) => level === row?.severity);
+    if (!title || !severity) continue;
+    lines.push({ severity, area: typeof row.label === "string" ? row.label : "", title });
+    if (lines.length === max) break;
+  }
+  return lines;
 }

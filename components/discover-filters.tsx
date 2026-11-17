@@ -6,10 +6,12 @@ import { useState, useTransition } from "react";
 export function DiscoverFilters({
   initialQuery = "",
   initialOpenOnly = false,
+  selectedArea = "",
   fromEarn = false,
 }: {
   initialQuery?: string;
   initialOpenOnly?: boolean;
+  selectedArea?: string;
   /** Came from the Earn page: searching keeps that, so the way back stays the Earn page. */
   fromEarn?: boolean;
 }) {
@@ -20,6 +22,9 @@ export function DiscoverFilters({
 
   const applyFilters = (newQuery: string, newOpenOnly: boolean) => {
     const params = new URLSearchParams();
+    if (selectedArea) {
+      params.set("area", selectedArea);
+    }
     const cleanQ = newQuery.trim();
     if (cleanQ) {
       params.set("q", cleanQ);
@@ -36,11 +41,7 @@ export function DiscoverFilters({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanQ = query.trim();
-    if (!cleanQ) {
-      return;
-    }
-    applyFilters(cleanQ, openOnly);
+    applyFilters(query, openOnly);
   };
 
   const handleCheckboxChange = (checked: boolean) => {

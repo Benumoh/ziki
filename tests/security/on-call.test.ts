@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildCallLog, cancelOnCallInvite, inviteToOnCall, resolveInviteEmail, respondToOnCallInvite, searchPeopleForOnCall } from "@/lib/security-checks/on-call";
+import { agentState, buildCallLog, cancelOnCallInvite, inviteToOnCall, listOnCallPeople, pageCallLog, personState, resolveInviteEmail, respondToOnCallInvite, searchPeopleForOnCall } from "@/lib/security-checks/on-call";
 
 /** A fake Prisma client: every model method is a mock, and $transaction runs the callback on the same fake. */
 function fakeDb() {
   const db = {
-    user: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    user: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     onCallInvite: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     notification: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -170,5 +170,84 @@ describe("the invite box: search as you type, and names (#on-call)", () => {
     await expect(resolveInviteEmail("Ada", asDb(db))).rejects.toMatchObject({ code: "ambiguous" });
     db.user.findMany.mockResolvedValue([]);
     await expect(resolveInviteEmail("Nobody", asDb(db))).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("the staff list of people on call (#on-call)", () => {
+  const seen = (minutesAgo: number) => ({ lastUsedAt: new Date(now.getTime() - minutesAgo * 60_000) });
+
+  it("a person is as online as their best agent: online, else quiet, else paused, and none without agents", () => {
+    const recent = { pausedAt: null, apiKeys: [seen(2)] };
+    const stale = { pausedAt: null, apiKeys: [seen(90)] };
+    const paused = { pausedAt: now, apiKeys: [seen(1)] };
+    expect(agentState(recent, now)).toBe("Online");
+    expect(agentState(stale, now)).toBe("Quiet");
+    expect(agentState(paused, now)).toBe("Paused");
+    expect(personState([stale, recent], now)).toBe("Online");
+    expect(personState([stale, paused], now)).toBe("Quiet");
+    expect(personState([paused], now)).toBe("Paused");
+    expect(personState([], now)).toBe("No agents");
+    // Never seen counts as quiet, and a paused agent's recent use doesn't make a person online.
+    expect(personState([{ pausedAt: null, apiKeys: [] }, paused], now)).toBe("Quiet");
+  });
+
+  it("searches names and emails case-insensitively, pages the list, and shows only name, email, state and clearance", async () => {
+    const db = fakeDb();
+    db.user.count.mockResolvedValue(13);
+    db.user.findMany.mockResolvedValue([
+      { id: "u1", name: "Tolu Adeyemi", email: "tolu@example.com", securityClearedAt: now, agents: [{ pausedAt: null, apiKeys: [seen(1)] }] },
+      { id: "u2", name: "Kemi Bakare", email: "kemi@example.com", securityClearedAt: null, agents: [] },
+    ]);
+    const { total, people } = await listOnCallPeople({ q: "  TOL ", skip: 10, take: 10 }, now, asDb(db));
+    expect(total).toBe(13);
+    const where = db.user.findMany.mock.calls[0]![0].where;
+    expect(where).toEqual({
+      onCallAt: { not: null },
+      OR: [{ name: { contains: "TOL", mode: "insensitive" } }, { email: { contains: "TOL", mode: "insensitive" } }],
+    });
+    expect(db.user.findMany.mock.calls[0]![0]).toMatchObject({ skip: 10, take: 10 });
+    expect(db.user.count.mock.calls[0]![0].where).toEqual(where);
+    expect(people).toEqual([
+      { id: "u1", name: "Tolu Adeyemi", email: "tolu@example.com", state: "Online", cleared: true },
+      { id: "u2", name: "Kemi Bakare", email: "kemi@example.com", state: "No agents", cleared: false },
+    ]);
+  });
+
+  it("without a search it lists everyone who is on call", async () => {
+    const db = fakeDb();
+    db.user.count.mockResolvedValue(0);
+    db.user.findMany.mockResolvedValue([]);
+    await listOnCallPeople({}, now, asDb(db));
+    expect(db.user.findMany.mock.calls[0]![0].where).toEqual({ onCallAt: { not: null } });
+  });
+});
+
+describe("paging the call log (#on-call)", () => {
+  const line = (n: number, missed: boolean) => ({
+    kind: "security_part" as const,
+    at: new Date(now.getTime() - n * 60_000),
+    what: `Part ${n}`,
+    pickedUpBy: missed ? null : "Ada",
+    waitMs: missed ? null : 1000,
+    missed,
+  });
+  const lines = Array.from({ length: 25 }, (_, n) => line(n, n % 5 === 0));
+
+  it("shows ten a page and counts what was missed over the whole log", () => {
+    const first = pageCallLog(lines, { page: 1 });
+    expect(first.lines).toHaveLength(10);
+    expect(first.pagination).toMatchObject({ totalCount: 25, totalPages: 3, from: 1, to: 10 });
+    expect(first.totalLines).toBe(25);
+    expect(first.missed).toBe(5);
+    expect(pageCallLog(lines, { page: 3 }).lines).toHaveLength(5);
+    // A page past the end is the last page.
+    expect(pageCallLog(lines, { page: 99 }).pagination.page).toBe(3);
+  });
+
+  it("can show only the missed lines, paged on their own", () => {
+    const only = pageCallLog(lines, { missedOnly: true, perPage: 2 });
+    expect(only.lines.every((l) => l.missed)).toBe(true);
+    expect(only.pagination).toMatchObject({ totalCount: 5, totalPages: 3 });
+    expect(only.totalLines).toBe(25);
   });
 });

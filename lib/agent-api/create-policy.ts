@@ -76,6 +76,7 @@ export async function findSimilarIssues(
   title: string,
   /** Only work on this track counts: a marketing task never duplicates a product report. */
   track: WorkTrack = "product",
+  includeIdeas = true,
 ): Promise<SimilarIssue[]> {
   const query = normalizeQuery(title);
   if (!shouldSearch(query)) return [];
@@ -100,6 +101,7 @@ export async function findSimilarIssues(
         AND "organisationId" = ${scope.organisationId}
         AND "projectId" = ${scope.projectId}
         AND "status" = 'open'
+        AND ${includeIdeas}
         AND ("title" % ${query} OR ${query} <% "title")
       ORDER BY "score" DESC
       LIMIT ${CANDIDATES}`;
@@ -117,12 +119,12 @@ export async function findSimilarIssues(
       orderBy: [{ voteCount: "desc" }, { updatedAt: "desc" }],
       take: SIMILAR_LIMIT,
     }),
-    db.idea.findMany({
+    includeIdeas ? db.idea.findMany({
       where: { organisationId: scope.organisationId, projectId: scope.projectId, track, isDeleted: false, status: "open", AND: titleMatch },
       select: { id: true, number: true, title: true, score: true },
       orderBy: [{ score: "desc" }, { updatedAt: "desc" }],
       take: SIMILAR_LIMIT,
-    }),
+    }) : Promise.resolve([]),
   ]);
   return [
     ...issues.map((issue) => ({ ...issue, kind: "issue" as const })),

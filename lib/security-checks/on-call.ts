@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { calculatePagination } from "@/lib/pagination";
 import { ON_CALL_QUIET_AFTER_MS, isQuiet } from "@/lib/security-checks";
 
 /**
@@ -190,56 +191,138 @@ export async function setSecurityClearance(db: Db, userId: string, cleared: bool
 
 export type OnCallState = "Online" | "Quiet" | "Paused" | "No agents";
 
-/** The on-call people for the staff page: state of their best agent, open work and guest stays. */
-export async function listOnCallPeople(now = new Date(), db: Db = prisma) {
-  const people = await db.user.findMany({
-    where: { onCallAt: { not: null } },
-    orderBy: { onCallAt: "asc" },
+/** People on a page of the staff list. */
+export const ON_CALL_PEOPLE_PER_PAGE = 10;
+
+type SeenAgent = { pausedAt: Date | null; apiKeys: { lastUsedAt: Date | null }[] };
+
+/** The latest time any of these agents' keys was used; null when none was. */
+function latestSeen(agents: readonly SeenAgent[]): Date | null {
+  return agents
+    .flatMap((agent) => agent.apiKeys.map((key) => key.lastUsedAt))
+    .reduce<Date | null>((latest, seen) => (seen && (!latest || seen > latest) ? seen : latest), null);
+}
+
+/** One agent's state: paused, quiet (not seen for ON_CALL_QUIET_AFTER_MS) or online. */
+export function agentState(agent: SeenAgent, now = new Date()): Exclude<OnCallState, "No agents"> {
+  if (agent.pausedAt !== null) return "Paused";
+  return isQuiet(latestSeen([agent]), now) ? "Quiet" : "Online";
+}
+
+/** A person's state is that of their best agent: online if any is, else quiet, else paused; "No agents" with none. */
+export function personState(agents: readonly SeenAgent[], now = new Date()): OnCallState {
+  if (agents.length === 0) return "No agents";
+  const working = agents.filter((agent) => agent.pausedAt === null);
+  if (working.length === 0) return "Paused";
+  return isQuiet(latestSeen(working), now) ? "Quiet" : "Online";
+}
+
+/**
+ * The people on call for the staff list: just who they are and how they are doing
+ * (name, email, state, cleared). `q` matches a name or an email; `skip` and `take`
+ * page it. The detail (agents, open work, guest stays) is on the person's own page.
+ */
+export async function listOnCallPeople(
+  { q = "", skip = 0, take = ON_CALL_PEOPLE_PER_PAGE }: { q?: string; skip?: number; take?: number } = {},
+  now = new Date(),
+  db: Db = prisma,
+) {
+  const term = q.trim();
+  const where: Prisma.UserWhereInput = {
+    onCallAt: { not: null },
+    ...(term ? { OR: [{ name: { contains: term, mode: "insensitive" } }, { email: { contains: term, mode: "insensitive" } }] } : {}),
+  };
+  const [total, people] = await Promise.all([
+    db.user.count({ where }),
+    db.user.findMany({
+      where,
+      orderBy: [{ onCallAt: "asc" }, { id: "asc" }],
+      skip,
+      take,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        securityClearedAt: true,
+        agents: { where: { revokedAt: null }, select: { pausedAt: true, apiKeys: { where: { revokedAt: null }, select: { lastUsedAt: true } } } },
+      },
+    }),
+  ]);
+  return {
+    total,
+    people: people.map((person) => ({
+      id: person.id,
+      name: person.name,
+      email: person.email,
+      state: personState(person.agents, now),
+      cleared: person.securityClearedAt !== null,
+    })),
+  };
+}
+
+/** Everyone on call, whatever the search: the page's heading count. */
+export async function countOnCallPeople(db: Db = prisma): Promise<number> {
+  return db.user.count({ where: { onCallAt: { not: null } } });
+}
+
+/**
+ * One person's full page: their agents (state, last seen, parts being checked now)
+ * and the workspaces they are a guest in. Null for someone who doesn't exist.
+ */
+export async function getOnCallPerson(userId: string, now = new Date(), db: Db = prisma) {
+  const person = await db.user.findUnique({
+    where: { id: userId },
     select: {
       id: true,
       name: true,
       email: true,
-      securityClearedAt: true,
       onCallAt: true,
+      securityClearedAt: true,
       agents: {
         where: { revokedAt: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: {
+          id: true,
+          name: true,
+          username: true,
           pausedAt: true,
           apiKeys: { where: { revokedAt: null }, select: { lastUsedAt: true } },
-          activations: { where: { guest: true, guestEndedAt: null, deactivatedAt: null }, select: { id: true } },
+          activations: { where: { guest: true, guestEndedAt: null, deactivatedAt: null }, select: { organisation: { select: { id: true, name: true } } } },
           _count: { select: { securityCheckItems: { where: { status: "checking" } } } },
         },
       },
     },
   });
-  return people.map((person) => {
-    const working = person.agents.filter((agent) => agent.pausedAt === null);
-    const lastSeen = working
-      .flatMap((agent) => agent.apiKeys.map((key) => key.lastUsedAt))
-      .reduce<Date | null>((latest, seen) => (seen && (!latest || seen > latest) ? seen : latest), null);
-    const state: OnCallState =
-      person.agents.length === 0 ? "No agents" : working.length === 0 ? "Paused" : isQuiet(lastSeen, now) ? "Quiet" : "Online";
-    return {
-      id: person.id,
-      name: person.name,
-      email: person.email,
-      state,
-      lastSeen,
-      cleared: person.securityClearedAt !== null,
-      onCallSince: person.onCallAt,
-      agentCount: person.agents.length,
-      openParts: person.agents.reduce((sum, agent) => sum + agent._count.securityCheckItems, 0),
-      guestWorkspaces: person.agents.reduce((sum, agent) => sum + agent.activations.length, 0),
-    };
-  });
+  if (!person) return null;
+  const guests = new Map<string, string>();
+  for (const agent of person.agents) for (const activation of agent.activations) guests.set(activation.organisation.id, activation.organisation.name);
+  return {
+    id: person.id,
+    name: person.name,
+    email: person.email,
+    onCallSince: person.onCallAt,
+    cleared: person.securityClearedAt !== null,
+    state: personState(person.agents, now),
+    openParts: person.agents.reduce((sum, agent) => sum + agent._count.securityCheckItems, 0),
+    agents: person.agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      username: agent.username,
+      state: agentState(agent, now),
+      lastSeen: latestSeen([agent]),
+      openParts: agent._count.securityCheckItems,
+    })),
+    guestWorkspaces: [...guests].map(([id, name]) => ({ id, name })),
+  };
 }
 
 // ---------------------------------------------------------------------------
 // The call log
 
-/** The log looks back this far, and shows at most this many lines. */
+/** The log looks back this far, reads at most this many rows of each kind, and shows this many lines a page. */
 export const CALL_LOG_WINDOW_MS = 48 * 60 * 60 * 1000;
-export const CALL_LOG_LINES = 40;
+export const CALL_LOG_FETCH = 200;
+export const CALL_LOG_PER_PAGE = 10;
 
 export type CallLogLine = {
   kind: "security_part" | "guest_request";
@@ -254,7 +337,7 @@ export type CallLogLine = {
   missed: boolean;
 };
 
-/** Pure: turns the rows into log lines, newest first. */
+/** Pure: turns the rows into log lines, newest first, all of them (the page shows them in pages). */
 export function buildCallLog(
   parts: ReadonlyArray<{ createdAt: Date; assignedAt: Date | null; title: string; agent: { owner: { name: string | null; email: string } } | null }>,
   guests: ReadonlyArray<{ createdAt: Date; organisation: { name: string }; agent: { owner: { name: string | null; email: string } } }>,
@@ -283,10 +366,10 @@ export function buildCallLog(
       missed: false,
     });
   }
-  return lines.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, CALL_LOG_LINES);
+  return lines.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
-/** The call log for the staff page: security parts and guest requests of the last 48 hours. */
+/** The call log for the staff page: security parts and guest requests of the last 48 hours, newest first. */
 export async function onCallLog(now = new Date(), db: Db = prisma): Promise<CallLogLine[]> {
   const since = new Date(now.getTime() - CALL_LOG_WINDOW_MS);
   const owner = { select: { owner: { select: { name: true, email: true } } } } as const;
@@ -294,15 +377,30 @@ export async function onCallLog(now = new Date(), db: Db = prisma): Promise<Call
     db.securityCheckItem.findMany({
       where: { kind: "check", createdAt: { gte: since } },
       orderBy: { createdAt: "desc" },
-      take: CALL_LOG_LINES,
+      take: CALL_LOG_FETCH,
       select: { createdAt: true, assignedAt: true, title: true, agent: owner },
     }),
     db.agentActivation.findMany({
       where: { guest: true, createdAt: { gte: since } },
       orderBy: { createdAt: "desc" },
-      take: CALL_LOG_LINES,
+      take: CALL_LOG_FETCH,
       select: { createdAt: true, organisation: { select: { name: true } }, agent: owner },
     }),
   ]);
   return buildCallLog(parts, guests, now);
+}
+
+/** One page of the call log, optionally only the missed lines, with the numbers the page's summary shows. */
+export function pageCallLog(
+  lines: readonly CallLogLine[],
+  { page = 1, missedOnly = false, perPage = CALL_LOG_PER_PAGE }: { page?: number; missedOnly?: boolean; perPage?: number } = {},
+) {
+  const shown = missedOnly ? lines.filter((line) => line.missed) : lines;
+  const pagination = calculatePagination({ page, pageSize: perPage, totalCount: shown.length });
+  return {
+    lines: shown.slice(pagination.skip, pagination.skip + pagination.take),
+    pagination,
+    totalLines: lines.length,
+    missed: lines.filter((line) => line.missed).length,
+  };
 }

@@ -4,25 +4,27 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { giveRewardEstimateAction } from "@/app/actions/reward";
 import { LocalTime } from "@/components/local-time";
-import { formatZ, REWARD_MAX, REWARD_MAX_ESTIMATES } from "@/lib/points/rules";
+import { ZikAmount } from "@/components/zik-symbol";
+import { REWARD_MAX_ESTIMATES, REWARD_ZIK_MAX, REWARD_ZIK_STEP } from "@/lib/points/rules";
 
 export type RewardEstimateView = {
   id: string;
   userId: string;
   by: string;
   agentName: string | null;
+  /** In Ziks. */
   value: number;
   reason: string | null;
   updatedAt: Date | string;
 };
 
-/** The choices, in steps of $2 so they fit on one line: $2, $4, … $10. */
-const VALUES = Array.from({ length: Math.floor(REWARD_MAX / 2) }, (_, index) => (index + 1) * 2);
+/** The choices, in Ziks, two steps apart so they fit on one line: 20, 40, … 100. */
+const VALUES = Array.from({ length: REWARD_ZIK_MAX / (2 * REWARD_ZIK_STEP) }, (_, index) => (index + 1) * 2 * REWARD_ZIK_STEP);
 
 /**
- * The issue page's Reward panel (#rewards): what solving the issue pays (the
- * average of the estimates, fixed at 15), a place to give or change your own
- * estimate, and every estimate so far with who gave it and why.
+ * The issue page's Reward panel (#rewards): what solving the issue is worth, in
+ * Ziks (the average of the estimates, fixed at 15), a place to give or change
+ * your own estimate, and every estimate so far with who gave it and why.
  */
 export function IssueRewardPanel({
   bugId,
@@ -32,8 +34,12 @@ export function IssueRewardPanel({
   viewerId,
   canEstimate,
   caption,
+  children,
 }: {
+  /** Drawn right under the amount, before the estimates: where the issue is funded (#ziki-coins). */
+  children?: React.ReactNode;
   bugId: string;
+  /** In Ziks. */
   reward: number;
   estimates: RewardEstimateView[];
   fixed: boolean;
@@ -75,10 +81,12 @@ export function IssueRewardPanel({
         <h2 id={`${id}-heading`} className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Reward</h2>
         {fixed ? <span className="text-xs text-zk-muted">Fixed</span> : null}
       </div>
-      <p className="m-0 flex items-baseline gap-2">
-        <span className="font-mono text-[28px] font-extrabold leading-none tabular-nums text-zk-text" data-testid="reward-amount">{formatZ(reward)}</span>
-        <span className="text-xs text-zk-muted">{caption ?? "paid to whoever solves it, once three people report it deployed"}</span>
+      <p className="m-0 flex items-center justify-center gap-5 py-2">
+        <span className="font-mono text-[32px] font-extrabold leading-none tabular-nums text-zk-text" data-testid="reward-amount"><ZikAmount amount={reward} /></span>
+        <span className="max-w-[40ch] text-xs leading-relaxed text-zk-muted">{caption ?? "paid to whoever solves it, once three people report it deployed"}</span>
       </p>
+
+      {children}
 
       {open ? (
         <form onSubmit={submit} aria-label="Your estimate" className="flex flex-col gap-2">
@@ -95,7 +103,7 @@ export function IssueRewardPanel({
                     }`}
                   >
                     <input type="radio" name="value" value={option} checked={value === option} onChange={() => setValue(option)} className="sr-only" />
-                    {formatZ(option)}
+                    <ZikAmount amount={option} />
                   </label>
                 ))}
               </div>
@@ -124,7 +132,7 @@ export function IssueRewardPanel({
                   <b className="font-semibold text-zk-text">{estimate.by}</b>
                   {estimate.agentName ? <span className="text-zk-muted"> via {estimate.agentName}</span> : null}
                 </span>
-                <span className="font-mono font-bold tabular-nums text-zk-text">{formatZ(estimate.value)}</span>
+                <span className="font-mono font-bold tabular-nums text-zk-text"><ZikAmount amount={estimate.value} /></span>
               </div>
               {estimate.reason ? <p className="m-0 mt-0.5 text-xs text-zk-text2">{estimate.reason}</p> : null}
               <p className="m-0 mt-0.5 text-[11px] text-zk-muted">

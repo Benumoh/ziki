@@ -4,6 +4,7 @@ import type { SecuritySeverity } from "@prisma/client";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { prisma } from "@/lib/prisma";
+import { walletBalance } from "@/lib/coins/ledger";
 import { CHECK_STATUS_LABEL, TARGET_KIND_LABEL, isReportPosted } from "@/lib/security-checks";
 import { findingPrice } from "@/lib/security-checks/payment";
 import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
@@ -15,7 +16,7 @@ export const metadata = { title: "Unlock fixes" };
 /**
  * Unlock fixes (#security-checks, plan C1). The scan is free; each finding
  * costs its severity's price to unlock (critical 5, high 3, medium 2, low 1
- * coins), and the client unlocks all of them or the ones they pick. The report
+ * Ziks), and the client unlocks all of them or the ones they pick. The report
  * links here with `?results=id1,id2` to preselect. A locked finding's title
  * and details never reach this page: only its severity and price.
  */
@@ -44,6 +45,7 @@ export default async function UnlockFixesPage({
   });
   if (!check) notFound();
 
+  const balance = await walletBalance(prisma, user.id);
   const back = `/security?check=${encodeURIComponent(check.id)}`;
   const site = check.target.value;
   const kind = check.target.kind;
@@ -58,9 +60,9 @@ export default async function UnlockFixesPage({
         Assets
       </Link>
 
-      <p className="mb-0 mt-8 text-sm text-zk-muted">Step 3 of 3 · Fix</p>
-      <h1 className="mb-0 mt-1 text-[28px] font-bold leading-tight tracking-tight text-zk-text">
-        Unlock fixes for <span className="break-all">{site}</span>
+      {/* The site breaks only when it can't fit a line, not mid-word on every phone. */}
+      <h1 className="mb-0 mt-8 text-2xl font-bold leading-tight tracking-tight text-zk-text sm:text-[28px]">
+        Unlock fixes for <span className="wrap-break-word">{site}</span>
       </h1>
       <p className="mb-0 mt-2 text-[15px] leading-relaxed text-zk-text2">
         Unlock a finding to see what&apos;s wrong in full and how to fix it. You pay per finding, by how serious it is.
@@ -104,7 +106,8 @@ export default async function UnlockFixesPage({
       </div>
 
       <p className="mb-0 mt-6 text-center text-xs text-zk-muted">
-        Prices: critical 5, high 3, medium 2, low 1 coins. Test payment, no coins move yet.
+        Prices: critical 5, high 3, medium 2, low 1 Ziks. You have {balance} {balance === 1 ? "Zik" : "Ziks"}.{" "}
+        <Link href="/coins" className="font-semibold text-zk-accent hover:underline">Buy Ziks</Link>
       </p>
     </div>
   );

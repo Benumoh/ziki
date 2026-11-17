@@ -14,7 +14,6 @@ import { newIssuePath, type ProjectRef } from "@/lib/project-paths";
 import { SeverityChip } from "@/components/security-finding-panel";
 import { AgentClearanceToggle } from "@/components/security-finding-controls";
 import { PipelineSteps } from "@/components/pipeline-steps";
-import { SecuritySettingsLink } from "@/components/security/security-settings-link";
 import {
   filterSecurityFindingsByStage,
   parseSecurityStageFilter,
@@ -23,11 +22,10 @@ import {
 } from "@/components/security-stage-filter";
 import { LocalTime } from "@/components/local-time";
 import { SecurityChecksPanel } from "@/components/security-checks/entry-panel";
-import { SecurityTabs } from "@/components/security-checks/security-tabs";
+import { OutsideStart } from "@/components/security-checks/outside-start";
 import { WorkspacePickerModal } from "@/components/security-checks/workspace-picker";
 import { listWorkspaceChecks } from "@/lib/security-checks/entry";
 import { parseSecurityTarget, targetAddress } from "@/lib/security-checks/target";
-import { countAgentJobs } from "@/lib/security-checks/your-work";
 import { OrgPageHeader, ReadOnlyNote, orgCard, orgListCard } from "../[org]/[project]/org/org-ui";
 
 /** Signed out, /security is the public Ziki Security page, so it carries that page's search title and description. */
@@ -56,6 +54,8 @@ type SearchParams = Promise<{
   show?: string | string[];
   target?: string | string[];
   picked?: string | string[];
+  /** "1" from Try now on the public page: once the site is in, open its page. */
+  progress?: string | string[];
   page?: string | string[];
 }>;
 
@@ -98,7 +98,7 @@ export default async function SecurityPage(props: {
       select: { organisation: { select: { id: true, name: true } } },
     });
     if (owned.length > 1) {
-      const pickedBack = `/security?target=${encodeURIComponent(brought)}&picked=1`;
+      const pickedBack = `/security?target=${encodeURIComponent(brought)}&picked=1${params.progress === "1" ? "&progress=1" : ""}`;
       picker = (
         <WorkspacePickerModal
           site={brought}
@@ -122,20 +122,23 @@ export default async function SecurityPage(props: {
     );
   }
   if (!showFindings && !access.admin) {
-    // Scans live in a workspace the person owns or runs. If the current one isn't theirs,
-    // open one that is, keeping the scanned site.
-    const own = await prisma.membership.findFirst({
-      where: { userId: user.id, role: { in: ["owner", "admin"] }, organisation: { archivedAt: null } },
-      orderBy: { createdAt: "asc" },
-      select: { organisationId: true },
-    });
-    if (own && own.organisationId !== access.organisationId) {
-      redirect(`/organisations/open?organisation=${encodeURIComponent(own.organisationId)}&next=${encodeURIComponent(back)}`);
+    // Arriving with a scanned site (from the public page): scans live in a workspace the person owns or
+    // runs, so if the current one isn't theirs, open one that is, keeping the scanned site.
+    if (brought) {
+      const own = await prisma.membership.findFirst({
+        where: { userId: user.id, role: { in: ["owner", "admin"] }, organisation: { archivedAt: null } },
+        orderBy: { createdAt: "asc" },
+        select: { organisationId: true },
+      });
+      if (own && own.organisationId !== access.organisationId) {
+        redirect(`/organisations/open?organisation=${encodeURIComponent(own.organisationId)}&next=${encodeURIComponent(back)}`);
+      }
+      // Owns none: straight to creating one; they come back here afterwards and the scan starts.
+      if (!own) redirect(`/organisations?next=${encodeURIComponent(back)}`);
     }
-    // Owns none and arrived with a scanned site (from the public page): straight to creating one;
-    // they come back here afterwards and the scan starts.
-    if (!own && brought) redirect(`/organisations?next=${encodeURIComponent(back)}`);
-    // A plain member of this workspace just sees their own work, as before.
+    // Otherwise a plain member of this workspace stays in it and sees their own work. Without a scanned
+    // site they are never moved to another workspace (15 Nov call): that other workspace is one switch away,
+    // and Your work says so.
     if (access.organisationId) redirect("/security/work");
   }
   if (!access.organisationId) {
@@ -144,7 +147,6 @@ export default async function SecurityPage(props: {
         <OrgPageHeader heading="h1" title="Security" actions={
           <div className="flex items-center gap-2">
             <Link href="/security/activity" className="text-sm font-semibold text-zk-accent hover:underline">Activity</Link>
-            <SecuritySettingsLink />
           </div>
         }>Report and track security findings.</OrgPageHeader>
         {/* No workspace of their own: scans live in one, so make it first, then come straight back with the site. */}
@@ -162,15 +164,25 @@ export default async function SecurityPage(props: {
     );
   }
   const organisationId = access.organisationId;
+  // Try now from the public page, with the workspace settled: add the site and open its progress page. Never the
+  // chat box for someone coming from outside.
+  if (!showFindings && brought && params.progress === "1" && !picker) {
+    return (
+      <div className="flex w-full flex-col pb-10">
+        <h1 className="sr-only">Security</h1>
+        <div className="mx-auto w-full max-w-[880px] pt-6">
+          <OutsideStart site={brought} />
+        </div>
+      </div>
+    );
+  }
   if (!showFindings) {
-    const [checks, jobs] = await Promise.all([listWorkspaceChecks(organisationId, user.id), countAgentJobs(user.id)]);
+    const checks = await listWorkspaceChecks(organisationId, user.id);
     const highlight = typeof params.check === "string" ? { checkId: params.check, unlocked: Number(params.unlocked) > 0 ? Number(params.unlocked) : 0 } : undefined;
     // One page (14 Nov plan): the box, the scan under it, then the person's scans.
     return (
       <div className="flex w-full flex-col pb-10">
-        <h1 className="sr-only">Security</h1>
-        {/* Removed (cancelled) scans don't count. */}
-        <SecurityTabs selected="checks" checks={checks.filter((check) => check.status !== "cancelled").length} jobs={jobs} />
+        {/* The title, "+ Add target" and the list are the panel's own (ScansArea); no tabs. Your work stays at /security/work. */}
         {picker}
         {/* While the pop-up asks where it goes, nothing is scanned yet. */}
         <SecurityChecksPanel checks={checks} highlight={highlight} startWith={picker ? undefined : (brought ?? undefined)} show={typeof params.show === "string" ? params.show : undefined} page={Number(params.page) > 0 ? Math.floor(Number(params.page)) : 1} />
@@ -216,7 +228,6 @@ export default async function SecurityPage(props: {
       <OrgPageHeader heading="h1" title="Findings" actions={
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/security/activity" className="text-sm font-semibold text-zk-accent hover:underline">Activity</Link>
-          <SecuritySettingsLink />
           <ReportButton projects={dashboard.projects} />
         </div>
       }>

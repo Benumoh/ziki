@@ -9,6 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { previewScan } from "@/lib/security-checks/preview";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
+import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 import {
   ASSISTANT_HISTORY_MAX,
@@ -17,7 +18,10 @@ import {
   askSecurityAssistant,
   type AssistantTurn,
 } from "@/lib/security-checks/assistant";
-import { loadSiteChat, saveSiteMessage, SITE_CHAT_MESSAGE_MAX, siteChatScan, siteContextNote } from "@/lib/security-checks/site-chat";
+import { loadSiteChat, saveSiteMessage, scansContextNote, SITE_CHAT_MESSAGE_MAX, siteChatScan, siteContextNote } from "@/lib/security-checks/site-chat";
+import { after } from "next/server";
+import { kickCheck } from "@/lib/security-checks/engine";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Ziki's security chat, signed in (#security-checks, plan part C3). A plain
@@ -33,8 +37,11 @@ import { loadSiteChat, saveSiteMessage, SITE_CHAT_MESSAGE_MAX, siteChatScan, sit
 export type ChatAnswer =
   | { kind: "reply"; reply: string }
   | { kind: "go"; reply: string; href: string }
-  /** The quick scan of a site, already added to the person's scans (`checkId`) unless it couldn't be reached. `summary` is null when the scan couldn't run. */
-  | { kind: "scan"; reply: string; target: string; summary: PreviewSummary | null; note: string | null; checkId: string | null; already?: boolean }
+  /**
+   * The quick scan of a site, already added to the person's scans (`checkId`) unless it couldn't be reached. `summary` is null when the scan couldn't run.
+   * `finished` is true when the agents' report is already posted (a site scanned before), so the chat offers "See results".
+   */
+  | { kind: "scan"; reply: string; target: string; summary: PreviewSummary | null; note: string | null; checkId: string | null; already?: boolean; finished?: boolean }
   | { kind: "error"; error: string };
 
 /**
@@ -52,14 +59,14 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}` });
   if (!result.ok) return { ok: false, error: result.reason };
-  const summary = summarisePreview(result);
+  const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
   revalidatePath("/security");
   return { ok: true, summary };
 }
 
-/** A site's saved chat, as the card shows it. */
-export type SiteChatAnswer = { ok: true; messages: { id: string; role: "user" | "assistant"; text: string }[] } | { ok: false; error: string };
+/** A site's saved chat, as the card shows it, and whether its agents' report is posted ("See results" rather than "See progress"). */
+export type SiteChatAnswer = { ok: true; messages: { id: string; role: "user" | "assistant"; text: string }[]; finished: boolean } | { ok: false; error: string };
 
 /** The saved chat under one of your scans (#security-checks): loaded when its result opens. */
 export async function siteChat(checkId: string): Promise<SiteChatAnswer> {
@@ -70,7 +77,7 @@ export async function siteChat(checkId: string): Promise<SiteChatAnswer> {
   const scan = typeof checkId === "string" ? await siteChatScan(access.organisationId, user.id, checkId) : null;
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   const messages = await loadSiteChat(access.organisationId, user.id, scan.targetId);
-  return { ok: true, messages: messages.map(({ id, role, text }) => ({ id, role, text })) };
+  return { ok: true, messages: messages.map(({ id, role, text }) => ({ id, role, text })), finished: scan.report.posted };
 }
 
 /**
@@ -97,7 +104,7 @@ export async function askSite(checkId: string, question: string): Promise<SiteCh
     "I can't answer just now. Try again in a moment, or open the report for the agents' findings.";
   await saveSiteMessage(organisationId, user.id, scan.targetId, "assistant", reply);
   const messages = await loadSiteChat(organisationId, user.id, scan.targetId);
-  return { ok: true, messages: messages.map(({ id, role, text: said }) => ({ id, role, text: said })) };
+  return { ok: true, messages: messages.map(({ id, role, text: said }) => ({ id, role, text: said })), finished: scan.report.posted };
 }
 
 /** Remove a scan from the person's list, only while its report isn't posted. */
@@ -107,7 +114,7 @@ export async function removeScan(checkId: string): Promise<{ ok: true } | { ok: 
   if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
   if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
   const removed = typeof checkId === "string" && (await removeOwnScan(access.organisationId, user.id, checkId));
-  if (!removed) return { ok: false, error: "This one can't be removed: its report is ready, and reports stay." };
+  if (!removed) return { ok: false, error: "This scan is already removed." };
   revalidatePath("/security");
   return { ok: true };
 }
@@ -130,33 +137,39 @@ export async function talkToSecurityAssistant(history: AssistantTurn[]): Promise
 
   // A plain link needs no AI.
   const direct = parseSecurityTarget(last.text);
-  if (direct.ok) return scanAndAdd(access.organisationId, user.id, direct.target, `Got it. Here's a quick look at ${direct.target.value}.`);
+  if (direct.ok) return scanAndAdd(access.organisationId, user.id, direct.target, `Got it. Here's a quick look at ${direct.target.value}.`, turns);
   if (direct.error === PRIVATE_TARGET_ERROR) return { kind: "reply", reply: PRIVATE_TARGET_ERROR };
 
   const limit = checkRateLimit(`security-assistant:${user.id}`, ASSISTANT_RATE_LIMIT);
   if (!limit.allowed) return { kind: "error", error: RATE_LIMIT_MESSAGE };
 
-  const answer = await askSecurityAssistant(turns);
+  // Follow-ups about their own scans ("what's happening with my site?"): what's known about them, read here.
+  const answer = await askSecurityAssistant(turns, await scansContextNote(access.organisationId, user.id));
   if (!answer) return { kind: "reply", reply: ASK_FOR_ADDRESS };
   if (answer.target) {
     const picked = parseSecurityTarget(answer.target);
-    if (picked.ok) return scanAndAdd(access.organisationId, user.id, picked.target, answer.reply);
+    if (picked.ok) return scanAndAdd(access.organisationId, user.id, picked.target, answer.reply, turns);
     if (picked.error === PRIVATE_TARGET_ERROR) return { kind: "reply", reply: PRIVATE_TARGET_ERROR };
   }
   return { kind: "reply", reply: answer.reply };
 }
 
-/** Add a site to the person's scans from outside the chat (the public page, signed in): scan, add, then back to Security. */
-export async function addSecurityAsset(link: string): Promise<ChatAnswer> {
+/**
+ * Try now from the public page: add the site and start the agents' check, with no chat. The person asked for the
+ * agents already, so the Security page opens the scan's progress page straight from here (never the chat box).
+ * A site already in their scans goes to its page too.
+ */
+export async function startFromOutside(site: string): Promise<{ ok: true; checkId: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const access = await currentOrganisationAccess(user.id, user.role);
-  if (!access.organisationId) return { kind: "error", error: NO_WORKSPACE };
-  if (!access.admin) return { kind: "error", error: OWNERS_ONLY_MESSAGE };
-  const parsed = parseSecurityTarget(typeof link === "string" ? link : "");
-  if (!parsed.ok) return { kind: "error", error: parsed.error };
+  if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
+  const parsed = typeof site === "string" ? parseSecurityTarget(site) : null;
+  if (!parsed?.ok) return { ok: false, error: "That address can't be scanned. Try it again from the Security page." };
   const answer = await scanAndAdd(access.organisationId, user.id, parsed.target, "");
-  if (answer.kind !== "scan" || !answer.checkId) return answer;
-  return { kind: "go", reply: "", href: `/security?check=${encodeURIComponent(answer.checkId)}` };
+  if (answer.kind === "scan" && answer.checkId) return { ok: true, checkId: answer.checkId };
+  if (answer.kind === "scan") return { ok: false, error: answer.note ?? `Ziki couldn't reach ${parsed.target.value}.` };
+  return { ok: false, error: answer.kind === "error" ? answer.error : answer.reply };
 }
 
 /**
@@ -165,7 +178,7 @@ export async function addSecurityAsset(link: string): Promise<ChatAnswer> {
  * site the scan couldn't reach isn't added; a private repo (the scan can't
  * see it) or a scan that only hit the limit still is.
  */
-async function scanAndAdd(organisationId: string, userId: string, target: ParsedTarget, reply: string): Promise<ChatAnswer> {
+async function scanAndAdd(organisationId: string, userId: string, target: ParsedTarget, reply: string, conversation: AssistantTurn[] = []): Promise<ChatAnswer> {
   const address = targetAddress(target);
   // Scanned before: don't scan it again, just point to its card.
   const scanned = await findScannedCheck(organisationId, userId, target);
@@ -178,18 +191,40 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
       note: `${target.value} is already in your scans. This is its saved result. Replace it with a new scan?`,
       checkId: scanned.checkId,
       already: true,
+      finished: scanned.finished,
     };
   }
   const result = await previewScan(address, { visitor: `user:${userId}` });
-  const summary = result.ok ? summarisePreview(result) : null;
+  const summary = result.ok ? await withSiteAddress(summarisePreview(result)) : null;
   const addable = result.ok || target.kind === "repo" || result.retryAfterSeconds !== undefined;
   // Couldn't reach it: say so plainly, with no "here's a quick look" before it.
   if (!addable) return { kind: "scan", reply: "", target: address, summary: null, note: result.ok ? null : result.reason, checkId: null };
   const added = await addTargetAndCheck(organisationId, userId, target);
   if ("refused" in added) return { kind: "reply", reply: refusedMessage(added.refused, target.value) };
+  // Start it as soon as this answers. Waiting for the one-minute sweep left a new scan on "Waiting to start" for minutes
+  // (the sweep can be busy for a long time), and once for ten (15 Nov test); kickCheck never throws, and the sweep still catches a miss.
+  after(() => kickCheck(prisma, added.checkId));
   if (summary) await saveQuickScan(added.targetId, summary);
+  // The conversation that led to this scan becomes the start of the site's saved chat,
+  // so "See result" later carries on from it (14 Nov call).
+  await keepConversation(organisationId, userId, added.targetId, conversation, reply, summary);
   revalidatePath("/security");
   return { kind: "scan", reply, target: address, summary, note: result.ok ? null : result.reason, checkId: added.checkId };
+}
+
+/**
+ * Save the chat that led to a scan, and the reply with what the quick scan found, as the start of that site's chat.
+ * The agents' report later replaces the quick scan's numbers, so the saved line says when it was true.
+ */
+async function keepConversation(organisationId: string, userId: string, targetId: string, conversation: AssistantTurn[], reply: string, summary: PreviewSummary | null) {
+  if (!conversation.length) return;
+  const counts = summary
+    ? (["critical", "high", "medium", "low"] as const).filter((s) => summary.counts[s]).map((s) => `${summary.counts[s]} ${s}`).join(", ")
+    : "";
+  const found = summary ? (summary.total ? ` When you added it, the quick scan found ${summary.total} ${summary.total === 1 ? "problem" : "problems"} (${counts}).` : " When you added it, the quick scan found nothing.") : "";
+  for (const turn of conversation) await saveSiteMessage(organisationId, userId, targetId, turn.role, turn.text);
+  const said = `${reply}${found}`.trim();
+  if (said) await saveSiteMessage(organisationId, userId, targetId, "assistant", said);
 }
 
 /** Only well-formed turns, trimmed to the limits, at most the last few. */

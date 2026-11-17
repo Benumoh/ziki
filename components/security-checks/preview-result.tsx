@@ -1,121 +1,237 @@
 import type { ReactNode } from "react";
 import type { SecuritySeverity } from "@prisma/client";
+import "@/components/security-finding.css";
+import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
 import { PREVIEW_RISK_LABEL, type PreviewRisk, type PreviewSummary } from "@/lib/security-checks/preview-summary";
 
-const RISKS: PreviewRisk[] = ["minimal", "low", "medium", "high", "critical"];
-/** Where the marker sits on the meter for each risk, in percent. */
-const RISK_AT: Record<PreviewRisk, number> = { minimal: 6, low: 28, medium: 50, high: 72, critical: 94 };
-const SEVERITY_LABEL: Record<SecuritySeverity, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
-const SEVERITY_TONE: Record<SecuritySeverity, string> = {
-  critical: "bg-[#fde2e2] text-[#9f1239]",
-  high: "bg-[#fde7e1] text-[#b42318]",
-  medium: "bg-[#fff1e6] text-[#c2410c]",
-  low: "bg-zk-chip text-zk-text2",
-};
+const CHIP = "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-bold";
+const OK_CHIP = `bg-zk-ok-bg text-zk-ok-fg ${CHIP}`;
 
 /**
- * A quick scan's result (#security-checks), laid out like the agreed prototype:
- * two status lines, a risk meter from Minimal to Critical, a note on what a
- * quick scan can't see, and each area with a Fine or "N problems" pill. Under
- * each area with problems, every problem it found as a row with its severity
- * and short title. It's only what any browser can see, so it is shown; the
- * detail and how to fix it are not. The agents' deeper findings, with their
- * prices, come in the report. What was found stays on
- * the server until it is unlocked. `children` holds the next step.
+ * A quick scan's result (#security-checks). Everything the first design showed
+ * (whether HTTPS is set up, how many problems and of what kind, the risk
+ * level, what a quick scan can't see, and every area it looked at with Fine or
+ * its problems), drawn in the app's own look: the report's card, headings and
+ * severity chips (report-results.tsx, security-finding.css). Only what any
+ * browser can see, so the titles are shown; never the detail or the fix. The
+ * agents' report replaces it once it's ready. `children` holds the next step.
  */
 export function PreviewResult({ summary, children }: { summary: PreviewSummary; children?: ReactNode }) {
   const { counts, total, risk } = summary;
-  const rows = summary.rows ?? [];
-  const breakdown = (["critical", "high", "medium", "low"] as const)
-    .filter((severity) => counts[severity] > 0)
-    .map((severity) => `${counts[severity]} ${severity}`)
-    .join(", ");
+  const rank = (severity: SecuritySeverity) => SECURITY_SEVERITIES.indexOf(severity);
+  const rows = [...(summary.rows ?? [])].sort((a, b) => rank(a.severity) - rank(b.severity));
   const https = summary.areas.find((area) => area.area === "https");
   const certificate = summary.areas.find((area) => area.area === "certificate");
   const secure = (https?.problems ?? 0) + (certificate?.problems ?? 0) === 0;
+  const worst = SECURITY_SEVERITIES.find((severity) => counts[severity] > 0) ?? null;
+  const worstIn = (area: string) => SECURITY_SEVERITIES.find((severity) => rows.some((row) => row.area === area && row.severity === severity)) ?? worst ?? "medium";
+  const breakdown = SECURITY_SEVERITIES.filter((severity) => counts[severity] > 0)
+    .map((severity) => `${counts[severity]} ${severity}`)
+    .join(", ");
 
   return (
-    <div className="flex w-full flex-col gap-5 rounded-2xl border border-zk-border bg-zk-surface p-4 text-left sm:p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {https || certificate ? (
-          <Status ok={secure} title={secure ? "HTTPS is set up" : "HTTPS needs work"} text={secure ? "The site loads securely and the certificate is valid." : "Browsers may not reach it securely every time."} />
+    <section aria-label="Scan summary" className="w-full overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface text-left">
+      <div className="px-4 pt-4 sm:px-6 sm:pt-5">
+        {/* Named after the site, like other scanners' results ("SSL Report: go.dev", "Website test: go.dev"). */}
+        <h3 className="m-0 wrap-break-word text-base font-semibold text-zk-text">Scan summary: {summary.target}</h3>
+        <p className="m-0 text-xs text-zk-muted">What any browser can see. The agents check much more, and their report replaces this.</p>
+        {summary.ip ? (
+          // The site's facts the way other scanners write them: a bold label, then the value, on one line
+          // (SecurityHeaders' "IP Address: …" and "Report Time: …" rows, Sucuri's "IP address: …" box).
+          <dl className="m-0 mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+            <div className="flex gap-1.5">
+              <dt className="font-semibold text-zk-text">IP address:</dt>
+              <dd className="m-0 tabular-nums text-zk-text2">{summary.ip}</dd>
+            </div>
+            <div className="flex gap-1.5">
+              <dt className="font-semibold text-zk-text">Checked:</dt>
+              <dd className="m-0 text-zk-text2">
+                {new Date(summary.checkedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </dd>
+            </div>
+          </dl>
         ) : null}
-        <Status
-          ok={total === 0}
-          title={total ? `${total} ${total === 1 ? "problem" : "problems"} found` : "No problems found"}
-          text={total ? breakdown : "In what a quick scan can see."}
+
+        {/* One summary: how many problems, whether HTTPS is set up, and the risk on a meter. */}
+        <RiskMeter
+          risk={risk}
+          headline={total ? `${total} ${total === 1 ? "problem" : "problems"} found` : "No problems found"}
+          breakdown={total ? breakdown : "In what a quick scan can see."}
+          tone={worst}
+          https={https || certificate ? secure : null}
         />
       </div>
 
-      <div aria-label={`Security risk: ${PREVIEW_RISK_LABEL[risk]}`} role="img">
-        <div className="relative h-3.5 rounded bg-zk-chip">
-          <div className="absolute inset-y-0 left-0 rounded bg-gradient-to-r from-[#f6c35b] via-[#f08a3c] to-[#e5602b]" style={{ width: `${RISK_AT[risk]}%` }} />
-          <span
-            aria-hidden="true"
-            className="absolute -top-2 h-0 w-0 -translate-x-1/2 border-x-[8px] border-t-[12px] border-x-transparent border-t-zk-text"
-            style={{ left: `${RISK_AT[risk]}%` }}
-          />
-        </div>
-        <div className="mt-2 flex justify-between text-[13px] text-zk-muted">
-          {RISKS.map((level) => (
-            <span key={level} className={level === risk ? "font-bold text-zk-text" : "max-sm:hidden"}>
-              {PREVIEW_RISK_LABEL[level]}{level === risk && level !== "minimal" ? " security risk" : ""}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <p className="m-0 rounded-[10px] border border-zk-border bg-zk-bg px-4 py-3 text-sm leading-relaxed text-zk-text2">
-        A quick scan only looks at what any browser can already see. Agents check much more: login, forms, code and server. Their report says how to fix each problem.
-      </p>
-
-      <div className="flex flex-col gap-4">
+      {/* Every area it looked at, Fine or with its problems, worst first. */}
+      <ol className="m-0 mt-4 list-none divide-y divide-zk-border border-t border-zk-border p-0">
         {summary.areas.map((area) => {
           const found = rows.filter((row) => row.area === area.area);
           return (
-            <section key={area.area} aria-label={area.label} className={`border-l-4 py-1 pl-4 ${area.problems ? "border-[#f0b23a]" : "border-[#7fcfa8]"}`}>
-              <h4 className="m-0 flex flex-wrap items-center gap-2.5 text-[15px] font-bold text-zk-text">
-                {area.label}
-                <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${area.problems ? "bg-[#fff1e6] text-[#c2410c]" : "bg-zk-ok-bg text-zk-ok-fg"}`}>
-                  {area.problems ? `${area.problems} ${area.problems === 1 ? "problem" : "problems"}` : "Fine"}
-                </span>
-              </h4>
+            <li key={area.area} className="relative px-4 py-3 sm:px-6">
+              {/* A coloured stripe: green when fine, the worst problem's colour otherwise. */}
+              <span
+                aria-hidden="true"
+                className={`absolute inset-y-2 left-0 w-1 rounded-r ${area.problems ? `security-severity security-severity--${worstIn(area.area)}` : "bg-zk-ok-fg"}`}
+                style={area.problems ? { background: "var(--sev-dot)" } : undefined}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="m-0 text-sm font-semibold text-zk-text">{area.label}</h4>
+                {area.problems ? (
+                  <span className={`security-severity security-severity--${worstIn(area.area)} ${CHIP}`}>
+                    {area.problems} {area.problems === 1 ? "problem" : "problems"}
+                  </span>
+                ) : (
+                  <span className={OK_CHIP}>✓ Fine</span>
+                )}
+              </div>
               {found.length ? (
                 <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
                   {found.map((row, index) => (
-                    <li key={index} className="flex items-center gap-3 rounded-[10px] border border-zk-border bg-zk-bg px-3 py-2 text-sm">
-                      <span className={`w-[68px] shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-bold ${SEVERITY_TONE[row.severity]}`}>
-                        {SEVERITY_LABEL[row.severity]}
-                      </span>
+                    <li key={index} className="flex items-center gap-3 text-sm">
+                      <span className={`security-severity security-severity--${row.severity} ${CHIP} w-[72px] justify-center`}>{SEVERITY_LABEL[row.severity]}</span>
                       {/* What any browser can see, so it's shown: the title only, never the detail or the fix. */}
-                      <span className="min-w-0 flex-1 text-zk-text">{row.title ?? "A problem in this area"}</span>
+                      <span className="min-w-0 flex-1 wrap-break-word text-zk-text">{row.title ?? "A problem in this area"}</span>
                     </li>
                   ))}
                 </ul>
               ) : area.problems ? (
-                <p className="m-0 mt-1.5 text-sm text-zk-muted">Scan again to see what was found here.</p>
-              ) : (
-                <p className="m-0 mt-1.5 text-sm text-zk-ok-fg">✓ Nothing found here</p>
-              )}
-            </section>
+                <p className="m-0 mt-1 text-xs text-zk-muted">Scan again to see what was found here.</p>
+              ) : null}
+            </li>
           );
         })}
-      </div>
+      </ol>
 
-      {children}
-    </div>
+      {children ? <div className="border-t border-zk-border px-4 py-3 sm:px-6">{children}</div> : null}
+    </section>
   );
 }
 
-function Status({ ok, title, text }: { ok: boolean; title: string; text: string }) {
+
+/**
+ * The quick scan on the scan's own page, before the agents' report: just its
+ * problems, worst first, laid out like the report's "What we found"
+ * (report-results.tsx) so the page reads the same before and after. The
+ * agents' report replaces it once it's ready.
+ */
+export function QuickScanList({ summary }: { summary: PreviewSummary }) {
+  const { counts, total } = summary;
+  const rank = (severity: SecuritySeverity) => SECURITY_SEVERITIES.indexOf(severity);
+  const rows = [...(summary.rows ?? [])].sort((a, b) => rank(a.severity) - rank(b.severity));
+  const areaLabel = new Map(summary.areas.map((area) => [area.area, area.label]));
+
   return (
-    <div className="flex items-start gap-3">
-      <span aria-hidden="true" className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-base font-extrabold text-white ${ok ? "bg-[#12805c]" : "bg-[#c2410c]"}`}>
-        {ok ? "✓" : "!"}
-      </span>
-      <div className="min-w-0">
-        <p className="m-0 text-base font-bold text-zk-text">{title}</p>
-        <p className="m-0 mt-0.5 text-sm text-zk-muted">{text}</p>
+    <section aria-labelledby="quick-scan-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-5">
+        <div className="min-w-0">
+          <h2 id="quick-scan-heading" className="text-base font-semibold text-zk-text">Scan summary</h2>
+          <p className="text-xs text-zk-muted">What any browser can see, worst first. The agents&apos; report replaces this.</p>
+        </div>
+        <ul aria-label="Results by severity" className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+          {total ? (
+            SECURITY_SEVERITIES.filter((severity) => counts[severity] > 0).map((severity) => (
+              <li key={severity}>
+                <span className={`security-severity security-severity--${severity} ${CHIP}`}>
+                  {counts[severity]} {SEVERITY_LABEL[severity].toLowerCase()}
+                </span>
+              </li>
+            ))
+          ) : (
+            <li>
+              <span className={OK_CHIP}>No problems found</span>
+            </li>
+          )}
+        </ul>
+      </div>
+      {rows.length ? (
+        <ol className="m-0 mt-3 list-none divide-y divide-zk-border border-t border-zk-border p-0">
+          {rows.map((row, index) => (
+            <li key={index} className="grid gap-1.5 px-4 py-3 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-4 sm:px-6">
+              <div>
+                <span className={`security-severity security-severity--${row.severity} ${CHIP}`}>{SEVERITY_LABEL[row.severity]}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="m-0 wrap-break-word text-sm font-semibold text-zk-text">{row.title ?? "A problem in this area"}</p>
+                {areaLabel.get(row.area) ? <p className="m-0 text-xs text-zk-muted">{areaLabel.get(row.area)}</p> : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="m-0 mt-3 border-t border-zk-border px-4 py-4 text-sm text-zk-text2 sm:px-6">
+          {total ? "Scan again to see what was found." : "Nothing a browser can see needs fixing."}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const RISKS: PreviewRisk[] = ["minimal", "low", "medium", "high", "critical"];
+/** Where each level sits on the meter, in percent: the middle of its fifth. */
+const RISK_AT: Record<PreviewRisk, number> = { minimal: 10, low: 30, medium: 50, high: 70, critical: 90 };
+
+/**
+ * The security risk on a meter from Minimal to Critical, as the first design had it and as public
+ * scanners like Sucuri SiteCheck show it: one bar filled up to this site's risk, in that level's
+ * severity colour, with a pointer where it stops and the levels named underneath.
+ */
+function RiskMeter({ risk, headline, breakdown, tone, https }: {
+  risk: PreviewRisk;
+  headline: string;
+  breakdown: string;
+  /** The worst severity found, for the headline's dot; null when nothing was found. */
+  tone: SecuritySeverity | null;
+  /** Whether HTTPS is set up, or null when it wasn't looked at. */
+  https: boolean | null;
+}) {
+  const at = RISK_AT[risk];
+  const minimal = risk === "minimal";
+  return (
+    <div className="mt-4 rounded-xl border border-zk-border px-3 py-3 sm:px-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <p className="m-0 flex min-w-0 items-center gap-2 text-sm">
+          <span
+            aria-hidden="true"
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone ? `security-severity security-severity--${tone}` : "bg-zk-ok-fg"}`}
+            style={tone ? { background: "var(--sev-dot)" } : undefined}
+          />
+          <span className="font-semibold text-zk-text">{headline}</span>
+          <span className="text-zk-muted">· {breakdown}</span>
+        </p>
+        {https === null ? null : (
+          <span className={`${CHIP} ${https ? "bg-zk-ok-bg text-zk-ok-fg" : "security-severity security-severity--high"}`}>
+            {https ? "✓ HTTPS set up" : "! HTTPS needs work"}
+          </span>
+        )}
+      </div>
+      <p className="m-0 mt-3 text-xs font-semibold text-zk-muted">Security risk</p>
+      <div
+        role="meter"
+        aria-label="Security risk"
+        aria-valuemin={0}
+        aria-valuemax={RISKS.length - 1}
+        aria-valuenow={RISKS.indexOf(risk)}
+        aria-valuetext={PREVIEW_RISK_LABEL[risk]}
+        className="relative mt-3 h-2.5 rounded-full bg-zk-chip"
+      >
+        <span
+          aria-hidden="true"
+          className={`absolute inset-y-0 left-0 rounded-full ${minimal ? "bg-zk-ok-fg" : `security-severity security-severity--${risk}`}`}
+          style={{ width: `${at}%`, ...(minimal ? {} : { background: "var(--sev-dot)" }) }}
+        />
+        {/* The pointer where the fill stops. */}
+        <span
+          aria-hidden="true"
+          className="absolute -top-2 h-0 w-0 -translate-x-1/2 border-x-[7px] border-t-[9px] border-x-transparent border-t-zk-text"
+          style={{ left: `${at}%` }}
+        />
+      </div>
+      <div className="mt-2 grid grid-cols-5 text-center text-[11px] text-zk-muted sm:text-xs">
+        {RISKS.map((level) => (
+          <span key={level} className={level === risk ? "font-bold text-zk-text" : undefined}>
+            {PREVIEW_RISK_LABEL[level]}
+          </span>
+        ))}
       </div>
     </div>
   );

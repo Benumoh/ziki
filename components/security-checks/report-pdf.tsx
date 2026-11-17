@@ -47,10 +47,10 @@ const CHIP = "#f0f2f7"; // --zk-chip
 
 /** The severity chips' colours on the page (components/security-finding.css, light theme). */
 const SEVERITY_COLOUR: Record<SecuritySeverity, { bg: string; fg: string; border: string }> = {
-  critical: { bg: "#ffe2e2", fg: "#82181a", border: "#ffa2a2" },
-  high: { bg: "#ffedd4", fg: "#7e2a0c", border: "#ffb86a" },
-  medium: { bg: "#fef9c2", fg: "#733e0a", border: "#ffdf20" },
-  low: { bg: "#dbeafe", fg: "#1c398e", border: "#8ec5ff" },
+  critical: { bg: "#ffa2a2", fg: "#460809", border: "#ffa2a2" },
+  high: { bg: "#ffb86a", fg: "#441306", border: "#ffb86a" },
+  medium: { bg: "#fee685", fg: "#461901", border: "#fee685" },
+  low: { bg: "#b8e6fe", fg: "#052f4a", border: "#b8e6fe" },
 };
 const CLEAR = { bg: "#e3f6ec", fg: "#146c43", border: "#e3f6ec" }; // --zk-ok-bg / --zk-ok-fg
 
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   severityColumn: { width: pt(96), alignItems: "flex-start" },
   findingBody: { flex: 1 },
   findingTitle: { fontSize: pt(16), fontWeight: 700, lineHeight: 24 / 16 },
-  chip: { borderRadius: 10, borderWidth: 0.75, paddingHorizontal: pt(10), paddingTop: 1.5, paddingBottom: 0.5, fontSize: pt(12), fontWeight: 700 },
+  chip: { borderRadius: 10, borderWidth: 0.75, paddingHorizontal: pt(10), paddingTop: 1.5, paddingBottom: 2.5, fontSize: pt(12), lineHeight: 1, fontWeight: 700, textAlign: "center" },
   moved: { marginTop: 3, alignSelf: "flex-start", borderRadius: 10, backgroundColor: CHIP, paddingHorizontal: pt(10), paddingTop: 1.5, paddingBottom: 0.5, fontSize: pt(12), fontWeight: 600, color: TEXT2 },
   description: { marginTop: 4, color: TEXT2 },
   howToFix: { marginTop: pt(8) },

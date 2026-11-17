@@ -1,4 +1,6 @@
 import "server-only";
+import { readQuickScan } from "@/lib/security-checks/entry";
+import type { PreviewSummary } from "@/lib/security-checks/preview-summary";
 import type {
   IdeaStatus,
   Prisma,
@@ -12,8 +14,6 @@ import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
 import { isReportPosted, isTargetProven } from "@/lib/security-checks";
-import { readQuickScan } from "@/lib/security-checks/entry";
-import type { PreviewSummary } from "@/lib/security-checks/preview-summary";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 
 /**
@@ -22,11 +22,11 @@ import { SECURITY_SEVERITIES } from "@/lib/security-severity";
  * `loadCheckReport`, so they always show the same thing. A report never goes
  * away: moving findings to the client's app leaves it as it is.
  *
- * - Until Ziki has posted the report (`isReportPosted`), no result is read at
- *   all: the client sees progress, and the quick scan's short titles (which
- *   are never findings: nothing in it can be paid for).
- * - Once posted, the report is free (14 Nov call): every finding shows in
- *   full. Clients pay only to have a finding fixed, by moving it to their app.
+ * - The report is free (14 Nov call): every finding an agent has reported
+ *   shows in full as soon as its part is done (16 Nov call: "don't wait for
+ *   all these checks to be done"), with the quick scan from when the asset was
+ *   added. Clients pay only to have a finding fixed, by moving it to their app.
+ * - Posting (`isReportPosted`) adds Ziki's summary and the PDF.
  * - "How to fix" is only for a finding the client paid to have fixed (Hamzat,
  *   14 Nov): for any other finding it is never read, so it can't reach the
  *   page, the HTML or the PDF.
@@ -40,6 +40,8 @@ export type ReportPart = { id: string; title: string; status: SecurityCheckItemS
 /** One finding, as the client sees it. */
 export type ReportFinding = {
   id: string;
+  /** The part that found it. */
+  partId: string;
   severity: SecuritySeverity;
   /** The part of the check that found it ("Login form"). */
   area: string;
@@ -119,23 +121,25 @@ type ReportBase = {
   progress: { done: number; total: number; percent: number };
 };
 
-/**
- * Before the report is posted: progress, and the quick scan run when the asset
- * was added (Chloe's, `SecurityTarget.previewSummary`). Nothing about the
- * agents' results.
- */
-export type UnpostedReport = ReportBase & { posted: false; quickScan: PreviewSummary | null };
-
-/** The posted report: Ziki's summary, then every finding worst first. */
-export type PostedReport = ReportBase & {
-  posted: true;
-  /** Ziki AI's plain summary. */
-  summary: string | null;
+/** What every report has, posted or not: the quick scan and every finding reported so far, worst first. */
+type ReportFindings = {
+  /** The quick scan run when the asset was added (`SecurityTarget.previewSummary`): the list's first phase. */
+  quickScan: PreviewSummary | null;
   findings: ReportFinding[];
   counts: SeverityCounts;
   total: number;
   /** Finished parts that found nothing, by title. */
   clearParts: string[];
+};
+
+/** Still being checked: findings show as their parts are done. */
+export type UnpostedReport = ReportBase & ReportFindings & { posted: false };
+
+/** The posted report: also Ziki's summary, and the PDF. */
+export type PostedReport = ReportBase & ReportFindings & {
+  posted: true;
+  /** Ziki AI's plain summary. */
+  summary: string | null;
 };
 
 export type CheckReport = UnpostedReport | PostedReport;
@@ -219,16 +223,14 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
     progress: partsProgress(parts),
   };
 
-  // Not posted yet: progress and the quick scan only, so no result is read, not even a count.
-  if (!isReportPosted(check)) return { ...base, posted: false, quickScan: readQuickScan(check.target.previewSummary) };
-
-  // Every finding, in full: the report is free.
+  // Every finding reported so far, in full: the report is free, and a finding shows once its part is done.
   const rows = await prisma.securityCheckResult.findMany({
     where: { checkId: check.id },
     select: {
       id: true,
       itemId: true,
       severity: true,
+      unlockedAt: true,
       createdAt: true,
       title: true,
       description: true,
@@ -236,8 +238,8 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       item: { select: { title: true } },
     },
   });
-  // "How to fix" only for the findings the client paid to have fixed.
-  const paid = rows.filter((row) => fixOf(row.finding)).map((row) => row.id);
+  // "How to fix" only for the findings the client paid for: unlocked ("Tell me how to fix it") or moved to their app.
+  const paid = rows.filter((row) => row.unlockedAt || fixOf(row.finding)).map((row) => row.id);
   const howToFix = paid.length
     ? new Map(
         (
@@ -246,16 +248,15 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       )
     : new Map<string, string>();
 
-  return {
-    ...base,
-    posted: true,
-    summary: check.summary,
+  const found: ReportFindings = {
+    quickScan: readQuickScan(check.target.previewSummary),
     counts: countBySeverity(rows),
     total: rows.length,
     clearParts: clearPartTitles(parts, rows),
     findings: worstFirst(rows).map(
       (row): ReportFinding => ({
         id: row.id,
+        partId: row.itemId,
         severity: row.severity,
         area: row.item.title,
         title: row.title,
@@ -265,4 +266,5 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       }),
     ),
   };
+  return isReportPosted(check) ? { ...base, ...found, posted: true, summary: check.summary } : { ...base, ...found, posted: false };
 }

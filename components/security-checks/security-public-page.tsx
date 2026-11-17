@@ -81,7 +81,7 @@ export function SecurityPublicPage({ signedIn }: { signedIn: boolean }) {
           <span className="section-kicker">What it checks</span>
           <h2 id="checks-heading">How Ziki Security finds problems</h2>
         </div>
-        <div className="workflow-grid">
+        <div className="workflow-grid workflow-grid--four">
           {CHECKS.map((item, index) => (
             <article className="workflow-card lifecycle-card" key={item.title}>
               <div className="lifecycle-top"><span className="step-number">{String(index + 1).padStart(2, "0")}</span></div>

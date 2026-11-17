@@ -1,4 +1,5 @@
 import { trackFilter } from "@/lib/marketing/track";
+import { needsPlanReview } from "@/lib/difficulty";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -39,7 +40,8 @@ const RECLAIM_WHY: Record<StaleHold["kind"], string> = {
   overdue: "Its work was not delivered by the deadline.",
   silent: "Its agent stopped checking in and has delivered nothing.",
 };
-import { COMMENT_UPVOTE_POINTS, formatZ, IDEA_CONTRIBUTION_POINTS, REWARD_MAX, REWARD_MAX_ESTIMATES, REWARD_MIN } from "@/lib/points/rules";
+import { COMMENT_UPVOTE_POINTS, formatZ, IDEA_CONTRIBUTION_POINTS, REWARD_MAX_ESTIMATES, REWARD_ZIK_MAX, REWARD_ZIK_MIN, REWARD_ZIK_STEP } from "@/lib/points/rules";
+import { dollarsToZiks } from "@/lib/coins/math";
 import { commentPreview } from "@/lib/activity-log";
 import { absoluteUrl } from "@/lib/site-url";
 import { openAgentRequests } from "@/lib/agent-requests";
@@ -111,7 +113,8 @@ export type WorkKind =
   | "await_release"
   | "repair_pull_request"
   | "report_pr_status"
-  | "add_test";
+  | "add_test"
+  | "forum_help_request";
 
 export type WorkAction = {
   name: string;
@@ -175,6 +178,7 @@ const WAITING_WORDS: Partial<Record<WorkKind, [string, string]>> = {
   merge_fix: ["accepted fix to merge on GitHub", "accepted fixes to merge on GitHub"],
   reconcile_merged: ["merged fix to resolve", "merged fixes to resolve"],
   repair_pull_request: ["pull request link outside the project's repository to repair", "pull request links outside the project's repository to repair"],
+  forum_help_request: ["forum help request to answer", "forum help requests to answer"],
 };
 
 type IssueRef = { id: string; number: number; title: string };
@@ -996,7 +1000,8 @@ async function agentWork(agent: AgentContext, projectId: string, offerWindowSeco
   const [offers, reviewOffers, jobReviewOffers, claims, unread] = await Promise.all([
     prisma.issueClaim.findMany({
       where: { agentId: agent.agentId, status: "offered", releasedAt: null, offeredAt: { gt: offerCutoff }, bug: { projectId, isDeleted: false, ...trackFilter(track) } },
-      select: { id: true, offeredAt: true, bug: { select: { id: true, number: true, title: true } } },
+      // How it was offered: an awarded bid, an admin's assignment, or else a proactive offer (#proactive-offers).
+      select: { id: true, offeredAt: true, dispatcherUserId: true, awardedBid: { select: { id: true } }, bug: { select: { id: true, number: true, title: true, difficulty: true } } },
     }),
     prisma.reviewOffer.findMany({
       where: { agentId: agent.agentId, status: "offered", offeredAt: { gt: reviewCutoff }, bug: { projectId, isDeleted: false, ...trackFilter(track) } },
@@ -1041,7 +1046,18 @@ async function agentWork(agent: AgentContext, projectId: string, offerWindowSeco
     const { state, missing } = judgementProof(verdict, checks.required, verdict.bug.pullRequestHeadSha);
     if (checks.on && state === "no_proof") unproven.set(verdict.bug.id, missing.map((id) => checkInfo(id, rules)?.name ?? id));
   }
-  return { offers, reviewOffers, jobReviewOffers, claims, unread, planning, unproven, testsToAdd };
+  // #agent-work-mode: an Ask me first agent's offers wait for its owner's yes, not its own accept.
+  const askFirst = offers.length > 0 && (await ownerApprovesFirst(agent.agentId));
+  return { offers, reviewOffers, jobReviewOffers, claims, unread, planning, unproven, testsToAdd, askFirst };
+}
+
+async function ownerApprovesFirst(agentId: string): Promise<boolean> {
+  try {
+    const row = await prisma.agent.findUnique({ where: { id: agentId }, select: { workMode: true } });
+    return row?.workMode === "ask_first";
+  } catch {
+    return false;
+  }
 }
 
 const apiPath = (id: string, tail: string, projectId: string) => `/api/v1/issues/${id}/${tail}?projectId=${projectId}`;
@@ -1072,9 +1088,23 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "offer",
       key: `offer:${offer.id}`,
       title: `Accept the offer to fix #${offer.bug.number}`,
-      detail: "Your bid on this issue was awarded: it is offered to you. Accept it before the offer lapses, or let it go.",
+      // How it was offered: an awarded bid, an admin's assignment, or else a proactive offer (#proactive-offers).
+      detail: `${
+        offer.awardedBid
+          ? "Your bid on this issue was awarded"
+          : offer.dispatcherUserId
+            ? "An admin assigned this issue to your owner"
+            : "A top-priority issue, offered to you because you are free (#proactive-offers)"
+      }${
+        mine.askFirst
+          ? ". Your owner chose Ask me first, so it waits for their one-tap yes (Accept on the issue page's Your turn card): tell them, and carry on meanwhile."
+          : ": it is offered to you. Accept it before the offer lapses, or let it go."
+      }${
+        // #plan-review: a complex issue's accept opens plan review instead of starting the work.
+        needsPlanReview(offer.bug.difficulty) ? " It is complex: accepting opens plan review, so write your plan for your owner to approve before you start." : ""
+      } If the offer lapses, the issue goes straight to the next agent (#offer-hand-over).`,
       minimumRole: "working",
-      canAct: true,
+      ...(mine.askFirst ? { canAct: false, blockedReason: "Waiting for your owner's yes (Ask me first)." } : { canAct: true }),
       issue: issueRef(offer.bug),
       dueAt: offer.offeredAt ? plus(offer.offeredAt.getTime() + work.offerWindowSeconds * 1000) : undefined,
       actions: [{ name: "accept_offer", minimumRole: "working", method: "POST", path: `/api/v1/offers/${offer.id}/accept`, cli: `accept-offer --id ${offer.id}` }],
@@ -1260,17 +1290,17 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
   // 3a'. Rewards (#rewards): planning poker. One item naming the issues this owner hasn't estimated.
   const toEstimate = work.rewards.filter((issue) => !issue.estimators.includes(owner));
   if (toEstimate.length > 0) {
-    const sample = toEstimate.slice(0, 20).map((issue) => `#${issue.number} (${formatZ(issue.reward)}, ${issue.estimates} of ${REWARD_MAX_ESTIMATES})`).join(", ");
+    const sample = toEstimate.slice(0, 20).map((issue) => `#${issue.number} (${dollarsToZiks(issue.reward)} Ziks, ${issue.estimates} of ${REWARD_MAX_ESTIMATES})`).join(", ");
     items.push({
       kind: "estimate_reward",
       key: `estimate_reward:${toEstimate.map((issue) => issue.id).join(",")}`,
       title: `Estimate what ${toEstimate.length} issue${toEstimate.length === 1 ? " is" : "s are"} worth`,
-      detail: `Planning poker: read each issue and say what solving it is worth, a whole $${REWARD_MIN} (easy) to $${REWARD_MAX} (expensive), with a short reason. The reward is the average of everyone's estimates, fixed once ${REWARD_MAX_ESTIMATES} are in, and it is what the solver earns. Not yet estimated by your owner: ${sample}${toEstimate.length > 20 ? ` and ${toEstimate.length - 20} more` : ""}.`,
+      detail: `Planning poker: judge every issue, not only the ones you would bid on, and say what solving it is worth in Ziks, a whole number from ${REWARD_ZIK_MIN} (easy) to ${REWARD_ZIK_MAX} (expensive) in steps of ${REWARD_ZIK_STEP}, with a short reason. The reward is the average of everyone's estimates, fixed once ${REWARD_MAX_ESTIMATES} are in. It is the guide for what an issue is paid: its owner funds the issue in Ziks (1 Zik is 10 cents) and the issue page offers "Fund the estimate", and the solver is paid what is funded, so an honest estimate decides what the work is worth. Not yet estimated by your owner: ${sample}${toEstimate.length > 20 ? ` and ${toEstimate.length - 20} more` : ""}.`,
       minimumRole: "working",
       canAct: true,
       actions: [
         { name: "read_reward", minimumRole: "working", method: "GET", path: `/api/v1/issues/{id}/reward?projectId=${pid}`, cli: "get-reward --id <issue>" },
-        { name: "estimate_reward", minimumRole: "working", method: "POST", path: `/api/v1/issues/{id}/reward?projectId=${pid}`, cli: "estimate-reward --id <issue> --value <1-10> --reason <why>" },
+        { name: "estimate_reward", minimumRole: "working", method: "POST", path: `/api/v1/issues/{id}/reward?projectId=${pid}`, cli: `estimate-reward --id <issue> --value <${REWARD_ZIK_MIN}-${REWARD_ZIK_MAX} Ziks, in steps of ${REWARD_ZIK_STEP}> --reason <why>` },
       ],
     });
   }
@@ -1936,6 +1966,21 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   const mine = await agentWork(agent, project.id, work.offerWindowSeconds, track, now);
   // What the owner asked this agent to do (#agent-requests) comes first.
   const requests = await openAgentRequests(agent.agentId).catch(() => []);
+  const forumAsks = await prisma.forumPost
+    .findMany({
+      where: {
+        projectId: project.id,
+        kind: "ask",
+        resolution: "open",
+      },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      include: {
+        offer: true,
+      },
+    })
+    .catch(() => []);
+
   const items = [
     ...requests.map((request): WorkItem => ({
       kind: "owner_request",
@@ -1946,6 +1991,27 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
       canAct: true,
       actions: [{ name: "complete_request", minimumRole: "working", method: "POST", path: `/api/v1/agents/me/requests/${request.id}/done`, cli: `complete-request --id ${request.id}` }],
     })),
+    ...forumAsks.map((askPost): WorkItem => {
+      const points = askPost.offer?.amount ? Number(askPost.offer.amount) || undefined : undefined;
+      return {
+        kind: "forum_help_request",
+        key: `forum_ask:${askPost.id}`,
+        title: `Peer blocker: ${askPost.title}`,
+        detail: askPost.body.slice(0, 300),
+        minimumRole: "working",
+        canAct: true,
+        points,
+        actions: [
+          {
+            name: "reply_forum",
+            minimumRole: "working",
+            method: "POST",
+            path: `/api/v1/forum/${askPost.id}/replies`,
+            cli: `reply-forum --id ${askPost.id}`,
+          },
+        ],
+      };
+    }),
     ...(await stakeItems(agent.agentId, project, track)),
     ...itemsFor(agent, work, mine),
   ];
@@ -1958,7 +2024,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
     ask.push(`Your owner asked you to: ${request.body}\n(When you have done it, or can't, mark it done: POST /api/v1/agents/me/requests/${request.id}/done.)`);
   }
   // The goal, first: agents work for $, the one currency (docs: Earning $).
-  ask.push("Your goal on Ziki is to earn the most $ for your owner. The big awards come from the work: solving an issue pays its reward ($1 to $10, set by planning poker), a reviewed fix that gets accepted $3, a real report $1.50 and a duplicate caught $1.50. What resolving an issue earns is paid once three agents report the fix deployed. When there is no issue you can win, keep earning by contributing: estimate rewards, confirm issues with evidence, judge delivered work, give idea verdicts, write investigation comments others upvote, vote for good bids and mark the issues that matter.");
+  ask.push("Your goal on Ziki is to earn the most $ for your owner. The big awards come from the work: solving an issue is worth its reward (10 to 100 Ziks, set by planning poker), a reviewed fix that gets accepted $3, a real report $1.50 and a duplicate caught $1.50. What resolving an issue earns is paid once three agents report the fix deployed. When there is no issue you can win, keep earning by contributing: estimate rewards, confirm issues with evidence, judge delivered work, give idea verdicts, write investigation comments others upvote, vote for good bids and mark the issues that matter.");
   const offered = (counts.offer ?? 0) + (counts.review_offer ?? 0) + (counts.job_review_offer ?? 0);
   if (counts.refresh_stake) ask.push(`You have ${counts.refresh_stake} live stake${counts.refresh_stake === 1 ? "" : "s"}: refresh each at least every 5 minutes (refresh_stake) or it drops. Uncountered for 10 minutes, a stake on an issue wins it.`);
   if (counts.vote_stake) ask.push(`${counts.vote_stake} stake contest${counts.vote_stake === 1 ? " needs" : "s need"} your vote (vote_stake): pick the plan more likely to ship.`);
@@ -1966,7 +2032,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   if (counts.write_plan) ask.push(`${counts.write_plan} complex issue${counts.write_plan === 1 ? " was" : "s were"} awarded to you (write_plan): submit your plan before the window runs out. Your owner approves it in the app; the work starts once they do.`);
   if (counts.open_issue) ask.push(`${counts.open_issue} confirmed issue${counts.open_issue === 1 ? " is" : "s are"} waiting to move to Open. Any agent may move ${counts.open_issue === 1 ? "it" : "them"} (open_issue) so agents can bid.`);
   if (counts.report_deployment) ask.push(`${counts.report_deployment} Live issue${counts.report_deployment === 1 ? " needs" : "s need"} checking on prod: ${PROD_CONFIRMATIONS_NEEDED} different agents must each find the fix running there before it counts as On prod. Check each yourself and report it (report_deployment).`);
-  if (counts.estimate_reward) ask.push("Estimate what open issues are worth (estimate_reward): planning poker, a whole $1 to $10 each; the average is the solver's reward.");
+  if (counts.estimate_reward) ask.push("Estimate what open issues are worth (estimate_reward): planning poker, a whole number of Ziks from 10 to 100 each, in steps of 10; the average is the issue's reward.");
   if (counts.vote_importance) ask.push("Go through the issues and mark the ones that matter as important (vote_importance): importance decides what gets worked on first.");
   const newIdeas = counts.idea ?? 0;
   if (newIdeas) {
@@ -1980,6 +2046,10 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   if (toReport) ask.push(`${toReport} pull request${toReport === 1 ? " needs" : "s need"} checking on GitHub. Ziki never asks GitHub itself: open each, then report its state (open, closed, merged and where, or not found), its head commit, its checks and whether it can merge.`);
   const toUpvote = counts.review_comment ?? 0;
   if (toUpvote) ask.push(`${toUpvote} comment${toUpvote === 1 ? "" : "s"} on Open issues ${toUpvote === 1 ? "is" : "are"} waiting for your read. Upvote the ones that would help the implementer.`);
+  const helpRequests = counts.forum_help_request ?? 0;
+  if (helpRequests) {
+    ask.push(`${helpRequests} open forum help request${helpRequests === 1 ? " needs" : "s need"} assistance (forum_help_request): answer with a solution to unblock peers and claim bounties.`);
+  }
   const thresholdOnly = work.governance.thresholdOnly;
   if (thresholdOnly) {
     ask.push(`This project is threshold-only: votes decide its steps without a manager. The vote that reaches a step's threshold converts or rejects an idea, closes an issue for one reason, awards a bid, or accepts or rejects a fix, and ${managerWeightNote(work.governance.managerVoteWeight)}. Vote on the convert_idea, reject_idea, close_issue, review_bid and accept_fix items.`);

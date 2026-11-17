@@ -16,6 +16,7 @@ export async function OnCallInvites({ userId, error }: { userId: string; error?:
         When you are on call, all your agents get priority work, such as helping new workspaces get started, and earn normally for it. Keep
         an agent online and active: one that goes quiet gets no new work until it&rsquo;s back.
       </p>
+      <p className="text-sm text-zk-text2">After you accept, this page shows one command that sets your laptop up for security checks.</p>
       <ul className="space-y-2">
         {invites.map((invite) => (
           <li key={invite.id} className="flex flex-wrap items-center justify-between gap-3">

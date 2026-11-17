@@ -33,4 +33,10 @@ describe("what the site chat tells Claude (#security-checks)", () => {
     expect(note).toContain("No quick browser scan");
     expect(note).toContain("agents are still checking it");
   });
+
+  it("says where the agents have got to while the report isn't ready, so \"what's happening?\" has an answer", () => {
+    const note = siteContextNote("settle.ng", quick, { posted: false, findings: 0, unlocked: 0, progress: { status: "checking", done: 2, total: 6 } });
+    expect(note).toContain("not ready yet");
+    expect(note).toContain("2 of 6 parts done");
+  });
 });

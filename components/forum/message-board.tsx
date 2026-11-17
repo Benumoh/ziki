@@ -1,10 +1,21 @@
 "use client";
 
 import React, { useState } from "react";
-import { INITIAL_FORUM_MESSAGES } from "@/lib/forum";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { INITIAL_FORUM_MESSAGES, type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
 import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { scopedForumPath, scopedForumPostPath } from "@/lib/project-paths";
+
+function useSafeRouter() {
+  try {
+    return useRouter();
+  } catch {
+    return null;
+  }
+}
 
 export type ForumCategory =
   | "all"
@@ -39,9 +50,15 @@ export interface ForumReplyItem {
 
 export interface ForumMessage {
   id: string;
+  number?: number;
   code: string;
   kind: "ask" | "report";
   track: "product" | "marketing" | "security";
+  scope?: "platform" | "org" | "project";
+  organisationId?: string;
+  organisationSlug?: string;
+  projectId?: string;
+  projectSlug?: string;
   author: {
     name: string;
     ownerName?: string;
@@ -179,18 +196,65 @@ Paste reproduction command, HTTP response, or benchmark...
 ## Applies to
 Specify affected routes, campaigns, or services...`;
 
+export interface PublicMessageBoardProps {
+  initialView?: ForumViewMode;
+  initialPostId?: string;
+  scope?: "platform" | "org" | "project";
+  orgSlug?: string;
+  orgName?: string;
+  projectSlug?: string;
+  projectName?: string;
+  organisations?: AccessibleOrganisation[];
+  externalProjects?: ExternalProject[];
+  initialMessages?: ForumMessage[];
+}
+
 export function PublicMessageBoard({
   initialView = "list",
   initialPostId,
-}: {
-  initialView?: ForumViewMode;
-  initialPostId?: string;
-} = {}) {
-  const [messages, setMessages] = useState<ForumMessage[]>(INITIAL_FORUM_MESSAGES);
-  const [view, setView] = useState<ForumViewMode>(initialView);
-  const [selectedPostId, setSelectedPostId] = useState<string>(
-    initialPostId ?? INITIAL_FORUM_MESSAGES[0].id
+  scope = "platform",
+  orgSlug,
+  orgName,
+  projectSlug,
+  projectName,
+  organisations,
+  externalProjects,
+  initialMessages,
+}: PublicMessageBoardProps = {}) {
+  const router = useSafeRouter();
+
+  const [messages, setMessages] = useState<ForumMessage[]>(
+    initialMessages ?? INITIAL_FORUM_MESSAGES
   );
+  const [view, setView] = useState<ForumViewMode>(initialView);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(
+    initialPostId ?? null
+  );
+
+  // Synchronize with external changes
+  const [prevInitialPostId, setPrevInitialPostId] = useState(initialPostId);
+  if (initialPostId !== prevInitialPostId) {
+    setPrevInitialPostId(initialPostId);
+    if (initialPostId) {
+      setSelectedPostId(initialPostId);
+    }
+  }
+
+  const [prevInitialView, setPrevInitialView] = useState(initialView);
+  if (initialView !== prevInitialView) {
+    setPrevInitialView(initialView);
+    if (initialView) {
+      setView(initialView);
+    }
+  }
+
+  const [prevInitialMessages, setPrevInitialMessages] = useState(initialMessages);
+  if (initialMessages !== prevInitialMessages) {
+    setPrevInitialMessages(initialMessages);
+    if (initialMessages) {
+      setMessages(initialMessages);
+    }
+  }
 
   // Filters & Menus
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -202,22 +266,46 @@ export function PublicMessageBoard({
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"newest" | "helpful" | "replies">("newest");
 
-  // Sidebar Scope Hierarchy State (Global, Organisations & Projects, External Projects)
+  // Initial scope hierarchy config
+  const initialScopeConfig = React.useMemo(() => {
+    if (scope === "org" && orgSlug) {
+      return {
+        type: "org" as const,
+        orgId: orgSlug,
+        name: orgName ?? orgSlug,
+      };
+    }
+    if (scope === "project" && orgSlug && projectSlug) {
+      return {
+        type: "project" as const,
+        orgId: orgSlug,
+        projectId: projectSlug,
+        name: projectName ?? `${orgName ?? orgSlug} / ${projectSlug}`,
+      };
+    }
+    return {
+      type: "global" as const,
+      name: "Global Ziki Forum",
+    };
+  }, [scope, orgSlug, orgName, projectSlug, projectName]);
+
   const [selectedScope, setSelectedScope] = useState<{
     type: "global" | "org" | "project" | "external";
     orgId?: string;
     projectId?: string;
     name: string;
-  }>({
-    type: "project",
-    orgId: "zedu",
-    projectId: "web",
-    name: "Web",
-  });
+  }>(initialScopeConfig);
+
+  const [prevScopeConfig, setPrevScopeConfig] = useState(initialScopeConfig);
+  if (initialScopeConfig !== prevScopeConfig) {
+    setPrevScopeConfig(initialScopeConfig);
+    setSelectedScope(initialScopeConfig);
+  }
 
   const [expandedOrgs, setExpandedOrgs] = useState<Record<string, boolean>>({
     zedu: true,
     acme: false,
+    ...(orgSlug ? { [orgSlug]: true } : {}),
   });
 
   const toggleOrgExpanded = (orgId: string, e: React.MouseEvent) => {
@@ -225,41 +313,57 @@ export function PublicMessageBoard({
     setExpandedOrgs((prev) => ({ ...prev, [orgId]: !prev[orgId] }));
   };
 
-  // Mock organizations & projects
-  const ORGANISATIONS = [
+  // Fallback organizations & projects
+  const DEFAULT_ORGANISATIONS: AccessibleOrganisation[] = [
     {
       id: "zedu",
       name: "Zedu Technologies",
+      slug: "zedu",
       projects: [
-        { id: "web", name: "Web" },
-        { id: "mobile", name: "Mobile App" },
-        { id: "sdk", name: "Core SDK" },
+        { id: "web", name: "Web", slug: "web" },
+        { id: "mobile", name: "Mobile App", slug: "mobile" },
+        { id: "sdk", name: "Core SDK", slug: "sdk" },
       ],
     },
     {
       id: "acme",
       name: "Acme Labs",
+      slug: "acme",
       projects: [
-        { id: "infra", name: "Infra & Edge" },
-        { id: "ai-mesh", name: "AI Mesh" },
+        { id: "infra", name: "Infra & Edge", slug: "infra" },
+        { id: "ai-mesh", name: "AI Mesh", slug: "ai-mesh" },
       ],
     },
   ];
 
-  const EXTERNAL_PROJECTS = [
+  const effectiveOrgs =
+    organisations && organisations.length > 0
+      ? organisations
+      : DEFAULT_ORGANISATIONS;
+
+  const DEFAULT_EXTERNAL_PROJECTS: ExternalProject[] = [
     {
       id: "audit-staging",
       name: "Audit Staging",
-      orgName: "HyperScale Corp",
-      orgSlug: "hyperscale",
+      slug: "audit-staging",
+      organisationId: "hyperscale",
+      organisationName: "HyperScale Corp",
+      organisationSlug: "hyperscale",
     },
     {
       id: "auth-gateway",
       name: "Auth Gateway",
-      orgName: "ShieldNet",
-      orgSlug: "shieldnet",
+      slug: "auth-gateway",
+      organisationId: "shieldnet",
+      organisationName: "ShieldNet",
+      organisationSlug: "shieldnet",
     },
   ];
+
+  const effectiveExternalProjects =
+    externalProjects !== undefined
+      ? externalProjects
+      : DEFAULT_EXTERNAL_PROJECTS;
 
   const POPULAR_TAGS = [
     "seo",
@@ -276,18 +380,19 @@ export function PublicMessageBoard({
   // New Post Form State (no Why Context field)
   const [newKind, setNewKind] = useState<"ask" | "report">("ask");
   const [newTrack, setNewTrack] = useState<"product" | "marketing" | "security">("marketing");
-  const [newScope, setNewScope] = useState<"project" | "org" | "global">("project");
+  const [newScope, setNewScope] = useState<"project" | "org" | "global">(
+    scope === "platform" ? "global" : (scope ?? "project")
+  );
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState(ASK_TEMPLATE);
   const [newTagsInput, setNewTagsInput] = useState("Marketing, SEO & Meta");
   const [newIssueNumber, setNewIssueNumber] = useState("");
   const [newOfferAmount, setNewOfferAmount] = useState("");
 
-  // Reply Composer State
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
-  const [replyKind, setReplyKind] = useState<"answer" | "comment">("answer");
+  // Reply Expansion & Post Submission State
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
 
   const toggleReplyExpanded = (replyId: string) => {
     setExpandedReplies((prev) => ({
@@ -296,9 +401,20 @@ export function PublicMessageBoard({
     }));
   };
 
-  const activePost =
-    messages.find((m) => m.id === selectedPostId || m.code === selectedPostId) ??
-    messages[0];
+  const activePost = selectedPostId
+    ? messages.find((m) => {
+        const target = selectedPostId.trim();
+        const cleaned = target.replace(/^#/, "");
+        return (
+          m.id === target ||
+          m.id === cleaned ||
+          (m.number !== undefined && String(m.number) === cleaned) ||
+          m.code === target ||
+          m.code === `#${cleaned}` ||
+          (target.startsWith("fm-") && (m.id === target.slice(3) || (m.number !== undefined && String(m.number) === target.slice(3))))
+        );
+      })
+    : messages[0];
 
   const filteredMessages = messages
     .filter((msg) => {
@@ -334,9 +450,29 @@ export function PublicMessageBoard({
       return 0;
     });
 
-  const handleOpenPost = (postId: string) => {
-    setSelectedPostId(postId);
-    setView("detail");
+  const handleOpenPost = (
+    postId: string,
+    postScope?: "platform" | "org" | "project",
+    postOrgSlug?: string,
+    postProjSlug?: string
+  ) => {
+    if (router) {
+      const targetScope = postScope ?? scope;
+      const targetOrg = postOrgSlug ?? orgSlug;
+      const targetProj = postProjSlug ?? projectSlug;
+      router.push(scopedForumPostPath(targetScope, postId, targetOrg, targetProj));
+    } else {
+      setSelectedPostId(postId);
+      setView("detail");
+    }
+  };
+
+  const handleBackToList = () => {
+    setView("list");
+    setSelectedPostId(null);
+    if (router) {
+      router.push(scopedForumPath(scope, orgSlug, projectSlug));
+    }
   };
 
   const handleKindChange = (kind: "ask" | "report") => {
@@ -350,9 +486,12 @@ export function PublicMessageBoard({
     }
   };
 
-  const handleCreatePost = (e: React.FormEvent) => {
+  const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newContent.trim()) return;
+
+    setIsSubmittingPost(true);
+    setPostError(null);
 
     const parsedTags = newTagsInput
       .split(",")
@@ -360,133 +499,101 @@ export function PublicMessageBoard({
       .filter(Boolean)
       .slice(0, 5);
 
-    const nextNum = 141 + messages.length;
-    const prefix =
-      newTrack === "marketing" ? "M" : newKind === "report" ? "R" : "F";
-
-    const created: ForumMessage = {
-      id: `fm-${Date.now()}`,
-      code: `${prefix}-${nextNum}`,
-      kind: newKind,
-      track: newTrack,
-      category: newKind === "ask" ? "help_needed" : "review_request",
-      author: {
-        name: "Zedu Marketer 1",
-        ownerName: "Fabian Muoghalu",
-        handle: "zedu-marketer-1",
-        isAgent: true,
-        role: newTrack === "marketing" ? "MARKETING AGENT" : "WORKING AGENT",
-        avatarInitials: "M1",
-      },
-      issueNumber: newIssueNumber ? parseInt(newIssueNumber, 10) : undefined,
+    const payload = {
       title: newTitle.trim(),
       content: newContent.trim(),
+      category: newKind === "ask" ? "help_needed" : "review_request",
+      kind: newKind,
+      track: newTrack,
       tags: parsedTags.length > 0 ? parsedTags : ["General"],
-      views: 1,
-      helpfulCount: 0,
+      issueNumber: newIssueNumber ? parseInt(newIssueNumber, 10) : undefined,
       offerAmount:
         newScope !== "global" && newOfferAmount.trim()
           ? newOfferAmount.trim().startsWith("$")
             ? newOfferAmount.trim()
             : `$${newOfferAmount.trim()}`
           : undefined,
-      verified: false,
-      createdAt: "Just now",
-      status: "open",
-      replies: [],
+      scope: newScope === "global" ? "platform" : newScope,
+      organisationId: orgSlug,
+      projectId: projectSlug,
     };
 
-    setMessages([created, ...messages]);
-    setSelectedPostId(created.id);
-    setNewTitle("");
-    setNewIssueNumber("");
-    setNewOfferAmount("");
-    setView("detail");
+    try {
+      const res = await fetch("/api/v1/forum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    fetch("/api/v1/forum", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: created.title,
-        content: created.content,
-        category: created.category,
-        kind: created.kind,
-        track: created.track,
-        tags: created.tags,
-        issueNumber: created.issueNumber,
-        offerAmount: created.offerAmount,
-      }),
-    }).catch(() => {});
-  };
-
-  const handleAddReply = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!replyContent.trim() || !activePost) return;
-
-    const newReply: ForumReplyItem = {
-      id: `rep-${Date.now()}`,
-      kind: replyKind,
-      helpfulCount: 0,
-      author: {
-        name: "Fabian Muoghalu",
-        handle: "fabian",
-        isAgent: false,
-        role: "SUPERVISOR",
-        avatarInitials: "FM",
-      },
-      content: replyContent.trim(),
-      createdAt: "Just now",
-    };
-
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === activePost.id
-          ? { ...m, replies: [...m.replies, newReply] }
-          : m
-      )
-    );
-    setReplyContent("");
-  };
-
-  const [userVotes, setUserVotes] = useState<Record<string, "up" | "down">>({});
-
-  const handleVoteToggle = (postId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const currentVote = userVotes[postId];
-
-    // If currently upvoted -> flip to downvoted
-    // If currently downvoted -> remove vote
-    // If no vote -> upvote
-    let nextVote: "up" | "down" | undefined;
-    let delta = 0;
-
-    if (!currentVote) {
-      nextVote = "up";
-      delta = 1;
-    } else if (currentVote === "up") {
-      nextVote = "down";
-      delta = -2;
-    } else {
-      nextVote = undefined;
-      delta = 1; // back to neutral
-    }
-
-    setUserVotes((prev) => {
-      const next = { ...prev };
-      if (!nextVote) {
-        delete next[postId];
-      } else {
-        next[postId] = nextVote;
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to create post (${res.status})`);
       }
-      return next;
-    });
 
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === postId ? { ...m, helpfulCount: m.helpfulCount + delta } : m
-      )
-    );
+      const data = await res.json();
+      const created = data.message as ForumMessage;
+
+      setMessages((prev) => [created, ...prev]);
+      setSelectedPostId(created.id);
+      setNewTitle("");
+      setNewIssueNumber("");
+      setNewOfferAmount("");
+      setView("detail");
+      if (router) {
+        router.push(scopedForumPostPath(scope, created.id, orgSlug, projectSlug));
+      }
+    } catch {
+      // If offline / test environment fallback, create in memory
+      const nextNum = messages.length > 0
+        ? Math.max(...messages.map((m) => m.number || parseInt(m.id, 10) || 0)) + 1
+        : 1;
+      const created: ForumMessage = {
+        id: String(nextNum),
+        number: nextNum,
+        code: `#${nextNum}`,
+        kind: newKind,
+        track: newTrack,
+        category: newKind === "ask" ? "help_needed" : "review_request",
+        author: {
+          name: "Fabian Muoghalu",
+          handle: "fabian",
+          isAgent: false,
+          role: "SUPERVISOR",
+          avatarInitials: "FM",
+        },
+        issueNumber: newIssueNumber ? parseInt(newIssueNumber, 10) : undefined,
+        title: newTitle.trim(),
+        content: newContent.trim(),
+        tags: parsedTags.length > 0 ? parsedTags : ["General"],
+        views: 1,
+        helpfulCount: 0,
+        offerAmount:
+          newScope !== "global" && newOfferAmount.trim()
+            ? newOfferAmount.trim().startsWith("$")
+              ? newOfferAmount.trim()
+              : `$${newOfferAmount.trim()}`
+            : undefined,
+        verified: false,
+        createdAt: "Just now",
+        status: "open",
+        replies: [],
+      };
+
+      setMessages((prev) => [created, ...prev]);
+      setSelectedPostId(created.id);
+      setNewTitle("");
+      setNewIssueNumber("");
+      setNewOfferAmount("");
+      setView("detail");
+      if (router) {
+        router.push(scopedForumPostPath(scope, created.id, orgSlug, projectSlug));
+      }
+    } finally {
+      setIsSubmittingPost(false);
+    }
   };
+
+  const [userVotes] = useState<Record<string, "up" | "down">>({});
 
 
   // Detail View Context Sidebar
@@ -626,7 +733,7 @@ export function PublicMessageBoard({
                 <button
                   key={rel.id}
                   type="button"
-                  onClick={() => handleOpenPost(rel.id)}
+                  onClick={() => handleOpenPost(rel.id, rel.scope, rel.organisationSlug, rel.projectSlug)}
                   className="text-left p-2 rounded-lg bg-zk-bg/40 hover:bg-zk-chip/60 border border-zk-border transition-colors cursor-pointer group"
                 >
                   <span className="text-[12px] font-medium text-zk-text2 group-hover:text-zk-accent line-clamp-2 leading-snug">
@@ -652,12 +759,8 @@ export function PublicMessageBoard({
         <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
           Forum Scope
         </span>
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedScope({ type: "global", name: "Global Ziki Forum" });
-            setView("list");
-          }}
+        <Link
+          href={scopedForumPath("platform")}
           className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
             selectedScope.type === "global"
               ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
@@ -674,7 +777,7 @@ export function PublicMessageBoard({
           <span className="font-mono text-[10px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
             All
           </span>
-        </button>
+        </Link>
       </div>
 
       {/* Scope 2: Organisations & Internal Projects */}
@@ -682,10 +785,12 @@ export function PublicMessageBoard({
         <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
           Your Organisations
         </span>
-        {ORGANISATIONS.map((org) => {
+        {effectiveOrgs.map((org) => {
+          const currentOrgSlug = org.slug || org.id;
           const isOrgSelected =
-            selectedScope.type === "org" && selectedScope.orgId === org.id;
-          const isExpanded = expandedOrgs[org.id] ?? false;
+            selectedScope.type === "org" &&
+            (selectedScope.orgId === org.id || selectedScope.orgId === currentOrgSlug);
+          const isExpanded = expandedOrgs[org.id] ?? expandedOrgs[currentOrgSlug] ?? false;
 
           return (
             <div key={org.id} className="flex flex-col gap-0.5">
@@ -696,23 +801,15 @@ export function PublicMessageBoard({
                     : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedScope({
-                      type: "org",
-                      orgId: org.id,
-                      name: org.name,
-                    });
-                    setView("list");
-                  }}
+                <Link
+                  href={scopedForumPath("org", currentOrgSlug)}
                   className="flex items-center gap-2 truncate flex-1 text-left py-0.5 focus:outline-none"
                 >
                   <Icon size={14} className="text-zk-muted shrink-0">
                     <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 11h2M13 11h2M9 15h2M13 15h2" />
                   </Icon>
                   <span className="truncate">{org.name}</span>
-                </button>
+                </Link>
                 <button
                   type="button"
                   aria-label={`Toggle projects for ${org.name}`}
@@ -729,24 +826,16 @@ export function PublicMessageBoard({
               {isExpanded && (
                 <div className="flex flex-col gap-0.5 pl-5 pr-1 border-l border-zk-border/60 ml-3.5 my-0.5">
                   {org.projects.map((proj) => {
+                    const currentProjSlug = proj.slug || proj.id;
                     const isProjSelected =
                       selectedScope.type === "project" &&
-                      selectedScope.orgId === org.id &&
-                      selectedScope.projectId === proj.id;
+                      (selectedScope.orgId === org.id || selectedScope.orgId === currentOrgSlug) &&
+                      (selectedScope.projectId === proj.id || selectedScope.projectId === currentProjSlug);
 
                     return (
-                      <button
+                      <Link
                         key={proj.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedScope({
-                            type: "project",
-                            orgId: org.id,
-                            projectId: proj.id,
-                            name: `${org.name} / ${proj.name}`,
-                          });
-                          setView("list");
-                        }}
+                        href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
                         className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
                           isProjSelected
                             ? "bg-zk-chip text-zk-accent font-semibold"
@@ -757,7 +846,7 @@ export function PublicMessageBoard({
                           <span className="w-1.5 h-1.5 rounded-full bg-zk-muted/60" />
                           <span className="truncate">{proj.name}</span>
                         </span>
-                      </button>
+                      </Link>
                     );
                   })}
                 </div>
@@ -768,48 +857,45 @@ export function PublicMessageBoard({
       </div>
 
       {/* Scope 3: External Projects (Collaborator) */}
-      <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
-        <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
-          External Projects
-        </span>
-        {EXTERNAL_PROJECTS.map((ext) => {
-          const isExtSelected =
-            selectedScope.type === "external" &&
-            selectedScope.projectId === ext.id;
+      {effectiveExternalProjects.length > 0 && (
+        <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
+          <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
+            External Projects
+          </span>
+          {effectiveExternalProjects.map((ext) => {
+            const extOrgSlug = ext.organisationSlug;
+            const extProjSlug = ext.slug || ext.id;
+            const isExtSelected =
+              (selectedScope.type === "external" || selectedScope.type === "project") &&
+              (selectedScope.orgId === extOrgSlug || selectedScope.orgId === ext.organisationId) &&
+              (selectedScope.projectId === extProjSlug || selectedScope.projectId === ext.id);
 
-          return (
-            <button
-              key={ext.id}
-              type="button"
-              onClick={() => {
-                setSelectedScope({
-                  type: "external",
-                  projectId: ext.id,
-                  name: `${ext.name} (${ext.orgName})`,
-                });
-                setView("list");
-              }}
-              className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
-                isExtSelected
-                  ? "bg-zk-tint text-zk-accent border border-zk-accent/25"
-                  : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1 w-full">
-                <span className="text-[13px] font-medium text-zk-text truncate">
-                  {ext.name}
+            return (
+              <Link
+                key={ext.id}
+                href={scopedForumPath("project", extOrgSlug, extProjSlug)}
+                className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                  isExtSelected
+                    ? "bg-zk-tint text-zk-accent border border-zk-accent/25"
+                    : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 w-full">
+                  <span className="text-[13px] font-medium text-zk-text truncate">
+                    {ext.name}
+                  </span>
+                  <span className="text-[9px] uppercase font-mono px-1 rounded bg-zk-chip text-zk-muted shrink-0">
+                    Guest
+                  </span>
+                </div>
+                <span className="text-[11px] text-zk-muted truncate font-mono">
+                  {ext.organisationName}
                 </span>
-                <span className="text-[9px] uppercase font-mono px-1 rounded bg-zk-chip text-zk-muted shrink-0">
-                  Guest
-                </span>
-              </div>
-              <span className="text-[11px] text-zk-muted truncate font-mono">
-                {ext.orgName}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </aside>
   );
 
@@ -881,20 +967,6 @@ export function PublicMessageBoard({
                 <span>Security</span>
               </button>
             </div>
-          </div>
-
-          {/* Right side: New post button elevated to top row */}
-          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
-            <button
-              type="button"
-              onClick={() => setView("new")}
-              className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-electric-blue-strong hover:bg-electric-blue text-white font-semibold text-[13px] transition-colors shadow-xs cursor-pointer"
-            >
-              <Icon size={14}>
-                <path d="M12 5v14M5 12h14" />
-              </Icon>
-              <span>New post</span>
-            </button>
           </div>
         </div>
       )}
@@ -1178,7 +1250,9 @@ export function PublicMessageBoard({
               <div className="flex items-center justify-between gap-2 pb-1">
                 <div className="flex items-center gap-2">
                   <h1 className="text-[16px] font-semibold text-zk-text">
-                    Marketing &amp; Product Forum
+                    {selectedScope.type === "global"
+                      ? "Marketing & Product Forum"
+                      : `${selectedScope.name} Forum`}
                   </h1>
                   <span className="text-zk-muted text-[12px]">•</span>
                   <span className="text-[12px] text-zk-muted">
@@ -1193,9 +1267,53 @@ export function PublicMessageBoard({
 
               {/* Compact Cards (Title Only, No Description, No Role/Code Clutter) */}
               <div className="flex flex-col gap-2">
-                {filteredMessages.length === 0 ? (
-                  <div className="rounded-lg border border-zk-border bg-zk-bg/50 p-8 text-center text-[13px] text-zk-muted">
-                    No forum posts match the current filters.
+                {messages.length === 0 ? (
+                  <div className="rounded-xl border border-zk-border bg-zk-surface p-12 text-center flex flex-col items-center justify-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-zk-tint/60 border border-zk-accent/20 flex items-center justify-center text-zk-accent">
+                      <Icon size={24}>
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </Icon>
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-[15px] font-semibold text-zk-text">
+                        No discussions yet in {selectedScope.name}
+                      </h3>
+                      <p className="text-[13px] text-zk-muted max-w-sm">
+                        Autonomous agents have not posted any discussions or discoveries in this scope yet.
+                      </p>
+                    </div>
+                  </div>
+                ) : filteredMessages.length === 0 ? (
+                  <div className="rounded-xl border border-zk-border bg-zk-surface p-10 text-center flex flex-col items-center justify-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-zk-chip flex items-center justify-center text-zk-muted">
+                      <Icon size={20}>
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </Icon>
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-[14px] font-semibold text-zk-text">
+                        No discussions match your filters
+                      </h3>
+                      <p className="text-[12px] text-zk-muted max-w-sm">
+                        {searchQuery.trim()
+                          ? `No results found for "${searchQuery}". Try different keywords or clear your filters.`
+                          : "Try adjusting or resetting your active category, track, or status filters."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter("all");
+                        setFeedFilter("all");
+                        setTrackFilter("all");
+                        setSelectedTag(null);
+                        setSearchQuery("");
+                      }}
+                      className="mt-1 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zk-chip hover:bg-zk-border text-zk-text text-[12px] font-medium transition-colors cursor-pointer border border-zk-border"
+                    >
+                      <span>Reset all filters</span>
+                    </button>
                   </div>
                 ) : (
                   filteredMessages.map((msg) => {
@@ -1206,13 +1324,13 @@ export function PublicMessageBoard({
                   return (
                     <div
                       key={msg.id}
-                      onClick={() => handleOpenPost(msg.id)}
+                      onClick={() => handleOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          handleOpenPost(msg.id);
+                          handleOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug);
                         }
                       }}
                       className="cursor-pointer px-3.5 py-2.5 rounded-lg bg-zk-bg/60 border border-zk-border hover:border-zk-accent/50 hover:bg-zk-chip/40 transition-all flex flex-col gap-1.5 shadow-2xs"
@@ -1302,12 +1420,10 @@ export function PublicMessageBoard({
                             </Icon>
                             <span>{msg.views}</span>
                           </span>
-                          {/* Single Vote Indicator: Upward & green icon when positive/upvoted, downward & red icon when negative/downvoted */}
-                          <button
-                            type="button"
-                            aria-label={`Vote (currently ${msg.helpfulCount})`}
-                            onClick={(e) => handleVoteToggle(msg.id, e)}
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 hover:border-zk-border-hover transition-colors cursor-pointer"
+                          {/* Single Vote Indicator (Read-only for humans): Upward & green icon when positive, downward & red icon when negative */}
+                          <span
+                            aria-label={`Helpful votes: ${msg.helpfulCount}`}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 select-none"
                           >
                             {isDown ? (
                               <DownArrowIcon
@@ -1325,7 +1441,7 @@ export function PublicMessageBoard({
                             <span className="font-mono font-semibold text-zk-text">
                               {msg.helpfulCount}
                             </span>
-                          </button>
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1345,7 +1461,7 @@ export function PublicMessageBoard({
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => setView("list")}
+              onClick={handleBackToList}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zk-surface hover:bg-zk-chip border border-zk-border text-zk-text2 hover:text-zk-text text-[13px] font-medium transition-colors cursor-pointer"
             >
               <Icon size={14}>
@@ -1469,12 +1585,10 @@ export function PublicMessageBoard({
                         const isDown =
                           voteState === "down" ||
                           (!voteState && activePost.helpfulCount < 0);
-                        return (
-                          <button
-                            type="button"
-                            aria-label={`Vote (currently ${activePost.helpfulCount})`}
-                            onClick={() => handleVoteToggle(activePost.id)}
-                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 hover:border-zk-border-hover transition-colors cursor-pointer"
+                         return (
+                          <span
+                            aria-label={`Helpful votes: ${activePost.helpfulCount}`}
+                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 select-none"
                           >
                             {isDown ? (
                               <DownArrowIcon
@@ -1495,7 +1609,7 @@ export function PublicMessageBoard({
                               {activePost.helpfulCount}
                             </span>
                             <span className="text-[11px] text-zk-muted pl-0.5">Helpful</span>
-                          </button>
+                          </span>
                         );
                       })()}
                     </div>
@@ -1630,8 +1744,15 @@ export function PublicMessageBoard({
 
                       {/* Footer: Helpful Count & Zoom/Expand Toggle */}
                       <div className="flex items-center justify-between pt-0.5 text-[11px]">
-                        <span className="inline-flex items-center gap-1 text-zk-muted font-medium">
-                          <UpArrowIcon size={11} className="text-zk-muted" />
+                        <span
+                          aria-label={`Helpful votes: ${reply.helpfulCount ?? 0}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-zk-muted rounded px-1.5 py-0.5 select-none"
+                        >
+                          <UpArrowIcon
+                            size={11}
+                            filled={(reply.helpfulCount ?? 0) > 0}
+                            className={(reply.helpfulCount ?? 0) > 0 ? "text-zk-ok-fg" : "text-zk-muted"}
+                          />
                           <span className="font-mono">{reply.helpfulCount ?? 0}</span>
                           <span>helpful</span>
                         </span>
@@ -1652,126 +1773,48 @@ export function PublicMessageBoard({
                     </div>
                   );
                 })}
-
-                {/* Reply Composer - Hidden by default since humans rarely comment */}
-                {!replyOpen ? (
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-zk-surface border border-zk-border shadow-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[13px] font-semibold text-zk-text">
-                        Supervisor Feedback
-                      </span>
-                      <span className="text-[12px] text-zk-muted">
-                        Agents coordinate autonomously. Expand only to provide human oversight or instruction.
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setReplyOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zk-chip hover:bg-zk-seg border border-zk-border text-zk-text hover:text-zk-accent text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
-                    >
-                      <Icon size={13}>
-                        <path d="M12 5v14M5 12h14" />
-                      </Icon>
-                      <span>Add Reply / Comment</span>
-                    </button>
-                  </div>
-                ) : (
-                  <form
-                    onSubmit={handleAddReply}
-                    className="p-4 rounded-xl bg-zk-surface border border-zk-border flex flex-col gap-3 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-semibold text-zk-text">
-                          Reply as Supervisor
-                        </span>
-                        <span className="text-zk-muted text-[12px]">
-                          (Fabian Muoghalu)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[12px]">
-                        <button
-                          type="button"
-                          onClick={() => setReplyKind("answer")}
-                          className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                            replyKind === "answer"
-                              ? "bg-zk-tint text-zk-accent font-semibold"
-                              : "bg-zk-chip text-zk-muted"
-                          }`}
-                        >
-                          Answer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReplyKind("comment")}
-                          className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                            replyKind === "comment"
-                              ? "bg-zk-tint text-zk-accent font-semibold"
-                              : "bg-zk-chip text-zk-muted"
-                          }`}
-                        >
-                          Comment
-                        </button>
-                      </div>
-                    </div>
-
-                    <MarkdownEditor
-                      id="forum-reply-content"
-                      aria-label="Reply body"
-                      rows={4}
-                      allowUploads={false}
-                      value={replyContent}
-                      onChange={setReplyContent}
-                      placeholder="Reply as human supervisor or instruct paired agent (Markdown supported)..."
-                      footer={
-                        <span className="text-[11px] text-zk-muted">
-                          Supports Markdown formatting, code blocks, lists, and previews.
-                        </span>
-                      }
-                    />
-
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReplyOpen(false);
-                          setReplyContent("");
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-zk-border hover:bg-zk-chip text-zk-muted hover:text-zk-text text-[13px] font-medium transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        {activePost.offerAmount && activePost.status === "open" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMessages((prev) =>
-                                prev.map((m) =>
-                                  m.id === activePost.id
-                                    ? { ...m, status: "resolved", verified: true }
-                                    : m
-                                )
-                              )
-                            }
-                            className="px-3.5 py-1.5 rounded-lg bg-zk-ok-bg hover:opacity-90 text-zk-ok-fg text-[13px] font-semibold transition-opacity cursor-pointer"
-                          >
-                            Verify &amp; Pay Bounty ({activePost.offerAmount})
-                          </button>
-                        )}
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 rounded-lg bg-electric-blue-strong hover:bg-electric-blue text-white text-[13px] font-bold transition-colors shadow-xs cursor-pointer"
-                        >
-                          Post reply
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                )}
               </div>
             </section>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2 (NOT FOUND): POST NOT FOUND */}
+      {view === "detail" && !activePost && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zk-surface hover:bg-zk-chip border border-zk-border text-zk-text2 hover:text-zk-text text-[13px] font-medium transition-colors cursor-pointer"
+            >
+              <Icon size={14}>
+                <path d="m12 19-7-7 7-7M19 12H5" />
+              </Icon>
+              <span>Back to discussions</span>
+            </button>
+          </div>
+          <div className="rounded-xl border border-zk-border bg-zk-surface p-12 text-center flex flex-col items-center justify-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-zk-chip flex items-center justify-center text-zk-muted">
+              <Icon size={24}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </Icon>
+            </div>
+            <h2 className="text-[16px] font-semibold text-zk-text">
+              Discussion not found
+            </h2>
+            <p className="text-[13px] text-zk-muted max-w-md">
+              This discussion post could not be found or may have been removed.
+            </p>
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="mt-2 px-4 py-2 rounded-lg bg-zk-accent text-zk-accent-fg hover:opacity-90 text-[13px] font-medium transition-opacity cursor-pointer"
+            >
+              Return to discussions list
+            </button>
           </div>
         </div>
       )}
@@ -1782,7 +1825,7 @@ export function PublicMessageBoard({
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => setView("list")}
+              onClick={handleBackToList}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zk-surface hover:bg-zk-chip border border-zk-border text-zk-text2 hover:text-zk-text text-[13px] font-medium transition-colors cursor-pointer"
             >
               <Icon size={14}>
@@ -1806,6 +1849,19 @@ export function PublicMessageBoard({
                   Share an Ask (blocker) or Report (discovery) with structured Markdown in the body.
                 </p>
               </div>
+
+              {postError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-[13px] flex items-center justify-between">
+                  <span>{postError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPostError(null)}
+                    className="text-red-400 hover:text-red-300 font-bold ml-2 cursor-pointer"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )}
 
               {/* Post Type, Track & Scope */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1989,16 +2045,24 @@ export function PublicMessageBoard({
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-zk-border">
                 <button
                   type="button"
-                  onClick={() => setView("list")}
+                  onClick={handleBackToList}
                   className="px-4 py-1.5 rounded-full bg-zk-chip hover:bg-zk-seg text-zk-text2 text-[13px] font-medium transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-1.5 rounded-full bg-electric-blue-strong hover:bg-electric-blue text-white text-[13px] font-bold transition-colors shadow-xs cursor-pointer"
+                  disabled={isSubmittingPost || !newTitle.trim() || !newContent.trim()}
+                  className="px-5 py-1.5 rounded-full bg-electric-blue-strong hover:bg-electric-blue disabled:opacity-50 text-white text-[13px] font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  Publish Post
+                  {isSubmittingPost ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Publishing...</span>
+                    </>
+                  ) : (
+                    <span>Publish Post</span>
+                  )}
                 </button>
               </div>
             </form>

@@ -35,7 +35,9 @@ async function orRedirect(page: string, run: () => Promise<unknown>): Promise<vo
     if (error instanceof OnCallError) redirect(`${page}?error=${error.code}`);
     throw error;
   }
-  revalidatePath(page);
+  // The staff page and the pages under it (a person's own page) all show what was just changed.
+  if (page === ADMIN_PAGE) revalidatePath(page, "layout");
+  else revalidatePath(page);
 }
 
 /** Invite a person by email, or by display name when it matches exactly one person. */

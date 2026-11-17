@@ -39,16 +39,24 @@ const Reply = z.object({
 
 const SYSTEM = `You are Ziki's security assistant, on the Security page of Ziki (ziki.dev). Ziki's agents check a client's website, server or GitHub repository for security weaknesses and tell them privately what they find. Agents only look: they never log in as the client, change anything, or exploit what they find.
 
-Your one job is to find out what the client wants secured and get its address:
+You help with two things:
+1. A new scan: find out what the client wants secured and get its address.
 - If they haven't given an address yet, ask for it: their website (like yourshop.com), a server address, or a GitHub repo.
-- When they give one, set "target" to it and say the next step is to show it's theirs, after which the scan starts.
+- When they give one, set "target" to it; the quick scan runs and it's added to their scans.
+2. Their own scans: answer follow-up questions about the scans listed under "The client's scans" below, such as "what's happening with my site?", "is my report ready?" or "what did the quick scan find?". Say where it has got to from that list (its status, how many parts are done, whether the report is ready) and what the quick scan found, in plain words. The full findings and how to fix them are in the agents' report, on the scan's page under Security.
+
 - Answer short questions about how checking with Ziki works, using only what is written here. If you don't know, say a person on the Ziki team can help.
-- If they ask about anything else, say you can only help them secure their website, server or code with Ziki, and ask what they want to secure.
+- If they ask about a site that isn't in their list, say it isn't in their scans yet and offer to scan it.
+- If they ask about anything that isn't securing their website, server or code with Ziki, say you can only help with that here, and ask what they want to secure or which scan they want to know about.
 
-Never say a scan has started or finished, and never invent findings, prices or features. Don't talk about prices, payment or anything being free: if asked, say they only pay to unlock a fix, once the report is ready. Write plainly, in the language the client uses, in one or two short sentences.`;
+Only say a scan has started, is running or is finished when the list below says so, and never invent findings, numbers, prices or features. Don't talk about prices, payment or anything being free: if asked, say they only pay to unlock a fix, once the report is ready. Write plainly, in the language the client uses, in one to three short sentences.`;
 
-/** Ask the assistant for its next reply, or null if it can't answer now. */
-export async function askSecurityAssistant(history: AssistantTurn[]): Promise<AssistantReply | null> {
+/**
+ * Ask the assistant for its next reply, or null if it can't answer now.
+ * `scans` is what's known about the client's own scans (scansContextNote): one
+ * line each, counts only, read on the server.
+ */
+export async function askSecurityAssistant(history: AssistantTurn[], scans = ""): Promise<AssistantReply | null> {
   const apiKey = process.env.ZIKI_CLAUDE_API_KEY?.trim();
   const turns = history
     .filter((turn) => turn.text.trim())
@@ -66,7 +74,7 @@ export async function askSecurityAssistant(history: AssistantTurn[]): Promise<As
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "low", format: betaZodOutputFormat(Reply) },
-      system: SYSTEM,
+      system: `${SYSTEM}\n\nThe client's scans:\n${scans.trim() || "None yet."}`,
       messages: turns,
     });
     if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") return null;
@@ -89,6 +97,7 @@ export async function askSecurityAssistant(history: AssistantTurn[]): Promise<As
 
 const SITE_SYSTEM = `You are Ziki's security assistant, in the chat under one site's scan on Ziki's Security page (ziki.dev). The client asks about that site's scan. What you know about it is below; it is all you know.
 
+- If they ask what's happening or whether it's done, say where the agents have got to from below: the status, how many parts are done, and whether the report is ready.
 - Explain what the quick browser scan found in plain words: what each problem means and why it matters, in a sentence or two.
 - The quick scan only sees what any browser sees. Ziki's agents check much more (login, forms, code, server); their report has every finding in full, with how to fix it, and the client unlocks each fix there.
 - Don't give step-by-step fixes or code: say the fix comes with the agents' report.

@@ -47,6 +47,7 @@ export function TasksBoard({
   const isIdeas = list.kind === "proposals";
   // The Ideas panel is narrower and centred, as on the issue list.
   const width = isIdeas ? "max-w-[920px]" : "max-w-6xl";
+  const isEmpty = list.kind === "proposals" ? list.ideas.length === 0 : list.rows.length === 0;
 
   return (
     <>
@@ -99,6 +100,18 @@ export function TasksBoard({
             </div>
           ) : (
             <TaskTable rows={list.rows} sort={list.sort} />
+          )}
+
+          {isEmpty && (
+            <section className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] bg-zk-tint px-5 py-[18px] sm:px-[22px]" aria-label="Make a marketing video">
+              <div>
+                <h2 className="text-[15px] font-bold text-zk-text">Not sure what to post?</h2>
+                <p className="mt-1 text-[13px] text-zk-text2">Make a short marketing video for your product. We can suggest ideas.</p>
+              </div>
+              <Link href={marketingPath(slug, "video")} className="inline-flex min-h-10 items-center justify-center rounded-full bg-zk-accent px-4 py-2 text-sm font-bold text-zk-surface hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric-blue-strong">
+                Make a marketing video
+              </Link>
+            </section>
           )}
 
           {pagination.totalCount > 0 ? (

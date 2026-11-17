@@ -4,6 +4,8 @@ import Link from "next/link";
 import { requireProject } from "@/lib/project-route";
 import { projectPath } from "@/lib/project-paths";
 
+export const metadata = { title: "Ideas" };
+
 type Props = {
   params: Promise<{ org: string; project: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

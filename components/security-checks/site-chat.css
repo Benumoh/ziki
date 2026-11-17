@@ -1,0 +1,50 @@
+/* The site chat on a scan's page (16 Nov): it opens under the top row as the
+   page's first section. Motion follows how major design systems open a panel
+   in place: the height grows with a decelerating ease-out while the content
+   fades in, and closing is quicker with an accelerating ease-in. No slide,
+   scale or bounce.
+   - IBM Carbon: "Expansion" 240ms, entrance cubic-bezier(0, 0, 0.38, 0.9), exit cubic-bezier(0.2, 0, 1, 0.9).
+   - Atlassian: ease-out for panels entering, exits faster than entrances.
+   - Radix UI Accordion: animates the content's height with ease-out, clipped while it moves.
+   With reduced motion it simply appears. */
+.site-chat-drawer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 160ms cubic-bezier(0.2, 0, 1, 0.9);
+}
+.site-chat-drawer[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 240ms cubic-bezier(0, 0, 0.38, 0.9);
+}
+.site-chat-drawer__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+/* Once fully open, nothing is clipped: focus rings and the card's edge show. */
+.site-chat-drawer[data-settled="true"] .site-chat-drawer__inner {
+  overflow: visible;
+}
+.site-chat-drawer__card {
+  /* The gap to the row above, the same as the page's own gaps between sections. */
+  padding-top: 1rem;
+  opacity: 0;
+  transition: opacity 110ms cubic-bezier(0.2, 0, 1, 0.9);
+}
+@media (min-width: 640px) {
+  .site-chat-drawer__card {
+    padding-top: 1.5rem;
+  }
+}
+.site-chat-drawer[data-open="true"] .site-chat-drawer__card {
+  opacity: 1;
+  /* Fades in alongside the opening, a beat behind so it never looks cut off. */
+  transition: opacity 200ms cubic-bezier(0, 0, 0.38, 0.9) 40ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-chat-drawer,
+  .site-chat-drawer[data-open="true"],
+  .site-chat-drawer__card,
+  .site-chat-drawer[data-open="true"] .site-chat-drawer__card {
+    transition: none;
+  }
+}

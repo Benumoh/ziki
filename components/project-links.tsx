@@ -55,12 +55,15 @@ function LinksIcon({ size }: { size: number }) {
 const ICON_BUTTON =
   "relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue";
 
-/** Beside the stage tabs, at the top right: Project notes and the project's settings, as icons only. Goals are on Project Overview. */
+/** Beside the stage tabs, at the top right: Project notes, Design and the project's settings, as icons only. Goals are on Project Overview. */
 export function ProjectIconLinks({
   notesHref,
+  designHref,
   settingsHref,
 }: {
   notesHref?: string;
+  /** The Design area (#9): only for members of the project's organisation. */
+  designHref?: string;
   settingsHref?: string;
 }) {
   return (
@@ -68,6 +71,12 @@ export function ProjectIconLinks({
       {notesHref ? (
         <Link href={notesHref} aria-label="Project notes" title="Project notes" className={ICON_BUTTON}>
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="3" width="15" height="18" rx="2" /><path d="M9 3v18M3 7h4M3 12h4M3 17h4M12 8h5M12 12h5" /></svg>
+        </Link>
+      ) : null}
+      {designHref ? (
+        <Link href={designHref} aria-label="Design" title="Design" className={ICON_BUTTON}>
+          {/* A palette: the redesigns proposed for this project. */}
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2a4.6 4.6 0 0 0 4.6-4.6C21 6.4 17 3 12 3Z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10" cy="7.5" r="1" /><circle cx="14.5" cy="7.5" r="1" /></svg>
         </Link>
       ) : null}
       {settingsHref ? (

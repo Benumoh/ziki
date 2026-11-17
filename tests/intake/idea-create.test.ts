@@ -75,7 +75,7 @@ import { GET as suggestIssues } from "@/app/api/issues/suggest/route";
 import { NextRequest } from "next/server";
 import { structureIdea } from "@/lib/idea-structuring";
 import { parseIdeaTrack } from "@/lib/marketing/idea-track";
-import { createPublicIdea, findPublicIdeaMatches, publicIdeaSchema } from "@/lib/public-idea-intake";
+import { createPublicIdea, findPublicIdeaMatches, publicIdeaSchema, PUBLIC_IDEA_BODY_BYTES } from "@/lib/public-idea-intake";
 import { POST as submitPublicIdea } from "@/app/api/public/projects/[org]/[project]/ideas/route";
 import { createFeaturePlan, featureProject, featureWorkState, findFeatureWork, publishFeaturePlan, saveFeaturePlan } from "@/lib/feature-plans";
 import { generateFeatureDraft } from "@/lib/feature-plan-generation";
@@ -325,7 +325,7 @@ describe("signed-out public idea intake (#3464)", () => {
 
     const oversized = new NextRequest("https://ziki.dev/api/public/projects/zedu/web/ideas", {
       method: "POST",
-      headers: { "content-type": "application/json", "content-length": String(25 * 1024), origin: "https://ziki.dev", host: "ziki.dev" },
+      headers: { "content-type": "application/json", "content-length": String(PUBLIC_IDEA_BODY_BYTES + 1024), origin: "https://ziki.dev", host: "ziki.dev" },
       body: "{}",
     });
     expect((await submitPublicIdea(oversized, context)).status).toBe(413);

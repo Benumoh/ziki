@@ -23,3 +23,34 @@
 
 - Merged main after Seyi's #659 and raised the package version from 0.1.137 to 0.1.138. Confirmed the report page passes only unlocked findings to the picker after posting.
 - The version check, lint and all 1,894 unit tests passed. The first typecheck hit a local Node memory limit while running alongside lint. Retrying typecheck separately and verifying the final PR head in GitHub CI.
+
+## 2026-11-14 — Rename the finding picker
+
+- Updated the picker heading and submit button to Move to your app. The report still reads the existing result-to-finding-to-issue link. The new report pill is owned by Seyi.
+
+## 2026-11-14 — Standalone move page
+
+- Added the standalone picker with server-priced simulated payment and the existing transactional issue link. The report integration remains a separate change.
+
+- Refreshed the move picker using the Security payment page's severity badges, rounded cards, and blue action button. Grouped project selection and total in the same card.
+
+- Merged upstream main with Seyi's #723, wired its report button to the standalone route, and raised the version to 0.1.176.
+
+- Browser verification on the migrated local demo: opened Seyi's report, followed Move to your app, moved a sample result, and verified the reopened report links to the same Issue #245.
+
+## 2026-11-15 — PR #730 review
+
+- Shared the simulated payment write between unlock and move. The move still writes the linked issue in the same transaction. Moved the page loader into server-only code and added tests for requester scope and mixed prices. Renamed the button to Pay and move.
+
+## 2026-11-16 — Bulk selection on the move page
+
+- Added Select all and Clear selection for findings that can still be moved. Updated the picker to use Zik and Ziks, the currency name in upstream main.
+
+## 2026-11-17 — Stack scan results on upstream main
+
+- Preserved the prototype in a local stash and fast-forwarded to 0d3a55f1. Stacked Quick Scan and Quick checks using upstream rows, severity styles, and checkout links.
+- Full verification passed with the regenerated Prisma client: lint, typecheck, and all 2,285 unit tests.
+
+- Restored the posted report summary in the scan header. It shows the total and severity counts in place of the progress bar.
+- Matched the artifact summary treatment and linked its action to upstream checkout, prioritizing critical findings that still need fixing.
+- Renamed the agent results section to Deeper scan to match upstream terminology.

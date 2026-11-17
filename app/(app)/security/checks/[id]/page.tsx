@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { IssueActionsMenu } from "@/components/issue-actions-menu";
+import { RemoveScanButton } from "@/components/security-checks/remove-scan-button";
+import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
-import { ReportProgress } from "@/components/security-checks/report-progress";
-import { PreviewResult } from "@/components/security-checks/preview-result";
-import { ReportResults } from "@/components/security-checks/report-results";
-import { ReportSummary } from "@/components/security-checks/report-summary";
+import { CheckHeader } from "@/components/security-checks/check-header";
+import { checkListTabs } from "@/lib/security-checks/check-list";
+import { SiteChatButton, SiteChatHolder, SiteChatPanel } from "@/components/security-checks/site-chat-box";
 import { requireUser } from "@/lib/auth-helpers";
 import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
@@ -14,12 +16,6 @@ import { loadCheckReport } from "@/lib/security-checks/report";
 import { orgCard } from "../../../[org]/[project]/org/org-ui";
 
 export const metadata = { title: "Security check" };
-
-/** What each step tells the client while there are no parts to list yet. */
-const WAITING_NOTE: Partial<Record<keyof typeof CHECK_STATUS_LABEL, string>> = {
-  queued: "Ziki will start planning the checks in a moment.",
-  splitting: "Ziki is looking at it and planning the checks.",
-};
 
 /**
  * One security check (12 and 14 Nov plans, part S): live progress and the
@@ -44,8 +40,12 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
     <div className="flex w-full flex-col gap-4 pb-10 sm:gap-6">
       {/* Live until the report is posted; a cancelled check has nothing more to show. */}
       {working && !report.posted ? <ReportLive /> : null}
-      {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx). */}
-      <nav aria-label="Breadcrumb" className="flex w-full items-center px-0.5 text-[13px] text-zk-text2">
+      {/* The top row and, under it, the site's chat when it's opened from the icon by "More actions" (16 Nov): one block, so a closed chat adds no gap. */}
+      <SiteChatHolder checkId={report.checkId} site={report.target.value}>
+      <div className="flex flex-col">
+      {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx), with the same "More actions" menu on the right. */}
+      <div className="flex w-full items-center justify-between gap-3">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center px-0.5 text-[13px] text-zk-text2">
         <ol className="flex min-w-0 flex-wrap items-center gap-0.5">
           <li className="min-w-0">
             <Link
@@ -59,6 +59,25 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
           <li aria-current="page" className="truncate px-1.5">{report.target.value}</li>
         </ol>
       </nav>
+      {/* Remove sits here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
+      {report.status !== "cancelled" ? (
+        <div className="flex shrink-0 items-center gap-2">
+          <SiteChatButton />
+          <IssueActionsMenu>
+            {/* The PDF is a secondary action (16 Nov call): people want things fixed, not a file. */}
+            {report.posted ? (
+              <a href={`/security/checks/${report.checkId}/report.pdf`} className="px-2.5 py-1 text-xs font-semibold text-zk-text hover:underline">
+                Download report (PDF)
+              </a>
+            ) : null}
+            <RemoveScanButton checkId={report.checkId} site={report.target.value} posted={report.posted} />
+          </IssueActionsMenu>
+        </div>
+      ) : null}
+      </div>
+      {report.status !== "cancelled" ? <SiteChatPanel /> : null}
+      </div>
+      </SiteChatHolder>
 
       {/* Only while ownership proof is on: with it off, the report shows such a check as waiting to start. */}
       {report.status === "awaiting_ownership" ? (
@@ -74,36 +93,11 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
         </section>
       ) : (
         <>
-          <ReportSummary report={report} />
-
-          {/* The quick scan's short titles while the agents check: never findings, so nothing here is sold. */}
-          {!report.posted && report.quickScan ? (
-            <section aria-labelledby="quick-scan-heading" className="flex flex-col gap-3">
-              <h2 id="quick-scan-heading" className="px-0.5 text-base font-semibold text-zk-text">Quick scan</h2>
-              <PreviewResult summary={report.quickScan} />
-            </section>
-          ) : null}
-
-          {/* Progress, until Ziki has summed up every part and posted the report. */}
-          {!report.posted ? (
-            <section aria-labelledby="progress-heading" className={orgCard}>
-              <h2 id="progress-heading" className="text-base font-semibold text-zk-text">Progress</h2>
-              <div className="mt-3">
-                {report.parts.length ? (
-                  <>
-                    <ReportProgress progress={report.progress} parts={report.parts} />
-                    {working && report.progress.done === report.progress.total ? (
-                      <p className="mt-3 text-sm text-zk-text2">Every part is checked. Ziki is writing your report.</p>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-sm text-zk-text2">{WAITING_NOTE[report.status] ?? "No parts to check yet."}</p>
-                )}
-              </div>
-            </section>
-          ) : null}
-
-          {report.posted ? <ReportResults report={report} /> : null}
+          {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
+          <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+            <CheckHeader report={report} />
+            <CheckList checkId={report.checkId} tabs={checkListTabs(report)} />
+          </section>
 
         </>
       )}

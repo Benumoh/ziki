@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ProjectRewardRulesSection } from "@/components/project-reward-rules-section";
 import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
+import { copyText } from "@/lib/clipboard";
 
 type Project = {
   slug: string;
@@ -21,6 +22,7 @@ type Project = {
   acceptsGuestIdeas?: boolean;
   contributorGuidelines?: string | null;
   rewardConfig?: unknown;
+  organisation?: { slug: string };
 };
 
 export function ProjectSettingsForm({
@@ -34,6 +36,13 @@ export function ProjectSettingsForm({
   const [visibility, setVisibility] = useState<"public" | "private">(project.visibility === "public" ? "public" : "private");
   const [isOpenForContributors, setIsOpenForContributors] = useState(Boolean(project.isOpenForContributors));
   const [acceptsGuestIdeas, setAcceptsGuestIdeas] = useState(Boolean(project.acceptsGuestIdeas));
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://ziki.dev";
+  const orgSlug = project.organisation?.slug ?? "ziki";
+  const portalUrl = `${origin}/${orgSlug}/${project.slug}/contribute`;
+  const htmlSnippet = `<a href="${portalUrl}">Share feedback</a>`;
 
   return (
     <form action={action} className="space-y-4">
@@ -122,6 +131,62 @@ export function ProjectSettingsForm({
               <p className="mt-1 pl-6 text-xs text-zk-muted">
                 Signed-out visitors may send an idea to the private triage queue and track it with an unlisted link. It is not published on the project overview. Guests cannot vote, bid, claim, review, or upload files.
               </p>
+              {acceptsGuestIdeas ? (
+                <div className="mt-3 ml-6 space-y-3 rounded-xl border border-zk-border bg-zk-chip/30 p-3.5">
+                  <div className="space-y-1.5">
+                    <label htmlFor="contributor-portal-link" className="block text-xs font-semibold text-zk-text">
+                      Contributor portal link
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="contributor-portal-link"
+                        readOnly
+                        value={portalUrl}
+                        className="bg-zk-surface font-mono text-xs text-zk-text"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={async () => {
+                          setCopiedLink(await copyText(portalUrl));
+                          setTimeout(() => setCopiedLink(false), 2000);
+                        }}
+                        className="shrink-0 text-xs"
+                      >
+                        {copiedLink ? "Copied" : "Copy link"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="contributor-html-snippet" className="block text-xs font-semibold text-zk-text">
+                      HTML link snippet
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="contributor-html-snippet"
+                        readOnly
+                        value={htmlSnippet}
+                        className="bg-zk-surface font-mono text-xs text-zk-text"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={async () => {
+                          setCopiedSnippet(await copyText(htmlSnippet));
+                          setTimeout(() => setCopiedSnippet(false), 2000);
+                        }}
+                        className="shrink-0 text-xs"
+                      >
+                        {copiedSnippet ? "Copied" : "Copy snippet"}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-zk-muted">
+                      Share this link in your README, website or support messages.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div>

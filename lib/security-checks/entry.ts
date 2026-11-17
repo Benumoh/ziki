@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { Prisma, type SecurityCheckStatus, type SecurityTargetKind } from "@prisma/client";
+import { Prisma, type SecurityCheckStatus, type SecuritySeverity, type SecurityTargetKind } from "@prisma/client";
+import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { prisma } from "@/lib/prisma";
 import type { PreviewSummary } from "./preview-summary";
 import { SECURITY_CHECK_PRICE_COINS, FINISHED_CHECK_STATUSES, FREE_SCANS_PER_WORKSPACE_PER_MONTH, freeScanAllowed, freeScanMonthStart, ownershipProofRequired } from "@/lib/security-checks";
@@ -98,13 +99,14 @@ export function refusedMessage(refused: RefusedCheck["refused"], site: string, n
 }
 
 /**
- * Remove one of this person's scans (#security-checks): only while its report
- * isn't posted, since reports never go away (14 Nov plan). It's cancelled, so
- * agents stop and it leaves the list. False when it can't be removed.
+ * Remove one of this person's scans (#security-checks), finished or not (15 Nov:
+ * people can always remove their scans). It's cancelled, so agents stop and it
+ * leaves the list; findings already moved to the app stay there. False when it
+ * isn't theirs or is already removed.
  */
 export async function removeOwnScan(organisationId: string, userId: string, checkId: string): Promise<boolean> {
   const removed = await prisma.securityCheck.updateMany({
-    where: { id: checkId, organisationId, requestedById: userId, postedAt: null, status: { not: "cancelled" } },
+    where: { id: checkId, organisationId, requestedById: userId, status: { not: "cancelled" } },
     data: { status: "cancelled" },
   });
   return removed.count > 0;
@@ -114,7 +116,7 @@ export async function removeOwnScan(organisationId: string, userId: string, chec
  * A site this person has already scanned in this workspace (#security-checks):
  * its latest check that wasn't cancelled, so the same site isn't scanned again.
  */
-export async function findScannedCheck(organisationId: string, userId: string, target: ParsedTarget): Promise<{ checkId: string; summary: PreviewSummary | null } | null> {
+export async function findScannedCheck(organisationId: string, userId: string, target: ParsedTarget): Promise<{ checkId: string; summary: PreviewSummary | null; finished: boolean } | null> {
   const check = await prisma.securityCheck.findFirst({
     where: {
       organisationId,
@@ -123,10 +125,11 @@ export async function findScannedCheck(organisationId: string, userId: string, t
       target: { organisationId, kind: target.kind, value: target.value },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, target: { select: { previewSummary: true } } },
+    select: { id: true, postedAt: true, target: { select: { previewSummary: true } } },
   });
-  // Its saved quick scan, so the person sees that result again instead of a new scan.
-  return check ? { checkId: check.id, summary: readQuickScan(check.target.previewSummary) } : null;
+  // Its saved quick scan, so the person sees that result again instead of a new scan,
+  // and whether the agents' report is posted, so the chat offers "See results" rather than "See progress".
+  return check ? { checkId: check.id, summary: readQuickScan(check.target.previewSummary), finished: check.postedAt !== null } : null;
 }
 
 /** One of this person's scans in this workspace, with its site, for replacing its quick scan. */
@@ -192,8 +195,30 @@ export type WorkspaceCheckRow = {
   moved: number;
   /** The quick scan from when it was added, if any: counts and locked rows only. */
   preview: PreviewSummary | null;
+  /**
+   * The agents' result once the report is posted (null before): the card shows it
+   * in place of the quick scan, which only stays while no agent has reported.
+   */
+  agentReport: AgentReport | null;
   createdAt: Date;
 };
+
+/** What a card shows of a posted report: Ziki's summary and each finding, worst first. */
+export type AgentReport = {
+  summary: string | null;
+  findings: { id: string; severity: SecuritySeverity; title: string; unlocked: boolean; moved: boolean }[];
+};
+
+/** A posted check's findings for its card, worst first and then by id so the order never wobbles. */
+export function agentReportOf(
+  summary: string | null,
+  results: readonly { id: string; severity: SecuritySeverity; title: string; unlockedAt: Date | null; findingId: string | null }[],
+): AgentReport {
+  const findings = results
+    .map((result) => ({ id: result.id, severity: result.severity, title: result.title, unlocked: result.unlockedAt !== null, moved: result.findingId !== null }))
+    .sort((a, b) => SECURITY_SEVERITIES.indexOf(a.severity) - SECURITY_SEVERITIES.indexOf(b.severity) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return { summary, findings };
+}
 
 /** A scan's place, on its card: being checked, its report ready, or findings moved to the app (14 Nov plan, C1). */
 export type ScanStage = "scanning" | "report" | "in_app" | "cancelled";
@@ -230,9 +255,10 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
       id: true,
       status: true,
       postedAt: true,
+      summary: true,
       createdAt: true,
       target: { select: { id: true, kind: true, value: true, verifiedAt: true, previewSummary: true } },
-      results: { select: { unlockedAt: true, findingId: true } },
+      results: { select: { id: true, severity: true, title: true, unlockedAt: true, findingId: true } },
     },
   });
   return rows.map((row) => ({
@@ -247,6 +273,7 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
     unlocked: row.results.filter((result) => result.unlockedAt !== null).length,
     moved: row.results.filter((result) => result.findingId !== null).length,
     preview: readQuickScan(row.target.previewSummary),
+    agentReport: row.postedAt !== null ? agentReportOf(row.summary, row.results) : null,
     createdAt: row.createdAt,
   }));
 }

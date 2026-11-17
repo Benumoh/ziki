@@ -2,6 +2,7 @@
 
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import {
   acceptOfferForMyAgentAction,
@@ -120,27 +121,17 @@ export function YourTurnCard({ bugId, turn }: { bugId: string; turn: YourTurn })
 
       {turn.kind === "open" ? (
         <div>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => go(() => openForBidsAction(bugId), "Opened for bids.")}
-            className="rounded-lg bg-zk-accent px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
+          <Button type="button" disabled={pending} onClick={() => go(() => openForBidsAction(bugId), "Opened for bids.")}>
             {pending ? "Opening…" : "Open for bids"}
-          </button>
+          </Button>
         </div>
       ) : null}
 
       {turn.kind === "offer" ? (
         <div>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => go(() => acceptOfferForMyAgentAction(bugId), `${turn.agentName} is on it.`)}
-            className="rounded-lg bg-zk-accent px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
+          <Button type="button" disabled={pending} onClick={() => go(() => acceptOfferForMyAgentAction(bugId), `${turn.agentName} is on it.`)}>
             {pending ? "Accepting…" : `Accept for ${turn.agentName}`}
-          </button>
+          </Button>
         </div>
       ) : null}
 
@@ -183,24 +174,19 @@ export function YourTurnCard({ bugId, turn }: { bugId: string; turn: YourTurn })
               </p>
             ) : null}
             <div className="flex justify-end gap-2">
-              <button type="button" disabled={pending} onClick={() => setWriting(null)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zk-text2 hover:bg-zk-chip">
+              <Button type="button" variant="ghost" disabled={pending} onClick={() => setWriting(null)}>
                 Back
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={submitDelivery}
-                className="rounded-lg bg-zk-accent px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-              >
+              </Button>
+              <Button type="button" disabled={pending} onClick={submitDelivery}>
                 {pending ? "Delivering…" : "Deliver"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <div>
-            <button type="button" onClick={() => setWriting("good")} className="rounded-lg bg-zk-accent px-3.5 py-2 text-sm font-semibold text-white">
+            <Button type="button" onClick={() => setWriting("good")}>
               Deliver the work
-            </button>
+            </Button>
           </div>
         )
       ) : null}
@@ -249,27 +235,22 @@ export function YourTurnCard({ bugId, turn }: { bugId: string; turn: YourTurn })
               </p>
             ) : null}
             <div className="flex justify-end gap-2">
-              <button type="button" disabled={pending} onClick={() => setWriting(null)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zk-text2 hover:bg-zk-chip">
+              <Button type="button" variant="ghost" disabled={pending} onClick={() => setWriting(null)}>
                 Back
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={submitEntry}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 ${writing === "good" ? "bg-zk-accent" : "bg-zk-text2"}`}
-              >
+              </Button>
+              <Button type="button" variant={writing === "good" ? "primary" : "secondary"} disabled={pending} onClick={submitEntry}>
                 {pending ? "Saving…" : writing === "good" ? yes : no}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setWriting("good")} className="rounded-lg bg-zk-accent px-3.5 py-2 text-sm font-semibold text-white">
+            <Button type="button" onClick={() => setWriting("good")}>
               {yes}
-            </button>
-            <button type="button" onClick={() => setWriting("bad")} className="rounded-lg border border-zk-border bg-zk-surface px-3.5 py-2 text-sm font-semibold text-zk-text hover:bg-zk-chip">
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setWriting("bad")}>
               {no}
-            </button>
+            </Button>
           </div>
         )
       ) : null}
