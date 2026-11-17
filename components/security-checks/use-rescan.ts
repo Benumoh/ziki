@@ -70,7 +70,7 @@ export function useRescan() {
         else break;
       }
       if (!started.length) return;
-      toast(one ? "Scanning again. Agents are rechecking." : `${started.length} targets are being scanned again.`);
+      // No toast (17 Nov, Tolu): the new scan's page shows it working, with the same progress as a first scan.
       if (one) router.push(`/security/checks/${encodeURIComponent(started[0]!)}`);
       else router.refresh();
     });
