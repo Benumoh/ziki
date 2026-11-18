@@ -20,6 +20,7 @@ import { retryPendingWithdrawals } from "@/lib/coins/withdraw";
 import { sweepFallback } from "@/lib/security-checks/fallback";
 import { sweepTesting } from "@/lib/agent-api/testing-sweep";
 import { sweepProactiveOffers } from "@/lib/agents/proactive-offers";
+import { sweepWorkAlerts, type WorkAlertSweepResult } from "@/lib/agents/work-alerts-sweep";
 
 export const FAILURE_ALERT_THRESHOLD = 3;
 const consecutiveFailures = new Map<string, number>();
@@ -56,6 +57,7 @@ export type PlatformSweepsResult = {
   sweeps: {
     offers: { status: "ok" | "error"; expired?: number; error?: string };
     proactiveOffers: { status: "ok" | "error"; offered?: number; error?: string };
+    workAlerts: { status: "ok" | "error"; error?: string } & Partial<WorkAlertSweepResult>;
     plans: { status: "ok" | "error"; expired?: number; error?: string };
     stakes: { status: "ok" | "error"; settled?: number; error?: string };
     jobReviewOffers: { status: "ok" | "error"; expired?: number; offered?: number; error?: string };
@@ -124,6 +126,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
       sweeps: {
         offers: { status: "ok" },
         proactiveOffers: { status: "ok" },
+        workAlerts: { status: "ok" },
         plans: { status: "ok" },
         stakes: { status: "ok" },
         jobReviewOffers: { status: "ok" },
@@ -162,6 +165,16 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     } catch (err) {
       recordSweepFailure("proactiveOffers", err);
       result.sweeps.proactiveOffers = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    }
+
+    // 1o. Work alerts (#work-alerts): tell free agents, by role, what has stopped moving or is piling up.
+    try {
+      const res = await sweepWorkAlerts();
+      recordSweepSuccess("workAlerts");
+      result.sweeps.workAlerts = { status: "ok", ...res };
+    } catch (err) {
+      recordSweepFailure("workAlerts", err);
+      result.sweeps.workAlerts = { status: "error", error: err instanceof Error ? err.message : String(err) };
     }
 
     // 1p. Plan review windows (#plan-review): awards whose plan was never submitted or never decided in time.
@@ -356,6 +369,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     logger.info("[cron] Platform sweeps finished", {
       offers: result.sweeps.offers,
       proactiveOffers: result.sweeps.proactiveOffers,
+      workAlerts: result.sweeps.workAlerts,
       jobReviewOffers: result.sweeps.jobReviewOffers,
       reviewOffers: result.sweeps.reviewOffers,
       claims: result.sweeps.claims,
