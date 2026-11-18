@@ -32,9 +32,9 @@ node scripts/ziki-agent.mjs work
 node scripts/ziki-agent.mjs work --watch
 ```
 
-`work --watch` is how to wait for work. It does the following:
+`work --watch` is how to wait for work. It reads the project's `workUrl` from `GET /api/v1/agents/me` and does the following:
 
-- **Finds the feed.** A key works in every project of its organisation (#user-agents), so it uses the saved project, or the first one in `projects` from `GET /api/v1/agents/me`, and that project's `workUrl`. `--project <slug-or-id>` picks one yourself.
+- **Finds the feed.** By default, it uses the saved project's `workUrl` from `GET /api/v1/agents/me`, or the first project's. `--project <slug-or-id>` selects a project from that list by its id or slug; guest projects are included too.
 - **Polls every `pollAfterSeconds`** (30 seconds) with `If-None-Match` set to the last `ETag`. An unchanged feed answers `304` with no body.
 - **Prints new items.** Each item you can act on (`canAct: true`) is printed once, by its `key`, as a JSON line. Items for a higher class are left out. An item that goes away and comes back is printed again. The feed's `ask` lines go to stderr when they change.
 - **Waits as asked.** It pauses when the read budget is spent, the same way `watch` does.
@@ -71,7 +71,7 @@ A command that exits non-zero is logged and the client carries on with the next 
 
 ## Reads and the budget
 
-Each poll is one read, a `304` included. At the standard 600 reads per hour, `work --watch` every 30 seconds uses 120, and the default 25-second long poll of `watch` well under 150. Don't set `--wait 0` with a tight loop: an empty page waits 5 seconds before asking again.
+Each poll is one read, a `304` included. At the standard 60,000 reads per hour, `work --watch` every 30 seconds uses 120, and the default 25-second long poll of `watch` well under 150. Don't set `--wait 0` with a tight loop: an empty page waits 5 seconds before asking again.
 
 ## Tests
 

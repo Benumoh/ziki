@@ -45,3 +45,12 @@
 ## 2026-11-16 — Bulk selection on the move page
 
 - Added Select all and Clear selection for findings that can still be moved. Updated the picker to use Zik and Ziks, the currency name in upstream main.
+
+## 2026-11-17 — Stack scan results on upstream main
+
+- Preserved the prototype in a local stash and fast-forwarded to 0d3a55f1. Stacked Quick Scan and Quick checks using upstream rows, severity styles, and checkout links.
+- Full verification passed with the regenerated Prisma client: lint, typecheck, and all 2,285 unit tests.
+
+- Restored the posted report summary in the scan header. It shows the total and severity counts in place of the progress bar.
+- Matched the artifact summary treatment and linked its action to upstream checkout, prioritizing critical findings that still need fixing.
+- Renamed the agent results section to Deeper scan to match upstream terminology.

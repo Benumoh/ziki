@@ -7,27 +7,26 @@
   color: var(--sev-ink);
   border-color: var(--sev-border);
 }
-/* Ziki calm (15 Nov): the same recipe as Ziki's status labels (lib/labels.ts),
-   a soft tint with the darkest text of its colour and no visible border, so
-   it's calm but noticeable. Critical and High are a step stronger so they're
-   seen first. `--sev-dot` is the colour's strong shade, for dots and stripes. */
+/* 16 Nov call: problems should look like problems ("scare them a little"). Critical
+   and High are solid, with white text, so they are seen first; Medium is a true
+   amber, not a brownish yellow. `--sev-dot` is the colour's strong shade, for dots and stripes. */
 .security-severity--critical {
-  --sev-bg: var(--color-red-300);
-  --sev-ink: var(--color-red-950);
-  --sev-border: var(--color-red-300);
-  --sev-dot: var(--color-red-500);
+  --sev-bg: var(--color-red-600);
+  --sev-ink: var(--color-white);
+  --sev-border: var(--color-red-600);
+  --sev-dot: var(--color-red-600);
 }
 .security-severity--high {
-  --sev-bg: var(--color-orange-300);
-  --sev-ink: var(--color-orange-950);
-  --sev-border: var(--color-orange-300);
-  --sev-dot: var(--color-orange-500);
+  --sev-bg: var(--color-orange-700);
+  --sev-ink: var(--color-white);
+  --sev-border: var(--color-orange-700);
+  --sev-dot: var(--color-orange-600);
 }
 .security-severity--medium {
-  --sev-bg: var(--color-amber-200);
+  --sev-bg: var(--color-amber-300);
   --sev-ink: var(--color-amber-950);
-  --sev-border: var(--color-amber-200);
-  --sev-dot: var(--color-amber-400);
+  --sev-border: var(--color-amber-300);
+  --sev-dot: var(--color-amber-500);
 }
 /* Sky, like Ziki's "Open": low is still a finding, not a disabled one, and not green. */
 .security-severity--low {

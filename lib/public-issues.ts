@@ -34,6 +34,9 @@ const PUBLIC_ISSUE_SELECT = {
   area: { select: { name: true } },
 } satisfies Prisma.BugSelect;
 
+/** The statuses a guest's public issue list shows; closed issues are left out. */
+export const PUBLIC_ISSUE_STATUSES = ["open", "in_progress", "done", "merge", "resolved"] as const;
+
 export function parsePublicIssueStatus(value?: string | null): PublicIssueStatusFilter {
   if (value === "open" || value === "in_progress" || value === "resolved") {
     return value;
@@ -57,7 +60,7 @@ export async function listPublicIssues(
     securityFinding: { is: null },
     status:
       status === "all"
-        ? { in: ["open", "in_progress", "done", "merge", "resolved"] }
+        ? { in: [...PUBLIC_ISSUE_STATUSES] }
         : status,
   };
 

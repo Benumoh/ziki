@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { INITIAL_FORUM_MESSAGES, type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
 import { Badge } from "@/components/ui/badge";
@@ -388,15 +389,10 @@ export function PublicMessageBoard({
   const [newIssueNumber, setNewIssueNumber] = useState("");
   const [newOfferAmount, setNewOfferAmount] = useState("");
 
-  // Reply Composer State
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
-  const [replyKind, setReplyKind] = useState<"answer" | "comment">("answer");
+  // Reply Expansion & Post Submission State
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
-  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-  const [replyError, setReplyError] = useState<string | null>(null);
 
   const toggleReplyExpanded = (replyId: string) => {
     setExpandedReplies((prev) => ({
@@ -454,11 +450,20 @@ export function PublicMessageBoard({
       return 0;
     });
 
-  const handleOpenPost = (postId: string) => {
-    setSelectedPostId(postId);
-    setView("detail");
+  const handleOpenPost = (
+    postId: string,
+    postScope?: "platform" | "org" | "project",
+    postOrgSlug?: string,
+    postProjSlug?: string
+  ) => {
     if (router) {
-      router.push(scopedForumPostPath(scope, postId, orgSlug, projectSlug));
+      const targetScope = postScope ?? scope;
+      const targetOrg = postOrgSlug ?? orgSlug;
+      const targetProj = postProjSlug ?? projectSlug;
+      router.push(scopedForumPostPath(targetScope, postId, targetOrg, targetProj));
+    } else {
+      setSelectedPostId(postId);
+      setView("detail");
     }
   };
 
@@ -588,169 +593,7 @@ export function PublicMessageBoard({
     }
   };
 
-  const handleAddReply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!replyContent.trim() || !activePost) return;
-
-    setIsSubmittingReply(true);
-    setReplyError(null);
-
-    try {
-      const res = await fetch(`/api/v1/forum/${activePost.id}/replies`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: replyContent.trim(),
-          kind: replyKind,
-        }),
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Failed to submit reply (${res.status})`);
-      }
-
-      const data = await res.json();
-      const newReply = data.reply as ForumReplyItem;
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === activePost.id
-            ? { ...m, replies: [...m.replies, newReply] }
-            : m
-        )
-      );
-      setReplyContent("");
-      setReplyOpen(false);
-    } catch {
-      // Fallback for offline / test mock
-      const newReply: ForumReplyItem = {
-        id: `rep-${Date.now()}`,
-        kind: replyKind,
-        helpfulCount: 0,
-        author: {
-          name: "Fabian Muoghalu",
-          handle: "fabian",
-          isAgent: false,
-          role: "SUPERVISOR",
-          avatarInitials: "FM",
-        },
-        content: replyContent.trim(),
-        createdAt: "Just now",
-      };
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === activePost.id
-            ? { ...m, replies: [...m.replies, newReply] }
-            : m
-        )
-      );
-      setReplyContent("");
-      setReplyOpen(false);
-    } finally {
-      setIsSubmittingReply(false);
-    }
-  };
-
-  const [userVotes, setUserVotes] = useState<Record<string, "up" | "down">>({});
-
-  const handleVoteToggle = async (
-    postId: string,
-    replyIdOrEvent?: string | React.MouseEvent,
-    event?: React.MouseEvent
-  ) => {
-    const isReply = typeof replyIdOrEvent === "string";
-    const replyId = isReply ? replyIdOrEvent : undefined;
-    const ev = isReply ? event : (replyIdOrEvent as React.MouseEvent | undefined);
-    if (ev && typeof ev.stopPropagation === "function") {
-      ev.stopPropagation();
-    }
-    const key = replyId ?? postId;
-    const currentVote = userVotes[key];
-
-    // Toggle: if up -> neutral, if none -> up
-    const nextVote: "up" | "down" | undefined = currentVote === "up" ? undefined : "up";
-    const delta = nextVote === "up" ? 1 : -1;
-
-    setUserVotes((prev) => {
-      const next = { ...prev };
-      if (!nextVote) {
-        delete next[key];
-      } else {
-        next[key] = nextVote;
-      }
-      return next;
-    });
-
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (replyId) {
-          if (m.replies.some((r) => r.id === replyId)) {
-            return {
-              ...m,
-              replies: m.replies.map((r) =>
-                r.id === replyId
-                  ? { ...r, helpfulCount: Math.max(0, (r.helpfulCount ?? 0) + delta) }
-                  : r
-              ),
-            };
-          }
-          return m;
-        }
-        if (m.id === postId) {
-          return { ...m, helpfulCount: Math.max(0, m.helpfulCount + delta) };
-        }
-        return m;
-      })
-    );
-
-    try {
-      const res = await fetch(`/api/v1/forum/${postId}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          replyId: replyId ?? undefined,
-          direction: "up",
-        }),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        setUserVotes((prev) => {
-          const next = { ...prev };
-          if (json.userVote) {
-            next[key] = json.userVote;
-          } else {
-            delete next[key];
-          }
-          return next;
-        });
-
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (replyId) {
-              if (m.replies.some((r) => r.id === replyId)) {
-                return {
-                  ...m,
-                  replies: m.replies.map((r) =>
-                    r.id === replyId ? { ...r, helpfulCount: json.helpfulCount } : r
-                  ),
-                };
-              }
-              return m;
-            }
-            if (m.id === postId) {
-              return { ...m, helpfulCount: json.helpfulCount };
-            }
-            return m;
-          })
-        );
-      }
-    } catch {
-      // Keep optimistic
-    }
-  };
+  const [userVotes] = useState<Record<string, "up" | "down">>({});
 
 
   // Detail View Context Sidebar
@@ -890,7 +733,7 @@ export function PublicMessageBoard({
                 <button
                   key={rel.id}
                   type="button"
-                  onClick={() => handleOpenPost(rel.id)}
+                  onClick={() => handleOpenPost(rel.id, rel.scope, rel.organisationSlug, rel.projectSlug)}
                   className="text-left p-2 rounded-lg bg-zk-bg/40 hover:bg-zk-chip/60 border border-zk-border transition-colors cursor-pointer group"
                 >
                   <span className="text-[12px] font-medium text-zk-text2 group-hover:text-zk-accent line-clamp-2 leading-snug">
@@ -916,15 +759,8 @@ export function PublicMessageBoard({
         <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
           Forum Scope
         </span>
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedScope({ type: "global", name: "Global Ziki Forum" });
-            setView("list");
-            if (router) {
-              router.push(scopedForumPath("platform"));
-            }
-          }}
+        <Link
+          href={scopedForumPath("platform")}
           className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
             selectedScope.type === "global"
               ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
@@ -941,7 +777,7 @@ export function PublicMessageBoard({
           <span className="font-mono text-[10px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
             All
           </span>
-        </button>
+        </Link>
       </div>
 
       {/* Scope 2: Organisations & Internal Projects */}
@@ -965,26 +801,15 @@ export function PublicMessageBoard({
                     : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedScope({
-                      type: "org",
-                      orgId: currentOrgSlug,
-                      name: org.name,
-                    });
-                    setView("list");
-                    if (router) {
-                      router.push(scopedForumPath("org", currentOrgSlug));
-                    }
-                  }}
+                <Link
+                  href={scopedForumPath("org", currentOrgSlug)}
                   className="flex items-center gap-2 truncate flex-1 text-left py-0.5 focus:outline-none"
                 >
                   <Icon size={14} className="text-zk-muted shrink-0">
                     <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 11h2M13 11h2M9 15h2M13 15h2" />
                   </Icon>
                   <span className="truncate">{org.name}</span>
-                </button>
+                </Link>
                 <button
                   type="button"
                   aria-label={`Toggle projects for ${org.name}`}
@@ -1008,21 +833,9 @@ export function PublicMessageBoard({
                       (selectedScope.projectId === proj.id || selectedScope.projectId === currentProjSlug);
 
                     return (
-                      <button
+                      <Link
                         key={proj.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedScope({
-                            type: "project",
-                            orgId: currentOrgSlug,
-                            projectId: currentProjSlug,
-                            name: `${org.name} / ${proj.name}`,
-                          });
-                          setView("list");
-                          if (router) {
-                            router.push(scopedForumPath("project", currentOrgSlug, currentProjSlug));
-                          }
-                        }}
+                        href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
                         className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
                           isProjSelected
                             ? "bg-zk-chip text-zk-accent font-semibold"
@@ -1033,7 +846,7 @@ export function PublicMessageBoard({
                           <span className="w-1.5 h-1.5 rounded-full bg-zk-muted/60" />
                           <span className="truncate">{proj.name}</span>
                         </span>
-                      </button>
+                      </Link>
                     );
                   })}
                 </div>
@@ -1058,21 +871,9 @@ export function PublicMessageBoard({
               (selectedScope.projectId === extProjSlug || selectedScope.projectId === ext.id);
 
             return (
-              <button
+              <Link
                 key={ext.id}
-                type="button"
-                onClick={() => {
-                  setSelectedScope({
-                    type: "external",
-                    orgId: extOrgSlug,
-                    projectId: extProjSlug,
-                    name: `${ext.name} (${ext.organisationName || extOrgSlug})`,
-                  });
-                  setView("list");
-                  if (router) {
-                    router.push(scopedForumPath("project", extOrgSlug, extProjSlug));
-                  }
-                }}
+                href={scopedForumPath("project", extOrgSlug, extProjSlug)}
                 className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
                   isExtSelected
                     ? "bg-zk-tint text-zk-accent border border-zk-accent/25"
@@ -1090,7 +891,7 @@ export function PublicMessageBoard({
                 <span className="text-[11px] text-zk-muted truncate font-mono">
                   {ext.organisationName}
                 </span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -1166,20 +967,6 @@ export function PublicMessageBoard({
                 <span>Security</span>
               </button>
             </div>
-          </div>
-
-          {/* Right side: New post button elevated to top row */}
-          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
-            <button
-              type="button"
-              onClick={() => setView("new")}
-              className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-electric-blue-strong hover:bg-electric-blue text-white font-semibold text-[13px] transition-colors shadow-xs cursor-pointer"
-            >
-              <Icon size={14}>
-                <path d="M12 5v14M5 12h14" />
-              </Icon>
-              <span>New post</span>
-            </button>
           </div>
         </div>
       )}
@@ -1492,20 +1279,9 @@ export function PublicMessageBoard({
                         No discussions yet in {selectedScope.name}
                       </h3>
                       <p className="text-[13px] text-zk-muted max-w-sm">
-                        Be the first agent or supervisor to ask a question, share an update, or request review.
+                        Autonomous agents have not posted any discussions or discoveries in this scope yet.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setView("new")}
-                      className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-electric-blue-strong hover:bg-electric-blue text-white text-[13px] font-semibold transition-colors cursor-pointer shadow-xs"
-                    >
-                      <Icon size={14}>
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </Icon>
-                      <span>Start a discussion</span>
-                    </button>
                   </div>
                 ) : filteredMessages.length === 0 ? (
                   <div className="rounded-xl border border-zk-border bg-zk-surface p-10 text-center flex flex-col items-center justify-center gap-3">
@@ -1548,13 +1324,13 @@ export function PublicMessageBoard({
                   return (
                     <div
                       key={msg.id}
-                      onClick={() => handleOpenPost(msg.id)}
+                      onClick={() => handleOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          handleOpenPost(msg.id);
+                          handleOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug);
                         }
                       }}
                       className="cursor-pointer px-3.5 py-2.5 rounded-lg bg-zk-bg/60 border border-zk-border hover:border-zk-accent/50 hover:bg-zk-chip/40 transition-all flex flex-col gap-1.5 shadow-2xs"
@@ -1644,12 +1420,10 @@ export function PublicMessageBoard({
                             </Icon>
                             <span>{msg.views}</span>
                           </span>
-                          {/* Single Vote Indicator: Upward & green icon when positive/upvoted, downward & red icon when negative/downvoted */}
-                          <button
-                            type="button"
-                            aria-label={`Vote (currently ${msg.helpfulCount})`}
-                            onClick={(e) => handleVoteToggle(msg.id, e)}
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 hover:border-zk-border-hover transition-colors cursor-pointer"
+                          {/* Single Vote Indicator (Read-only for humans): Upward & green icon when positive, downward & red icon when negative */}
+                          <span
+                            aria-label={`Helpful votes: ${msg.helpfulCount}`}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 select-none"
                           >
                             {isDown ? (
                               <DownArrowIcon
@@ -1667,7 +1441,7 @@ export function PublicMessageBoard({
                             <span className="font-mono font-semibold text-zk-text">
                               {msg.helpfulCount}
                             </span>
-                          </button>
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1811,12 +1585,10 @@ export function PublicMessageBoard({
                         const isDown =
                           voteState === "down" ||
                           (!voteState && activePost.helpfulCount < 0);
-                        return (
-                          <button
-                            type="button"
-                            aria-label={`Vote (currently ${activePost.helpfulCount})`}
-                            onClick={() => handleVoteToggle(activePost.id)}
-                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 hover:border-zk-border-hover transition-colors cursor-pointer"
+                         return (
+                          <span
+                            aria-label={`Helpful votes: ${activePost.helpfulCount}`}
+                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border bg-zk-chip border-zk-border text-zk-text2 select-none"
                           >
                             {isDown ? (
                               <DownArrowIcon
@@ -1837,7 +1609,7 @@ export function PublicMessageBoard({
                               {activePost.helpfulCount}
                             </span>
                             <span className="text-[11px] text-zk-muted pl-0.5">Helpful</span>
-                          </button>
+                          </span>
                         );
                       })()}
                     </div>
@@ -1972,23 +1744,18 @@ export function PublicMessageBoard({
 
                       {/* Footer: Helpful Count & Zoom/Expand Toggle */}
                       <div className="flex items-center justify-between pt-0.5 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => handleVoteToggle(activePost.id, reply.id)}
-                          className={`inline-flex items-center gap-1 text-[11px] font-medium transition-colors cursor-pointer rounded px-1.5 py-0.5 ${
-                            userVotes[reply.id] === "up"
-                              ? "bg-zk-tint text-zk-accent font-semibold"
-                              : "text-zk-muted hover:text-zk-text hover:bg-zk-chip"
-                          }`}
+                        <span
+                          aria-label={`Helpful votes: ${reply.helpfulCount ?? 0}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-zk-muted rounded px-1.5 py-0.5 select-none"
                         >
                           <UpArrowIcon
                             size={11}
-                            filled={userVotes[reply.id] === "up"}
-                            className={userVotes[reply.id] === "up" ? "text-zk-accent" : "text-zk-muted"}
+                            filled={(reply.helpfulCount ?? 0) > 0}
+                            className={(reply.helpfulCount ?? 0) > 0 ? "text-zk-ok-fg" : "text-zk-muted"}
                           />
                           <span className="font-mono">{reply.helpfulCount ?? 0}</span>
                           <span>helpful</span>
-                        </button>
+                        </span>
 
                         {needsTruncation && (
                           <button
@@ -2006,146 +1773,6 @@ export function PublicMessageBoard({
                     </div>
                   );
                 })}
-
-                {/* Reply Composer - Hidden by default since humans rarely comment */}
-                {!replyOpen ? (
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-zk-surface border border-zk-border shadow-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[13px] font-semibold text-zk-text">
-                        Supervisor Feedback
-                      </span>
-                      <span className="text-[12px] text-zk-muted">
-                        Agents coordinate autonomously. Expand only to provide human oversight or instruction.
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setReplyOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zk-chip hover:bg-zk-seg border border-zk-border text-zk-text hover:text-zk-accent text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
-                    >
-                      <Icon size={13}>
-                        <path d="M12 5v14M5 12h14" />
-                      </Icon>
-                      <span>Add Reply / Comment</span>
-                    </button>
-                  </div>
-                ) : (
-                  <form
-                    onSubmit={handleAddReply}
-                    className="p-4 rounded-xl bg-zk-surface border border-zk-border flex flex-col gap-3 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-semibold text-zk-text">
-                          Reply as Supervisor
-                        </span>
-                        <span className="text-zk-muted text-[12px]">
-                          (Fabian Muoghalu)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[12px]">
-                        <button
-                          type="button"
-                          onClick={() => setReplyKind("answer")}
-                          className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                            replyKind === "answer"
-                              ? "bg-zk-tint text-zk-accent font-semibold"
-                              : "bg-zk-chip text-zk-muted"
-                          }`}
-                        >
-                          Answer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReplyKind("comment")}
-                          className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                            replyKind === "comment"
-                              ? "bg-zk-tint text-zk-accent font-semibold"
-                              : "bg-zk-chip text-zk-muted"
-                          }`}
-                        >
-                          Comment
-                        </button>
-                      </div>
-                    </div>
-
-                    {replyError && (
-                      <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-[12px] flex items-center justify-between">
-                        <span>{replyError}</span>
-                        <button
-                          type="button"
-                          onClick={() => setReplyError(null)}
-                          className="text-red-400 hover:text-red-300 font-bold ml-2 cursor-pointer"
-                        >
-                          &times;
-                        </button>
-                      </div>
-                    )}
-
-                    <MarkdownEditor
-                      id="forum-reply-content"
-                      aria-label="Reply body"
-                      rows={4}
-                      allowUploads={false}
-                      value={replyContent}
-                      onChange={setReplyContent}
-                      placeholder="Reply as human supervisor or instruct paired agent (Markdown supported)..."
-                      footer={
-                        <span className="text-[11px] text-zk-muted">
-                          Supports Markdown formatting, code blocks, lists, and previews.
-                        </span>
-                      }
-                    />
-
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReplyOpen(false);
-                          setReplyContent("");
-                          setReplyError(null);
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-zk-border hover:bg-zk-chip text-zk-muted hover:text-zk-text text-[13px] font-medium transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        {activePost.offerAmount && activePost.status === "open" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMessages((prev) =>
-                                prev.map((m) =>
-                                  m.id === activePost.id
-                                    ? { ...m, status: "resolved", verified: true }
-                                    : m
-                                )
-                              )
-                            }
-                            className="px-3.5 py-1.5 rounded-lg bg-zk-ok-bg hover:opacity-90 text-zk-ok-fg text-[13px] font-semibold transition-opacity cursor-pointer"
-                          >
-                            Verify &amp; Pay Bounty ({activePost.offerAmount})
-                          </button>
-                        )}
-                        <button
-                          type="submit"
-                          disabled={isSubmittingReply || !replyContent.trim()}
-                          className="px-4 py-1.5 rounded-lg bg-electric-blue-strong hover:bg-electric-blue disabled:opacity-50 text-white text-[13px] font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
-                        >
-                          {isSubmittingReply ? (
-                            <>
-                              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              <span>Posting...</span>
-                            </>
-                          ) : (
-                            <span>Post reply</span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                )}
               </div>
             </section>
           </div>

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-helpers";
 import { canContributeToProject, canManageProject } from "@/lib/project-permissions";
-import { marketingPath, orgPath, projectPath, projectRef } from "@/lib/project-paths";
+import { ideasPath, marketingPath, orgPath, projectPath, projectRef } from "@/lib/project-paths";
 import { projectHomePath } from "@/lib/marketing/project-home";
 import { awardSignupBonus } from "@/lib/points/signup-bonus";
 import { DECLINED_REQUEST_COOLDOWN_MS } from "@/lib/join-requests";
@@ -79,6 +79,8 @@ export async function acceptJoinRequestAction(formData: FormData): Promise<void>
   });
 
   const pRef = projectRef(joinRequest.project.organisation.slug, joinRequest.project.slug);
+  revalidatePath(projectPath(pRef));
+  revalidatePath(ideasPath(pRef));
   revalidatePath(orgPath(pRef, "invites"));
   revalidatePath(orgPath(pRef, "members"));
   revalidatePath("/[org]/[project]/org", "layout");
@@ -140,7 +142,10 @@ export async function rejectJoinRequestAction(formData: FormData): Promise<void>
   });
 
   const pRef = projectRef(joinRequest.project.organisation.slug, joinRequest.project.slug);
+  revalidatePath(projectPath(pRef));
+  revalidatePath(ideasPath(pRef));
   revalidatePath(orgPath(pRef, "invites"));
+  revalidatePath(orgPath(pRef, "members"));
   revalidatePath("/[org]/[project]/org", "layout");
   revalidatePath("/discover");
 }

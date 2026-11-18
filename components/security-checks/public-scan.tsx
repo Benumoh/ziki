@@ -63,9 +63,13 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
   function scan(event: React.FormEvent) {
     event.preventDefault();
     if (pending) return;
-    const parsed = parseSecurityTarget(text);
+    start(text);
+  }
+
+  function start(input: string) {
+    const parsed = parseSecurityTarget(input);
     if (!parsed.ok) {
-      setError(text.trim() ? "Enter a valid URL, like yourshop.com" : "Enter your URL first.");
+      setError(input.trim() ? "Enter a valid URL, like yourshop.com" : "Enter your URL first.");
       return;
     }
     setError(null);
@@ -74,6 +78,8 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
     // A repo goes by its GitHub address: it is what the scan reads back.
     const address = targetAddress(parsed.target);
     setSite(address);
+    // The result gets its own address, so it can be shared or reopened: the page stays, only the address changes.
+    window.history.replaceState(null, "", `${window.location.pathname}?site=${encodeURIComponent(address)}`);
     setStep(0);
     setRepo(parsed.target.kind === "repo");
     // The bar runs through every area before the result drops, even when the scan answers sooner.
@@ -91,24 +97,38 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
   }
 
 
+  // A shared result's address (?site=…) runs that scan again when it's opened, the way SecurityHeaders' "?q=" and
+  // SSL Labs' "?d=" links do. Read once on load, after the first render, so it matches the server's.
+  useEffect(() => {
+    const shared = new URLSearchParams(window.location.search).get("site");
+    if (!shared) return;
+    const timer = setTimeout(() => {
+      setText(shared);
+      start(shared);
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The summary's last row, the way other scanners end their result: SecurityHeaders' "Advanced: … Try Now" row and
   // Sucuri's "sign up for a complete scan" line. Signed out, Try now signs up first, then the Security page; signed
   // in, straight to the Security page with the site ready to add.
   const next = site ? (
-    <div className="grid gap-x-6 gap-y-2 py-1 sm:grid-cols-[96px_1fr] sm:items-start">
+    <div className="grid gap-x-6 gap-y-2 py-1 sm:grid-cols-[96px_1fr] sm:items-center">
       <p className="m-0 text-sm font-semibold text-zk-text">Advanced</p>
-      <div className="min-w-0">
+      {/* Text and Try now on one line when there's room (SecurityHeaders' Advanced row); the button drops under it on a phone. */}
+      <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <p className="m-0 text-sm leading-relaxed text-zk-text2">
           Want a deeper check? Ziki&apos;s agents test much more and show you how to fix it.
         </p>
         {signedIn ? (
-          // Signed in: Try now opens the Security page with the site ready to add (asking which workspace if they
-          // have more than one), not the scan's page straight away.
-          <Link href={addAssetPath(site)} className="mt-3 inline-flex h-10 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
+          // Signed in: Try now adds the site and opens its progress page, where the agents are already at work
+          // (asking which workspace first if they have more than one), the same as after signing up.
+          <Link href={tryNowPath(site)} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
             Try now
           </Link>
         ) : (
-          <Link href={`/signup?callbackUrl=${encodeURIComponent(tryNowPath(site))}`} className="mt-3 inline-flex h-10 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
+          <Link href={`/signup?callbackUrl=${encodeURIComponent(tryNowPath(site))}`} className="inline-flex h-10 shrink-0 items-center rounded-full bg-electric-blue-strong px-6 text-sm font-bold text-white hover:brightness-105">
             Try now
           </Link>
         )}

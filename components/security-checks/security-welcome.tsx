@@ -1,11 +1,13 @@
-import { SecurityChat } from "./security-chat";
+"use client";
+
+import { SecurityChat, keepChatOpen } from "./security-chat";
 
 /**
  * Security before anything is scanned (#security-checks, 14 Nov plan): laid
  * out like the Ideas page you see first, one big box asking what to secure,
  * and the three steps under it. Type a site and its scan shows right here.
  */
-export function SecurityWelcome({ startWith, thenProgress }: { startWith?: string; thenProgress?: boolean }) {
+export function SecurityWelcome({ startWith }: { startWith?: string }) {
   const steps = [
     { title: "Say what to secure", text: "Paste your website, a server address or a GitHub repo. Ziki works out which it is." },
     { title: "Get a quick scan", text: "See straight away what any browser can find. Then Ziki's agents check much more." },
@@ -26,7 +28,9 @@ export function SecurityWelcome({ startWith, thenProgress }: { startWith?: strin
         Paste your website, a server address or a GitHub repo. The scan starts straight away and you see what it finds here.
       </p>
       <div className="mt-6 w-full text-left">
-        <SecurityChat id="security-chat-empty" focusOnOpen startWith={startWith} thenProgress={thenProgress} />
+        {/* The first scan turns this page into the Assets list: keep the chat open there, with the result and See progress,
+            instead of it closing the moment the result comes in. */}
+        <SecurityChat id="security-chat-empty" focusOnOpen startWith={startWith} onScanned={() => keepChatOpen(true)} />
       </div>
       <ol className="mt-8 grid w-full list-none gap-3 p-0 text-left sm:grid-cols-3">
         {steps.map((step, index) => (

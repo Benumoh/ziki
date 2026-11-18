@@ -19,6 +19,7 @@ import { sweepSecurityChecks } from "@/lib/security-checks/engine";
 import { retryPendingWithdrawals } from "@/lib/coins/withdraw";
 import { sweepFallback } from "@/lib/security-checks/fallback";
 import { sweepTesting } from "@/lib/agent-api/testing-sweep";
+import { sweepProactiveOffers } from "@/lib/agents/proactive-offers";
 
 export const FAILURE_ALERT_THRESHOLD = 3;
 const consecutiveFailures = new Map<string, number>();
@@ -54,6 +55,7 @@ export type PlatformSweepsResult = {
   timestamp: string;
   sweeps: {
     offers: { status: "ok" | "error"; expired?: number; error?: string };
+    proactiveOffers: { status: "ok" | "error"; offered?: number; error?: string };
     plans: { status: "ok" | "error"; expired?: number; error?: string };
     stakes: { status: "ok" | "error"; settled?: number; error?: string };
     jobReviewOffers: { status: "ok" | "error"; expired?: number; offered?: number; error?: string };
@@ -99,6 +101,7 @@ let sweepInProgress = false;
 /**
  * Runs the due sweeps on schedule (#647):
  * - Offer expiry (due-date sweep)
+ * - Proactive offers of top-priority issues to idle agents (#proactive-offers)
  * - Job-review offer expiry and recovery
  * - Stale claim release (inactivity & deadline)
  * - Reopen unassigned in-progress issues without live claims or linked fixes
@@ -120,6 +123,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
       timestamp,
       sweeps: {
         offers: { status: "ok" },
+        proactiveOffers: { status: "ok" },
         plans: { status: "ok" },
         stakes: { status: "ok" },
         jobReviewOffers: { status: "ok" },
@@ -147,6 +151,17 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     } catch (err) {
       recordSweepFailure("offers", err);
       result.sweeps.offers = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    }
+
+    // 1o. Proactive offers (#proactive-offers): after lapsed offers are released, the highest-ranked
+    // offerable issues go to idle active agents.
+    try {
+      const res = await sweepProactiveOffers();
+      recordSweepSuccess("proactiveOffers");
+      result.sweeps.proactiveOffers = { status: "ok", offered: res.offered };
+    } catch (err) {
+      recordSweepFailure("proactiveOffers", err);
+      result.sweeps.proactiveOffers = { status: "error", error: err instanceof Error ? err.message : String(err) };
     }
 
     // 1p. Plan review windows (#plan-review): awards whose plan was never submitted or never decided in time.
@@ -206,7 +221,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     }
 
     // 2a. Security checks (#security-checks): start proven checks (Ziki AI splits them),
-    // take back stale parts, give waiting parts to cleared agents, post finished
+    // take back stale parts (agents get parts by asking for them), post finished
     // reports (Ziki AI summary) and pay the finders of unlocked findings.
     try {
       const res = await sweepSecurityChecks(prisma);
@@ -340,6 +355,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
 
     logger.info("[cron] Platform sweeps finished", {
       offers: result.sweeps.offers,
+      proactiveOffers: result.sweeps.proactiveOffers,
       jobReviewOffers: result.sweeps.jobReviewOffers,
       reviewOffers: result.sweeps.reviewOffers,
       claims: result.sweeps.claims,

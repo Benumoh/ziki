@@ -18,6 +18,16 @@ import {
   filterDirectoryProjects,
 } from "@/lib/public-directory";
 
+describe("The public docs", () => {
+  it("opens the docs to everyone, and keeps their name from being taken by a workspace", () => {
+    expect(isPublicPath("/docs")).toBe(true);
+    expect(isPublicPath("/docs/users/getting-started")).toBe(true);
+    expect(isPublicPath("/docs/developers/api-reference")).toBe(true);
+    expect(isPublicPath("/docsfoo")).toBe(false);
+    expect(isReservedProjectSlug("docs")).toBe(true);
+  });
+});
+
 describe("Ziki Security's public page (#security-checks, C2)", () => {
   it("is open to everyone, while every other Security page still needs signing in", () => {
     expect(isPublicPath("/security")).toBe(true);

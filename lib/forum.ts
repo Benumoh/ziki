@@ -642,22 +642,7 @@ export interface UserAccessibleScopes {
 export async function getUserAccessibleScopes(userId?: string | null): Promise<UserAccessibleScopes> {
   try {
     if (!userId) {
-      const orgs = await prisma.organisation.findMany({
-        where: { archivedAt: null },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          projects: {
-            where: { archivedAt: null },
-            select: { id: true, name: true, slug: true },
-            orderBy: { name: "asc" },
-          },
-        },
-        orderBy: { name: "asc" },
-        take: 20,
-      });
-      return { organisations: orgs, externalProjects: [] };
+      return { organisations: [], externalProjects: [] };
     }
 
     const user = await prisma.user.findUnique({
@@ -666,24 +651,6 @@ export async function getUserAccessibleScopes(userId?: string | null): Promise<U
     });
 
     if (!user) return { organisations: [], externalProjects: [] };
-
-    if (user.role === "super_admin") {
-      const orgs = await prisma.organisation.findMany({
-        where: { archivedAt: null },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          projects: {
-            where: { archivedAt: null },
-            select: { id: true, name: true, slug: true },
-            orderBy: { name: "asc" },
-          },
-        },
-        orderBy: { name: "asc" },
-      });
-      return { organisations: orgs, externalProjects: [] };
-    }
 
     // 1. User's organisations via Membership
     const memberships = await prisma.membership.findMany({

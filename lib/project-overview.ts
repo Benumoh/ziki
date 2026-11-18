@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { parseProjectRewardConfig, type ProjectRewardConfig } from "@/lib/points/project-rewards";
 import { canContributeToProject, canManageProject, type UserIdentifier } from "@/lib/project-permissions";
 import { isSuperAdmin } from "@/lib/roles";
 
@@ -17,6 +18,18 @@ export type ProjectOverviewPerson = {
   image: string | null;
 };
 
+export type ProjectOverviewJoinRequest = {
+  id: string;
+  message: string | null;
+  createdAt: Date;
+  user: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image: string | null;
+  };
+};
+
 export type ProjectOverviewData = {
   project: {
     id: string;
@@ -27,6 +40,8 @@ export type ProjectOverviewData = {
     siteUrl: string | null;
     stagingUrl: string | null;
     contributorGuidelines: string | null;
+    rewardConfig: ProjectRewardConfig;
+    hasCustomRewards: boolean;
     visibility: "public" | "private";
     isOpenForContributors: boolean;
     acceptsGuestIdeas: boolean;
@@ -43,6 +58,8 @@ export type ProjectOverviewData = {
   canManage: boolean;
   /** The viewer's request to join (#join-requests), when they asked and aren't a member: "none" otherwise. */
   joinRequest: "none" | "pending" | "rejected";
+  /** Pending requests to join this project, loaded only when the viewer can manage it (#join-requests). */
+  pendingJoinRequests: ProjectOverviewJoinRequest[];
 };
 
 /** What "open issues" means on every public page: not yet delivered. Delivered work (done, merge, resolved) is counted as delivered fixes, never as both. */
@@ -57,6 +74,7 @@ const overviewSelect = {
   siteUrl: true,
   stagingUrl: true,
   contributorGuidelines: true,
+  rewardConfig: true,
   visibility: true,
   isOpenForContributors: true,
   acceptsGuestIdeas: true,
@@ -153,6 +171,19 @@ export async function loadProjectOverview(
         })
       : Promise.resolve(null),
   ]);
+  const pendingJoinRequests =
+    canManage && typeof prisma.projectJoinRequest.findMany === "function"
+      ? await prisma.projectJoinRequest.findMany({
+          where: { projectId: project.id, status: "pending" },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            message: true,
+            createdAt: true,
+            user: { select: { id: true, name: true, email: true, image: true } },
+          },
+        })
+      : [];
   const maintainer =
     project.organisation.memberships.find((membership) => membership.role === "owner") ??
     project.organisation.memberships[0] ??
@@ -168,6 +199,8 @@ export async function loadProjectOverview(
       siteUrl: project.siteUrl,
       stagingUrl: project.stagingUrl,
       contributorGuidelines: project.contributorGuidelines,
+      rewardConfig: parseProjectRewardConfig(project.rewardConfig),
+      hasCustomRewards: Boolean(project.rewardConfig),
       visibility: project.visibility,
       isOpenForContributors: project.isOpenForContributors,
       acceptsGuestIdeas: project.acceptsGuestIdeas,
@@ -189,5 +222,6 @@ export async function loadProjectOverview(
     isMember,
     canManage,
     joinRequest: request?.status === "pending" || request?.status === "rejected" ? request.status : "none",
+    pendingJoinRequests,
   };
 }

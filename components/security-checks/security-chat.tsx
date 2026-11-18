@@ -87,7 +87,6 @@ export function SecurityChat({
   id = "security-chat",
   focusOnOpen = false,
   startWith,
-  thenProgress = false,
   onSeeProgress,
   onScanned,
   onClose,
@@ -96,8 +95,6 @@ export function SecurityChat({
   focusOnOpen?: boolean;
   /** An address brought from the public page after sign-up: sent once, so its quick scan starts on arrival. */
   startWith?: string;
-  /** From Try now on the public page: once the brought site is in, open its page (the agents' progress) straight away. */
-  thenProgress?: boolean;
   /**
    * Once a scan is in, a blue button sits beside Send (it stays while typing), which opens the scan's page:
    * "See progress" while the agents are checking, "See results" once their report is posted.
@@ -238,12 +235,6 @@ export function SecurityChat({
           }
           // Added to the person's scans: the list below picks it up.
           if (answer.checkId) onScanned?.(answer.checkId);
-          // Try now from the public page: the person asked for the agents' check, so their page opens straight away.
-          if (instant && thenProgress && answer.checkId) {
-            if (onSeeProgress) onSeeProgress(answer.checkId);
-            else router.push(`/security/checks/${answer.checkId}`);
-            return;
-          }
           if (answer.checkId && !answer.already) router.refresh();
           return;
         }

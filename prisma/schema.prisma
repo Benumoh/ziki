@@ -293,7 +293,6 @@ enum GoalAllocationTarget {
 }
 
 model User {
-  expressImportGrants        ExpressImportGrant[]
   featurePlans              FeaturePlan[]
   marketingPlans            MarketingPlan[]           @relation("MarketingPlanCreator")
   marketingPlanRevisions    MarketingPlanRevision[]   @relation("MarketingPlanRevisionCreator")
@@ -312,6 +311,9 @@ model User {
   /// Site-wide security clearance (#security-checks): set by staff, usually with an on-call invite.
   /// Only the agents of a cleared person get security-check jobs or read results.
   securityClearedAt         DateTime?
+  /// When the person borrowed Ziks to try Security (16 Nov call): a one-time overdraft of ZIKS_LOAN that only
+  /// Security payments may use, until their first purchase pays it back (lib/coins/loan.ts). Null if never borrowed.
+  ziksLoanAt                DateTime?
   securityChecksRequested   SecurityCheck[]         @relation("SecurityCheckRequester")
   name                      String
   email                     String                  @unique
@@ -330,6 +332,9 @@ model User {
   notifyStatusChanges       Boolean                 @default(true)
   /// #287: site-wide keyboard shortcuts; per user so it follows them.
   keyboardShortcuts         Boolean                 @default(true)
+  /// #active-agents: whether the person sees a project's Active agents page and its link in the Agents panel.
+  /// Everyone who can open the project may; this lets them hide it. Per user so it follows them.
+  showActiveAgents          Boolean                 @default(true)
   /// #618: optional EVM address (0x + 40 hex) points could later be sent to.
   /// Set only by the person themselves; read only by them and organisation admins.
   walletAddress             String?
@@ -446,6 +451,8 @@ model IssueType {
   isActive    Boolean   @default(true)
   /// Marketing types show only in the Marketing section.
   track       WorkTrack @default(product)
+  /// What a marketing type's work is for, shown on the Marketing home (#marketing-agent-home). Null: none set.
+  goal        String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bugs        Bug[]
@@ -459,7 +466,6 @@ model IssueType {
 
 model Bug {
   coinEntries               CoinEntry[]
-  outsideWork               OutsideWorkImport?
   featurePlanItems          FeaturePlanItem[]
   previewBuilds             PreviewBuild[]
   pullRequestLinkRepairs    PullRequestLinkRepair[]
@@ -948,9 +954,6 @@ model Organisation {
 /// A project inside an organisation (organisation), e.g. Zedu Web or Zedu Desktop.
 /// Organisations hold projects and nothing in between (#no-platforms).
 model Project {
-  expressImportRequests ExpressImportRequest[]
-  expressImportGrants    ExpressImportGrant[]
-  outsideWorkImports     OutsideWorkImport[]
   featurePlans          FeaturePlan[]
   clusters              Cluster[]
   marketingPlans        MarketingPlan[]
@@ -1368,9 +1371,6 @@ model ProjectJoinRequest {
 /// A named agent working for its owner inside an organisation (#427). It always acts
 /// as itself and for a named person.
 model Agent {
-  expressImportRequests ExpressImportRequest[]
-  expressImportGrants  ExpressImportGrant[]
-  outsideWorkImports   OutsideWorkImport[]
   /// Parts of security checks this agent holds or did (#security-checks).
   securityCheckItems   SecurityCheckItem[]
   requests             AgentRequest[]
@@ -1485,58 +1485,6 @@ model Agent {
 /// choose which to activate where. An agent works in every project of an
 /// organisation it is active in. The organisation's grants live here: its
 /// class (an organisation admin's grant) and its rate budget.
-/// A person administering a project may let a particular agent import outside work.
-/// This never changes its class or grants GitHub merge permissions.
-model ExpressImportGrant {
-  agentId         String
-  projectId       String
-  grantedByUserId String
-  createdAt       DateTime @default(now())
-  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  grantedBy       User     @relation(fields: [grantedByUserId], references: [id], onDelete: Restrict)
-
-  @@id([agentId, projectId])
-  @@index([projectId])
-}
-
-/// A request is not a grant. Only an organisation admin can approve it.
-model ExpressImportRequest {
-  agentId          String
-  projectId        String
-  reason           String
-  decision         String   @default("pending")
-  response         String?
-  requestedAt      DateTime @default(now())
-  decidedAt        DateTime?
-  reviewedByUserId String?
-  agent            Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@id([agentId, projectId])
-  @@index([projectId, decision, requestedAt])
-}
-
-/// Immutable provenance and retry identity for a delivery imported outside the board (#788).
-/// PR identity is normalized, so URL casing, fragments and retries cannot earn twice.
-model OutsideWorkImport {
-  id             String   @id @default(cuid())
-  bugId          String   @unique
-  projectId      String
-  agentId        String
-  pullRequestKey String
-  requestKey     String
-  requestHash    String
-  initialState   String
-  createdAt      DateTime @default(now())
-  bug            Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
-
-  @@unique([projectId, pullRequestKey])
-  @@unique([agentId, projectId, requestKey])
-}
-
 model AgentActivation {
   id             String       @id @default(cuid())
   agentId        String
@@ -3620,6 +3568,14 @@ enum SecurityCheckItemStatus {
   skipped
 }
 
+/// What a rescan's agent said about an earlier finding (#security-rescan, 17 Nov).
+enum SecurityRecheckState {
+  /// The problem is still there.
+  still_there
+  /// The problem is gone.
+  fixed
+}
+
 /// A website, server or repo a workspace wants checked (#security-checks).
 /// Ownership is proven once per target, not once per check.
 model SecurityTarget {
@@ -3687,10 +3643,18 @@ model SecurityCheck {
   postedAt       DateTime?
   startedAt      DateTime?
   finishedAt     DateTime?
+  /// A rescan (#security-rescan, 17 Nov): the check it follows. Its agents recheck that check's open
+  /// findings (still there or fixed) and look for new ones. Null for a first scan.
+  previousCheckId String?              @unique
+  previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
+  /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
+  nextCheck      SecurityCheck?        @relation("SecurityRescan")
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   items          SecurityCheckItem[]
   results        SecurityCheckResult[]
+  /// Earlier findings this check (a rescan) rechecked.
+  rechecked      SecurityCheckResult[] @relation("SecurityRecheckCheck")
 
   @@index([organisationId, createdAt])
   @@index([targetId, createdAt])
@@ -3721,6 +3685,8 @@ model SecurityCheckItem {
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
   results          SecurityCheckResult[]
+  /// A rescan's recheck part: the earlier findings its agent says are still there or fixed.
+  recheckResults   SecurityCheckResult[]   @relation("SecurityRecheckItem")
 
   @@index([checkId, status])
   @@index([agentId, status])
@@ -3750,11 +3716,25 @@ model SecurityCheckResult {
   unlockedAt  DateTime?
   /// When its finder was paid for it, once, after the unlock.
   payoutReleasedAt DateTime?
+  /// Rechecked by a rescan (#security-rescan, 17 Nov): the finding stays this row, so its unlock, price and any
+  /// issue it was moved to carry over and nothing is paid twice. The latest rescan's answer; null until one.
+  recheckState   SecurityRecheckState?
+  recheckedAt    DateTime?
+  /// The rescan that rechecked it last.
+  recheckCheckId String?
+  recheckCheck   SecurityCheck?     @relation("SecurityRecheckCheck", fields: [recheckCheckId], references: [id], onDelete: SetNull)
+  /// The rescan part that holds it to recheck; set when the rescan is planned.
+  recheckItemId  String?
+  recheckItem    SecurityCheckItem? @relation("SecurityRecheckItem", fields: [recheckItemId], references: [id], onDelete: SetNull)
+  /// What the rechecking agent saw, in a line.
+  recheckNote    String?
   createdAt   DateTime          @default(now())
 
   @@index([checkId, severity])
   @@index([checkId, unlockedAt])
   @@index([itemId])
+  @@index([recheckCheckId])
+  @@index([recheckItemId])
 }
 
 /// Status of a support thread raised about a stuck fix (#requests).

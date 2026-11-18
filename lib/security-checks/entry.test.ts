@@ -6,7 +6,8 @@ const prismaMock = vi.hoisted(() => {
     securityTarget: { findUnique: vi.fn(), create: vi.fn() },
     securityCheck: { findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     securityCheckResult: { findMany: vi.fn(), updateMany: vi.fn() },
-    coinEntry: { aggregate: vi.fn(), createMany: vi.fn() },
+    coinEntry: { aggregate: vi.fn(), createMany: vi.fn(), count: vi.fn().mockResolvedValue(1) },
+    user: { findUnique: vi.fn().mockResolvedValue({ ziksLoanAt: null }) },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -179,7 +180,8 @@ describe("listWorkspaceChecks", () => {
     const rows = await listWorkspaceChecks("org1", "u1");
 
     const query = prismaMock.securityCheck.findMany.mock.calls[0][0];
-    expect(query.where).toEqual({ organisationId: "org1", requestedById: "u1" });
+    // A scan that was scanned again (#security-rescan) leaves the list, so each site shows once, as its newest scan.
+    expect(query.where).toEqual({ organisationId: "org1", requestedById: "u1", nextCheck: { is: null } });
     expect(query.orderBy).toEqual({ createdAt: "desc" });
     // A finding's id, severity, title and whether it is unlocked or moved (what the report page already shows its owner): never its description or how to fix it.
     expect(query.select.results).toEqual({ select: { id: true, severity: true, title: true, unlockedAt: true, findingId: true } });
@@ -239,7 +241,8 @@ describe("unlocking fixes per finding (plan C1, paid in Ziks)", () => {
     prismaMock.securityCheckResult.findMany.mockResolvedValue([{ id: "r1", severity: "critical", priceCoins: 5 }]);
     prismaMock.coinEntry.aggregate.mockResolvedValue({ _sum: { amount: 3 } });
 
-    expect(await unlockFindings("c1", "org1", "u1", "all")).toEqual({ ok: false, reason: "insufficient_ziks", needed: 5, balance: 3 });
+    // Has bought Ziks before (the default here), so no loan is offered.
+    expect(await unlockFindings("c1", "org1", "u1", "all")).toEqual({ ok: false, reason: "insufficient_ziks", needed: 5, balance: 3, canBorrow: false });
     expect(prismaMock.securityCheckResult.updateMany).not.toHaveBeenCalled();
     expect(prismaMock.coinEntry.createMany).not.toHaveBeenCalled();
   });
@@ -253,11 +256,9 @@ describe("unlocking fixes per finding (plan C1, paid in Ziks)", () => {
     expect(prismaMock.securityCheckResult.findMany.mock.calls[0][0].where).toEqual({ checkId: "c1", unlockedAt: null, id: { in: ["r2"] } });
   });
 
-  it("refuses someone else's check, an unposted report, and findings already unlocked", async () => {
+  it("refuses someone else's check and findings already unlocked; an unposted check is fine (16 Nov call)", async () => {
     prismaMock.securityCheck.findFirst.mockResolvedValueOnce(null);
     expect(await unlockFindings("c1", "org1", "u1", "all")).toEqual({ ok: false, reason: "not_found" });
-    prismaMock.securityCheck.findFirst.mockResolvedValueOnce({ postedAt: null });
-    expect(await unlockFindings("c1", "org1", "u1", "all")).toEqual({ ok: false, reason: "not_posted" });
     prismaMock.securityCheck.findFirst.mockResolvedValueOnce(posted);
     prismaMock.securityCheckResult.findMany.mockResolvedValueOnce([]);
     expect(await unlockFindings("c1", "org1", "u1", "all")).toEqual({ ok: false, reason: "nothing_to_unlock" });

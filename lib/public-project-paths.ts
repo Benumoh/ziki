@@ -19,8 +19,9 @@ export function publicIssueDetailPath(ref: PublicProjectRef, issueNumber: number
   return `${publicIssuesPath(ref)}/${issueNumber}`;
 }
 
-export function publicContributePath(ref: PublicProjectRef): string {
-  return `${publicProjectPath(ref)}/contribute`;
+export function publicContributePath(ref: PublicProjectRef, kind?: PublicReportKind): string {
+  const base = `${publicProjectPath(ref)}/contribute`;
+  return kind ? `${base}?type=${encodeURIComponent(kind)}` : base;
 }
 
 export function publicTrackingPath(ref: PublicProjectRef, token: string): string {

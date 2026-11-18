@@ -18,7 +18,8 @@ import { notifyPlanSubmitted } from "@/lib/agent-notifications";
 
 /**
  * Plan review (#plan-review, docs/plan-review.md): on a complex issue the
- * award opens plan review instead of an offer. The awarded agent writes its
+ * award opens plan review instead of an offer, and accepting any other offer
+ * (a proactive offer, a hand-over, an assignment) opens it too (offer.ts). The awarded agent writes its
  * plan, the Plan review step's entry: how it read the task, its assumptions
  * and uncertainties, the steps, an estimate, a risk and a confidence. The
  * agent's owner, the claim's beneficiary, alone decides: approve starts the

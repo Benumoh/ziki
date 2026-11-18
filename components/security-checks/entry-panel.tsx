@@ -17,14 +17,13 @@ function PrivacyNote() {
 /**
  * The Security page (#security-checks, 14 Nov plan and call): one page, no
  * wizard and no proof step. With nothing scanned yet it's the one big box;
- * after that the person's scans are the page, with "+ Add asset" opening the
+ * after that the person's scans are the page, with "+ Add target" opening the
  * chat to scan a new site.
  */
 export function SecurityChecksPanel({
   checks,
   highlight,
   startWith,
-  thenProgress,
   show,
   page,
 }: {
@@ -32,8 +31,6 @@ export function SecurityChecksPanel({
   highlight?: { checkId: string; unlocked: number };
   /** An address brought from the public page after sign-up: its scan starts on arrival. */
   startWith?: string;
-  /** From Try now on the public page: once that site is in, open its page, where the agents' progress shows. */
-  thenProgress?: boolean;
   /** Which scans to show (?show=): all, scanning, report or in_app. */
   show?: string;
   /** Which page of scans (?page=). */
@@ -43,22 +40,31 @@ export function SecurityChecksPanel({
   if (checks.every((check) => check.status === "cancelled")) {
     return (
       <section aria-label="Security" className={PANEL}>
-        <SecurityWelcome startWith={startWith} thenProgress={thenProgress} />
+        <h1 className="sr-only">Security</h1>
+        <SecurityWelcome startWith={startWith} />
       </section>
     );
   }
 
   return (
-    <section aria-labelledby="security-scans-heading" className={PANEL}>
-      {highlight?.unlocked ? (
-        <FlashNote>
-          {highlight.unlocked === 1 ? "1 fix unlocked." : `${highlight.unlocked} fixes unlocked.`} Open the report to read each one in full, with how to fix it.
-        </FlashNote>
-      ) : null}
-      <ScansArea checks={checks} highlightId={highlight?.checkId} show={show} page={page} startWith={startWith} thenProgress={thenProgress} />
-      <div className="border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
-        <PrivacyNote />
-      </div>
-    </section>
+    <ScansArea
+      checks={checks}
+      highlightId={highlight?.checkId}
+      show={show}
+      page={page}
+      startWith={startWith}
+      top={
+        highlight?.unlocked ? (
+          <FlashNote>
+            {highlight.unlocked === 1 ? "1 fix unlocked." : `${highlight.unlocked} fixes unlocked.`} Open the report to read each one in full, with how to fix it.
+          </FlashNote>
+        ) : null
+      }
+      bottom={
+        <div className="rounded-b-[20px] border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
+          <PrivacyNote />
+        </div>
+      }
+    />
   );
 }

@@ -6,9 +6,11 @@ import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit";
 import { OWNERS_ONLY_MESSAGE } from "@/lib/security-checks";
 import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/security-checks/target";
-import { addTargetAndCheck, findOwnScan, findScannedCheck, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
+import { addTargetAndCheck, findOwnScan, findScannedCheck, fixPaidSinceQuickScan, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
+import { rescanQuote, startRescan, type RescanOutcome, type RescanQuote } from "@/lib/security-checks/rescan";
 import { previewScan } from "@/lib/security-checks/preview";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
+import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 import {
   ASSISTANT_HISTORY_MAX,
@@ -56,12 +58,56 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
   const scan = typeof checkId === "string" ? await findOwnScan(access.organisationId, user.id, checkId) : null;
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
-  const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}` });
+  // A quick scan from the last 10 minutes is reused, unless a fix was paid for since (#security-rescan).
+  const fresh = await fixPaidSinceQuickScan(scan.target);
+  const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh });
   if (!result.ok) return { ok: false, error: result.reason };
-  const summary = summarisePreview(result);
+  const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
   revalidatePath("/security");
   return { ok: true, summary };
+}
+
+/** What "Scan again" costs and covers, for its confirm (#security-rescan). Charges nothing. */
+export async function rescanCost(checkId: string): Promise<RescanQuote> {
+  const user = await requireUser();
+  const access = await currentOrganisationAccess(user.id, user.role);
+  if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
+  if (typeof checkId !== "string") return { ok: false, error: "That scan isn't in your scans." };
+  return rescanQuote(access.organisationId, user.id, checkId);
+}
+
+/**
+ * Scan again with agents (#security-rescan, 17 Nov): pays 10 Ziks, starts a follow-up scan whose agents recheck the
+ * earlier findings and look for new ones, and runs the quick scan again. The follow-up starts after this answers.
+ */
+export async function rescanSite(checkId: string): Promise<RescanOutcome> {
+  const user = await requireUser();
+  const access = await currentOrganisationAccess(user.id, user.role);
+  if (!access.organisationId) return { ok: false, reason: "not_found", error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, reason: "not_found", error: OWNERS_ONLY_MESSAGE };
+  if (typeof checkId !== "string") return { ok: false, reason: "not_found", error: "That scan isn't in your scans." };
+  const outcome = await startRescan(access.organisationId, user.id, checkId);
+  if (!outcome.ok) return outcome;
+  const next = outcome.checkId;
+  const organisationId = access.organisationId;
+  after(async () => {
+    // The quick scan is part of scanning again (reused for 10 minutes unless a fix was paid for since);
+    // a failure here doesn't stop the agents.
+    try {
+      const scan = await findOwnScan(organisationId, user.id, next);
+      if (scan) {
+        const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh: await fixPaidSinceQuickScan(scan.target) });
+        if (result.ok) await saveQuickScan(scan.targetId, await withSiteAddress(summarisePreview(result)));
+      }
+    } catch {
+      // The report still shows the last quick scan.
+    }
+    await kickCheck(prisma, next);
+  });
+  revalidatePath("/security");
+  return outcome;
 }
 
 /** A site's saved chat, as the card shows it, and whether its agents' report is posted ("See results" rather than "See progress"). */
@@ -154,6 +200,24 @@ export async function talkToSecurityAssistant(history: AssistantTurn[]): Promise
 }
 
 /**
+ * Try now from the public page: add the site and start the agents' check, with no chat. The person asked for the
+ * agents already, so the Security page opens the scan's progress page straight from here (never the chat box).
+ * A site already in their scans goes to its page too.
+ */
+export async function startFromOutside(site: string): Promise<{ ok: true; checkId: string } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const access = await currentOrganisationAccess(user.id, user.role);
+  if (!access.organisationId) return { ok: false, error: NO_WORKSPACE };
+  if (!access.admin) return { ok: false, error: OWNERS_ONLY_MESSAGE };
+  const parsed = typeof site === "string" ? parseSecurityTarget(site) : null;
+  if (!parsed?.ok) return { ok: false, error: "That address can't be scanned. Try it again from the Security page." };
+  const answer = await scanAndAdd(access.organisationId, user.id, parsed.target, "");
+  if (answer.kind === "scan" && answer.checkId) return { ok: true, checkId: answer.checkId };
+  if (answer.kind === "scan") return { ok: false, error: answer.note ?? `Ziki couldn't reach ${parsed.target.value}.` };
+  return { ok: false, error: answer.kind === "error" ? answer.error : answer.reply };
+}
+
+/**
  * Every asset (a website, a server or a public repo) gets the quick scan, and
  * is added to the person's scans straight away, so the full check starts. A
  * site the scan couldn't reach isn't added; a private repo (the scan can't
@@ -176,7 +240,7 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
     };
   }
   const result = await previewScan(address, { visitor: `user:${userId}` });
-  const summary = result.ok ? summarisePreview(result) : null;
+  const summary = result.ok ? await withSiteAddress(summarisePreview(result)) : null;
   const addable = result.ok || target.kind === "repo" || result.retryAfterSeconds !== undefined;
   // Couldn't reach it: say so plainly, with no "here's a quick look" before it.
   if (!addable) return { kind: "scan", reply: "", target: address, summary: null, note: result.ok ? null : result.reason, checkId: null };

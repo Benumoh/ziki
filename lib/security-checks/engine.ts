@@ -5,6 +5,7 @@ import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, a
 import { cleanParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
 import { pickAgentFor, type CandidateAgent } from "./assign";
 import { quickScanForAgents, type QuickScanLine } from "./preview-summary";
+import { fixBucketOf } from "./fix-bucket";
 import { realNetwork } from "./ownership";
 
 /**
@@ -15,8 +16,10 @@ import { realNetwork } from "./ownership";
  *    proven) with `startCheck`, called when it is added, or by the sweep: Ziki's own AI splits it into parts. It is
  *    not an agent and earns nothing.
  * 2. Each part goes to a security-cleared agent (its owner's `User.securityClearedAt`)
- *    that is online and not quiet: on-call agents first, then agents in the
- *    client's workspace, then the least busy. A few parts at a time each.
+ *    when that agent asks for security work (`listAgentJobs`), never pushed by the
+ *    sweep: an agent that only does normal Ziki work would hold a part it never sees
+ *    (16 Nov call). On-call agents first, then agents in the client's workspace, then
+ *    the least busy. A few parts at a time each.
  * 3. Each part's agent reports what it found. Each result's price is set from
  *    its severity (`SEVERITY_PRICE`).
  * 4. When every part is in, Ziki's AI writes the summary from severities and
@@ -50,6 +53,8 @@ export const MAX_RESULTS_PER_PART = 20;
  * may add parts with its report (15 Nov call). A few per report, and a ceiling per check so it can't grow for ever.
  */
 export const MAX_MORE_PARTS_PER_REPORT = 3;
+/** How many earlier findings one recheck part may hold on a rescan (#security-rescan): one area's worth. */
+export const MAX_RECHECKS_PER_PART = 40;
 export const MAX_PARTS_PER_CHECK = 40;
 /**
  * Shown on Your work until it moves to per-finding earnings (12 Nov plan C1).
@@ -121,12 +126,19 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
 
   let saved: boolean;
   try {
-    const check = await db.securityCheck.findUnique({ where: { id: checkId }, select: { target: { select: { kind: true, value: true } } } });
+    const check = await db.securityCheck.findUnique({
+      where: { id: checkId },
+      select: { previousCheckId: true, organisationId: true, requestedById: true, targetId: true, target: { select: { kind: true, value: true } } },
+    });
     if (!check) return false;
+    // A rescan (#security-rescan) starts from what was found before: those findings are rechecked, and the new parts look past them.
+    const earlier = check.previousCheckId ? await openEarlierFindings(db, check, checkId) : [];
     const { parts } = await planParts(check.target, {
       ai: deps.ai,
       readPage: deps.readPage === undefined ? readPublicPage : deps.readPage,
+      earlier: earlier.map((finding) => finding.title),
     });
+    const rechecks = recheckParts(earlier);
 
     saved = await db.$transaction(async (tx) => {
       const { count: still } = await tx.securityCheck.updateMany({
@@ -134,6 +146,13 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
         data: { status: "checking" },
       });
       if (still !== 1) return false;
+      for (const part of rechecks) {
+        const created = await tx.securityCheckItem.create({
+          data: { checkId, kind: "check", title: part.title, instructions: part.instructions },
+          select: { id: true },
+        });
+        await tx.securityCheckResult.updateMany({ where: { id: { in: part.resultIds } }, data: { recheckItemId: created.id } });
+      }
       await tx.securityCheckItem.createMany({
         data: parts.map((part) => ({ checkId, kind: "check" as const, title: part.title, instructions: part.instructions })),
       });
@@ -145,8 +164,59 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
     await db.securityCheck.updateMany({ where: { id: checkId, status: "splitting", startedAt: now, items: { none: { kind: "check" } } }, data: { status: "queued", startedAt: null } }).catch(() => undefined);
     throw error;
   }
-  if (saved) await assignWaitingJobs(db, new Date());
+  // The parts wait for agents that ask for work (they ask every few seconds); none are pushed (16 Nov call).
   return saved;
+}
+
+/** An earlier finding a rescan looks at again, with the area (part title) that found it. */
+export type EarlierFinding = { id: string; title: string; area: string };
+
+/**
+ * The findings a rescan rechecks (#security-rescan): every finding on this person's earlier scans of the same site,
+ * in the same workspace, that no rescan has called fixed. Removed scans don't count. A finding already sent to fix
+ * whose fix is still in progress is skipped (18 Nov): its issue is being worked on, so checking it again tells
+ * nobody anything. Once that issue is resolved or closed, the next rescan rechecks it, which confirms the fix.
+ */
+export async function openEarlierFindings(
+  db: Db,
+  check: { organisationId: string; requestedById: string; targetId: string },
+  excludeCheckId: string,
+): Promise<EarlierFinding[]> {
+  const rows = await db.securityCheckResult.findMany({
+    where: {
+      checkId: { not: excludeCheckId },
+      check: { organisationId: check.organisationId, requestedById: check.requestedById, targetId: check.targetId, status: { not: "cancelled" } },
+      OR: [{ recheckState: null }, { recheckState: "still_there" }],
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      item: { select: { title: true } },
+      finding: { select: { bug: { select: { status: true, isDeleted: true } }, idea: { select: { status: true, isDeleted: true } } } },
+    },
+  });
+  return rows
+    .filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing")
+    .map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
+}
+
+/** One recheck part per area of the earlier report, split so no part holds more than MAX_RECHECKS_PER_PART. */
+export function recheckParts(earlier: ReadonlyArray<EarlierFinding>): { title: string; instructions: string; resultIds: string[] }[] {
+  const byArea = new Map<string, string[]>();
+  for (const finding of earlier) byArea.set(finding.area, [...(byArea.get(finding.area) ?? []), finding.id]);
+  const parts: { title: string; instructions: string; resultIds: string[] }[] = [];
+  for (const [area, ids] of byArea) {
+    for (let at = 0; at < ids.length; at += MAX_RECHECKS_PER_PART) {
+      parts.push({
+        title: `Recheck: ${area}`.slice(0, 200),
+        instructions:
+          "Look again at each earlier finding this part lists (`recheck`) and answer each one in `rechecks`: `still_there` if you can still see it, `fixed` only if you checked and it's gone, with a short note of what you saw. Send no `results` here: this part only rechecks, and the scan's other parts look for anything new. Look only.",
+        resultIds: ids.slice(at, at + MAX_RECHECKS_PER_PART),
+      });
+    }
+  }
+  return parts;
 }
 
 /**
@@ -244,11 +314,13 @@ export async function availableAgents(db: Db, now = new Date(), onlyAgentId?: st
 }
 
 /**
- * Gives waiting parts, oldest first, to available agents. With `onlyAgentId`
- * (an agent asking for work), only that agent is considered.
+ * Gives waiting parts, oldest first, to the agent asking for security work, if it is available and has room.
+ * Only an agent that asks gets a part (16 Nov call): before, the sweep handed parts to any cleared agent seen
+ * in the last 15 minutes, including ones that never ask for security work, and those parts sat for
+ * JOB_TIMEOUT_MINUTES with nobody checking them.
  */
-export async function assignWaitingJobs(db: Db, now = new Date(), onlyAgentId?: string): Promise<number> {
-  const agents = await availableAgents(db, now, onlyAgentId);
+export async function assignWaitingJobs(db: Db, now: Date, agentId: string): Promise<number> {
+  const agents = await availableAgents(db, now, agentId);
   if (agents.length === 0) return 0;
   // Real agents get a part only while it is young: after the fallback time only Ziki's own agent takes it
   // (lib/security-checks/fallback.ts), so an agent that keeps failing can't hold on to old parts for ever.
@@ -293,6 +365,11 @@ export type SecurityJob = {
   reportBy: Date | null;
   /** `quickScan`: what the quick browser scan already saw on this site (short titles only), so your report agrees with it where you look at the same thing. */
   check: { id: string; target: { kind: string; value: string; quickScan: QuickScanLine[] } };
+  /**
+   * A rescan's recheck part (#security-rescan): the earlier findings to look at again. Answer each with
+   * `rechecks` in the report, `still_there` or `fixed`. Empty on every other part.
+   */
+  recheck: { id: string; severity: SecuritySeverity; title: string; description: string }[];
 };
 
 /** The parts this agent holds now. It is given waiting parts first if it has room. */
@@ -307,10 +384,12 @@ export async function listAgentJobs(db: Db, agentId: string, now = new Date()): 
       instructions: true,
       assignedAt: true,
       check: { select: { id: true, target: { select: { kind: true, value: true, previewSummary: true } } } },
+      recheckResults: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, severity: true, title: true, description: true } },
     },
   });
-  return items.map(({ check, ...item }) => ({
+  return items.map(({ check, recheckResults, ...item }) => ({
     ...item,
+    recheck: recheckResults,
     check: { id: check.id, target: { kind: check.target.kind, value: check.target.value, quickScan: quickScanForAgents(check.target.previewSummary) } },
     kind: "check" as const,
     reportBy: item.assignedAt ? new Date(item.assignedAt.getTime() + JOB_TIMEOUT_MINUTES * 60_000) : null,
@@ -340,6 +419,9 @@ async function heldJob(tx: Tx, agentId: string, itemId: string) {
 
 export type ResultInput = { severity: SecuritySeverity; title: string; description: string; howToFix: string };
 
+/** A recheck part's answer for one earlier finding (#security-rescan). */
+export type RecheckInput = { id: string; state: "still_there" | "fixed"; note?: string };
+
 /**
  * A part's report: stores what was found (possibly nothing), each priced by
  * its severity, and any more parts the agent asks for (`moreParts`: new, not already
@@ -355,12 +437,27 @@ export async function submitReport(
   results: ResultInput[],
   now = new Date(),
   moreParts: ReadonlyArray<PlannedPart> = [],
+  rechecks: ReadonlyArray<RecheckInput> = [],
 ) {
   if (results.length > MAX_RESULTS_PER_PART) {
     throw new SecurityJobError(400, "too_many_results", `Report at most ${MAX_RESULTS_PER_PART} problems for one part.`);
   }
   return db.$transaction(async (tx) => {
     const item = await heldJob(tx, agentId, itemId);
+    // A rescan's recheck part answers for the earlier findings it holds, and only those.
+    const held = await tx.securityCheckResult.findMany({ where: { recheckItemId: itemId }, select: { id: true } });
+    const heldIds = new Set(held.map((row) => row.id));
+    const stray = rechecks.find((answer) => !heldIds.has(answer.id));
+    if (stray) throw new SecurityJobError(400, "not_in_part", `Finding ${stray.id} isn't one this part rechecks.`);
+    // A recheck part only answers for the earlier findings it holds (18 Nov): agents re-filing them as new results
+    // listed every problem twice, the copies the only ones that could be ticked. New problems come from the other parts.
+    if (heldIds.size > 0 && results.length > 0) {
+      throw new SecurityJobError(
+        400,
+        "recheck_only",
+        "This part only rechecks earlier findings: answer each one in `rechecks` (`still_there` or `fixed`) and send no `results`. The scan's other parts look for anything new.",
+      );
+    }
     const { count } = await tx.securityCheckItem.updateMany({
       where: { id: itemId, agentId, status: "checking" },
       data: { status: "done", reportedAt: now },
@@ -379,8 +476,19 @@ export async function submitReport(
         })),
       });
     }
+    if (heldIds.size > 0) {
+      const answers = new Map(rechecks.map((answer) => [answer.id, answer]));
+      for (const id of heldIds) {
+        // One left out counts as still there: a security problem isn't called fixed unless someone saw it gone.
+        const answer = answers.get(id);
+        await tx.securityCheckResult.update({
+          where: { id },
+          data: { recheckState: answer?.state ?? "still_there", recheckNote: answer?.note || null, recheckedAt: now, recheckCheckId: item.checkId },
+        });
+      }
+    }
     const addedParts = await addMoreParts(tx, item.checkId, moreParts);
-    return { checkId: item.checkId, results: results.length, addedParts };
+    return { checkId: item.checkId, results: results.length, rechecked: heldIds.size, addedParts };
   });
 }
 
@@ -433,10 +541,15 @@ export async function postReportIfComplete(db: EngineDb, checkId: string, now = 
 
   const check = await db.securityCheck.findUnique({
     where: { id: checkId },
-    select: { target: { select: { kind: true, value: true } }, results: { select: { severity: true, title: true } } },
+    select: {
+      target: { select: { kind: true, value: true } },
+      results: { select: { severity: true, title: true } },
+      // On a rescan, the earlier findings still there count too; the fixed ones don't.
+      rechecked: { where: { recheckState: "still_there" }, select: { severity: true, title: true } },
+    },
   });
   if (!check) return false;
-  const { summary } = await writeSummary(check.target, check.results, { ai: deps.ai });
+  const { summary } = await writeSummary(check.target, [...check.results, ...check.rechecked], { ai: deps.ai });
 
   const { count: posted } = await db.securityCheck.updateMany({
     where: { id: checkId, status: "checking", postedAt: null, collatingAt: now },
@@ -518,13 +631,14 @@ export async function payUnlockedFindings(db: EngineDb, now = new Date()): Promi
 // The sweep, run by the platform cron (every minute). It recovers and catches up;
 // the fast path is startCheck after proof and agents polling for work.
 
-export type SecurityCheckSweep = { started: number; reclaimed: number; skipped: number; assigned: number; posted: number; paid: number };
+export type SecurityCheckSweep = { started: number; reclaimed: number; skipped: number; posted: number; paid: number };
 
 export async function sweepSecurityChecks(db: EngineDb, now = new Date(), deps: EngineDeps = {}): Promise<SecurityCheckSweep> {
   const started = await startWaitingChecks(db, now, deps);
   const { reclaimed, skipped } = await reclaimStaleJobs(db, now);
-  const assigned = await assignWaitingJobs(db, now);
+  // No handing out here: parts go only to agents that ask (listAgentJobs), and Ziki's own agent takes
+  // any still waiting after the fallback time (fallback.ts).
   const posted = await postFinishedReports(db, now, deps);
   const paid = await payUnlockedFindings(db, now);
-  return { started, reclaimed, skipped, assigned, posted, paid };
+  return { started, reclaimed, skipped, posted, paid };
 }

@@ -69,17 +69,12 @@ function useStep() {
 function Actions({ pending, label, onCancel, onGo, tone }: { pending: boolean; label: string; onCancel: () => void; onGo: () => void; tone?: "danger" }) {
   return (
     <div className="flex justify-end gap-2">
-      <button type="button" disabled={pending} onClick={onCancel} className="rounded-lg px-2.5 py-1 font-semibold text-zk-text2 hover:bg-zk-chip">
+      <Button type="button" variant="ghost" disabled={pending} onClick={onCancel} className="px-3 py-1.5 text-xs">
         Cancel
-      </button>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={onGo}
-        className={`rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-60 ${tone === "danger" ? "bg-zk-bad-fg" : "bg-zk-accent"}`}
-      >
+      </Button>
+      <Button type="button" variant={tone === "danger" ? "danger" : "primary"} disabled={pending} onClick={onGo} className="px-3 py-1.5 text-xs">
         {pending ? "Saving…" : label}
-      </button>
+      </Button>
     </div>
   );
 }

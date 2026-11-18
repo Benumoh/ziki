@@ -92,13 +92,13 @@ export function IssueRewardPanel({
         <form onSubmit={submit} aria-label="Your estimate" className="flex flex-col gap-2">
           <fieldset className="m-0 border-0 p-0">
             <legend className="mb-1.5 text-[13px] font-semibold text-zk-text">{mine ? "Change your estimate" : "Your estimate"}</legend>
-            {/* The choices, with the button at the right of the same row. */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-nowrap gap-1.5">
+            {/* The choices share the full width of one row; the button sits full width under them. */}
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-5 gap-1.5">
                 {VALUES.map((option) => (
                   <label
                     key={option}
-                    className={`inline-flex h-8 min-w-9 cursor-pointer items-center justify-center rounded-lg border px-2 text-[13px] font-bold tabular-nums transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-electric-blue-strong ${
+                    className={`inline-flex h-10 cursor-pointer items-center justify-center rounded-xl border px-1 text-[14px] font-bold tabular-nums transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-electric-blue-strong ${
                       value === option ? "border-electric-blue-strong bg-electric-blue-strong text-white" : "border-zk-border bg-zk-surface text-zk-text hover:bg-zk-chip"
                     }`}
                   >
@@ -110,9 +110,9 @@ export function IssueRewardPanel({
               <button
                 type="submit"
                 disabled={pending}
-                className="ml-auto inline-flex h-8 items-center rounded-full border border-zk-border bg-zk-surface px-4 text-[13px] font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue-strong disabled:opacity-50"
+                className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue-strong disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {pending ? "Saving…" : mine ? "Update" : "Add"}
+                {pending ? "Saving…" : mine ? "Update estimate" : "Add estimate"}
               </button>
             </div>
           </fieldset>

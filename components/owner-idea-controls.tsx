@@ -4,6 +4,7 @@ import { useId, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ownerAcceptIdeaAction, ownerArchiveIdeaAction, ownerRejectIdeaAction } from "@/app/actions/owner-moves";
 import { IssueActionsMenu } from "@/components/issue-actions-menu";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 
 const ARCHIVE_CHOICES = [
@@ -126,17 +127,12 @@ export function OwnerIdeaControls({
           </p>
         ) : null}
         <div className="flex justify-end gap-2">
-          <button type="button" disabled={pending} onClick={reset} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zk-text2 hover:bg-zk-chip">
+          <Button type="button" variant="ghost" disabled={pending} onClick={reset}>
             Back
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={submit}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 ${mode === "accept" ? "bg-zk-accent" : "bg-zk-bad-fg"}`}
-          >
+          </Button>
+          <Button type="button" variant={mode === "accept" ? "primary" : "danger"} disabled={pending} onClick={submit}>
             {pending ? "Saving…" : mode === "accept" ? "Accept idea" : mode === "reject" ? "Turn down" : "Archive"}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -144,25 +140,17 @@ export function OwnerIdeaControls({
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="owner-idea-controls">
-      <button type="button" onClick={() => setMode("accept")} className="rounded-lg bg-zk-accent px-3.5 py-2 text-sm font-semibold text-white">
+      <Button type="button" onClick={() => setMode("accept")}>
         Accept idea
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode("reject")}
-        className="rounded-lg border border-zk-border bg-zk-surface px-3.5 py-2 text-sm font-semibold text-zk-text hover:bg-zk-chip"
-      >
+      </Button>
+      <Button type="button" variant="danger-secondary" onClick={() => setMode("reject")}>
         Turn down…
-      </button>
+      </Button>
       <div className="ml-auto">
         <IssueActionsMenu>
-          <button
-            type="button"
-            onClick={() => setMode("archive")}
-            className="rounded-lg border border-zk-border px-2.5 py-1.5 text-left text-xs font-semibold text-zk-text hover:bg-zk-chip"
-          >
+          <Button type="button" variant="danger-secondary" onClick={() => setMode("archive")}>
             Archive idea…
-          </button>
+          </Button>
           {more}
         </IssueActionsMenu>
       </div>

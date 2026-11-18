@@ -15,6 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
 import { isReportPosted, isTargetProven } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
+import { findingPrice } from "@/lib/security-checks/payment";
+import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
 
 /**
  * What a client may see of one security check (#security-checks, 12 and 14
@@ -22,11 +24,11 @@ import { SECURITY_SEVERITIES } from "@/lib/security-severity";
  * `loadCheckReport`, so they always show the same thing. A report never goes
  * away: moving findings to the client's app leaves it as it is.
  *
- * - Until Ziki has posted the report (`isReportPosted`), no result is read at
- *   all: the client sees progress, and the quick scan's short titles (which
- *   are never findings: nothing in it can be paid for).
- * - Once posted, the report is free (14 Nov call): every finding shows in
- *   full. Clients pay only to have a finding fixed, by moving it to their app.
+ * - The report is free (14 Nov call): every finding an agent has reported
+ *   shows in full as soon as its part is done (16 Nov call: "don't wait for
+ *   all these checks to be done"), with the quick scan from when the asset was
+ *   added. Clients pay only to have a finding fixed, by moving it to their app.
+ * - Posting (`isReportPosted`) adds Ziki's summary and the PDF.
  * - "How to fix" is only for a finding the client paid to have fixed (Hamzat,
  *   14 Nov): for any other finding it is never read, so it can't reach the
  *   page, the HTML or the PDF.
@@ -40,6 +42,8 @@ export type ReportPart = { id: string; title: string; status: SecurityCheckItemS
 /** One finding, as the client sees it. */
 export type ReportFinding = {
   id: string;
+  /** The part that found it. */
+  partId: string;
   severity: SecuritySeverity;
   /** The part of the check that found it ("Login form"). */
   area: string;
@@ -49,9 +53,23 @@ export type ReportFinding = {
   howToFix: string | null;
   /** Where its fix is, once it was moved to the client's app and became a private finding; null until then. */
   fix: ResultFix | null;
+  /** The scan that found it: this one, or an earlier one for a finding a rescan rechecks. Its page lives under that scan. */
+  checkId: string;
+  /**
+   * On a rescan (#security-rescan): an earlier finding's recheck. `checking` until its agent answers, then
+   * `still_there` or `fixed`. Null for a finding this scan found.
+   */
+  recheck: RecheckStatus | null;
+  /** What the rechecking agent saw, when it said. */
+  recheckNote: string | null;
+  /** What sending it to the app costs now, in Ziks: 0 once unlocked or moved. */
+  price: number;
 };
 
-export type FixBucket = "fixing" | "fixed" | "closed";
+/** Where an earlier finding stands on a rescan. */
+export type RecheckStatus = "checking" | "still_there" | "fixed";
+
+export type { FixBucket } from "@/lib/security-checks/fix-bucket";
 
 /** A moved problem's fix, read from its private finding (#security-findings). */
 export type ResultFix = {
@@ -75,17 +93,10 @@ type FindingRow = {
 export function fixOf(finding: FindingRow | null): ResultFix | null {
   if (!finding) return null;
   const bug = finding.bug && !finding.bug.isDeleted ? finding.bug : null;
-  const idea = finding.idea && !finding.idea.isDeleted ? finding.idea : null;
   const latest = finding.verifications[0];
-  const bucket: FixBucket =
-    bug?.status === "resolved"
-      ? "fixed"
-      : bug?.status === "closed" || (!bug && (idea?.status === "rejected" || idea?.status === "archived"))
-        ? "closed"
-        : "fixing";
   return {
     findingHref: `/security/findings/${finding.id}`,
-    bucket,
+    bucket: fixBucketOf(finding),
     issue: bug ? { number: bug.number, href: issuePath(refOf(finding.project), bug.number) } : null,
     recheck: latest ? { passed: latest.passed, by: latest.reviewer?.name ?? null } : null,
   };
@@ -117,25 +128,33 @@ type ReportBase = {
   target: { id: string; kind: SecurityTargetKind; value: string; input: string; verified: boolean };
   parts: ReportPart[];
   progress: { done: number; total: number; percent: number };
+  /** A rescan's earlier scan, and the rescan that followed this one (#security-rescan); null when there is none. */
+  previousCheckId: string | null;
+  nextCheckId: string | null;
 };
 
-/**
- * Before the report is posted: progress, and the quick scan run when the asset
- * was added (`SecurityTarget.previewSummary`), shown first on the scan's page
- * until the agents' report replaces it. Nothing about the agents' results.
- */
-export type UnpostedReport = ReportBase & { posted: false; quickScan: PreviewSummary | null };
-
-/** The posted report: Ziki's summary, then every finding worst first. */
-export type PostedReport = ReportBase & {
-  posted: true;
-  /** Ziki AI's plain summary. */
-  summary: string | null;
+/** What every report has, posted or not: the quick scan and every finding reported so far, worst first. */
+type ReportFindings = {
+  /** The quick scan run when the asset was added (`SecurityTarget.previewSummary`): the list's first phase. */
+  quickScan: PreviewSummary | null;
+  /** Every open finding: this scan's own, and on a rescan the earlier ones still there or still being rechecked. */
   findings: ReportFinding[];
+  /** On a rescan, the earlier findings its agents found fixed. Not counted, priced or shown in the totals. */
+  fixed: ReportFinding[];
   counts: SeverityCounts;
   total: number;
   /** Finished parts that found nothing, by title. */
   clearParts: string[];
+};
+
+/** Still being checked: findings show as their parts are done. */
+export type UnpostedReport = ReportBase & ReportFindings & { posted: false };
+
+/** The posted report: also Ziki's summary, and the PDF. */
+export type PostedReport = ReportBase & ReportFindings & {
+  posted: true;
+  /** Ziki AI's plain summary. */
+  summary: string | null;
 };
 
 export type CheckReport = UnpostedReport | PostedReport;
@@ -196,6 +215,8 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true, title: true, status: true },
       },
+      previousCheckId: true,
+      nextCheck: { select: { id: true } },
     },
   });
   if (!check) return null;
@@ -217,18 +238,25 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
     },
     parts,
     progress: partsProgress(parts),
+    previousCheckId: check.previousCheckId,
+    nextCheckId: check.nextCheck?.id ?? null,
   };
 
-  // Not posted yet: progress and the quick scan only, so no result is read, not even a count.
-  if (!isReportPosted(check)) return { ...base, posted: false, quickScan: readQuickScan(check.target.previewSummary) };
-
-  // Every finding, in full: the report is free.
-  const rows = await prisma.securityCheckResult.findMany({
-    where: { checkId: check.id },
+  // Every finding reported so far, in full: the report is free, and a finding shows once its part is done.
+  // On a rescan, also the earlier findings its recheck parts hold (#security-rescan).
+  const all = await prisma.securityCheckResult.findMany({
+    where: { OR: [{ checkId: check.id }, { recheckItem: { checkId: check.id } }] },
     select: {
       id: true,
+      checkId: true,
       itemId: true,
+      recheckItemId: true,
+      recheckCheckId: true,
+      recheckState: true,
+      recheckNote: true,
       severity: true,
+      unlockedAt: true,
+      priceCoins: true,
       createdAt: true,
       title: true,
       description: true,
@@ -236,8 +264,17 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       item: { select: { title: true } },
     },
   });
-  // "How to fix" only for the findings the client paid to have fixed.
-  const paid = rows.filter((row) => fixOf(row.finding)).map((row) => row.id);
+  // An earlier scan's finding that one of this rescan's recheck parts holds; everything else is this scan's own.
+  const earlier = (row: (typeof all)[number]) => row.checkId !== check.id && Boolean(row.recheckItemId);
+  // An earlier finding is "checking" until this rescan's agent answers for it.
+  const recheckOf = (row: (typeof all)[number]): RecheckStatus | null =>
+    !earlier(row) ? null : row.recheckCheckId === check.id && row.recheckState ? row.recheckState : "checking";
+  // An earlier finding sits under the recheck part that holds it on this scan.
+  const partOf = (row: (typeof all)[number]) => (earlier(row) && row.recheckItemId ? row.recheckItemId : row.itemId);
+  const rows = all.filter((row) => recheckOf(row) !== "fixed");
+  const fixedRows = all.filter((row) => recheckOf(row) === "fixed");
+  // "How to fix" only for the findings the client paid for: unlocked ("Tell me how to fix it") or moved to their app.
+  const paid = all.filter((row) => row.unlockedAt || fixOf(row.finding)).map((row) => row.id);
   const howToFix = paid.length
     ? new Map(
         (
@@ -246,23 +283,28 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       )
     : new Map<string, string>();
 
-  return {
-    ...base,
-    posted: true,
-    summary: check.summary,
+  const toFinding = (row: (typeof all)[number]): ReportFinding => ({
+    id: row.id,
+    partId: partOf(row),
+    severity: row.severity,
+    area: row.item.title,
+    title: row.title,
+    description: row.description,
+    howToFix: howToFix.get(row.id) ?? null,
+    fix: fixOf(row.finding),
+    // Nothing more to pay once unlocked or moved; a rescan's earlier finding keeps the unlock it had.
+    price: row.unlockedAt || row.finding ? 0 : findingPrice(row),
+    checkId: earlier(row) ? row.checkId : check.id,
+    recheck: recheckOf(row),
+    recheckNote: row.recheckNote && row.recheckCheckId === check.id ? row.recheckNote : null,
+  });
+  const found: ReportFindings = {
+    quickScan: readQuickScan(check.target.previewSummary),
     counts: countBySeverity(rows),
     total: rows.length,
-    clearParts: clearPartTitles(parts, rows),
-    findings: worstFirst(rows).map(
-      (row): ReportFinding => ({
-        id: row.id,
-        severity: row.severity,
-        area: row.item.title,
-        title: row.title,
-        description: row.description,
-        howToFix: howToFix.get(row.id) ?? null,
-        fix: fixOf(row.finding),
-      }),
-    ),
+    clearParts: clearPartTitles(parts, all.map((row) => ({ itemId: partOf(row) }))),
+    findings: worstFirst(rows).map(toFinding),
+    fixed: worstFirst(fixedRows).map(toFinding),
   };
+  return isReportPosted(check) ? { ...base, ...found, posted: true, summary: check.summary } : { ...base, ...found, posted: false };
 }

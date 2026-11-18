@@ -166,7 +166,7 @@ vi.mock("@/lib/site-url", () => ({ absoluteUrl: (path: string) => `https://ziki.
 
 import { fundIssue } from "@/lib/coins/fund";
 import { refundEscrow, releaseEscrow } from "@/lib/coins/escrow";
-import { escrowBalance, walletBalance, walletSummary } from "@/lib/coins/ledger";
+import { escrowBalance, escrowByBug, walletBalance, walletSummary } from "@/lib/coins/ledger";
 import { dollarsToZiks, estimateToZik, feeOf, planRelease, splitByWeight, ziksToDollars } from "@/lib/coins/math";
 import { ledgerBalances } from "@/lib/coins/money";
 import { createPackCheckout, recordPurchase } from "@/lib/coins/purchase";
@@ -232,6 +232,13 @@ describe("funding an issue", () => {
     expect(await fundIssue("owner", "bug", 20, "request-0002")).toEqual({ funded: false, escrow: 20 });
     expect(await walletBalance(db as never, "owner")).toBe(30);
     expect(total()).toBe(50);
+  });
+
+  it("tells a list which issues have Ziks behind them, and leaves out the rest", async () => {
+    await buy("owner", 50, "s1b");
+    await fundIssue("owner", "bug", 20, "request-0013");
+    expect(await escrowByBug(db as never, ["bug", "other"])).toEqual(new Map([["bug", 20]]));
+    expect(await escrowByBug(db as never, [])).toEqual(new Map());
   });
 
   it("won't fund an estimated issue below its estimate, but lets the owner add more once it is reached", async () => {
