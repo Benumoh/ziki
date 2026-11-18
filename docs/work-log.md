@@ -85,3 +85,8 @@
 
 - Checkpoint 2 — Verification: full verification passed lint (32 warnings, no errors) and typecheck; 2,267/2,268 unit tests passed. The only failure was the existing PDF font test exceeding its 5-second timeout. The unchanged-state recheck declined to rerun it; the isolated `pnpm exec vitest run tests/security/security-checks.test.ts` then passed all 41 tests without changing code or timeouts. `git diff --check` passed and no unmerged paths remain.
 - Outcome: ready as a local merge commit at version 0.1.247. Push awaits the owner's approval under their earlier do-not-push-without-asking instruction; PR #827 has not yet received this conflict resolution.
+
+- Checkpoint 3 — New upstream merge: main advanced again to `306f55ad` through PR #831, adding the three-step scan page and moving main to 0.1.247. Merged it into the existing branch cleanly and raised this branch to 0.1.248. No manual UI or backend conflict resolution was needed; verification follows before publication.
+
+- Checkpoint 4 — Final verification for the refreshed resolution: the full run passed lint (0 errors, 32 warnings), typecheck and all 2,271 unit tests across 167 files. The prior PDF timeout did not recur. No unmerged paths or whitespace errors remain. Preserved main's three-step scan UI and its paymentRequired/Start-event integration hook.
+- Outcome: resolution complete locally at version 0.1.248, ready for the approved publication step. No push has been performed; awaiting the owner's explicit push approval.
