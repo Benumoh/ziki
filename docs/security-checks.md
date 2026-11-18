@@ -180,7 +180,7 @@ When the report is posted, the scan header replaces its progress bar with the to
 
 ## First deeper scan payment gate (18 Nov)
 
-The free quick scan remains available before sign-in. New signed-in checks save that result but do not start agents automatically. Starting the first deeper scan costs **20 Ziks**, taken from the requesting person's wallet. This charge does not unlock or move findings. The existing **10-Zik rescan** and per-finding remediation charges remain separate.
+The free quick scan remains available before sign-in. New signed-in checks save that result but do not start agents automatically. Starting the first deeper scan costs **20 Ziks**, taken from the requesting person's wallet. This charge does not unlock or move findings. The existing **10-Zik rescan** and per-finding remediation charges remain separate. The Ziks page Activity list names these separately: **Deeper scan**, **Scan again**, and **Unlocked security fixes**. These descriptions are derived from the existing ledger reference keys, so older scan charges display correctly without changing transaction amounts or rewriting history.
 
 ### Server entry points
 
