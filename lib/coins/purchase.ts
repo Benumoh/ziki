@@ -6,6 +6,7 @@ import { findPack, zikToCents } from "./math";
 import { discountedCents, isKnownDiscount } from "./plans";
 import { getStripe } from "./stripe";
 import { discountPercentFor } from "./subscription";
+import { safeReturnTo } from "./return-to";
 
 /**
  * Buying Ziks (#ziki-coins). Checkout takes the money; the webhook
@@ -14,7 +15,12 @@ import { discountPercentFor } from "./subscription";
  * An owner with a paid-up plan pays the plan's discount less for the same Ziks.
  */
 
-export async function createPackCheckout(userId: string, email: string | undefined, packId: string): Promise<string> {
+/**
+ * `returnTo`: a scan's page the buyer came from (#deeper-scan-gate). Stripe then sends them straight back there to
+ * press Pay, instead of to the Ziks page. Anything that isn't one of our scan pages is ignored.
+ */
+export async function createPackCheckout(userId: string, email: string | undefined, packId: string, returnTo?: unknown): Promise<string> {
+  const back = safeReturnTo(returnTo);
   const pack = findPack(packId);
   if (!pack) throw new CoinError("invalid_amount", "Choose one of the packs.");
   const discountPercent = await discountPercentFor(userId);
@@ -36,8 +42,8 @@ export async function createPackCheckout(userId: string, email: string | undefin
       },
     ],
     metadata: { userId, packId: pack.id, zik: String(pack.zik), discountPercent: String(discountPercent) },
-    success_url: absoluteUrl("/coins?bought=1"),
-    cancel_url: absoluteUrl("/coins"),
+    success_url: absoluteUrl(back ? `${back}?bought=1` : "/coins?bought=1"),
+    cancel_url: absoluteUrl(back ? `/coins?returnTo=${encodeURIComponent(back)}` : "/coins"),
   });
   if (!session.url) throw new CoinError("not_configured", "Stripe didn't return a checkout page.");
   return session.url;

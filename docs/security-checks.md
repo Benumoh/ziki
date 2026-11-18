@@ -1,6 +1,6 @@
 # Security checks
 
-**18 Nov backend update:** new first deeper scans require a 20-Zik payment before agents start. See [First deeper scan payment gate](#first-deeper-scan-payment-gate-18-nov) for the implemented server behavior and pending checkout UI integration. This supersedes the automatic-start descriptions in the historical plans below.
+**18 Nov backend update:** new first deeper scans require a 20-Zik payment before agents start. See [First deeper scan payment gate](#first-deeper-scan-payment-gate-18-nov) for the server behavior and the checkout on the scan's page. This supersedes the automatic-start descriptions in the historical plans below.
 
 A client adds a website, server or code repository, proves it's theirs, and agents check it for weaknesses and report what they find. Agents look; they never exploit. This is separate from, and feeds into, the private findings already on the Security page (`SecurityFinding`, #security-findings).
 
@@ -188,7 +188,18 @@ The free quick scan remains available before sign-in. New signed-in checks save 
 
 ### Server entry points
 
-[`app/actions/security-deeper-scan.ts`](../app/actions/security-deeper-scan.ts) exports `deeperScanCost(checkId)` for a read-only checkout quote and `startPaidDeeperScan(checkId)` for an explicitly authorized payment. The server derives the owner, workspace and price; successful retries return the same check without another charge. `loadCheckReport` and `listWorkspaceChecks` expose `paymentRequired` for clients. Checkout presentation and browser integration are not included in this backend change.
+[`app/actions/security-deeper-scan.ts`](../app/actions/security-deeper-scan.ts) exports `deeperScanCost(checkId)` for a read-only checkout quote and `startPaidDeeperScan(checkId)` for an explicitly authorized payment. The server derives the owner, workspace and price; successful retries return the same check without another charge. `loadCheckReport` and `listWorkspaceChecks` expose `paymentRequired` for clients; the checkout below uses them.
+
+### The checkout on the scan's page (18 Nov, Seyi)
+
+Before payment, the scan's page shows what the quick scan found and offers the deeper scan; nothing says agents are working.
+
+- **Top:** "Quick scan done on <site>", then "Start the deeper scan to have agents check inside." (`DeeperScanStart` in `components/security-checks/deeper-scan-offer.tsx`), in place of "Ziki is checking … Planning the checks". The status label says **Quick scan done**, and so does the Assets list (its own filter).
+- **Steps:** Chloe's steps box (`scan-steps.tsx`) shows the Deeper scan step locked with **Start**. Start sends `zk:start-deeper-scan`, which opens the checkout. The price shows only in the checkout.
+- **The list:** the quick scan's findings show under **Quick scan**, even on new scans whose findings are saved in the main list (`codeInList`); the **Deeper scan** says **Not started** and lists what agents check that the quick scan can't (`DEEPER_SCAN_COVERS`, from the agents' own parts in `lib/security-checks/ai.ts`), each **Not checked**. Once paid but before agents have parts, findings already in still show instead of hiding behind "Planning".
+- **The checkout:** a large window over the blurred page (`DeeperScanCheckout`), like Add asset. Two cards, as plans: **Quick scan** (Done · Free; picking it shows what it checked, technically, and **View quick scan results**) and **Deeper scan** (picked at first; the price and the checks). Under them: the price and the wallet, then **Pay 20 Ziks and start**; when short and never borrowed, **Borrow and pay**; when short otherwise, **Buy Ziks**. Opening it only reads the quote (`deeperScanCost`); paying is only that button (`startPaidDeeperScan`); errors show inside the window. Already paid (another tab) just refreshes.
+- **After buying Ziks:** **Buy Ziks** links to `/coins?returnTo=/security/checks/<id>` (`lib/coins/return-to.ts`; only a scan's own page is allowed). Back on the scan with `?bought=1`, the checkout opens again and waits for Stripe's webhook ("Waiting for your Ziks…", rechecked every 3 seconds for 30). It never pays by itself. The Ziks page keeps `returnTo` through its pack buttons, and `createPackCheckout` sets Stripe's `success_url` to the scan (`?bought=1`) and its `cancel_url` back to the Ziks page with the scan remembered; anything that isn't a scan's own page falls back to the Ziks page.
+- **After payment** nothing new: the existing progress, steps and results take over.
 
 ### Storage, permissions and failure handling
 

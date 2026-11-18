@@ -3,6 +3,7 @@ import type { CheckReport, RecheckStatus, ReportFinding, ReportPart, ResultFix }
 import { shortLine } from "@/lib/security-checks/short-line";
 import { siteChangeSentence } from "@/lib/security-checks/site-change";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
+import { DEEPER_SCAN_COVERS } from "@/lib/security-checks";
 
 /** How a severity reads on the check's list and a finding's page (16 Nov): "Critical threat", not just "Critical". */
 export const THREAT_LABEL: Record<SecuritySeverity, string> = {
@@ -49,6 +50,8 @@ export type ListTab = {
   /** On a rescan, the earlier findings its agents found fixed. */
   fixed?: ListFinding[];
   pending?: ListPending[];
+  /** Before the deeper scan is paid for (#deeper-scan-gate): what it will check, each not checked yet. */
+  notChecked?: { title: string; why: string }[];
   clear?: string[];
   /** Shown when the tab has nothing else to show. */
   note: string;
@@ -66,7 +69,18 @@ export function checkListTabs(report: CheckReport): [ListTab, ListTab] {
   return [quickScanTab(report), deeperScanTab(report)];
 }
 
+/** "Automatic check: Security headers" → "Security headers": the area a code check's finding came from. */
+function codeArea(area: string): string {
+  return area.replace(/^Automatic check:\s*/, "");
+}
+
 function quickScanTab(report: CheckReport): ListTab {
+  // Waiting for the deeper scan's payment (#deeper-scan-gate): the quick scan's findings are all there is, so they
+  // show in their own Quick scan section, not under a Deeper scan that hasn't started.
+  if (report.codeInList && report.paymentRequired) {
+    const rows = report.findings.map((finding) => ({ severity: finding.severity, title: finding.title, line: shortLine(finding.description), area: codeArea(finding.area) }));
+    return { key: "quick", title: "Quick scan", count: rows.length, state: { label: "Done", tone: "done" }, scanRows: rows, note: "No threats found by what any browser can see." };
+  }
   if (report.codeInList) {
     return { key: "quick", title: "Quick scan", count: 0, state: { label: "Done", tone: "done" }, merged: true, note: "The quick scan's findings are in the list below." };
   }
@@ -83,11 +97,10 @@ function quickScanTab(report: CheckReport): ListTab {
 function deeperScanTab(report: CheckReport): ListTab {
   const base = { key: "deep" as const, title: "Deeper scan" };
   const parts = report.parts;
-  if (!parts.length) {
-    const planning = report.status !== "cancelled" && report.status !== "done";
-    return planning
-      ? { ...base, count: 0, state: { label: "Planning", tone: "working" }, note: "Ziki is planning the checks." }
-      : { ...base, count: 0, state: { label: "None", tone: "waiting" }, note: "No checks were run." };
+  // Waiting for its payment (#deeper-scan-gate): agents haven't started, and won't until it's paid for. The quick
+  // scan's findings show in the Quick scan section above.
+  if (report.paymentRequired) {
+    return { ...base, count: 0, state: { label: "Not started", tone: "waiting" }, notChecked: DEEPER_SCAN_COVERS[report.target.kind], note: "Agents start once you run the deeper scan." };
   }
   const toRow = (finding: ReportFinding): ListFinding => ({
     id: finding.id,
@@ -105,6 +118,13 @@ function deeperScanTab(report: CheckReport): ListTab {
   });
   const findings = report.findings.map(toRow);
   const fixed = report.fixed.map(toRow);
+  // No agent parts yet: say so, but still list any findings already in (the quick scan's, once they're saved in the
+  // list), instead of hiding them behind "Planning".
+  if (!parts.length) {
+    const planning = report.status !== "cancelled" && report.status !== "done";
+    const state: ListTab["state"] = planning ? { label: "Planning", tone: "working" } : { label: "None", tone: "waiting" };
+    return { ...base, count: findings.length, state, findings, fixed, note: planning ? "Ziki is planning the checks." : "No checks were run." };
+  }
   const withFindings = new Set([...report.findings, ...report.fixed].map((finding) => finding.partId));
   const finished = (part: ReportPart) => part.status === "done" || part.status === "skipped";
   const done = parts.filter(finished).length;

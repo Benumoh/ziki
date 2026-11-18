@@ -336,7 +336,7 @@ describe("Ziki plans (a discount on Ziks packs)", () => {
     }) as never;
   const live = (status = "active", planId = "pro") =>
     world.subscriptions.push({ id: "csub-9", userId: "owner", stripeSubscriptionId: "sub_1", planId, status, cancelAtPeriodEnd: false });
-  const lastCheckout = () => world.stripeCalls.at(-1)?.args[0] as { mode: string; line_items: Array<{ price_data: { unit_amount: number; recurring?: { interval: string } } }>; metadata: Record<string, string>; subscription_data?: { metadata: unknown } };
+  const lastCheckout = () => world.stripeCalls.at(-1)?.args[0] as { mode: string; line_items: Array<{ price_data: { unit_amount: number; recurring?: { interval: string } } }>; metadata: Record<string, string>; subscription_data?: { metadata: unknown }; success_url?: string; cancel_url?: string };
 
   it("takes the plan's discount off a pack's price, to the cent", () => {
     expect(discountedCents(500, 0)).toBe(500);
@@ -408,6 +408,17 @@ describe("Ziki plans (a discount on Ziks packs)", () => {
     world.subscriptions[0].status = "past_due";
     await createPackCheckout("owner", undefined, "starter");
     expect(lastCheckout().line_items[0].price_data.unit_amount).toBe(500);
+  });
+
+  it("sends a buyer who came from a scan's checkout back to that scan after paying, and never anywhere else (#deeper-scan-gate)", async () => {
+    await createPackCheckout("owner", undefined, "starter", "/security/checks/cm123");
+    expect(lastCheckout().success_url).toMatch(/\/security\/checks\/cm123\?bought=1$/);
+    expect(lastCheckout().cancel_url).toMatch(/\/coins\?returnTo=%2Fsecurity%2Fchecks%2Fcm123$/);
+
+    for (const elsewhere of ["https://evil.example/x", "//evil.example/security/checks/x", "/settings", undefined]) {
+      await createPackCheckout("owner", undefined, "starter", elsewhere);
+      expect(lastCheckout().success_url).toMatch(/\/coins\?bought=1$/);
+    }
   });
 
   it("credits a discounted pack's full Ziks, but only for a price a plan really gives", async () => {
