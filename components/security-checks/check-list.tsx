@@ -64,7 +64,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
           <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
         </details>
       )}
-      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+      {/* The id: the Deeper scan step at the top of the page jumps here (18 Nov). */}
+      <details id="deeper-scan-results" open className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
