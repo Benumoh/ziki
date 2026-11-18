@@ -1,5 +1,7 @@
 # Security checks
 
+**18 Nov backend update:** new first deeper scans require a 20-Zik payment before agents start. See [First deeper scan payment gate](#first-deeper-scan-payment-gate-18-nov) for the implemented server behavior and pending checkout UI integration. This supersedes the automatic-start descriptions in the historical plans below.
+
 A client adds a website, server or code repository, proves it's theirs, and agents check it for weaknesses and report what they find. Agents look; they never exploit. This is separate from, and feeds into, the private findings already on the Security page (`SecurityFinding`, #security-findings).
 
 This page is the shared contract for the parts being built in parallel under the **14 Nov plan** (after the 13 Nov call with Mark; it replaces the 12 Nov plan). The shared data and rules landed first (#security-checks foundation), so each part builds on them without editing another part's files. Steps marked *(coming)* are being built now; the rest is live.
@@ -51,7 +53,7 @@ See `security-checks-plan-14nov.md` (kept with the team's plans) for who builds 
 - **A workspace is required.** Security is behind the existing workspace gate. Fix on Ziki adds issues to a project of that workspace.
 - **One check is a one-off report,** not ongoing monitoring.
 
-**Being replaced:** `SecurityCheck.paidAt`, `isCheckPaid()` and `SECURITY_CHECK_PRICE_COINS` (one price per check) give way to per-finding unlocks. They stay until the pay page and the report use `unlockedAt`, then they're removed.
+**18 Nov update:** `SecurityCheck.paidAt` now records scan admission payment, separate from per-finding `unlockedAt`. The new first deeper scan price is `DEEPER_SCAN_PRICE_ZIKS`; the legacy `SECURITY_CHECK_PRICE_COINS` value does not price this checkout.
 
 ## On-call people
 
@@ -178,3 +180,26 @@ Verify by moving a finding from the check's list, following its issue link, and 
 Expand **Quick scan** to see the browser preview. Under **Deeper scan**, select completed findings and choose **Fix selected** to open checkout with those findings. Unfinished checks appear under **Still checking**.
 
 When the report is posted, the scan header replaces its progress bar with the total findings and their severity counts.
+
+
+## First deeper scan payment gate (18 Nov)
+
+The free quick scan remains available before sign-in. New signed-in checks save that result but do not start agents automatically. Starting the first deeper scan costs **20 Ziks**, taken from the requesting person's wallet. This charge does not unlock or move findings. The existing **10-Zik rescan** and per-finding remediation charges remain separate.
+
+### Server entry points
+
+[`app/actions/security-deeper-scan.ts`](../app/actions/security-deeper-scan.ts) exports `deeperScanCost(checkId)` for a read-only checkout quote and `startPaidDeeperScan(checkId)` for an explicitly authorized payment. The server derives the owner, workspace and price; successful retries return the same check without another charge. `loadCheckReport` and `listWorkspaceChecks` expose `paymentRequired` for clients. Checkout presentation and browser integration are not included in this backend change.
+
+### Storage, permissions and failure handling
+
+[`lib/security-checks/deeper-scan.ts`](../lib/security-checks/deeper-scan.ts) scopes every request to the requesting user and current workspace; the actions also require workspace owner/admin access. Ownership proof is required before charging whenever that feature is enabled. Cancelled scans cannot be paid. New checks use the existing `free: false`, `priceCoins: 20`, `paidAt: null` fields. Historical free checks stay usable without a retroactive charge; paid rescans remain usable too. No migration is needed.
+
+A wallet row lock serializes spending and duplicate requests. One transaction records `paidAt`, queues the check and appends the balanced wallet/revenue ledger pair with stable `deeper-scan:<checkId>:wallet` and `:revenue` keys. Any failed write rolls it all back. A retry returns the same paid check with `charged: 0`. After commit, the action schedules `kickCheck`; the existing sweep retries a missed or failed startup without another charge.
+
+[`lib/security-checks.ts`](../lib/security-checks.ts) defines the price and shared payment eligibility. Engine startup, polling/assignment, reporting and the fallback worker require a paid or historical free check. Ownership verification alone does not bypass payment. No finding text is added to payment logs, events or ledger entries.
+
+### Repeatable verification
+
+Run the repo's `pnpm verify:ready` before requesting the PR. Focused coverage lives in `tests/security/security-checks.test.ts` and `app/actions/security-assistant.test.ts`; it covers access, quick-scan/proof prerequisites, wallet failure, retries, transaction failures, and the agent payment guard. The concurrency unit test uses serialized transaction doubles; a real PostgreSQL concurrency and browser checkout exercise still requires local fixture integration with the checkout UI. Do not seed or reset a shared/demo database.
+
+With the checkout UI connected, verify: quick scan → sign in if needed → checkout showing 20 Ziks → explicit pay → progress/results. Refresh and double-click payment to confirm one debit; cancel checkout and try insufficient funds to confirm no agents start. Existing free scans and paid 10-Zik rescans must still open normally.

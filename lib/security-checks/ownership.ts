@@ -5,7 +5,7 @@ import http from "node:http";
 import https from "node:https";
 import type { SecurityTargetKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
+import { FINISHED_CHECK_STATUSES, scanPaymentWhere } from "@/lib/security-checks";
 
 /**
  * Proving a target is yours (#security-checks, part 2). Until a target is
@@ -394,7 +394,7 @@ export async function recordOwnership(
       data: { ownershipMethod: method, verifiedAt: new Date() },
     });
     await tx.securityCheck.updateMany({
-      where: { targetId, organisationId, status: "awaiting_ownership" },
+      where: { targetId, organisationId, status: "awaiting_ownership", ...scanPaymentWhere() },
       data: { status: "queued" },
     });
     const open = await tx.securityCheck.findFirst({
@@ -404,7 +404,7 @@ export async function recordOwnership(
       select: { id: true },
     });
     const queued = await tx.securityCheck.findMany({
-      where: { targetId, organisationId, status: "queued" },
+      where: { targetId, organisationId, status: "queued", ...scanPaymentWhere() },
       select: { id: true },
     });
     return { checkId: open?.id ?? null, queued: queued.map((check) => check.id) };

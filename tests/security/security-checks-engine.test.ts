@@ -55,7 +55,7 @@ function fakeAi(answer: unknown) {
 }
 
 function heldItem(overrides: Record<string, unknown> = {}) {
-  return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", target: verified }, ...overrides };
+  return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", free: true, paidAt: null, target: verified }, ...overrides };
 }
 
 beforeEach(() => {
@@ -366,7 +366,7 @@ describe("reporting a part", () => {
 
     // Any other part of a rescan can't file an earlier open finding again (18 Nov), whatever its casing or spacing;
     // something new is saved as usual.
-    const rescanPart = heldItem({ checkId: "rescan1", check: { status: "checking", target: verified, previousCheckId: "check0", organisationId: "org1", requestedById: "owner", targetId: "t1" } });
+    const rescanPart = heldItem({ checkId: "rescan1", check: { status: "checking", free: true, paidAt: null, target: verified, previousCheckId: "check0", organisationId: "org1", requestedById: "owner", targetId: "t1" } });
     const repeated = fakeDb();
     repeated.securityCheckItem.findUnique.mockResolvedValue(rescanPart);
     // Asked in turn: the part's own rechecks, this scan's code findings, then the earlier open findings.
@@ -439,14 +439,14 @@ describe("reporting a part", () => {
   it("refuses work on a check whose target lost its ownership proof, when proof is required", async () => {
     vi.stubEnv("SECURITY_OWNERSHIP_PROOF_REQUIRED", "true");
     const db = fakeDb();
-    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", target: { verifiedAt: null } } }));
+    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", free: true, paidAt: null, target: { verifiedAt: null } } }));
     await expect(submitReport(asDb(db), "agentA", "item1", [], now)).rejects.toBeInstanceOf(SecurityJobError);
     vi.unstubAllEnvs();
   });
 
   it("takes the work of a target with no proof while proof is off", async () => {
     const db = fakeDb();
-    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", target: { verifiedAt: null } } }));
+    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", free: true, paidAt: null, target: { verifiedAt: null } } }));
     db.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
     expect(await submitReport(asDb(db), "agentA", "item1", found, now)).toEqual({ checkId: "check1", results: 1, rechecked: 0, addedParts: 0 });
   });
