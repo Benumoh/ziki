@@ -285,5 +285,39 @@ describe("contributor form intake (#989)", () => {
         }),
       );
     });
+
+    it("supports feedback links for private projects without exposing internal issues (#1048)", async () => {
+      db.project.findFirst.mockResolvedValue({
+        ...publicProject,
+        slug: "desktop",
+        name: "Desktop",
+        visibility: "private",
+        acceptsGuestIdeas: false,
+      });
+      db.$queryRaw.mockResolvedValue([
+        { id: "secret_bug", kind: "issue", number: 7, title: "Internal desktop roadmap issue", status: "open", score: 0.95 },
+      ]);
+
+      const searchResult = await findPublicIdeaMatches(
+        { orgSlug: "ziki", projectSlug: "desktop" },
+        "Internal desktop",
+        publicHeaders,
+        { db: db as never, consume: rateLimit.consume },
+      );
+      expect(searchResult).toEqual({ status: 200, matches: [] });
+      expect(db.$queryRaw).not.toHaveBeenCalled();
+
+      const submitResult = await createPublicIdea(
+        { orgSlug: "ziki", projectSlug: "desktop" },
+        {
+          description: "Desktop window freezes when resizing on macOS.",
+          trackingToken: "d".repeat(32),
+        },
+        publicHeaders,
+        { db: db as never, consume: rateLimit.consume, emit },
+      );
+      expect(submitResult.status).toBe(201);
+      expect(db.$queryRaw).not.toHaveBeenCalled();
+    });
   });
 });

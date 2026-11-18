@@ -24,6 +24,15 @@ export function publicContributePath(ref: PublicProjectRef, kind?: PublicReportK
   return kind ? `${base}?type=${encodeURIComponent(kind)}` : base;
 }
 
+export function publicFeedbackPath(ref: PublicProjectRef, kind?: PublicReportKind): string {
+  const base = `${publicProjectPath(ref)}/feedback`;
+  return kind ? `${base}?type=${encodeURIComponent(kind)}` : base;
+}
+
+export function publicOrgFeedbackPath(orgSlug: string): string {
+  return `/${encodeURIComponent(orgSlug)}/feedback`;
+}
+
 export function publicTrackingPath(ref: PublicProjectRef, token: string): string {
   return `${publicProjectPath(ref)}/track/${encodeURIComponent(token)}`;
 }
@@ -36,13 +45,13 @@ function decodeSegment(segment: string): string {
   }
 }
 
-export type PublicIntakeKind = "report" | "contribute" | "track";
+export type PublicIntakeKind = "report" | "contribute" | "feedback" | "track";
 
 /** Guest-only intake pages nested below the existing public project overview. */
 export function publicIntakeSegments(
   path: string,
 ): (PublicProjectRef & { kind: PublicIntakeKind }) | null {
-  const match = /^\/([^/]+)\/([^/]+)\/(report|contribute|track\/[^/]+)\/?$/.exec(path);
+  const match = /^\/([^/]+)\/([^/]+)\/(report|contribute|feedback|track\/[^/]+)\/?$/.exec(path);
   if (!match) return null;
   const orgSlug = decodeSegment(match[1] ?? "");
   const projectSlug = decodeSegment(match[2] ?? "");
@@ -51,13 +60,29 @@ export function publicIntakeSegments(
   const kind: PublicIntakeKind =
     segment === "contribute"
       ? "contribute"
-      : segment === "report"
-      ? "report"
-      : "track";
+      : segment === "feedback"
+        ? "feedback"
+        : segment === "report"
+          ? "report"
+          : "track";
   return {
     orgSlug,
     projectSlug,
     kind,
+  };
+}
+
+/** External organization-level feedback portal (`/<org>/feedback`). */
+export function publicOrgFeedbackSegments(
+  path: string,
+): { orgSlug: string; kind: "org-feedback" } | null {
+  const match = /^\/([^/]+)\/feedback\/?$/.exec(path);
+  if (!match) return null;
+  const orgSlug = decodeSegment(match[1] ?? "");
+  if (!orgSlug) return null;
+  return {
+    orgSlug,
+    kind: "org-feedback",
   };
 }
 

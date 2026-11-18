@@ -3554,6 +3554,9 @@ enum SecurityCheckItemKind {
   check
   /// Once every part is in: an always-on agent writes the one report the client sees.
   collate
+  /// Ziki's own code checks (the quick scan, 18 Nov): its findings join the main list. Never given to an agent,
+  /// never counted as a part, saved already done.
+  automatic
 }
 
 /// Where one job is (#security-checks).
@@ -3645,6 +3648,10 @@ model SecurityCheck {
   /// A rescan (#security-rescan, 17 Nov): the check it follows. Its agents recheck that check's open
   /// findings (still there or fixed) and look for new ones. Null for a first scan.
   previousCheckId String?              @unique
+  /// What the quick scan saw of the site, as short hashes per area (certificate, TLS, headers, cookies, files, email; a
+  /// repo's file lists), so a rescan can say whether the site changed since (18 Nov). Null before then, or when the
+  /// quick scan couldn't run.
+  siteFingerprint Json?
   previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
   /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
   nextCheck      SecurityCheck?        @relation("SecurityRescan")

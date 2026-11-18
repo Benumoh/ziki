@@ -17,6 +17,8 @@ import { isReportPosted, isTargetProven, isScanPaymentSatisfied } from "@/lib/se
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { findingPrice } from "@/lib/security-checks/payment";
 import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
+import { siteChangeBetween, type SiteChange } from "@/lib/security-checks/site-change";
+import { AUTOMATIC_PART_PREFIX } from "@/lib/security-checks/code-findings";
 
 /**
  * What a client may see of one security check (#security-checks, 12 and 14
@@ -133,12 +135,18 @@ type ReportBase = {
   /** A rescan's earlier scan, and the rescan that followed this one (#security-rescan); null when there is none. */
   previousCheckId: string | null;
   nextCheckId: string | null;
+  /** On a rescan, whether the site changed since the earlier scan (18 Nov); null when that can't be told. */
+  siteChange: SiteChange | null;
 };
 
 /** What every report has, posted or not: the quick scan and every finding reported so far, worst first. */
 type ReportFindings = {
   /** The quick scan run when the asset was added (`SecurityTarget.previewSummary`): the list's first phase. */
   quickScan: PreviewSummary | null;
+  /** Ziki's code checks (the quick scan) saved their findings in the main list (18 Nov), so the quick scan isn't shown apart. */
+  codeInList: boolean;
+  /** Of `total`, how many came from Ziki's code checks (the quick scan) rather than agents, so they aren't counted twice. */
+  codeFound: number;
   /** Every open finding: this scan's own, and on a rescan the earlier ones still there or still being rechecked. */
   findings: ReportFinding[];
   /** On a rescan, the earlier findings its agents found fixed. Not counted, priced or shown in the totals. */
@@ -220,7 +228,10 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
         select: { id: true, title: true, status: true },
       },
       previousCheckId: true,
+      siteFingerprint: true,
+      previousCheck: { select: { siteFingerprint: true } },
       nextCheck: { select: { id: true } },
+      _count: { select: { items: { where: { kind: "automatic" } } } },
     },
   });
   if (!check) return null;
@@ -245,6 +256,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
     progress: partsProgress(parts),
     previousCheckId: check.previousCheckId,
     nextCheckId: check.nextCheck?.id ?? null,
+    siteChange: check.previousCheck ? siteChangeBetween(check.previousCheck.siteFingerprint, check.siteFingerprint) : null,
   };
 
   // Every finding reported so far, in full: the report is free, and a finding shows once its part is done.
@@ -305,6 +317,8 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
   });
   const found: ReportFindings = {
     quickScan: readQuickScan(check.target.previewSummary),
+    codeInList: check._count.items > 0,
+    codeFound: rows.filter((row) => row.item.title.startsWith(AUTOMATIC_PART_PREFIX)).length,
     counts: countBySeverity(rows),
     total: rows.length,
     clearParts: clearPartTitles(parts, all.map((row) => ({ itemId: partOf(row) }))),

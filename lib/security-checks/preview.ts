@@ -2,6 +2,7 @@ import "server-only";
 import { isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
+import { createHash } from "node:crypto";
 import tls from "node:tls";
 import { getDomain } from "tldts";
 import type { SecuritySeverity, SecurityTargetKind } from "@prisma/client";
@@ -14,12 +15,18 @@ import { parseSecurityTarget } from "@/lib/security-checks/target";
 
 /**
  * The quick preview scan on the public security page (#security-checks, 12 Nov
- * plan, part D3). Code only: no agents and no AI, so it costs almost nothing.
+ * plan, part D3). Code only: no agents and no AI, so it costs almost nothing,
+ * and the same site gives the same answer every time. Since 18 Nov it also
+ * checks the yes/no facts agents used to find only sometimes (old TLS versions
+ * accepted, the certificate's names, robots.txt and security.txt, more headers,
+ * cookie scoping), and a scan's findings join its main list (code-findings.ts).
  *
  * It reads only what any visitor's browser already gets from a site: the
- * homepage's response headers and cookies, its HTTPS certificate, and the
- * domain's public SPF and DMARC records. It never probes: no login forms, no
- * guessed paths, no port scans. Every connection goes through the same
+ * homepage's response headers and cookies, its HTTPS certificate (and whether
+ * the server still agrees to TLS 1.0 or 1.1), robots.txt and
+ * /.well-known/security.txt (the two files sites publish for visitors and
+ * crawlers), and the domain's public SPF and DMARC records. It never probes: no
+ * login forms, no guessed paths, no port scans. Every connection goes through the same
  * public-only lookup as the ownership check, so a link can't point Ziki at a
  * private network, by name, by number or by DNS rebinding.
  *
@@ -31,12 +38,16 @@ import { parseSecurityTarget } from "@/lib/security-checks/target";
 export const PREVIEW_CACHE_MS = 10 * 60 * 1000;
 
 const TIMEOUT_MS = 5_000;
+/** How much of a public text file (robots.txt, security.txt) is read. */
+const TEXT_MAX_CHARS = 64_000;
+/** Same-site redirects followed for a public text file. */
+const TEXT_MAX_REDIRECTS = 3;
 /** Same-site HTTPS redirects followed before the homepage is called unreadable (browsers allow about 20). */
 export const MAX_REDIRECTS = 10;
 const EXPIRING_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type PreviewArea = "https" | "certificate" | "headers" | "cookies" | "email" | "secrets" | "policy" | "updates";
+export type PreviewArea = "https" | "certificate" | "headers" | "cookies" | "files" | "email" | "secrets" | "policy" | "updates";
 
 export type PreviewFinding = {
   /** Stable for each kind of problem, so a page can key and count them. */
@@ -58,8 +69,33 @@ export type PreviewResult =
       counts: Record<SecuritySeverity, number>;
       /** Worst first. */
       findings: PreviewFinding[];
+      /** What it saw, as short hashes per part, so a rescan can tell whether the site changed (18 Nov). */
+      fingerprint?: SiteFingerprint;
     }
   | { ok: false; reason: string; retryAfterSeconds?: number };
+
+/** The parts of a site whose fingerprint is kept, each a short hash of what the quick scan saw. */
+export type FingerprintPart = "certificate" | "tls" | "headers" | "cookies" | "files" | "email" | "repo";
+export type SiteFingerprint = Partial<Record<FingerprintPart, string>>;
+
+const hashOf = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+/** The security headers whose values are kept, with per-request values (CSP nonces) left out so they don't look like changes. */
+const FINGERPRINT_HEADERS = [
+  "strict-transport-security", "content-security-policy", "content-security-policy-report-only", "x-frame-options", "x-content-type-options",
+  "referrer-policy", "permissions-policy", "cross-origin-opener-policy", "server", "x-powered-by",
+];
+
+/** Cookie names and settings, without their values or expiry, which change on every visit. */
+function cookieShape(headers: PageAnswer["headers"]): string[] {
+  const raw = headers["set-cookie"];
+  return (Array.isArray(raw) ? raw : raw ? [raw] : [])
+    .map((cookie) => {
+      const [pair, ...attributes] = cookie.split(";").map((part) => part.trim());
+      const kept = attributes.map((part) => part.toLowerCase()).filter((part) => !/^(expires|max-age)=/.test(part)).sort();
+      return [pair!.split("=")[0], ...kept].join(";");
+    })
+    .sort();
+}
 
 /* ------------------------------------------------------------------ */
 /* The network, behind one seam so the rules can be tested             */
@@ -74,7 +110,12 @@ export type CertificateAnswer = {
   validTo: Date | null;
   /** The TLS version agreed, for example "TLSv1.3". */
   protocol: string | null;
+  /** The host names the certificate covers (its subject alternative names). Absent when not read. */
+  names?: string[];
 };
+
+/** A small public text file, such as robots.txt: its status and the start of its body. */
+export type TextAnswer = { status: number; body: string };
 
 export type PreviewNetwork = {
   /** One GET that reads the headers only, never following redirects itself. */
@@ -83,6 +124,10 @@ export type PreviewNetwork = {
   certificate(host: string): Promise<CertificateAnswer | null>;
   /** TXT records for a name; empty when there are none. */
   txt(host: string): Promise<string[][]>;
+  /** Which of the old TLS versions (TLSv1, TLSv1.1) the server on port 443 still agrees to; empty when none. */
+  oldTls?(host: string): Promise<string[]>;
+  /** One GET of a small public text file, following same-site HTTPS redirects (example.com to www.example.com); null when nothing answers. */
+  text?(url: string): Promise<TextAnswer | null>;
   /** The file and folder names a public repo shows at its top level, in `.github` and in `docs`. */
   repo(owner: string, name: string): Promise<RepoAnswer>;
 };
@@ -161,12 +206,16 @@ async function scan(
   const host = isIP(value) === 6 ? `[${value}]` : value;
   // Mail records live on the registrable domain (app.example.co.uk -> example.co.uk), not on each subdomain.
   const mailDomain = kind === "website" ? emailDomainFor(value) : null;
-  const [home, plain, certificate, spf, dmarc] = await Promise.all([
+  const readText = (path: string) => (kind === "website" && network.text ? network.text(`https://${host}${path}`).catch(rethrowPrivate) : Promise.resolve(null));
+  const [home, plain, certificate, spf, dmarc, oldTls, robots, securityTxt] = await Promise.all([
     homepage(network, `https://${host}/`, value).catch(rethrowPrivate),
     network.page(`http://${host}/`).catch(rethrowPrivate),
     network.certificate(value).catch(rethrowPrivate),
     mailDomain ? readTxt(network, mailDomain) : Promise.resolve(null),
     mailDomain ? readDmarc(network, value, mailDomain) : Promise.resolve(null),
+    network.oldTls ? network.oldTls(value).catch(rethrowPrivate) : Promise.resolve(null),
+    readText("/robots.txt"),
+    readText("/.well-known/security.txt"),
   ]);
   // Too many redirects says nothing about HTTPS either way: don't call it missing.
   const tooManyRedirects = home === TOO_MANY_REDIRECTS;
@@ -201,7 +250,7 @@ async function scan(
 
   if (certificate) {
     checked.push("certificate");
-    findings.push(...certificateFindings(certificate, kind, value, now));
+    findings.push(...certificateFindings(certificate, kind, value, now, oldTls));
   }
 
   // Headers and cookies are read from the site's own page, not from a redirect that sends visitors elsewhere.
@@ -210,6 +259,12 @@ async function scan(
     checked.push("headers", "cookies");
     findings.push(...headerFindings(page.headers));
     findings.push(...cookieFindings(page.headers));
+  }
+
+  // A file is only judged when the site answered for it: a request that failed says nothing.
+  if (robots || securityTxt) {
+    checked.push("files");
+    findings.push(...publicFileFindings(robots, securityTxt, value, now));
   }
 
   // A record is only called missing when the lookup really answered: a lookup that failed says nothing.
@@ -221,7 +276,17 @@ async function scan(
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const finding of findings) counts[finding.severity] += 1;
-  return { ok: true, kind, target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings };
+  // A part is only fingerprinted when it was really seen, so a failed look never reads as a change.
+  const fingerprint: SiteFingerprint = {};
+  if (certificate) fingerprint.certificate = hashOf([certificate.validTo?.toISOString() ?? null, [...(certificate.names ?? [])].sort(), certificate.authorized]);
+  if (certificate && oldTls) fingerprint.tls = hashOf([certificate.protocol, oldTls]);
+  if (page) {
+    fingerprint.headers = hashOf(FINGERPRINT_HEADERS.map((name) => (header(page.headers, name) ?? "").replace(/'nonce-[^']*'/g, "'nonce'")));
+    fingerprint.cookies = hashOf(cookieShape(page.headers));
+  }
+  if (robots || securityTxt) fingerprint.files = hashOf([robots?.status ?? null, robots?.body ?? null, securityTxt?.status ?? null, securityTxt?.body ?? null]);
+  if (mailDomain && (spf !== null || dmarc !== null)) fingerprint.email = hashOf([spf, dmarc]);
+  return { ok: true, kind, target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings, fingerprint };
 }
 
 /* ------------------------------------------------------------------ */
@@ -256,7 +321,8 @@ async function scanRepo(value: string, network: PreviewNetwork, now: number): Pr
       id: `secret-file:${file.toLowerCase()}`,
       severity: "high",
       area: "secrets",
-      title: "A file that usually holds secrets is in the repo",
+      // The file is named in the title: each is its own finding, matched by title across scans (code-findings.ts).
+      title: `A file that usually holds secrets is in the repo: ${file}`,
       detail: `${value} publishes a file named ${file}. If it holds real keys or passwords, anyone can read them, so they should be removed from the repo and changed.`,
     });
   }
@@ -289,7 +355,8 @@ async function scanRepo(value: string, network: PreviewNetwork, now: number): Pr
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const finding of findings) counts[finding.severity] += 1;
-  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings };
+  const fingerprint: SiteFingerprint = { repo: hashOf([[...answer.root].sort(), [...answer.github].sort(), [...answer.docs].sort()]) };
+  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings, fingerprint };
 }
 
 const SEVERITY_ORDER: Record<SecuritySeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -375,6 +442,8 @@ export function certificateFindings(
   kind: Exclude<SecurityTargetKind, "repo">,
   value: string,
   now: number,
+  /** Which old TLS versions the server still agrees to when asked for one; null when that wasn't checked. */
+  oldTls: readonly string[] | null = null,
 ): PreviewFinding[] {
   const findings: PreviewFinding[] = [];
   const expired = certificate.validTo !== null && certificate.validTo.getTime() <= now;
@@ -414,9 +483,41 @@ export function certificateFindings(
       title: "The site still uses an old version of TLS",
       detail: `${value} agreed to ${certificate.protocol}, which browsers no longer consider safe. TLS 1.2 or 1.3 should be the minimum.`,
     });
+  } else if (oldTls && oldTls.length > 0) {
+    // It uses a modern version by default but still agrees to an old one when a client asks for it.
+    findings.push({
+      id: "old-tls-accepted",
+      severity: "low",
+      area: "certificate",
+      title: "The site still accepts old versions of TLS",
+      detail: `${value} still agrees to ${oldTls.map((version) => (version === "TLSv1" ? "TLS 1.0" : version.replace("TLSv", "TLS "))).join(" and ")} when a visitor asks for it. Browsers dropped these years ago; TLS 1.2 or 1.3 should be the minimum.`,
+    });
+  }
+  const internal = internalNames(certificate.names ?? [], value);
+  if (internal.length > 0) {
+    findings.push({
+      id: "certificate-internal-names",
+      severity: "low",
+      area: "certificate",
+      title: "The certificate lists internal-looking host names",
+      detail: `The certificate on ${value} also covers ${internal.slice(0, 5).join(", ")}${internal.length > 5 ? ` and ${internal.length - 5} more` : ""}. Anyone can read these names, which point to staging, test or internal systems worth hiding.`,
+    });
   }
   return findings;
 }
+
+/** Labels that usually name a staging, test or internal system. */
+const INTERNAL_LABEL = /^(?:staging|stage|stg|dev|develop|development|internal|intranet|test|testing|qa|uat|preprod|pre-prod|sandbox|corp)\d*$/;
+
+/** The certificate's names, other than the site itself, that look internal (a label like staging, dev or internal). */
+export function internalNames(names: readonly string[], value: string): string[] {
+  const site = value.toLowerCase().replace(/^www\./, "");
+  return [...new Set(names.map((name) => name.toLowerCase()))].filter((name) => {
+    if (name.replace(/^\*\./, "").replace(/^www\./, "") === site) return false;
+    return name.split(".").some((label) => label.split("-").some((part) => INTERNAL_LABEL.test(part)));
+  });
+}
+
 
 function header(headers: PageAnswer["headers"], name: string): string | null {
   const value = headers[name.toLowerCase()];
@@ -472,6 +573,24 @@ export function headerFindings(headers: PageAnswer["headers"]): PreviewFinding[]
       detail: "There is no Referrer-Policy header, so links to other sites may pass on the full address of the page the visitor came from.",
     });
   }
+  if (!header(headers, "permissions-policy")) {
+    findings.push({
+      id: "missing-permissions-policy",
+      severity: "low",
+      area: "headers",
+      title: "Browsers aren't told which features the site may use",
+      detail: "There is no Permissions-Policy header, so an injected or embedded script can ask for the camera, microphone, location and similar features without the site ruling them out.",
+    });
+  }
+  if (!header(headers, "cross-origin-opener-policy")) {
+    findings.push({
+      id: "missing-cross-origin-isolation",
+      severity: "low",
+      area: "headers",
+      title: "No cross-origin isolation headers",
+      detail: "There is no Cross-Origin-Opener-Policy header, so a page this site opens, or that opens it, keeps a handle on its window, which some cross-site attacks rely on.",
+    });
+  }
   const server = header(headers, "server");
   const poweredBy = header(headers, "x-powered-by");
   if ((server && /\d/.test(server)) || poweredBy) {
@@ -524,6 +643,68 @@ export function cookieFindings(headers: PageAnswer["headers"]): PreviewFinding[]
       title: "Cookies don't say when other sites may send them",
       detail: `${plural(noSameSite)} set on the homepage have no SameSite setting, which leaves more room for cross-site request forgery.`,
     });
+  }
+  const domainWide = count((attrs) => attrs.includes("domain"));
+  if (domainWide) {
+    findings.push({
+      id: "cookie-domain-wide",
+      severity: "low",
+      area: "cookies",
+      title: "Cookies are shared with every subdomain",
+      detail: `${plural(domainWide)} set on the homepage name a Domain, so every subdomain of the site receives them, including any that are less well looked after.`,
+    });
+  }
+  return findings;
+}
+
+/** Words in a robots.txt path that usually point to something private. */
+const PRIVATE_PATH = /(?:^|[/_.-])(?:admin|administrator|internal|staging|private|backup|backups|secret|secrets|config|debug|test|dev|cms|wp-admin|phpmyadmin)(?:$|[/_.-])/i;
+
+/**
+ * robots.txt and /.well-known/security.txt. `null` for either means the site didn't answer for it, so nothing is said
+ * about it. robots.txt is only read for the paths it lists; security.txt only for whether it exists, says who to
+ * contact, and hasn't expired.
+ */
+export function publicFileFindings(robots: TextAnswer | null, securityTxt: TextAnswer | null, value: string, now: number): PreviewFinding[] {
+  const findings: PreviewFinding[] = [];
+  if (robots && robots.status === 200) {
+    const paths = robots.body
+      .split(/\r?\n/)
+      .map((line) => /^\s*(?:dis)?allow\s*:\s*(\S+)/i.exec(line)?.[1] ?? "")
+      .filter((path) => path && PRIVATE_PATH.test(path));
+    const unique = [...new Set(paths)];
+    if (unique.length > 0) {
+      findings.push({
+        id: "robots-private-paths",
+        severity: "low",
+        area: "files",
+        title: "robots.txt points to private pages",
+        detail: `${value}/robots.txt names ${unique.slice(0, 5).join(", ")}${unique.length > 5 ? ` and ${unique.length - 5} more` : ""}. The file is public, so it tells anyone where the private pages are; they should be protected by sign-in, not hidden by name.`,
+      });
+    }
+  }
+  if (securityTxt) {
+    const body = securityTxt.status === 200 ? securityTxt.body : "";
+    const contact = /^\s*contact\s*:/im.test(body);
+    const expires = /^\s*expires\s*:\s*(\S+)/im.exec(body)?.[1];
+    const expiredAt = expires ? Date.parse(expires) : Number.NaN;
+    if (!contact) {
+      findings.push({
+        id: "missing-security-txt",
+        severity: "low",
+        area: "files",
+        title: "No security.txt telling people how to report problems",
+        detail: `${value} has no /.well-known/security.txt with a Contact line, so a person who finds a problem doesn't know where to report it privately.`,
+      });
+    } else if (!Number.isNaN(expiredAt) && expiredAt <= now) {
+      findings.push({
+        id: "security-txt-expired",
+        severity: "low",
+        area: "files",
+        title: "The site's security.txt has expired",
+        detail: `${value}/.well-known/security.txt expired on ${new Date(expiredAt).toISOString().slice(0, 10)}, so people may not trust its contact details.`,
+      });
+    }
   }
   return findings;
 }
@@ -691,6 +872,7 @@ export const realPreviewNetwork: PreviewNetwork = {
           authorizationError,
           validTo: peer?.valid_to ? new Date(peer.valid_to) : null,
           protocol: socket.getProtocol(),
+          names: (peer?.subjectaltname ?? "").split(",").map((name) => name.trim()).filter((name) => name.startsWith("DNS:")).map((name) => name.slice(4).toLowerCase()),
         });
       });
       socket.once("timeout", () => done(null));
@@ -701,4 +883,92 @@ export const realPreviewNetwork: PreviewNetwork = {
     });
   },
   txt: (host) => realNetwork.txt(host),
+  async oldTls(host) {
+    if (isIP(host) && !isPublicAddress(host)) throw new PrivateAddressError(host);
+    const accepted: string[] = [];
+    // One handshake per old version, nothing more: the same as an old browser connecting once.
+    for (const version of ["TLSv1", "TLSv1.1"] as const) {
+      const agreed = await new Promise<boolean>((resolve, reject) => {
+        const socket = tls.connect({
+          host,
+          port: 443,
+          servername: isIP(host) ? undefined : host,
+          lookup: publicOnlyLookup(),
+          rejectUnauthorized: false,
+          timeout: TIMEOUT_MS,
+          minVersion: version,
+          maxVersion: version,
+          // Old versions need OpenSSL's lowest security level to be offered at all; this only asks, it sends nothing.
+          ciphers: "DEFAULT:@SECLEVEL=0",
+        });
+        const done = (yes: boolean) => {
+          socket.destroy();
+          resolve(yes);
+        };
+        socket.once("secureConnect", () => done(socket.getProtocol() === version));
+        socket.once("timeout", () => done(false));
+        socket.once("error", (error: NodeJS.ErrnoException) => {
+          if (error instanceof PrivateAddressError || error.code === "EPRIVATE") reject(new PrivateAddressError(host));
+          else done(false);
+        });
+      });
+      if (agreed) accepted.push(version);
+    }
+    return accepted;
+  },
+  async text(url) {
+    // Many sites send /robots.txt and /.well-known/security.txt on to www. (netflix.com does): follow that, on the same site only.
+    let next = new URL(url);
+    const site = next.hostname;
+    for (let hop = 0; hop <= TEXT_MAX_REDIRECTS; hop++) {
+      const answer = await readTextOnce(next);
+      if (!answer || !answer.location) return answer && { status: answer.status, body: answer.body };
+      const moved = new URL(answer.location, next);
+      if (moved.protocol !== "https:" || !sameSite(moved.hostname, site)) return { status: answer.status, body: "" };
+      next = moved;
+    }
+    return null;
+  },
 };
+
+/** One GET of a small text file: its status, body (only on 200) and where a redirect points. */
+async function readTextOnce(target: URL): Promise<(TextAnswer & { location: string | null }) | null> {
+  const host = target.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host) && !isPublicAddress(host)) throw new PrivateAddressError(host);
+  return new Promise((resolve, reject) => {
+    const request = https.request(
+      target,
+      {
+        method: "GET",
+        agent: false,
+        lookup: publicOnlyLookup(),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        rejectUnauthorized: false,
+        headers: { "User-Agent": USER_AGENT, Accept: "text/plain,*/*;q=0.1" },
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        const location = status >= 300 && status < 400 && typeof response.headers.location === "string" ? response.headers.location : null;
+        // A redirect or error page has no file to read.
+        if (status !== 200) {
+          response.destroy();
+          resolve({ status, body: "", location });
+          return;
+        }
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => {
+          body += chunk;
+          if (body.length >= TEXT_MAX_CHARS) response.destroy();
+        });
+        response.on("close", () => resolve({ status, body: body.slice(0, TEXT_MAX_CHARS), location: null }));
+        response.on("error", () => resolve({ status, body: body.slice(0, TEXT_MAX_CHARS), location: null }));
+      },
+    );
+    request.on("error", (error: NodeJS.ErrnoException) => {
+      if (error instanceof PrivateAddressError || error.code === "EPRIVATE") reject(new PrivateAddressError(host));
+      else resolve(null);
+    });
+    request.end();
+  });
+}
