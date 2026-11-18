@@ -13,12 +13,14 @@ const mocks = vi.hoisted(() => ({
   findOwnScan: vi.fn(),
   scansNote: vi.fn(),
   kick: vi.fn(),
+  saveCode: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // `after` runs its job once the action answers; here, at once, so a test can see what it starts.
 vi.mock("next/server", () => ({ after: (job: () => unknown) => void job() }));
 vi.mock("@/lib/security-checks/engine", () => ({ kickCheck: mocks.kick }));
+vi.mock("@/lib/security-checks/code-findings", () => ({ saveCodeFindings: mocks.saveCode }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: vi.fn().mockResolvedValue({ id: "u1", role: "member" }) }));
 vi.mock("@/lib/organisation-access", () => ({ currentOrganisationAccess: mocks.access }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: mocks.rate, RATE_LIMIT_MESSAGE: "Slow down." }));
@@ -98,6 +100,8 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
     // No proof step: added straight away (14 Nov plan).
     expect(mocks.addTargetAndCheck).toHaveBeenCalledWith("org1", "u1", expect.objectContaining({ kind: "website", value: "settle.ng" }));
     expect(mocks.saveQuickScan).toHaveBeenCalledWith("t1", expect.objectContaining({ total: 2, risk: "high" }));
+    // Its findings join the scan's main list (18 Nov).
+    expect(mocks.saveCode).toHaveBeenCalledWith({}, "c1", expect.objectContaining({ ok: true, target: "settle.ng" }));
     // Started as soon as it is added, not left for the one-minute sweep (which kept a scan waiting for minutes, 15 Nov).
     expect(mocks.kick).toHaveBeenCalledTimes(1);
     expect(mocks.kick).toHaveBeenCalledWith(expect.anything(), "c1");
