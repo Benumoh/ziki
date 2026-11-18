@@ -140,6 +140,7 @@ export type PublicIdeaResult =
 type PublicIntakeDb = Pick<PrismaClient, "project" | "idea" | "bug" | "user" | "attachment" | "agentEvent" | "webhookSubscription" | "$queryRaw" | "$transaction">;
 
 type PublicIdeaDependencies = {
+  submittedById?: string;
   db?: PublicIntakeDb;
   consume?: (items: RateLimitItem[]) => Promise<{ allowed: boolean; retryAfterMs: number }>;
   emit?: typeof publish;
@@ -193,13 +194,15 @@ export async function findPublicIdeaMatches(
     where: {
       slug: ref.projectSlug,
       archivedAt: null,
-      visibility: "public",
-      acceptsGuestIdeas: true,
       organisation: { slug: ref.orgSlug, archivedAt: null },
     },
-    select: { id: true, organisationId: true },
+    select: { id: true, organisationId: true, visibility: true, acceptsGuestIdeas: true },
   });
   if (!project) return { status: 404, error: "not_found", message: "Public issue intake is not available for this project." };
+  // Never expose internal issues or duplicate suggestions for private projects (#1048).
+  if (project.visibility === "private") {
+    return { status: 200, matches: [] };
+  }
 
   const consume = dependencies.consume ?? consumeRateLimits;
   const limited = await consume([
@@ -241,11 +244,9 @@ export async function createPublicIdea(
     where: {
       slug: ref.projectSlug,
       archivedAt: null,
-      visibility: "public",
-      acceptsGuestIdeas: true,
       organisation: { slug: ref.orgSlug, archivedAt: null },
     },
-    select: { id: true, name: true, organisationId: true },
+    select: { id: true, name: true, organisationId: true, visibility: true, acceptsGuestIdeas: true },
   });
   if (!project) return { status: 404, error: "not_found", message: "Public issue intake is not available for this project." };
 
@@ -299,7 +300,8 @@ export async function createPublicIdea(
     return { status: 429, error: "rate_limited", message: "Too many reports were submitted. Please wait and try again.", retryAfterSeconds: retrySeconds(limited.retryAfterMs) };
   }
 
-  if (!input.acknowledgeSimilar) {
+  // Never expose internal issues on a private project's shared feedback portal (#1048).
+  if (!input.acknowledgeSimilar && project.visibility !== "private") {
     const matches = await findSimilarIssues(db as PrismaClient, {
       organisationId: project.organisationId,
       projectId: project.id,
@@ -318,7 +320,7 @@ export async function createPublicIdea(
   const description = publicIdeaDescription(input);
   try {
     const idea = await db.$transaction(async (tx) => {
-      const reporter = await tx.user.upsert({
+      const reporter = dependencies.submittedById ? { id: dependencies.submittedById } : await tx.user.upsert({
         where: { email: publicReporterEmail(project.id) },
         update: {},
         create: {
@@ -347,6 +349,9 @@ export async function createPublicIdea(
         },
         select: { id: true, number: true },
       });
+      if (dependencies.submittedById) {
+        await tx.publicSubmission.create({ data: { ideaId: created.id, userId: dependencies.submittedById } });
+      }
       if (checkedScreenshot) {
         await tx.attachment.create({
           data: {

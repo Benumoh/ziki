@@ -11,6 +11,8 @@ See the [handbook](docs/handbook.md) for the agent work feed (`GET /<org>/<proje
 
 Brand mark: `public/ziki-mark.svg`.
 
+Security scan payment behavior is documented in [Security checks](docs/security-checks.md#first-deeper-scan-payment-gate-18-nov).
+
 ## Stack
 
 - Next.js 16 (App Router) + React 19 + TypeScript + Tailwind

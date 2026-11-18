@@ -967,7 +967,6 @@ async function loadFacts(ids: string[]): Promise<Map<string, IssueFacts>> {
       assigneeId: true,
       createdByAgentId: true,
       pullRequestUrl: true,
-      outsideWork: { select: { agentId: true } },
       createdByAgent: { select: { ownerUserId: true } },
       claims: { select: { status: true, releasedAt: true, releaseReason: true, beneficiaryUserId: true, agentId: true, dispatcherUserId: true, agent: { select: { ownerUserId: true } } } },
       deliveries: { select: { pullRequestUrl: true, agentId: true } },
@@ -985,7 +984,6 @@ async function loadFacts(ids: string[]): Promise<Map<string, IssueFacts>> {
         assigneeId: bug.assigneeId,
         createdByAgentId: bug.createdByAgentId,
         createdByAgent: bug.createdByAgent,
-        outsideWork: bug.outsideWork,
         pullRequestUrl: bug.pullRequestUrl,
         // #force-merge: the claim a force-merged fix was done under is released at the merge, but its agent still
         // stands where the holder does, so it isn't asked to judge or report on its own work.

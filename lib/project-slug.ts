@@ -51,6 +51,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "leaderboard",
   "marketing",
   "milestones",
+  "my-submissions",
   "notes",
   "notifications",
   "org",

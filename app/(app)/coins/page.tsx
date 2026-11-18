@@ -11,11 +11,13 @@ import { ZikiPlans } from "@/components/coins/ziki-plans";
 import { discountedCents } from "@/lib/coins/plans";
 import { discountPercentFor, liveSubscriptionOf, syncUserSubscriptions } from "@/lib/coins/subscription";
 import { UrlNotice } from "@/components/coins/url-notice";
+import { safeReturnTo } from "@/lib/coins/return-to";
 
 export const metadata = { title: "Ziks" };
 export const dynamic = "force-dynamic";
 
 const card = "rounded-[22px] border border-zk-border bg-zk-surface p-5 sm:p-6";
+const notice = "m-0 rounded-2xl px-4 py-3 text-sm font-semibold";
 const label = "text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted";
 
 /** What a ledger row says happened, for the activity list. */
@@ -30,12 +32,25 @@ const KIND_LABEL = {
   check_payment: "Unlocked security fixes",
 } as const;
 
+/** Scan admission and finding unlocks share an accounting kind, but not an Activity description. */
+function activityLabel(entry: { kind: keyof typeof KIND_LABEL; sourceKey: string }): string {
+  if (entry.kind === "check_payment") {
+    if (entry.sourceKey.startsWith("deeper-scan:")) return "Deeper scan";
+    if (entry.sourceKey.startsWith("rescan:")) return "Scan again";
+  }
+  return KIND_LABEL[entry.kind];
+}
+
 /**
  * Ziks (#ziki-coins): your wallet, the packs you can buy with Stripe, your plan,
  * and what moved. Buying is Stripe Checkout; the wallet is only credited when
  * Stripe's webhook says the payment went through. Earning and withdrawing are on /coins/payouts (the Withdraw page).
  */
-type CoinsQuery = { bought?: string; subscribed?: string; error?: string };
+function hasRecentPurchase(entries: { kind: string; createdAt: Date }[]): boolean {
+  return entries.some((entry) => entry.kind === "purchase" && Date.now() - entry.createdAt.getTime() < 10 * 60 * 1000);
+}
+
+type CoinsQuery = { bought?: string; subscribed?: string; error?: string; returnTo?: string };
 
 export default async function CoinsPage({ searchParams }: { searchParams?: Promise<CoinsQuery> }) {
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
@@ -50,24 +65,33 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       where: { account: "wallet", userId: user.id, kind: { in: ["purchase", "fund_issue", "refund", "check_payment"] } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 12,
-      select: { id: true, kind: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
+      select: { id: true, kind: true, sourceKey: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
     }),
   ]);
   const configured = stripeConfigured();
+  // Whether the Stripe webhook has already credited what was just paid for (a purchase in the last few minutes).
+  const justCredited = hasRecentPurchase(entries);
+  // Came from a deeper scan's checkout (#deeper-scan-gate): after paying, Stripe sends them back to that scan.
+  const returnTo = safeReturnTo(query.returnTo);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
-      <Link href="/home" className="self-start text-sm font-semibold text-zk-accent hover:underline">â† Back</Link>
+      <Link href="/home" className="self-start text-sm font-semibold text-zk-accent hover:underline">← Back</Link>
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">Ziks</h1>
-        <p className="mt-1 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. One Zik is {zikToCents(1)}Â¢.</p>
+        <p className="mt-1 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. One Zik is {zikToCents(1)}¢.</p>
       </div>
 
+      {/* One-time notices: shown on arrival, then the query is dropped from the address (UrlNotice) so a refresh does not bring them back. */}
       {query.bought === "1" ? (
-        <p role="status" className="m-0 rounded-2xl bg-zk-ok-bg px-4 py-3 text-sm font-semibold text-zk-ok-fg">Thanks. Your Ziks arrive as soon as Stripe confirms the payment, usually within a few seconds.</p>
+        <UrlNotice role="status" className={`${notice} bg-zk-ok-bg text-zk-ok-fg`}>
+          {justCredited ? "Thanks. Your payment went through and your Ziks are in your wallet." : "Thanks. Your Ziks arrive as soon as Stripe confirms the payment, usually within a few seconds."}
+        </UrlNotice>
       ) : null}
       {query.subscribed === "1" ? (
-        <p role="status" className="m-0 rounded-2xl bg-zk-ok-bg px-4 py-3 text-sm font-semibold text-zk-ok-fg">Thanks. Your plan is on, and this month&apos;s Ziks arrive as soon as Stripe confirms the payment, usually within a few seconds.</p>
+        <UrlNotice role="status" className={`${notice} bg-zk-ok-bg text-zk-ok-fg`}>
+          {subscription ? `Thanks. Your plan is on, and every pack is now ${discountPercent}% cheaper.` : "Thanks. Your plan shows here as soon as Stripe confirms the payment, usually within a few seconds."}
+        </UrlNotice>
       ) : null}
       {query.error ? <UrlNotice role="alert" className="m-0 rounded-2xl bg-zk-warn-bg px-4 py-3 text-sm font-semibold text-zk-warn-fg">{query.error}</UrlNotice> : null}
 
@@ -94,13 +118,14 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
               <p className="m-0 text-xs text-zk-muted">Ziks</p>
               <form action={buyZiksAction} className="mt-4">
                 <input type="hidden" name="packId" value={pack.id} />
+                {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
                 <button
                   type="submit"
                   disabled={!configured}
-                  className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-full border border-zk-border bg-zk-surface px-2.5 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Buy for {formatUsd(discountedCents(zikToCents(pack.zik), discountPercent))}
-                  {discountPercent > 0 ? <s className="ml-2 font-medium text-zk-muted">{formatUsd(zikToCents(pack.zik))}</s> : null}
+                  {discountPercent > 0 ? <s className="ml-1.5 font-medium text-zk-muted">{formatUsd(zikToCents(pack.zik))}</s> : null}
                 </button>
               </form>
             </li>
@@ -120,8 +145,8 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
             {entries.map((entry) => (
               <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm text-zk-text">
                 <span className="flex-1">
-                  {KIND_LABEL[entry.kind]}
-                  {entry.bug ? <span className="text-zk-muted"> Â· #{entry.bug.number} {entry.bug.title}</span> : null}
+                  {activityLabel(entry)}
+                  {entry.bug ? <span className="text-zk-muted"> · #{entry.bug.number} {entry.bug.title}</span> : null}
                   <span className="block text-xs text-zk-muted"><LocalTime date={entry.createdAt} /></span>
                 </span>
                 <span className={`font-mono font-bold tabular-nums ${entry.amount < 0 ? "text-zk-text2" : "text-zk-ok-fg"}`}>

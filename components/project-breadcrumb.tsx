@@ -76,7 +76,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
     if (second) return [{ label: "Forum", href: projectPath(ref, "/forum") }, { label: "Discussion" }];
     return named("Forum");
   }
-  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", agents: "Active agents", report: "Report an issue", import: "Import delivered work" };
+  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", agents: "Active agents", report: "Report an issue" };
   return pages[first] ? named(pages[first]) : [];
 }
 
@@ -87,6 +87,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
  */
 function narrowPage(pathname: string, ref: ProjectRef): boolean {
   const [first, second] = pathname.slice(projectPath(ref).length).replace(/^\/+|\/+$/g, "").split("/");
+  if (["feedback", "contribute", "report", "track", "public-issues"].includes(first ?? "")) return true;
   if (first === "workstream" || first === "agents") return true;
   return first === "ideas" && !(second && /^[0-9]+$/.test(second));
 }
@@ -142,7 +143,6 @@ export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
           </>
         )}
       </ol>
-      {ref ? <Link href={`${projectPath(ref)}/import`} className={`${crumb} ml-auto shrink-0 text-zk-accent`}>Import work</Link> : null}
     </nav>
   );
 }
