@@ -31,6 +31,15 @@ const KIND_LABEL = {
   check_payment: "Unlocked security fixes",
 } as const;
 
+/** Scan admission and finding unlocks share an accounting kind, but not an Activity description. */
+function activityLabel(entry: { kind: keyof typeof KIND_LABEL; sourceKey: string }): string {
+  if (entry.kind === "check_payment") {
+    if (entry.sourceKey.startsWith("deeper-scan:")) return "Deeper scan";
+    if (entry.sourceKey.startsWith("rescan:")) return "Scan again";
+  }
+  return KIND_LABEL[entry.kind];
+}
+
 /**
  * Ziks (#ziki-coins): your wallet, the packs you can buy with Stripe, your plan,
  * and what moved. Buying is Stripe Checkout; the wallet is only credited when
@@ -55,7 +64,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       where: { account: "wallet", userId: user.id, kind: { in: ["purchase", "fund_issue", "refund", "check_payment"] } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 12,
-      select: { id: true, kind: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
+      select: { id: true, kind: true, sourceKey: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
     }),
   ]);
   const configured = stripeConfigured();
@@ -132,7 +141,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
             {entries.map((entry) => (
               <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm text-zk-text">
                 <span className="flex-1">
-                  {KIND_LABEL[entry.kind]}
+                  {activityLabel(entry)}
                   {entry.bug ? <span className="text-zk-muted"> · #{entry.bug.number} {entry.bug.title}</span> : null}
                   <span className="block text-xs text-zk-muted"><LocalTime date={entry.createdAt} /></span>
                 </span>

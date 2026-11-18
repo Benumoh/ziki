@@ -90,3 +90,13 @@
 
 - Checkpoint 4 — Final verification for the refreshed resolution: the full run passed lint (0 errors, 32 warnings), typecheck and all 2,271 unit tests across 167 files. The prior PDF timeout did not recur. No unmerged paths or whitespace errors remain. Preserved main's three-step scan UI and its paymentRequired/Start-event integration hook.
 - Outcome: resolution complete locally at version 0.1.248, ready for the approved publication step. No push has been performed; awaiting the owner's explicit push approval.
+
+## 2026-11-18 — Wallet Activity labels for security payments
+
+- Objective and starting point: the Ziks Activity list calls every `check_payment` an unlock, including the 20-Zik deeper scan and 10-Zik rescan. Confirmed PR #827 merged; created the owner-approved `feat/wallet-activity-label-fix` branch from upstream main `08dc6715` (0.1.248), preserving the previous branch.
+- Checkpoint 1 — Investigation: the immutable ledger already distinguishes scan admission (`deeper-scan:`), rescans (`rescan:`) and finding unlocks (`check:`) in sourceKey. Update only the Activity query/label selection; no payment, accounting, schema or stored history change is required.
+
+- Checkpoint 2 — Implementation: the wallet Activity query now reads sourceKey, and its local label formatter distinguishes deeper scans and rescans before falling back to the existing kind labels. Updated the security-check guide; version is 0.1.249. No new tests assert static copy, in keeping with the repository test rules; existing required verification follows.
+
+- Checkpoint 3 — Verification: full verification passed lint (0 errors, 32 warnings) and typecheck. All 2,259 tests that ran passed, but Vitest exited with two worker-startup timeout errors before the on-call invitation and My stakes files could run. An isolated rerun of those two files passed all 14 tests without code/configuration changes. This is full-run coverage plus a targeted recovery, not a single clean full-suite exit. `git diff --check` passed.
+- Outcome: display-only fix complete locally on `feat/wallet-activity-label-fix` at version 0.1.249. Deeper scan/rescan labels use existing reference keys; unlock and all other activity labels keep their prior behavior. No database writes, ledger changes or browser verification were performed. Commit/push publication requires the owner's approval; no push or follow-up PR has been made.
