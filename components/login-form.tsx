@@ -45,6 +45,8 @@ export function LoginForm({
 
   return (
     <form
+      // POST, so a submit before hydration never puts the password in the URL.
+      method="post"
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();

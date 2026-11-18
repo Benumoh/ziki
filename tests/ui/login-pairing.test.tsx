@@ -6,7 +6,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LoginPage from "@/app/(auth)/login/page";
 import { loginAction } from "@/app/actions/auth";
+import { renderToString } from "react-dom/server";
 import { LoginForm } from "@/components/login-form";
+import { ResetPasswordForm } from "@/components/reset-password-form";
 import { PairForm } from "@/app/(app)/settings/agents/pair/pair-form";
 
 const pairAgentAction = vi.hoisted(() => vi.fn());
@@ -23,6 +25,7 @@ vi.mock("@/lib/google-oauth", () => ({
 vi.mock("@/app/actions/auth", () => ({
   googleSignInAction: vi.fn(),
   loginAction: vi.fn(),
+  resetPasswordAction: vi.fn(),
 }));
 
 // Auth split frame mounts ThemeToggle; keep the page unit test free of
@@ -105,6 +108,15 @@ describe("the sign-in form's code step (#648)", () => {
     const sent = login.mock.calls[1][1] as FormData;
     expect(sent.get("email")).toBe("ada@example.com");
     expect(sent.get("totp")).toBe("123456");
+  });
+
+  it("posts if the browser submits it before the page has loaded, so the password never goes into the address", () => {
+    // The server's HTML is what a browser submits on its own before React takes over: a GET would put
+    // ?email=…&password=… in the address, the history and the server logs.
+    for (const form of [<LoginForm key="login" />, <ResetPasswordForm key="reset" token="t" />]) {
+      const html = new DOMParser().parseFromString(renderToString(form), "text/html");
+      expect(html.querySelector("form")?.method).toBe("post");
+    }
   });
 });
 

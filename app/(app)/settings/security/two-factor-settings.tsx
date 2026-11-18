@@ -127,6 +127,8 @@ export function TwoFactorSettings({
   if (step.name === "scan") {
     return (
       <form
+        // POST, so a submit before hydration never puts the password in the URL.
+        method="post"
         className="mt-4 space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
@@ -179,6 +181,8 @@ export function TwoFactorSettings({
   if (step.name === "password") {
     return (
       <form
+        // POST, so a submit before hydration never puts the password in the URL.
+        method="post"
         className="mt-4 space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
@@ -216,6 +220,8 @@ export function TwoFactorSettings({
     const disabling = step.name === "disable";
     return (
       <form
+        // POST, so a submit before hydration never puts the password in the URL.
+        method="post"
         className="mt-4 space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
