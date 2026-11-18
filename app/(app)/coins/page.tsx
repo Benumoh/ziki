@@ -11,6 +11,7 @@ import { ZikiPlans } from "@/components/coins/ziki-plans";
 import { discountedCents } from "@/lib/coins/plans";
 import { discountPercentFor, liveSubscriptionOf, syncUserSubscriptions } from "@/lib/coins/subscription";
 import { UrlNotice } from "@/components/coins/url-notice";
+import { safeReturnTo } from "@/lib/coins/return-to";
 
 export const metadata = { title: "Ziks" };
 export const dynamic = "force-dynamic";
@@ -49,7 +50,7 @@ function hasRecentPurchase(entries: { kind: string; createdAt: Date }[]): boolea
   return entries.some((entry) => entry.kind === "purchase" && Date.now() - entry.createdAt.getTime() < 10 * 60 * 1000);
 }
 
-type CoinsQuery ={ bought?: string; subscribed?: string; error?: string };
+type CoinsQuery = { bought?: string; subscribed?: string; error?: string; returnTo?: string };
 
 export default async function CoinsPage({ searchParams }: { searchParams?: Promise<CoinsQuery> }) {
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
@@ -70,6 +71,8 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
   const configured = stripeConfigured();
   // Whether the Stripe webhook has already credited what was just paid for (a purchase in the last few minutes).
   const justCredited = hasRecentPurchase(entries);
+  // Came from a deeper scan's checkout (#deeper-scan-gate): after paying, Stripe sends them back to that scan.
+  const returnTo = safeReturnTo(query.returnTo);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -115,6 +118,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
               <p className="m-0 text-xs text-zk-muted">Ziks</p>
               <form action={buyZiksAction} className="mt-4">
                 <input type="hidden" name="packId" value={pack.id} />
+                {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
                 <button
                   type="submit"
                   disabled={!configured}
