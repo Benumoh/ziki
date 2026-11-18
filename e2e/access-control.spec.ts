@@ -19,6 +19,15 @@ async function evidence(page: Page, testInfo: TestInfo, name: string) {
   await testInfo.attach(name, { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 }
 
+/** Where an address ends up after redirects: its path (not the query, which carries the sign-in callback), and whether it says not found. */
+async function landing(page: Page, path: string): Promise<string> {
+  await page.goto(path);
+  await page.waitForLoadState("domcontentloaded");
+  const url = new URL(page.url());
+  const notFound = await page.getByText(NOT_FOUND).count();
+  return `${url.pathname}${notFound > 0 ? " (not found)" : ""}`;
+}
+
 async function expectHidden(page: Page, path: string) {
   await page.goto(path);
   await expect(page.getByText(NOT_FOUND).first()).toBeVisible();
@@ -41,12 +50,18 @@ test.describe("signed-out visitor", () => {
     await evidence(page, testInfo, "signed-out: public issues list");
   });
 
-  test("gets not found for a private project, its issue and its public-issues page", async ({ page }, testInfo) => {
-    await expectHidden(page, PRIVATE);
-    await evidence(page, testInfo, "signed-out: private project overview is not found");
-    await expectHidden(page, `${PRIVATE}/public-issues`);
-    await expectHidden(page, `${PRIVATE}/public-issues/2`);
-    await evidence(page, testInfo, "signed-out: private public-issue page is not found");
+  test("is sent to sign in for a private project, exactly as for one that doesn't exist", async ({ page }, testInfo) => {
+    // Signed out, the app layout gives the guest page only to a public project; anything else asks to sign in.
+    // So a private project and a missing one must land on the same page, and the private one's name never shows.
+    for (const sub of ["", "/public-issues", "/public-issues/2"]) {
+      const missing = await landing(page, `/${OUTSIDE_ORG}/no-such-project-e2e${sub}`);
+      const hidden = await landing(page, `${PRIVATE}${sub}`);
+      expect(hidden).toBe(missing);
+      await expect(page.getByText(OUTSIDE_PRIVATE_ISSUE)).toHaveCount(0);
+      await expect(page.getByText("Outside private", { exact: true })).toHaveCount(0);
+      expect(await page.title()).not.toContain("Outside private");
+      if (sub === "") await evidence(page, testInfo, "signed-out: private project asks to sign in, like a missing one");
+    }
   });
 
   test("is never sent the private project by the public ideas or search APIs", async ({ request }) => {

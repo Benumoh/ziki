@@ -6,20 +6,20 @@ Daniel's part of the Ziki work split: security, access control and contributions
 
 | Who | Public project | Private project |
 | --- | --- | --- |
-| Signed-out visitor | Public overview, public issues (`/<org>/<project>/public-issues`), guest ideas when the project accepts them. App pages ask to sign in. | Nothing. It answers like a project that doesn't exist. |
+| Signed-out visitor | Public overview, public issues (`/<org>/<project>/public-issues`), guest ideas when the project accepts them. App pages ask to sign in. | Nothing. It asks them to sign in, exactly as a project that doesn't exist does. |
 | Newly registered user, or signed-in non-member | Opens the project and reads it. Can't contribute until they join (open project) or are accepted (request to join). | Nothing (404). |
 | Accepted contributor (project member only) | Opens and contributes in that project only. Not an organisation member, never an admin. | Opens it only if they're a member of that project. |
 | Organisation member | Every project in the organisation. | Every project in the organisation. |
 | Organisation owner or admin | As a member, plus settings, join requests, invites, deleted issues and private security findings. | The same. |
 | Site super admin | Everything. | Everything. |
 
-A private project someone can't see always answers exactly like a missing one (404, or "Project not found"). A request never confirms that a private project exists.
+A private project someone can't see always answers exactly like a missing one (404 or "Project not found" when signed in; the sign-in page when signed out). A request never confirms that a private project exists.
 
 ## Where it is enforced
 
 | Surface | Gate | Result |
 | --- | --- | --- |
-| Every page under `/<org>/<project>` | `requireProject` (`lib/project-route.ts`): public, OR a member of the project, OR a member of its organisation | ✅ Works. Tested for every role in `tests/security/access-control-matrix.test.ts`. |
+| Every page under `/<org>/<project>` | `requireProject` (`lib/project-route.ts`): public, OR a member of the project, OR a member of its organisation | ✅ Works. Tested for every role in `tests/security/access-control-matrix.test.ts`. The site super admin looped between the page and the organisation switch on any organisation they don't belong to; fixed in #836. |
 | Organisation area `/<org>/<project>/org/*` | Layout requires organisation membership. Invites and join requests are listed for owners and admins only. | ✅ Works. |
 | Issue addresses `/<org>/<project>/<n>`, and the issue page's title and share tags | `findProjectIssue`. Signed out: public projects only. | ✅ Fixed in #679 (Ziki #930). |
 | Public issues and project metadata | `findPublicProject`, `findPublicIssue`: public, unarchived, and never a security finding | ✅ Works. |

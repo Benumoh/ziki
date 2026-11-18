@@ -197,6 +197,16 @@ describe("project pages: requireProject, for each role", () => {
     const result = await open(PEOPLE["signed-in non-member (in another organisation)"], "vault");
     expect(result.outcome).toBe("404");
   });
+
+  it("switches only people who belong to the organisation, so the super admin never loops", async () => {
+    // Someone whose current organisation is another one. The current organisation ignores a pick they aren't a
+    // member of, so a switch for the super admin (not a member of org-acme) would come straight back here.
+    current.organisationId.mockResolvedValue("org-other");
+    const member = await open(PEOPLE["organisation member"], "vault");
+    expect(member.outcome).toMatch(/^redirect \/projects\/vault\/open\?organisation=org-acme/);
+    const superAdmin = await open(PEOPLE["site super admin"], "vault");
+    expect(superAdmin).toMatchObject({ outcome: "opens", isOrgAdmin: true });
+  });
 });
 
 function issueFile(projectId: string, visibility: Visibility, extra: Record<string, unknown> = {}) {
