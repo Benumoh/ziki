@@ -9,7 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, fixPaidSinceQuickScan, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { rescanQuote, startRescan, type RescanOutcome, type RescanQuote } from "@/lib/security-checks/rescan";
 import { previewScan } from "@/lib/security-checks/preview";
-import { saveCodeFindings } from "@/lib/security-checks/code-findings";
+import { ensureCodeBaseline, saveCodeFindings } from "@/lib/security-checks/code-findings";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
 import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
@@ -104,7 +104,9 @@ export async function rescanSite(checkId: string): Promise<RescanOutcome> {
         const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh: await fixPaidSinceQuickScan(scan.target) });
         if (result.ok) {
           await saveQuickScan(scan.targetId, await withSiteAddress(summarisePreview(result)));
-          // Code rechecks its own earlier findings and adds only new ones to the main list (18 Nov).
+          // Compared with the earlier scan's quick scan like the agents' findings (18 Nov, Tolu): an earlier scan with
+          // none saved gets this one first, so what was already there reads Still there, not New.
+          await ensureCodeBaseline(prisma, checkId, result);
           await saveCodeFindings(prisma, next, result);
         }
       }
