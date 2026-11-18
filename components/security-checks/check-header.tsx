@@ -51,7 +51,7 @@ export function CheckHeader({ report, backFromBuying = false }: { report: CheckR
       {/* Waiting for the deeper scan's payment (#deeper-scan-gate): nothing is moving yet, so instead of "Ziki is
           planning" it says the quick scan is done; Start in the steps below opens the checkout. */}
       {report.paymentRequired ? (
-        <DeeperScanStart checkId={report.checkId} site={report.target.value} price={DEEPER_SCAN_PRICE_ZIKS} quickTotal={report.quickScan?.total ?? null} covers={DEEPER_SCAN_COVERS[report.target.kind]} backFromBuying={backFromBuying} />
+        <DeeperScanStart checkId={report.checkId} site={report.target.value} price={DEEPER_SCAN_PRICE_ZIKS} covers={DEEPER_SCAN_COVERS[report.target.kind]} backFromBuying={backFromBuying} />
       ) : (
         <CheckActivity site={report.target.value} phase={phase} done={done} total={total} />
       )}

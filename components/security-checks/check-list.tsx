@@ -24,7 +24,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
   const [quick, checks] = tabs;
   // Every finding not already in the app can be sent from here, a rescan's earlier ones still there included (18 Nov, Tolu).
-  const fixable = (checks.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id));
+  // The quick scan's findings can be ticked and fixed too, from their own section (18 Nov).
+  const fixable = [...(quick.findings ?? []), ...(checks.findings ?? [])].filter(({ id, fix }) => !fix && picked.includes(id));
   const selected = fixable.map(({ id }) => id);
   const toggle = (id: string) => {
     const next = picked.includes(id) ? picked.filter((item) => item !== id) : [...picked, id];
@@ -52,17 +53,19 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
     <div id="check-results" className="scroll-mt-24 space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
       {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
       {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
-      {/* Once Ziki's code checks are in the main list (18 Nov), the quick scan isn't shown apart: it would list them twice. */}
+      {/* Ziki's code checks (the quick scan) keep their own section at the top, before and after payment (18 Nov):
+          their findings can be ticked and fixed here, and the Deeper scan below lists only the agents' work. */}
       {/* The id: the deeper scan's checkout jumps here from "View quick scan results" (#deeper-scan-gate). */}
       {quick.merged ? null : (
         <details id="quick-scan-results" open={!(checks.findings ?? []).length} className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
           <summary className={SECTION_HEADING}>
             Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
           </summary>
-          <TabRows tab={quick} selected={selected} onToggle={toggle} />
+          <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
         </details>
       )}
-      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+      {/* The id: the Deeper scan step at the top of the page jumps here (18 Nov). */}
+      <details id="deeper-scan-results" open className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>

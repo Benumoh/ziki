@@ -74,15 +74,37 @@ function codeArea(area: string): string {
   return area.replace(/^Automatic check:\s*/, "");
 }
 
+/** A finding from Ziki's own code checks (the quick scan), saved in the list since 18 Nov, rather than an agent's. */
+function isQuickScanFinding(finding: ReportFinding): boolean {
+  return /^Automatic check:/.test(finding.area);
+}
+
+/** One finding as a row of the list, tickable to fix. */
+function rowOf(report: CheckReport, finding: ReportFinding): ListFinding {
+  return {
+    id: finding.id,
+    severity: finding.severity,
+    title: finding.title,
+    line: finding.recheckNote ? shortLine(finding.recheckNote) : shortLine(finding.description),
+    area: isQuickScanFinding(finding) ? codeArea(finding.area) : finding.area,
+    howToFix: finding.howToFix ? shortLine(finding.howToFix) : null,
+    fix: finding.fix,
+    price: finding.price,
+    checkId: finding.checkId,
+    recheck: finding.recheck,
+    isNew: report.previousCheckId !== null && finding.recheck === null,
+    hint: rescanHint(report, finding),
+  };
+}
+
 function quickScanTab(report: CheckReport): ListTab {
-  // Waiting for the deeper scan's payment (#deeper-scan-gate): the quick scan's findings are all there is, so they
-  // show in their own Quick scan section, not under a Deeper scan that hasn't started.
-  if (report.codeInList && report.paymentRequired) {
-    const rows = report.findings.map((finding) => ({ severity: finding.severity, title: finding.title, line: shortLine(finding.description), area: codeArea(finding.area) }));
-    return { key: "quick", title: "Quick scan", count: rows.length, state: { label: "Done", tone: "done" }, scanRows: rows, note: "No threats found by what any browser can see." };
-  }
+  // Saved as real findings (18 Nov, Tolu's change): the quick scan's findings keep their own section at the top, before
+  // and after the deeper scan is paid for, with the same tick box, See the fix and Fix selected as the agents' (18 Nov,
+  // Seyi). They can be fixed without buying the deeper scan. The Deeper scan below lists only what the agents check.
   if (report.codeInList) {
-    return { key: "quick", title: "Quick scan", count: 0, state: { label: "Done", tone: "done" }, merged: true, note: "The quick scan's findings are in the list below." };
+    const findings = report.findings.filter(isQuickScanFinding).map((finding) => rowOf(report, finding));
+    const fixed = report.fixed.filter(isQuickScanFinding).map((finding) => rowOf(report, finding));
+    return { key: "quick", title: "Quick scan", count: findings.length, state: { label: "Done", tone: "done" }, findings, fixed, note: "No threats found by what any browser can see." };
   }
   const scan = report.quickScan;
   if (!scan) return { key: "quick", title: "Quick scan", count: 0, state: { label: "Not run", tone: "waiting" }, note: "No quick scan was run when this was added." };
@@ -102,30 +124,19 @@ function deeperScanTab(report: CheckReport): ListTab {
   if (report.paymentRequired) {
     return { ...base, count: 0, state: { label: "Not started", tone: "waiting" }, notChecked: DEEPER_SCAN_COVERS[report.target.kind], note: "Agents start once you run the deeper scan." };
   }
-  const toRow = (finding: ReportFinding): ListFinding => ({
-    id: finding.id,
-    severity: finding.severity,
-    title: finding.title,
-    line: finding.recheckNote ? shortLine(finding.recheckNote) : shortLine(finding.description),
-    area: finding.area,
-    howToFix: finding.howToFix ? shortLine(finding.howToFix) : null,
-    fix: finding.fix,
-    price: finding.price,
-    checkId: finding.checkId,
-    recheck: finding.recheck,
-    isNew: report.previousCheckId !== null && finding.recheck === null,
-    hint: rescanHint(report, finding),
-  });
-  const findings = report.findings.map(toRow);
-  const fixed = report.fixed.map(toRow);
-  // No agent parts yet: say so, but still list any findings already in (the quick scan's, once they're saved in the
-  // list), instead of hiding them behind "Planning".
+  // The agents' own findings: the quick scan's are in the Quick scan section above (18 Nov).
+  const agents = (finding: ReportFinding) => !report.codeInList || !isQuickScanFinding(finding);
+  const agentFindings = report.findings.filter(agents);
+  const agentFixed = report.fixed.filter(agents);
+  const findings = agentFindings.map((finding) => rowOf(report, finding));
+  const fixed = agentFixed.map((finding) => rowOf(report, finding));
+  // No agent parts yet: say so, but still list any findings already in, instead of hiding them behind "Planning".
   if (!parts.length) {
     const planning = report.status !== "cancelled" && report.status !== "done";
     const state: ListTab["state"] = planning ? { label: "Planning", tone: "working" } : { label: "None", tone: "waiting" };
     return { ...base, count: findings.length, state, findings, fixed, note: planning ? "Ziki is planning the checks." : "No checks were run." };
   }
-  const withFindings = new Set([...report.findings, ...report.fixed].map((finding) => finding.partId));
+  const withFindings = new Set([...agentFindings, ...agentFixed].map((finding) => finding.partId));
   const finished = (part: ReportPart) => part.status === "done" || part.status === "skipped";
   const done = parts.filter(finished).length;
   // A cancelled check doesn't list its unfinished parts as still being checked. Nor does a rescan (18 Nov, Tolu):

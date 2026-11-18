@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { buyZiksHref } from "@/lib/coins/return-to";
 import { ZikAmount } from "@/components/zik-symbol";
@@ -9,21 +9,13 @@ import { useDeeperScan, type Checkout } from "@/components/security-checks/use-d
 
 type Cover = { title: string; why: string };
 
-/** What the free quick scan did (docs/security-checks.md, step 2): passive, the home page only, code only. */
-const QUICK_SCAN_CHECKED = [
-  "HTTPS redirect and the TLS certificate (validity, expiry)",
-  "Security response headers: CSP, HSTS, X-Frame-Options, Referrer-Policy and others",
-  "Cookie flags on the home page: Secure, HttpOnly, SameSite",
-  "Email DNS records: SPF and DMARC",
-];
-
 /**
  * The top of a scan's page while its deeper scan waits for payment (#deeper-scan-gate, 18 Nov). Chloe's steps box
  * (scan-steps.tsx) shows the Deeper scan step locked with a Start button; Start sends "zk:start-deeper-scan", which
  * opens this checkout. Her rule: the price shows only once the checkout opens. Back from buying Ziks (`?bought=1`),
  * the checkout opens again by itself, to press Pay. It never pays by itself.
  */
-export function DeeperScanStart({ checkId, site, price, quickTotal, covers, backFromBuying = false }: { checkId: string; site: string; price: number; quickTotal: number | null; covers: Cover[]; backFromBuying?: boolean }) {
+export function DeeperScanStart({ checkId, site, price, covers, backFromBuying = false }: { checkId: string; site: string; price: number; covers: Cover[]; backFromBuying?: boolean }) {
   const deeper = useDeeperScan(checkId);
   const router = useRouter();
   const pathname = usePathname();
@@ -51,45 +43,27 @@ export function DeeperScanStart({ checkId, site, price, quickTotal, covers, back
         </h1>
         <p className="m-0 mt-1 text-[15px] font-bold text-zk-accent">Start the deeper scan to have agents check inside.</p>
       </div>
-      <DeeperScanCheckout checkId={checkId} site={site} price={price} quickTotal={quickTotal} covers={covers} deeper={deeper} />
+      <DeeperScanCheckout checkId={checkId} site={site} price={price} covers={covers} deeper={deeper} />
     </>
   );
 }
 
-type Choice = "quick" | "deeper";
-
 /**
- * The checkout (#deeper-scan-gate, 18 Nov): a large window over the blurred page, like Add asset. Two cards to pick
- * from, like plans: the free quick scan (already done) and the paid deeper scan (picked at first). The panel under
- * them follows the pick: the quick scan's technical detail and a way back to its results, or the price, the wallet
- * and Pay. Paying happens only from here.
+ * The checkout (#deeper-scan-gate, 18 Nov): a large window over the blurred page, like Add asset. Only the deeper
+ * scan (18 Nov, the team: the quick scan is already done, so it isn't offered again): what agents check, then the
+ * price, the wallet and Pay. Paying happens only from here.
  */
-function DeeperScanCheckout({ checkId, site, price, quickTotal, covers, deeper }: { checkId: string; site: string; price: number; quickTotal: number | null; covers: Cover[]; deeper: ReturnType<typeof useDeeperScan> }) {
+function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId: string; site: string; price: number; covers: Cover[]; deeper: ReturnType<typeof useDeeperScan> }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { open, checkout, loading, paying, close, pay } = deeper;
-  const [choice, setChoice] = useState<Choice>("deeper");
 
-  // showModal() gives the focus trap, the inert background and Escape. Each opening starts on the deeper scan.
+  // showModal() gives the focus trap, the inert background and Escape.
   useEffect(() => {
     const node = dialog.current;
     if (!node) return;
-    if (open && !node.open) {
-      setChoice("deeper");
-      node.showModal();
-    }
+    if (open && !node.open) node.showModal();
     if (!open && node.open) node.close();
   }, [open]);
-
-  /** Close, open the quick scan's section on the page and bring it into view. */
-  function viewQuickScan() {
-    close();
-    // The quick scan's own section, or the list it was merged into (18 Nov).
-    const section = document.getElementById("quick-scan-results") ?? document.getElementById("check-results");
-    if (section instanceof HTMLDetailsElement) section.open = true;
-    section?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  const found = quickTotal === null ? "Done" : quickTotal === 0 ? "Nothing found" : `${quickTotal} ${quickTotal === 1 ? "problem" : "problems"} found`;
 
   return (
     // Esc is handled by onCancel; onClick only catches a click on the backdrop, which has no keyboard equivalent to add.
@@ -104,7 +78,7 @@ function DeeperScanCheckout({ checkId, site, price, quickTotal, covers, deeper }
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
-      className="m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[820px] overflow-y-auto rounded-2xl border border-zk-border bg-zk-surface p-0 text-zk-text shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[760px] overflow-y-auto rounded-2xl border border-zk-border bg-zk-surface p-0 text-zk-text shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm"
     >
       {open ? (
         <div className="flex flex-col gap-5 p-5 sm:p-6">
@@ -124,33 +98,28 @@ function DeeperScanCheckout({ checkId, site, price, quickTotal, covers, deeper }
             </button>
           </div>
 
-          {/* Two cards to pick from, like plans (Pentest-Tools' Light and Deep scans): a radio group, so arrows move between them. */}
-          <fieldset className="m-0 grid min-w-0 gap-3 border-0 p-0 sm:grid-cols-[2fr_3fr]">
-            <legend className="sr-only">Scan</legend>
-            <ChoiceCard choice="quick" picked={choice} onPick={setChoice} title="Quick scan" badge={<span className="rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Done · Free</span>}>
-              <p className="m-0 mt-2 text-sm text-zk-text2">
-                {quickTotal === null ? "Looked" : quickTotal === 0 ? "Found nothing wrong" : `Found ${quickTotal} ${quickTotal === 1 ? "problem" : "problems"}`} on the outside: security headers, HTTPS and cookies.
-              </p>
-            </ChoiceCard>
-            <ChoiceCard choice="deeper" picked={choice} onPick={setChoice} title="Deeper scan" badge={<span className="rounded-full bg-zk-tint px-2.5 py-0.5 text-xs font-bold text-zk-accent"><ZikAmount amount={price} /></span>}>
-              <p className="m-0 mt-2 text-sm text-zk-text2">Security agents check inside:</p>
-              <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
-                {covers.map((cover) => (
-                  <li key={cover.title} className="flex gap-2 text-sm">
-                    <span aria-hidden="true" className="font-bold text-zk-ok-fg">✓</span>
-                    <span className="font-semibold text-zk-text">{cover.title}</span>
-                  </li>
-                ))}
-              </ul>
-            </ChoiceCard>
-          </fieldset>
+          {/* The deeper scan: what agents check (the agents' own parts), with its price. */}
+          <section aria-labelledby="deeper-checkout-card" className="rounded-xl border-2 border-electric-blue-strong p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 id="deeper-checkout-card" className="m-0 text-sm font-bold text-zk-text">Deeper scan</h3>
+              <span className="rounded-full bg-zk-tint px-2.5 py-0.5 text-xs font-bold text-zk-accent"><ZikAmount amount={price} /></span>
+            </div>
+            <p className="m-0 mt-2 text-sm text-zk-text2">Security agents check inside:</p>
+            <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
+              {covers.map((cover) => (
+                <li key={cover.title} className="flex gap-2 text-sm">
+                  <span aria-hidden="true" className="font-bold text-zk-ok-fg">✓</span>
+                  <span className="font-semibold text-zk-text">{cover.title}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-          {/* The panel follows the pick. */}
           <div aria-live="polite">
-            {choice === "quick" ? <QuickScanDetail found={found} /> : <Wallet checkout={checkout} loading={loading} price={price} />}
+            <Wallet checkout={checkout} loading={loading} price={price} />
           </div>
 
-          {choice === "deeper" && checkout?.error ? (
+          {checkout?.error ? (
             <p role="alert" className="m-0 rounded-xl bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{checkout.error}</p>
           ) : null}
 
@@ -165,13 +134,7 @@ function DeeperScanCheckout({ checkId, site, price, quickTotal, covers, deeper }
               >
                 Cancel
               </button>
-              {choice === "quick" ? (
-                <button type="button" onClick={viewQuickScan} className={PRIMARY}>
-                  View quick scan results
-                </button>
-              ) : (
-                <PayButton checkId={checkId} checkout={checkout} loading={loading} paying={paying} price={price} pay={pay} />
-              )}
+              <PayButton checkId={checkId} checkout={checkout} loading={loading} paying={paying} price={price} pay={pay} />
             </div>
           </div>
         </div>
@@ -181,52 +144,6 @@ function DeeperScanCheckout({ checkId, site, price, quickTotal, covers, deeper }
 }
 
 const PRIMARY = "inline-flex min-h-11 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white hover:brightness-105 disabled:opacity-60";
-
-/** One pickable card: a real radio button under the whole card, so a click anywhere on it picks it. */
-function ChoiceCard({ choice, picked, onPick, title, badge, children }: { choice: Choice; picked: Choice; onPick: (choice: Choice) => void; title: string; badge: React.ReactNode; children: React.ReactNode }) {
-  const on = picked === choice;
-  return (
-    <label
-      className={`block cursor-pointer rounded-xl p-4 transition has-focus-visible:ring-2 has-focus-visible:ring-electric-blue has-focus-visible:ring-offset-2 ${
-        on ? "border-2 border-electric-blue-strong bg-zk-surface" : "border-2 border-zk-border bg-zk-bg hover:border-zk-muted"
-      }`}
-    >
-      <input type="radio" name="deeper-scan-choice" value={choice} checked={on} onChange={() => onPick(choice)} className="sr-only" />
-      <span className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2">
-          {/* The radio's dot, drawn: filled when picked. */}
-          <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-electric-blue-strong" : "border-zk-muted"}`}>
-            {on ? <span className="h-2 w-2 rounded-full bg-electric-blue-strong" /> : null}
-          </span>
-          <span className="text-sm font-bold text-zk-text">{title}</span>
-        </span>
-        {badge}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-/** Picked the quick scan: what it was, technically, and that it's already done and free. */
-function QuickScanDetail({ found }: { found: string }) {
-  return (
-    <div className="rounded-xl border border-zk-border px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="m-0 text-sm font-bold text-zk-text">Already run, at no cost</p>
-        <span className="text-sm font-semibold text-zk-text">{found}</span>
-      </div>
-      <p className="m-0 mt-2 text-sm text-zk-text2">
-        A passive, code-only check of the responses any browser gets from the home page. No AI, no agents. It looked at:
-      </p>
-      <ul className="m-0 mt-2 list-disc space-y-1 pl-5 text-sm text-zk-text">
-        {QUICK_SCAN_CHECKED.map((line) => <li key={line}>{line}</li>)}
-      </ul>
-      <p className="m-0 mt-2 text-xs text-zk-muted">
-        It sends nothing beyond those requests: no guessed paths, no forms submitted, no login pages, no port scans. That&apos;s what the deeper scan adds.
-      </p>
-    </div>
-  );
-}
 
 /** Picked the deeper scan: the price and the wallet, and the one-time loan when the wallet is short. */
 function Wallet({ checkout, loading, price }: { checkout: Checkout | null; loading: boolean; price: number }) {

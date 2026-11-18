@@ -37,13 +37,16 @@ export function ScanSteps({
     phase === "planning" ? "Planning" : phase === "stopped" ? "Stopped" : deepDone ? `Done · ${deepFound} found` : phase === "writing" ? "Writing the report" : `Agents checking · ${done} of ${total}`;
   return (
     <ol aria-label="Steps of this security check" className="mt-0 flex list-none flex-col gap-1.5 p-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-0">
-      <Step state="done" name="Quick scan" detail={quickFound === null ? "Not run" : `Done · ${quickFound} found`} />
+      <Step state="done" name="Quick scan" detail={quickFound === null ? "Not run" : `Done · ${quickFound} found`} jumpTo="quick-scan-results" />
       <Joint done />
       {paymentRequired ? (
         <li className="flex">
           <span className="inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text sm:w-auto">
             <LockIcon />
-            Deeper scan
+            {/* Its name jumps to the Deeper scan section (18 Nov); Start opens the checkout. */}
+            <button type="button" onClick={() => jumpTo("deeper-scan-results")} className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-zk-accent">
+              Deeper scan
+            </button>
             {/* The price shows only once the start pop-up opens (18 Nov, Chloe). The pop-up and payment are the
                 deeper-scan checkout's (PR 827): it opens on this button's "zk:start-deeper-scan" event. */}
             <button
@@ -57,7 +60,7 @@ export function ScanSteps({
           </span>
         </li>
       ) : (
-        <Step state={deepDone ? "done" : phase === "stopped" ? "locked" : "now"} name="Deeper scan" detail={deepState} />
+        <Step state={deepDone ? "done" : phase === "stopped" ? "locked" : "now"} name="Deeper scan" detail={deepState} jumpTo="deeper-scan-results" />
       )}
       <Joint done={deepDone} />
       <li className="flex">
@@ -71,10 +74,25 @@ export function ScanSteps({
   );
 }
 
-function Step({ state, name, detail }: { state: "done" | "now" | "locked"; name: string; detail: string }) {
+/**
+ * Clicking a step takes you to its section further down the page (18 Nov, Seyi): it opens the section if it was
+ * folded and scrolls to it. The quick scan's own section, or the list it sits in when there's no section of its own.
+ */
+function jumpTo(id: string) {
+  const section = document.getElementById(id) ?? document.getElementById("check-results");
+  if (section instanceof HTMLDetailsElement) section.open = true;
+  section?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function Step({ state, name, detail, jumpTo: target }: { state: "done" | "now" | "locked"; name: string; detail: string; jumpTo?: string }) {
+  const chip = "inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text sm:w-auto";
+  const Box = target ? "button" : "span";
   return (
     <li className="flex">
-      <span className="inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text sm:w-auto">
+      <Box
+        {...(target ? { type: "button" as const, onClick: () => jumpTo(target), title: `Go to ${name}` } : {})}
+        className={target ? `${chip} cursor-pointer text-left hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-zk-accent` : chip}
+      >
         {state === "done" ? (
           <span aria-hidden="true" className="grid h-4 w-4 place-items-center rounded-full bg-green-600 text-white">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
@@ -87,7 +105,7 @@ function Step({ state, name, detail }: { state: "done" | "now" | "locked"; name:
         {name}
         <span className={`text-xs ${state === "now" ? "font-semibold text-zk-accent" : "font-medium text-zk-muted"}`}>{detail}</span>
         <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (in progress)" : " (locked)"}</span>
-      </span>
+      </Box>
     </li>
   );
 }
