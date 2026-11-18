@@ -12,7 +12,6 @@ import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { loadCheckReport } from "@/lib/security-checks/report";
-import { siteChangeSentence } from "@/lib/security-checks/site-change";
 import { orgCard } from "../../../[org]/[project]/org/org-ui";
 
 export const metadata = { title: "Security check" };
@@ -73,17 +72,12 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
       </div>
       </SiteChatHolder>
 
-      {/* Scanned again (#security-rescan): an older scan points to the newest, and a rescan to the scan it followed. */}
+      {/* Scanned again (#security-rescan): an older scan points to the newest. A rescan has no note of its own (18 Nov,
+          Tolu): its Still there and New labels say where each finding came from, with more on hover. */}
       {report.nextCheckId ? (
         <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
           This site was scanned again since.{" "}
           <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
-        </p>
-      ) : report.previousCheckId ? (
-        <p className="m-0 px-0.5 text-sm text-zk-text2">
-          A rescan: the same checks as last time, and what the last scan found is rechecked.{" "}
-          {report.siteChange ? `${siteChangeSentence(report.siteChange)} ` : null}
-          <Link href={`/security/checks/${encodeURIComponent(report.previousCheckId)}`} className={linkClass}>See the earlier scan</Link>
         </p>
       ) : null}
 

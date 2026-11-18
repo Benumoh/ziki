@@ -1,6 +1,7 @@
 import type { SecuritySeverity } from "@prisma/client";
 import type { CheckReport, RecheckStatus, ReportFinding, ReportPart, ResultFix } from "@/lib/security-checks/report";
 import { shortLine } from "@/lib/security-checks/short-line";
+import { siteChangeSentence } from "@/lib/security-checks/site-change";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 
 /** How a severity reads on the check's list and a finding's page (16 Nov): "Critical threat", not just "Critical". */
@@ -26,6 +27,8 @@ export type ListFinding = {
   recheck: RecheckStatus | null;
   /** On a rescan, a finding this scan found for the first time (18 Nov): shown with a New label. */
   isNew: boolean;
+  /** On a rescan, what its Rechecking, Still there or New label says on hover (18 Nov, Tolu); null otherwise. */
+  hint: string | null;
   /** What sending it to the app costs now, in Ziks. */
   price: number;
 };
@@ -98,6 +101,7 @@ function deeperScanTab(report: CheckReport): ListTab {
     checkId: finding.checkId,
     recheck: finding.recheck,
     isNew: report.previousCheckId !== null && finding.recheck === null,
+    hint: rescanHint(report, finding),
   });
   const findings = report.findings.map(toRow);
   const fixed = report.fixed.map(toRow);
@@ -119,4 +123,16 @@ function deeperScanTab(report: CheckReport): ListTab {
         ? { label: "Waiting", tone: "waiting" }
         : { label: `${done} of ${parts.length} done`, tone: "working" };
   return { ...base, count: findings.length, state, findings, fixed, pending, clear, note: "No threats found yet." };
+}
+
+/**
+ * On a rescan, the hover text of a finding's label (18 Nov, Tolu: instead of a note at the top of the page). A New
+ * one also says whether the site changed since the last scan, when that can be told.
+ */
+function rescanHint(report: CheckReport, finding: ReportFinding): string | null {
+  if (report.previousCheckId === null) return null;
+  if (finding.recheck === "checking") return "Found on the earlier scan, being checked again now.";
+  if (finding.recheck === "still_there") return "Found on the earlier scan and found again on this one.";
+  if (finding.recheck === "fixed") return "Found on the earlier scan, and gone now.";
+  return `Found for the first time on this scan.${report.siteChange ? ` ${siteChangeSentence(report.siteChange)}` : ""}`;
 }

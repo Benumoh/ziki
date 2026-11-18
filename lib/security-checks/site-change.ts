@@ -38,9 +38,9 @@ export function siteChangeBetween(earlier: unknown, current: unknown): SiteChang
   return { changed: shared.filter((part) => before[part] !== now[part]).map((part) => CHANGED_LABEL[part]) };
 }
 
-/** The sentence a rescan shows about it: "This site changed since the last scan (…)" or "…looks the same…". */
+/** What a New finding's hover says about it: "This site changed since the last scan (…)" or "…looks the same…, so this was missed then". */
 export function siteChangeSentence(change: SiteChange): string {
-  if (change.changed.length === 0) return "The site looks the same as at the last scan, so anything new was missed then, not added since.";
+  if (change.changed.length === 0) return "The site looks the same as at the last scan, so this was missed then.";
   const list = change.changed.length === 1 ? change.changed[0] : `${change.changed.slice(0, -1).join(", ")} and ${change.changed.at(-1)}`;
   return `This site changed since the last scan (${list}).`;
 }

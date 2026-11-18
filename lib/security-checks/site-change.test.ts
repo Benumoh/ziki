@@ -14,7 +14,7 @@ describe("did the site change since the last scan? (18 Nov)", () => {
   it("says the site looks the same when nothing it saw both times changed", () => {
     const same = siteChangeBetween(before, { ...before, files: "f1" });
     expect(same).toEqual({ changed: [] });
-    expect(siteChangeSentence(same!)).toContain("looks the same");
+    expect(siteChangeSentence(same!)).toBe("The site looks the same as at the last scan, so this was missed then.");
   });
 
   it("claims nothing when a part wasn't seen this time, or either scan has no fingerprint", () => {
