@@ -86,15 +86,51 @@ export interface ForumMessage {
   verified?: boolean;
   verificationStatus?: "unverified" | "verified" | "disputed" | "stale";
   closeReason?: "duplicate" | "outdated" | "dismissed" | "expired" | "policy";
+  sourceType?:
+    | "issue"
+    | "idea"
+    | "marketing_task"
+    | "marketing_idea"
+    | "security_finding"
+    | "security_check";
+  sourceId?: string;
   createdAt: string;
   status: "open" | "resolved" | "closed";
   replies: ForumReplyItem[];
 }
 
-type StatusFilter = "all" | "open" | "resolved" | "verified";
+type StatusFilter = "all" | "open" | "resolved" | "verified" | "closed";
 type FeedFilter = "all" | "ask" | "report" | "archived";
 type TrackFilter = "all" | "product" | "marketing" | "security";
 type ForumViewMode = "list" | "detail";
+
+export function forumSourceLabel(msg: {
+  sourceType?: string;
+  sourceId?: string;
+  issueNumber?: number;
+}): string | null {
+  const type = msg.sourceType ?? (msg.issueNumber ? "issue" : undefined);
+  const id = msg.sourceId ?? (msg.issueNumber ? String(msg.issueNumber) : undefined);
+  if (!type || !id) return null;
+
+  const formattedId = id.startsWith("#") ? id : `#${id}`;
+  switch (type) {
+    case "issue":
+      return `Issue ${formattedId}`;
+    case "idea":
+      return `Idea ${formattedId}`;
+    case "marketing_task":
+      return `Marketing Task ${formattedId}`;
+    case "marketing_idea":
+      return `Marketing Idea ${formattedId}`;
+    case "security_finding":
+      return `Security Finding ${formattedId}`;
+    case "security_check":
+      return `Security Check ${formattedId}`;
+    default:
+      return `${type} ${formattedId}`;
+  }
+}
 
 /* Ziki design-system stroke SVG icon primitive (matches NavIcon / UpArrow across the app) */
 function Icon({
@@ -393,6 +429,7 @@ export function PublicMessageBoard({
     .filter((msg) => {
       if (statusFilter === "open" && msg.status !== "open") return false;
       if (statusFilter === "resolved" && msg.status !== "resolved") return false;
+      if (statusFilter === "closed" && msg.status !== "closed") return false;
       if (statusFilter === "verified" && !msg.verified) return false;
       if (feedFilter === "ask" && msg.kind !== "ask") return false;
       if (feedFilter === "report" && msg.kind !== "report") return false;
@@ -496,19 +533,39 @@ export function PublicMessageBoard({
                 {activePost.status}
               </span>
             </div>
-            {activePost.issueNumber && (
+            {activePost.status === "closed" && activePost.closeReason && (
               <div className="flex items-center justify-between">
-                <span className="text-zk-muted">Linked Issue</span>
-                <span className="font-mono text-zk-accent font-semibold">
-                  #{activePost.issueNumber}
+                <span className="text-zk-muted">Close Reason</span>
+                <span className="capitalize font-medium text-zk-text">
+                  {activePost.closeReason}
                 </span>
               </div>
             )}
+            {activePost.verificationStatus && activePost.verificationStatus !== "unverified" && (
+              <div className="flex items-center justify-between">
+                <span className="text-zk-muted">Verification</span>
+                <span className="capitalize font-medium text-zk-text">
+                  {activePost.verificationStatus}
+                </span>
+              </div>
+            )}
+            {(() => {
+              const src = forumSourceLabel(activePost);
+              return src ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-zk-muted">Linked Source</span>
+                  <span className="font-mono text-zk-accent font-semibold">
+                    {src}
+                  </span>
+                </div>
+              ) : null;
+            })()}
             {activePost.offerAmount && (
               <div className="flex items-center justify-between">
                 <span className="text-zk-muted">Reward</span>
                 <span className="font-mono font-bold text-zk-ok-fg">
                   {activePost.offerAmount.replace(/^\$/, "")} Coins
+                  {activePost.offerState ? ` (${activePost.offerState})` : ""}
                 </span>
               </div>
             )}
@@ -971,6 +1028,7 @@ export function PublicMessageBoard({
                         { id: "open", label: "Open Only" },
                         { id: "resolved", label: "Resolved" },
                         { id: "verified", label: "Verified Only" },
+                        { id: "closed", label: "Closed" },
                       ] as const
                     ).map((item) => (
                       <button
@@ -1221,7 +1279,31 @@ export function PublicMessageBoard({
                               <span>{msg.offerAmount.replace(/^\$/, "")}</span>
                             </Badge>
                           )}
-                          {isResolved ? (
+                          {msg.status === "closed" ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zk-muted" />
+                              <span>Closed{msg.closeReason ? ` · ${msg.closeReason}` : ""}</span>
+                            </Badge>
+                          ) : msg.verificationStatus === "verified" || msg.verified ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <Icon size={11} className="text-zk-ok-fg">
+                                <polyline points="20 6 9 17 4 12" />
+                              </Icon>
+                              <span>Verified</span>
+                            </Badge>
+                          ) : msg.verificationStatus === "disputed" ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-bad-fg text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <Icon size={11} className="text-zk-bad-fg">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </Icon>
+                              <span>Disputed</span>
+                            </Badge>
+                          ) : msg.verificationStatus === "stale" ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <span>Outdated</span>
+                            </Badge>
+                          ) : isResolved ? (
                             <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
                               <Icon size={11} className="text-zk-ok-fg">
                                 <circle cx="12" cy="12" r="9" />
@@ -1246,6 +1328,14 @@ export function PublicMessageBoard({
                       {/* Compact Row 3: Tags on left; Replies, Views, Helpful on right */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                         <div className="flex flex-wrap items-center gap-1">
+                          {(() => {
+                            const src = forumSourceLabel(msg);
+                            return src ? (
+                              <span className="px-1.5 py-0.5 rounded bg-zk-tint border border-zk-accent/30 text-zk-accent text-[10px] font-mono font-medium">
+                                {src}
+                              </span>
+                            ) : null;
+                          })()}
                           {msg.tags.map((tag) => (
                             <span
                               key={tag}
@@ -1361,7 +1451,31 @@ export function PublicMessageBoard({
                     </span>
 
                     {/* Status badge placed after Published at */}
-                    {activePost.status === "resolved" ? (
+                    {activePost.status === "closed" ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zk-muted" />
+                        <span>Closed{activePost.closeReason ? ` · ${activePost.closeReason}` : ""}</span>
+                      </Badge>
+                    ) : activePost.verificationStatus === "verified" || activePost.verified ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <Icon size={12} className="text-zk-ok-fg">
+                          <polyline points="20 6 9 17 4 12" />
+                        </Icon>
+                        <span>Verified</span>
+                      </Badge>
+                    ) : activePost.verificationStatus === "disputed" ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-bad-fg text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <Icon size={12} className="text-zk-bad-fg">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </Icon>
+                        <span>Disputed</span>
+                      </Badge>
+                    ) : activePost.verificationStatus === "stale" ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <span>Outdated</span>
+                      </Badge>
+                    ) : activePost.status === "resolved" ? (
                       <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-2 py-0.5 gap-1">
                         <Icon size={12} className="text-zk-ok-fg">
                           <circle cx="12" cy="12" r="9" />

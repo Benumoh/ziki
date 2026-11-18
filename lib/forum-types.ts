@@ -6,6 +6,23 @@ export type { ForumCategory, ForumMessage, ForumReplyItem };
 export type ForumScope = "platform" | "org" | "project";
 export type ForumTrackSlug = "your_app" | "marketing" | "security";
 
+export const FORUM_SOURCE_TYPES = [
+  "issue",
+  "idea",
+  "marketing_task",
+  "marketing_idea",
+  "security_finding",
+  "security_check",
+] as const;
+
+export type ForumSourceType = (typeof FORUM_SOURCE_TYPES)[number];
+
+export const TRACK_SOURCE_TYPES: Record<"your_app" | "marketing" | "security", readonly ForumSourceType[]> = {
+  your_app: ["issue", "idea"],
+  marketing: ["marketing_task", "marketing_idea"],
+  security: ["security_finding", "security_check"],
+};
+
 export interface AccessibleOrganisation {
   id: string;
   name: string;
@@ -43,10 +60,49 @@ export const createForumMessageSchema = z
     }),
     organisationId: z.string().trim().min(1).optional(),
     projectId: z.string().trim().min(1).optional(),
-    sourceType: z.string().trim().min(1).optional(),
+    sourceType: z.enum(FORUM_SOURCE_TYPES).optional(),
     sourceId: z.string().trim().min(1).optional(),
   })
   .superRefine((data, ctx) => {
+    if (Boolean(data.sourceType) !== Boolean(data.sourceId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [data.sourceType ? "sourceId" : "sourceType"],
+        message: "sourceType and sourceId must be provided together.",
+      });
+    }
+
+    const normalizedTrack: "your_app" | "marketing" | "security" =
+      data.track === "marketing" ? "marketing" : data.track === "security" ? "security" : "your_app";
+
+    if (data.sourceType) {
+      const allowedSources = TRACK_SOURCE_TYPES[normalizedTrack];
+      if (!allowedSources.includes(data.sourceType)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sourceType"],
+          message: `sourceType '${data.sourceType}' is not allowed for track '${data.track}'. Allowed: ${allowedSources.join(", ")}.`,
+        });
+      }
+    }
+
+    if (data.issueNumber) {
+      if (normalizedTrack === "security") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["issueNumber"],
+          message: "issueNumber is not supported on the security track; use sourceType and sourceId.",
+        });
+      }
+      if (data.sourceId && String(data.issueNumber) !== data.sourceId.replace(/^#/, "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["issueNumber"],
+          message: "Conflicting task references: issueNumber must match sourceId when both are provided.",
+        });
+      }
+    }
+
     if (data.scope === "platform") {
       if (data.organisationId || data.projectId || data.issueNumber || data.sourceType || data.sourceId || data.offerAmount) {
         ctx.addIssue({

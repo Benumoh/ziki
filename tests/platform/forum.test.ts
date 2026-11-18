@@ -776,4 +776,223 @@ describe("Agent Forum platform & API contract", () => {
       expect(independentRes.status).toBe(200);
     });
   });
+
+  describe("Source reference mapping & track validation (Step 2C)", () => {
+    it("rejects mismatched sourceType or orphaned sourceId/sourceType", async () => {
+      // 1. sourceType without sourceId -> 400
+      const orphanSourceTypeReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Orphaned source type",
+          content: "Body text",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          sourceType: "issue",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(orphanSourceTypeReq)).status).toBe(400);
+
+      // 2. sourceId without sourceType -> 400
+      const orphanSourceIdReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Orphaned source id",
+          content: "Body text",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          sourceId: "101",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(orphanSourceIdReq)).status).toBe(400);
+
+      // 3. Mismatched sourceType for track (e.g. security_finding on product track) -> 400
+      const mismatchedTrackReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Security finding on product track",
+          content: "Body text",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          sourceType: "security_finding",
+          sourceId: "sec-1",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(mismatchedTrackReq)).status).toBe(400);
+
+      // 4. issueNumber on security track -> 400
+      const issueNumberOnSecurityReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Issue number on security track",
+          content: "Body text",
+          track: "security",
+          scope: "project",
+          projectId: "proj-1",
+          issueNumber: 101,
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(issueNumberOnSecurityReq)).status).toBe(400);
+
+      // 5. Conflicting issueNumber and sourceId -> 400
+      const conflictingTaskRefReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Conflicting task refs",
+          content: "Body text",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          sourceType: "issue",
+          sourceId: "102",
+          issueNumber: 101,
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(conflictingTaskRefReq)).status).toBe(400);
+    });
+
+    it("verifies source record exists in scope or returns 400", async () => {
+      // Mock bug not found in scope
+      mockPrisma.bug.findFirst.mockResolvedValueOnce(null);
+      const notFoundSourceReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Non-existent source issue",
+          content: "Body text",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          sourceType: "issue",
+          sourceId: "9999",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      const res = await createForumPost(notFoundSourceReq);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toContain("Referenced issue not found in this scope");
+    });
+
+    it("correctly maps sourceType and sourceId for product, marketing, and security tracks", async () => {
+      // 1. Explicit issue on product track
+      mockPrisma.bug.findFirst.mockResolvedValueOnce({ id: "bug-101", number: 101, reward: 10 });
+      const productPostRes = await createForumPost(
+        createMockRequest(
+          "/api/v1/forum",
+          "POST",
+          {
+            title: "Product bug discussion",
+            content: "Fixing pool connection error",
+            track: "product",
+            scope: "project",
+            projectId: "proj-1",
+            sourceType: "issue",
+            sourceId: "101",
+          },
+          { authorization: "Bearer ziki_agent_token" }
+        )
+      );
+      expect(productPostRes.status).toBe(201);
+      const productJson = await productPostRes.json();
+      expect(productJson.message.sourceType).toBe("issue");
+      expect(productJson.message.sourceId).toBe("101");
+      expect(productJson.message.issueNumber).toBe(101);
+
+      // 2. issueNumber on marketing track maps to marketing_task
+      mockPrisma.bug.findFirst.mockResolvedValueOnce({ id: "mkt-55", number: 55, reward: 5 });
+      const marketingPostRes = await createForumPost(
+        createMockRequest(
+          "/api/v1/forum",
+          "POST",
+          {
+            title: "Marketing task discussion",
+            content: "Landing page conversion experiment",
+            track: "marketing",
+            scope: "project",
+            projectId: "proj-1",
+            issueNumber: 55,
+          },
+          { authorization: "Bearer ziki_agent_token" }
+        )
+      );
+      expect(marketingPostRes.status).toBe(201);
+      const marketingJson = await marketingPostRes.json();
+      expect(marketingJson.message.sourceType).toBe("marketing_task");
+      expect(marketingJson.message.sourceId).toBe("55");
+      expect(marketingJson.message.issueNumber).toBe(55);
+
+      // 3. Security finding on security track
+      const securityPostRes = await createForumPost(
+        createMockRequest(
+          "/api/v1/forum",
+          "POST",
+          {
+            title: "Security finding report",
+            content: "Potential SSRF vulnerability in webhook validator",
+            track: "security",
+            scope: "project",
+            projectId: "proj-1",
+            sourceType: "security_finding",
+            sourceId: "sec-404",
+          },
+          { authorization: "Bearer ziki_agent_token" }
+        )
+      );
+      expect(securityPostRes.status).toBe(201);
+      const securityJson = await securityPostRes.json();
+      expect(securityJson.message.sourceType).toBe("security_finding");
+      expect(securityJson.message.sourceId).toBe("sec-404");
+      expect(securityJson.message.issueNumber).toBeUndefined();
+    });
+
+    it("filters forum messages by status=closed", async () => {
+      // Create a post and close it
+      const askPost = await createForumMessage(
+        {
+          name: "Test-Agent",
+          handle: "test-ag",
+          isAgent: true,
+          role: "Agent Worker",
+          userId: "user-1",
+          agentId: "agent-123456",
+        },
+        {
+          title: "Post to be closed for filter test",
+          content: "Body content",
+          category: "help_needed",
+          kind: "ask",
+          track: "product",
+          scope: "platform",
+        }
+      );
+      await resolveForumPost(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/resolve`,
+          "POST",
+          { closeReason: "outdated" },
+          { authorization: "Bearer ziki_agent_token" }
+        ),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+
+      const closedListRes = await listForumGet(createMockRequest("/api/v1/forum?status=closed"));
+      expect(closedListRes.status).toBe(200);
+      const closedJson = await closedListRes.json();
+      expect(closedJson.messages.some((m: { id: string }) => m.id === askPost.id)).toBe(true);
+      expect(closedJson.messages.every((m: { status: string }) => m.status === "closed")).toBe(true);
+    });
+  });
 });

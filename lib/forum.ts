@@ -140,6 +140,14 @@ function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
     verified,
     verificationStatus: (post.verification as ForumMessage["verificationStatus"]) ?? "unverified",
     closeReason: (post.closeReason as ForumMessage["closeReason"]) ?? undefined,
+    sourceType: (post.sourceType as ForumMessage["sourceType"]) ?? undefined,
+    sourceId: post.sourceId ?? undefined,
+    issueNumber:
+      (post.sourceType === "issue" || post.sourceType === "marketing_task") &&
+      post.sourceId &&
+      !isNaN(parseInt(post.sourceId.replace(/^#/, ""), 10))
+        ? parseInt(post.sourceId.replace(/^#/, ""), 10)
+        : undefined,
     createdAt: formatTimeAgo(post.createdAt),
     status:
       post.resolution === "resolved"
@@ -155,7 +163,7 @@ export interface ListForumOptions {
   q?: string;
   category?: ForumCategory;
   issueNumber?: number;
-  status?: "open" | "resolved";
+  status?: "open" | "resolved" | "closed";
   track?: "product" | "your_app" | "marketing" | "security";
   kind?: "ask" | "report";
   scope?: ForumScope;
@@ -401,6 +409,15 @@ export async function createForumMessage(
       ? parsedOffer
       : null;
 
+  const derivedSourceType: string | null =
+    effectiveScope === "platform"
+      ? null
+      : input.sourceType || (input.issueNumber ? (trackSlug === "marketing" ? "marketing_task" : "issue") : null);
+  const derivedSourceId: string | null =
+    effectiveScope === "platform"
+      ? null
+      : input.sourceId || (input.issueNumber ? String(input.issueNumber) : null);
+
   try {
     if (author.userId) {
       let resolvedOrgId: string | null = null;
@@ -504,63 +521,83 @@ export async function createForumMessage(
         throw new Error("Validation error: Offers (bounties) are only allowed on 'ask' posts.");
       }
 
-      if (validOfferAmount !== null) {
-        if (!input.issueNumber && !input.sourceId) {
-          throw new Error(
-            "Validation error: An offer (bounty) must be linked to a task via issueNumber or sourceId."
-          );
-        }
+      if (validOfferAmount !== null && (!derivedSourceType || !derivedSourceId)) {
+        throw new Error(
+          "Validation error: An offer (bounty) must be linked to a task via issueNumber or sourceId."
+        );
+      }
 
-        const taskSourceId = input.sourceId || (input.issueNumber ? String(input.issueNumber) : null);
-        if (prisma.bug?.findFirst && taskSourceId) {
-          const numericTask = input.issueNumber ?? parseInt(taskSourceId.replace(/^#/, ""), 10);
-          const hasNumericTask = !isNaN(numericTask) && numericTask > 0;
-          const linkedBug = await prisma.bug.findFirst({
-            where: {
-              ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
-              ...(resolvedProjId ? { projectId: resolvedProjId } : {}),
-              OR: [
-                { id: taskSourceId },
-                ...(hasNumericTask ? [{ number: numericTask }] : []),
-              ],
-            },
-            select: { id: true, number: true, reward: true },
-          });
-
-          if (!linkedBug) {
-            throw new Error(
-              "Validation error: Linked task not found in this scope; cannot reserve bounty."
-            );
-          }
-
-          const taskRewardLimit = Number(linkedBug.reward);
-          let alreadyReservedOrPaid = 0;
-
-          if (prisma.forumOffer?.findMany) {
-            const existingOffers = await prisma.forumOffer.findMany({
+      if (derivedSourceType && derivedSourceId) {
+        if (derivedSourceType === "issue" || derivedSourceType === "marketing_task") {
+          if (prisma.bug?.findFirst) {
+            const numericTask = parseInt(derivedSourceId.replace(/^#/, ""), 10);
+            const hasNumericTask = !isNaN(numericTask) && numericTask > 0;
+            const linkedBug = await prisma.bug.findFirst({
               where: {
                 ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
-                state: { in: ["reserved", "paid"] },
-                post: {
-                  OR: [
-                    { sourceId: linkedBug.id },
-                    { sourceId: String(linkedBug.number) },
-                  ],
-                },
+                ...(resolvedProjId ? { projectId: resolvedProjId } : {}),
+                track: derivedSourceType === "marketing_task" ? "marketing" : "product",
+                OR: [
+                  { id: derivedSourceId },
+                  ...(hasNumericTask ? [{ number: numericTask }] : []),
+                ],
               },
-              select: { amount: true },
+              select: { id: true, number: true, reward: true },
             });
-            alreadyReservedOrPaid = existingOffers.reduce(
-              (acc, o) => acc + Number(o.amount),
-              0
-            );
-          }
 
-          const remainingTaskBudget = Math.max(0, taskRewardLimit - alreadyReservedOrPaid);
-          if (validOfferAmount > remainingTaskBudget) {
-            throw new Error(
-              `Validation error: Offer amount ($${validOfferAmount.toFixed(2)}) exceeds the linked task's remaining reward limit ($${remainingTaskBudget.toFixed(2)} of $${taskRewardLimit.toFixed(2)}).`
-            );
+            if (!linkedBug) {
+              throw new Error(
+                `Validation error: Referenced ${derivedSourceType} not found in this scope.`
+              );
+            }
+
+            if (validOfferAmount !== null) {
+              const taskRewardLimit = Number(linkedBug.reward);
+              let alreadyReservedOrPaid = 0;
+
+              if (prisma.forumOffer?.findMany) {
+                const existingOffers = await prisma.forumOffer.findMany({
+                  where: {
+                    ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
+                    state: { in: ["reserved", "paid"] },
+                    post: {
+                      OR: [
+                        { sourceId: linkedBug.id },
+                        { sourceId: String(linkedBug.number) },
+                      ],
+                    },
+                  },
+                  select: { amount: true },
+                });
+                alreadyReservedOrPaid = existingOffers.reduce(
+                  (acc, o) => acc + Number(o.amount),
+                  0
+                );
+              }
+
+              const remainingTaskBudget = Math.max(0, taskRewardLimit - alreadyReservedOrPaid);
+              if (validOfferAmount > remainingTaskBudget) {
+                throw new Error(
+                  `Validation error: Offer amount ($${validOfferAmount.toFixed(2)}) exceeds the linked task's remaining reward limit ($${remainingTaskBudget.toFixed(2)} of $${taskRewardLimit.toFixed(2)}).`
+                );
+              }
+            }
+          }
+        } else if (derivedSourceType === "idea" || derivedSourceType === "marketing_idea") {
+          if (prisma.idea?.findFirst) {
+            const linkedIdea = await prisma.idea.findFirst({
+              where: {
+                ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
+                track: derivedSourceType === "marketing_idea" ? "marketing" : "product",
+                id: derivedSourceId,
+              },
+              select: { id: true },
+            });
+            if (!linkedIdea) {
+              throw new Error(
+                `Validation error: Referenced ${derivedSourceType} not found in this scope.`
+              );
+            }
           }
         }
       }
@@ -588,14 +625,8 @@ export async function createForumMessage(
           authorAgentId: author.agentId || null,
           organisationId: effectiveScope === "platform" ? null : resolvedOrgId,
           projectId: effectiveScope === "project" ? resolvedProjId : null,
-          sourceType:
-            effectiveScope === "platform"
-              ? null
-              : input.sourceType || (input.issueNumber ? "issue" : null),
-          sourceId:
-            effectiveScope === "platform"
-              ? null
-              : input.sourceId || (input.issueNumber ? String(input.issueNumber) : null),
+          sourceType: derivedSourceType,
+          sourceId: derivedSourceId,
           ...(validOfferAmount !== null && resolvedOrgId
             ? {
                 offer: {
@@ -665,7 +696,14 @@ export async function createForumMessage(
     category: input.category,
     title: input.title,
     content: input.content,
-    issueNumber: input.issueNumber,
+    issueNumber:
+      (derivedSourceType === "issue" || derivedSourceType === "marketing_task") &&
+      derivedSourceId &&
+      !isNaN(parseInt(derivedSourceId.replace(/^#/, ""), 10))
+        ? parseInt(derivedSourceId.replace(/^#/, ""), 10)
+        : input.issueNumber,
+    sourceType: (derivedSourceType as ForumMessage["sourceType"]) ?? undefined,
+    sourceId: derivedSourceId ?? undefined,
     tags: input.tags && input.tags.length > 0 ? input.tags : ["General"],
     views: 1,
     helpfulCount: 0,

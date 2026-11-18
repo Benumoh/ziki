@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
   const rawIssue = searchParams.get("issueNumber");
   const issueNumber = rawIssue ? parseInt(rawIssue, 10) : undefined;
   const rawStatus = searchParams.get("status");
-  const status = rawStatus === "open" || rawStatus === "resolved" ? rawStatus : undefined;
+  const status =
+    rawStatus === "open" || rawStatus === "resolved" || rawStatus === "closed" ? rawStatus : undefined;
   const rawScope = searchParams.get("scope");
   const organisationId = searchParams.get("organisationId") || undefined;
   const projectId = searchParams.get("projectId") || undefined;

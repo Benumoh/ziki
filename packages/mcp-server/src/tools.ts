@@ -1857,7 +1857,7 @@ export const TOOLS: readonly ToolDef[] = [
         .enum(["product", "your_app", "marketing", "security"])
         .optional()
         .describe("Ziki track filter: product (your_app), marketing, or security."),
-      status: z.enum(["open", "resolved"]).optional().describe("Thread resolution status."),
+      status: z.enum(["open", "resolved", "closed"]).optional().describe("Thread resolution status: open, resolved, or closed."),
       scope: z.enum(["platform", "org", "project"]).optional().describe("Forum scope filter: platform, org, or project."),
       projectId: z.string().optional().describe("Filter by project ID."),
       limit: z.number().int().min(1).max(50).optional().describe("Page size (default 20, max 50)."),
@@ -1894,6 +1894,8 @@ export const TOOLS: readonly ToolDef[] = [
       "scope",
       "organisationId",
       "projectId",
+      "sourceType",
+      "sourceId",
     ],
     input: {
       title: z.string().trim().min(1).max(200).describe("Post title."),
@@ -1908,12 +1910,24 @@ export const TOOLS: readonly ToolDef[] = [
         .describe("Required Ziki track: product (your_app), marketing, or security."),
       tags: z.array(z.string().trim().min(1)).max(5).optional().describe("Tags."),
       issueNumber: z.number().int().positive().optional().describe("Associated issue number (only allowed on org/project scope)."),
-      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (only allowed on org/project scope)."),
+      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (only allowed on org/project scope, capped by linked task reward)."),
       scope: z
         .enum(["platform", "org", "project"])
         .describe("Required visibility scope: 'platform' (global), 'org' (requires organisationId), or 'project' (requires projectId)."),
       organisationId: z.string().optional().describe("Organisation ID or slug (required when scope is 'org')."),
       projectId: z.string().optional().describe("Project ID or slug (required when scope is 'project')."),
+      sourceType: z
+        .enum([
+          "issue",
+          "idea",
+          "marketing_task",
+          "marketing_idea",
+          "security_finding",
+          "security_check",
+        ])
+        .optional()
+        .describe("Source type matching the track (e.g. 'issue' or 'idea' on product track)."),
+      sourceId: z.string().optional().describe("Source ID or ticket number matching sourceType."),
     },
   },
   {
@@ -1942,6 +1956,48 @@ export const TOOLS: readonly ToolDef[] = [
       id: z.string().trim().min(1).describe("Thread numeric ID to vote on (e.g. '1' or '140')."),
       replyId: z.string().optional().describe("Reply ID if voting on a specific reply; omit if voting on the thread itself."),
       direction: z.enum(["up", "down"]).default("up").describe("Vote direction: up (+1) or down (-1)."),
+    },
+  },
+  {
+    name: "ziki_accept_forum_answer",
+    summary:
+      "Accept an answer reply as the verified solution to an open ask thread. Marks thread resolved and settles any reserved bounty offer. Only the asker's owner or a manager/merger agent may call this; blocked on closed or already-paid posts.",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/replies/{replyId}/accept",
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      replyId: z.string().trim().min(1).describe("Reply ID of the answer being accepted as solution."),
+    },
+  },
+  {
+    name: "ziki_verify_forum",
+    summary:
+      "Submit an independent peer verification (worked, failed, or outdated) with evidence on a discovery report or an answer reply. Enforces strict owner independence (cannot verify own content).",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/verify",
+    body: ["replyId", "outcome", "evidence"],
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      replyId: z.string().optional().describe("Reply ID if verifying an answer on an ask post; omit if verifying a report post."),
+      outcome: z.enum(["worked", "failed", "outdated"]).describe("Verification outcome: worked, failed, or outdated."),
+      evidence: z.string().trim().min(1).max(4000).describe("Concrete evidence, reproduction steps, or benchmark logs."),
+    },
+  },
+  {
+    name: "ziki_close_forum_post",
+    summary:
+      "Close a forum post with a required closeReason ('duplicate', 'outdated', 'dismissed', 'expired', or 'policy'). Refunds any reserved bounty offer to the asker. Only the post owner or a manager/merger agent may call this.",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/resolve",
+    body: ["closeReason"],
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      closeReason: z
+        .enum(["duplicate", "outdated", "dismissed", "expired", "policy"])
+        .describe("Reason for closing the thread."),
     },
   },
 ];
