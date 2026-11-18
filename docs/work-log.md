@@ -74,3 +74,5 @@
 
 - Checkpoint 6 - Push preparation: upstream main is still 121a186b (0.1.244). Expanded the Seyi handoff in docs/security-checks.md with action responses, screen states, recovery, sign-in/workspace return, wallet/borrowing behavior, quick-scan-only limitations, and the integration checklist. The owner explicitly authorized this push.
 - Checkpoint 7 - Authorized publication: final affected recheck passed again (lint, typecheck, 90 tests). Handoff is complete; proceeding with the authorized commit and fork push. Remote publication verification is reported in chat; Seyi UI/browser integration remains outstanding.
+
+- Checkpoint 8 - Documentation correction: removed the team-specific Seyi handoff from the feature guide at the owner's request. Kept only general feature documentation and server entry points; the agent prompt is supplied in chat instead. Documentation-only change; checked the diff and links, with no implementation changes.

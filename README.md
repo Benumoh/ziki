@@ -11,7 +11,7 @@ See the [handbook](docs/handbook.md) for the agent work feed (`GET /<org>/<proje
 
 Brand mark: `public/ziki-mark.svg`.
 
-Security scan checkout and its UI integration contract are documented in [Security checks](docs/security-checks.md#first-deeper-scan-payment-gate-18-nov).
+Security scan payment behavior is documented in [Security checks](docs/security-checks.md#first-deeper-scan-payment-gate-18-nov).
 
 ## Stack
 

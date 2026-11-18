@@ -1,6 +1,6 @@
 # Security checks
 
-**18 Nov backend update:** new first deeper scans require a 20-Zik payment before agents start. See [First deeper scan payment gate](#first-deeper-scan-payment-gate-18-nov) for the implemented server contract and pending Seyi UI integration. This supersedes the automatic-start descriptions in the historical plans below.
+**18 Nov backend update:** new first deeper scans require a 20-Zik payment before agents start. See [First deeper scan payment gate](#first-deeper-scan-payment-gate-18-nov) for the implemented server behavior and pending checkout UI integration. This supersedes the automatic-start descriptions in the historical plans below.
 
 A client adds a website, server or code repository, proves it's theirs, and agents check it for weaknesses and report what they find. Agents look; they never exploit. This is separate from, and feeds into, the private findings already on the Security page (`SecurityFinding`, #security-findings).
 
@@ -182,89 +182,9 @@ When the report is posted, the scan header replaces its progress bar with the to
 
 The free quick scan remains available before sign-in. New signed-in checks save that result but do not start agents automatically. Starting the first deeper scan costs **20 Ziks**, taken from the requesting person's wallet. This charge does not unlock or move findings. The existing **10-Zik rescan** and per-finding remediation charges remain separate.
 
-### Full handoff for Seyi
+### Server entry points
 
-**Sanmi owns:** server eligibility, authenticated access, wallet charging, duplicate protection and starting agent work. **Seyi owns:** the checks-page call to action, payment presentation, sign-in/top-up navigation, pending/error states, and switching to the existing progress/results screen. Checkout can be a modal, a panel or a separate page; the server contract stays the same.
-
-#### Flow and boundaries
-
-1. Keep the free quick scan and its results available. Declining or closing checkout leaves those results visible and does not start agents.
-2. When the person chooses **Run deeper scan**, load a fresh quote. Do not call the payment action on mount, in an effect, when navigating back from login/top-up, or just because the quick scan finished.
-3. If sign-in is needed, show the returned sign-in link. After login, reload the quote and ask for payment consent again. A workspace owner/admin must be viewing their own check in the active workspace.
-4. Show **20 Ziks** as the first deeper scan's current price, using the returned `price` rather than hard-coding it. A suitable consent button is **Pay 20 Ziks and start**. This spends the existing wallet; it is not a new card-payment provider integration.
-5. On explicit consent, call the payment action. Disable repeat submissions while pending and show a clear pending state. On success, open/refresh `/security/checks/<checkId>` and use the existing live progress and results. Startup may take a moment after payment; the server schedules it after commit, and the sweep retries a missed start.
-
-**Keep the prices distinct:** the 20-Zik first deeper scan, the existing 10-Zik **Scan again** follow-up, and paying to move/unlock individual findings are separate operations. Scan payment does not move issues, unlock every finding or pay for remediation. Do not wire the new action to **Fix selected** or replace the existing rescan action.
-
-**Quick-scan-only issues are not included:** preview rows are not agent findings and the existing move flow cannot send them directly to Ziki. Do not expose a working **Fix selected** action on preview rows or imply the 20-Zik scan is mandatory just to file an ordinary issue. A dedicated quick-scan-to-issue option needs separate agreement and implementation through the normal confirmation workflow.
-
-#### Imports and response contract
-
-```ts
-import {
-  deeperScanCost,
-  startPaidDeeperScan,
-} from "@/app/actions/security-deeper-scan";
-
-// Read when checkout opens, and after returning from sign-in/top-up.
-const quote = await deeperScanCost(checkId);
-
-// Call only in the user's explicit payment submission handler.
-const outcome = await startPaidDeeperScan(checkId);
-```
-
-Invoke client mutations in a React transition, following the existing Next Server Action patterns. Pass **only `checkId`**; user/workspace IDs, the amount and payment status are derived on the server. The two lines above illustrate separate events, not an instruction to automatically charge after quoting. Never call `kickCheck`, the engine or the wallet library from the client.
-
-A successful quote has:
-
-```ts
-{
-  ok: true,
-  checkId: "example-check-id",
-  site: "example.test",
-  price: 20,
-  balance: 35,
-  canBorrow: false,
-  state: "payment_required"
-}
-```
-
-- `payment_required`: show checkout. Reading the quote never charges or queues agent work.
-- `started`: show/open the existing check, not another payment. `price` is zero for this response, including historical free scans; this does not make a new deeper scan free.
-- `loadCheckReport` and `listWorkspaceChecks` also return `paymentRequired` for page/list rendering. Use it to avoid showing an animated **Planning/Checking** state for a new unpaid scan. A cancelled check must remain cancelled, even if its payment flag is true. Reload the quote before offering payment; the flag alone is not checkout authorization.
-
-Successful payment returns `{ ok: true, checkId, charged: 20, reused: false }`. A paid retry returns the same check with `charged: 0, reused: true`; show the existing scan rather than creating a new one. The action revalidates `/security` and `/security/checks/<checkId>`.
-
-#### Failures and recovery
-
-Every failure has `ok: false`, `reason` and a displayable `error`:
-
-| `reason` | UI handling | Extra fields |
-| --- | --- | --- |
-| `sign_in_required` | Offer sign-in, then reload checkout on return; never auto-pay. | `signInUrl` |
-| `not_found` | Do not show/attempt payment. The scan is inaccessible, cancelled, invalid, or the user lacks owner/admin access. | None |
-| `quick_scan_required` | Ask the person to complete/retry the quick scan, then reload the quote. | None |
-| `ownership_required` | Follow the existing proof flow for the target, then reload the quote. This applies only while ownership proof is enabled. | None |
-| `insufficient_ziks` | Keep quick-scan results visible. Offer the existing wallet top-up, or explicit borrowing if allowed, then reload the quote. No debit or startup occurred. | `needed` (full price), `balance`, `canBorrow` |
-
-`signInUrl` returns to this check on the same site. For a public visitor with no saved check ID, retain the existing public scan handoff (`/security?target=...&progress=1`) through signup/login and workspace selection. It saves/reuses a signed-in quick scan rather than starting agents. Anonymous preview data is not assigned to an account by trusting a client-supplied check ID; the server may rerun/reuse its cached quick scan for the retained website.
-
-Wallet/top-up lives at `/coins`; reuse the existing [`BorrowZiks`](../components/coins/borrow-ziks.tsx) component/borrowing flow. No borrowing happens automatically. A previously accepted Security overdraft may cover a payment even when the displayed balance is below 20, so do not decide server eligibility from `balance` alone. The payment action is authoritative.
-
-Catch unexpected action/network errors and show a retry option without claiming payment failed definitively. A request may have committed before the response was lost: reload the quote, and safely retry the same check ID. Never issue a second payment against a newly created check as recovery.
-
-Private repos or rate-limited entries without a saved successful quick scan receive `quick_scan_required`; retry the quick scan before checkout. New payment screens and their routing are **not implemented by this backend branch**.
-
-#### Integration acceptance checklist
-
-- Signed out: run a free quick scan, choose deeper scan, sign in, select the workspace if prompted, and return to the same website without agents starting or an automatic debit.
-- Signed in: quick scan results remain readable before payment; dismissing checkout starts nothing.
-- Fresh checkout shows the returned price and wallet state; insufficient funds, top-up and explicit borrowing recover without discarding the scan.
-- A successful consent starts the existing progress view, then findings/results; payment does not promise immediate completed results.
-- Double-click, refresh, two tabs and a lost-response retry reuse one check and one 20-Zik debit. Verify this with a local test wallet/database; unit coverage uses transaction doubles.
-- Another person's check, another workspace, a cancelled check, missing quick scan, and missing ownership proof when enabled are rejected without debit.
-- Historical free scans and existing paid 10-Zik rescans still work; **Fix selected** retains its separate remediation payment.
-- Run keyboard/mobile/error-state checks after the UI is connected. The real browser checkout and PostgreSQL concurrency exercise remain outstanding; no shared/demo database reseed is needed.
+[`app/actions/security-deeper-scan.ts`](../app/actions/security-deeper-scan.ts) exports `deeperScanCost(checkId)` for a read-only checkout quote and `startPaidDeeperScan(checkId)` for an explicitly authorized payment. The server derives the owner, workspace and price; successful retries return the same check without another charge. `loadCheckReport` and `listWorkspaceChecks` expose `paymentRequired` for clients. Checkout presentation and browser integration are not included in this backend change.
 
 ### Storage, permissions and failure handling
 
@@ -276,6 +196,6 @@ A wallet row lock serializes spending and duplicate requests. One transaction re
 
 ### Repeatable verification
 
-Run the repo's `pnpm verify:ready` before requesting the PR. Focused coverage lives in `tests/security/security-checks.test.ts` and `app/actions/security-assistant.test.ts`; it covers access, quick-scan/proof prerequisites, wallet failure, retries, transaction failures, and the agent payment guard. The concurrency unit test uses serialized transaction doubles; a real PostgreSQL concurrency and browser checkout exercise still requires local fixture integration with Seyi's UI. Do not seed or reset a shared/demo database.
+Run the repo's `pnpm verify:ready` before requesting the PR. Focused coverage lives in `tests/security/security-checks.test.ts` and `app/actions/security-assistant.test.ts`; it covers access, quick-scan/proof prerequisites, wallet failure, retries, transaction failures, and the agent payment guard. The concurrency unit test uses serialized transaction doubles; a real PostgreSQL concurrency and browser checkout exercise still requires local fixture integration with the checkout UI. Do not seed or reset a shared/demo database.
 
-With Seyi's UI connected, verify: quick scan → sign in if needed → checkout showing 20 Ziks → explicit pay → progress/results. Refresh and double-click payment to confirm one debit; cancel checkout and try insufficient funds to confirm no agents start. Existing free scans and paid 10-Zik rescans must still open normally.
+With the checkout UI connected, verify: quick scan → sign in if needed → checkout showing 20 Ziks → explicit pay → progress/results. Refresh and double-click payment to confirm one debit; cancel checkout and try insufficient funds to confirm no agents start. Existing free scans and paid 10-Zik rescans must still open normally.
