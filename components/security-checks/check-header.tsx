@@ -8,7 +8,7 @@ import { CHECK_STATUS_LABEL, DEEPER_SCAN_COVERS, DEEPER_SCAN_PRICE_ZIKS, FINISHE
 import { DeeperScanStart } from "@/components/security-checks/deeper-scan-offer";
 import type { CheckReport } from "@/lib/security-checks/report";
 import { firstSentence } from "@/lib/security-checks/short-line";
-import { SECURITY_CHECK_PRICE_COINS } from "@/lib/security-checks";
+import { CODE_SCAN_PRICE_ZIKS } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { PREVIEW_RISK_LABEL, previewRisk, type PreviewRisk } from "@/lib/security-checks/preview-summary";
 import { ScanSteps } from "@/components/security-checks/scan-steps";
@@ -64,7 +64,11 @@ export function CheckHeader({ report, backFromBuying = false }: { report: CheckR
         phase={phase}
         done={done}
         total={total}
-        codePrice={SECURITY_CHECK_PRICE_COINS}
+        codePrice={CODE_SCAN_PRICE_ZIKS}
+        checkId={report.checkId}
+        codeScan={report.codeScan}
+        // A repo's own scan is the code scan: no Connect code step on it.
+        codeStep={report.target.kind !== "repo"}
         // Set once the deeper scan needs paying for (PR 827); false until then.
         paymentRequired={"paymentRequired" in report ? Boolean(report.paymentRequired) : false}
       />
