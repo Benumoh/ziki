@@ -52,7 +52,7 @@ export function ScanSteps({
   const deepState =
     phase === "planning" ? "Planning" : phase === "stopped" ? "Stopped" : deepDone ? `Done · ${deepFound} found` : phase === "writing" ? "Writing the report" : `Agents checking · ${done} of ${total}`;
   return (
-    <ol aria-label="Steps of this security check" className="mt-0 flex list-none flex-col gap-2 p-0 sm:flex-row sm:items-center sm:gap-0">
+    <ol aria-label="Steps of this security check" className="mt-0 flex list-none flex-col p-0 sm:flex-row sm:items-center">
       <Step state="done" name="Quick scan" detail={quickFound === null ? "Not run" : `Done · ${quickFound} found`} jumpTo="quick-scan-results" />
       <Joint done />
       {paymentRequired ? (
@@ -149,8 +149,9 @@ function Step({ state, name, detail, jumpTo: target }: { state: "done" | "now" |
   );
 }
 
+/** The line joining two steps: across between them on wider screens, down from the icon when they stack on a phone (18 Nov, Chloe). */
 function Joint({ done }: { done: boolean }) {
-  return <li aria-hidden="true" className={`hidden h-0.5 w-6 shrink-0 sm:block ${done ? "bg-green-600" : "bg-zk-border"}`} />;
+  return <li aria-hidden="true" className={`ml-[26px] h-3 w-0.5 shrink-0 sm:ml-0 sm:h-0.5 sm:w-6 ${done ? "bg-green-600" : "bg-zk-border"}`} />;
 }
 
 function LockIcon() {
