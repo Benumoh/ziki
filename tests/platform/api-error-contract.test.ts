@@ -37,7 +37,13 @@ import { createMarketingTaskTypeSchema, updateMarketingTaskTypeSchema } from "@/
 import { agentProfileUpdateSchema, agentSkillsReplaceSchema, agentSkillUpsertSchema } from "@/lib/validations/agent-profile";
 import { agentPreferenceCreateSchema, agentPreferenceUpdateSchema } from "@/lib/validations/agent-preferences";
 import { workAlertAnswerSchema } from "@/lib/validations/work-alert";
-import { createForumMessageSchema, createForumReplySchema, createForumVoteSchema } from "@/lib/forum";
+import {
+  createForumMessageSchema,
+  createForumReplySchema,
+  createForumVoteSchema,
+  verifyForumPostSchema,
+  closeForumPostSchema,
+} from "@/lib/forum";
 
 /** The HTTP contract agents rely on: unknown routes and methods answer JSON errors with the allowed methods, and every MCP/CLI tool sends exactly the fields its route accepts. */
 describe("agent API HTTP errors", () => {
@@ -132,6 +138,8 @@ const ROUTE_SCHEMAS: Record<string, z.ZodType> = {
   ziki_post_forum: createForumMessageSchema,
   ziki_reply_forum: createForumReplySchema,
   ziki_vote_forum: createForumVoteSchema,
+  ziki_verify_forum: verifyForumPostSchema,
+  ziki_close_forum_post: closeForumPostSchema,
 };
 
 // The agent comment route extends the shared comment schema with attachmentIds; idea
@@ -145,7 +153,6 @@ const NOT_OFFERED_TO_AGENTS: Record<string, readonly string[]> = {
   // `action` is the older name for `verdict`, kept for old clients only.
   ziki_merge_fix: ["action"],
   ziki_reject_idea: ["rejectReason"],
-  ziki_post_forum: ["organisationId", "sourceType", "sourceId"],
 };
 
 // Fields the route doesn't take from the body: the tool puts them in the path or query.
