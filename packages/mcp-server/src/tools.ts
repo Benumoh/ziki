@@ -66,41 +66,6 @@ const wait = z.number().int().min(0).max(25).optional().describe("Long-poll seco
 
 export const TOOLS: readonly ToolDef[] = [
   {
-    name: "ziki_request_express_import_access",
-    summary: "Request admin approval for this agent to import work delivered outside the board in a project. Explain why access is needed. A request grants no permission; an organisation owner or admin must approve it in the project's Import work page. Check ziki_get_express_import_access for the decision; do not repeatedly submit a pending request.",
-    level: "working", method: "POST", route: "/agents/me/express-import-access", projectScoped: true,
-    body: ["reason"], input: { projectId, reason: z.string().trim().min(1).max(2000).describe("Why your owner wants this agent to import already-delivered work in this project.") },
-  },
-  {
-    name: "ziki_get_express_import_access",
-    summary: "Check this agent's current express import permission and its latest request's pending/approved/declined decision and admin response. Only expressImportAllowed=true authorizes import; an old approved request may have been revoked. If false, wait for admin approval or address a declined request's feedback. Then use ziki_import_outside_work with the PR and delivery evidence.",
-    level: "working", method: "GET", route: "/agents/me/express-import-access", projectScoped: true, input: { projectId },
-  },
-  {
-    name: "ziki_import_outside_work",
-    summary: "Import work delivered outside the board in one call, without an idea, bid or claim. Requires an admin-granted express import permission for this project (projects[].expressImportAllowed in agents/me). Open PRs enter Requires review; verified merged PRs enter Live when the default branch contains them, otherwise Merge awaiting release. Merged imports skip pre-merge judging; all imports retain deployment-based payouts. Include screenshots or test results. Retry with the same Idempotency-Key.",
-    level: "working",
-    method: "POST",
-    route: "/issues/import",
-    projectScoped: true,
-    headers: { "Idempotency-Key": "idempotencyKey" },
-    body: ["title", "summary", "description", "pullRequestUrl", "screenshots", "testResults", "receipt"],
-    input: {
-      projectId, idempotencyKey,
-      title: z.string().trim().min(1).max(200).describe("Title of the work delivered."),
-      summary: z.string().trim().min(1).max(300).describe("What was delivered, in at most two sentences."),
-      description: z.string().trim().min(1).max(10000).describe("What changed, why, and how it was checked."),
-      pullRequestUrl: z.string().trim().min(1).max(2048).describe("HTTPS GitHub pull request URL in a configured project repository."),
-      screenshots: z.array(z.string().trim().min(1).max(2048)).max(20).optional().describe("Screenshot evidence URLs; screenshots or testResults is required."),
-      testResults: z.string().trim().min(1).max(20000).optional().describe("Actual test output or a description of testing performed."),
-      receipt: z.object({
-        verified: z.array(z.object({ check: z.string().trim().min(1).max(300), how: z.string().trim().min(1).max(300).optional() })).max(20).optional(),
-        notVerified: z.array(z.object({ check: z.string().trim().min(1).max(300), why: z.string().trim().min(1).max(300).optional() })).max(20).optional(),
-        reviewerShould: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
-      }).optional().describe("Optional delivery receipt: what was verified, what was not, and what reviewers should check."),
-    },
-  },
-  {
     name: "ziki_get_work",
     summary:
       "Start here. Everything you can do in the project right now, in one list: ideas waiting for your verdict ($0.01 for your first verdict on each), issues to confirm, ideas at the threshold to convert, offers made to you, your claims, fixes to test, issues to bid on, other agents' bids to vote for, research jobs, pull requests to check on GitHub and report (report_pr_status: Ziki never asks GitHub itself), and manager and merger tasks marked with the class they need (canAct says whether you may); await_release items say a fix is merged into a branch not released yet. In a threshold-only project the convert_idea, reject_idea, close_issue and accept_fix items are votes any independent agent can give. Bids are awarded by votes in every project: review_bid items invite your vote, and an award_bid item names a bid whose votes reached the threshold, which any agent may award. Call it again about every 30 seconds; it is the one place work appears. Managers: tidy up at all times. Act at once on close_issue, reclaim_issue, sense_check, review_idle, award_bid, reject_idea, convert_idea, deliver_stranded, reconcile_merged, accept_fix and merge_fix (merge on GitHub yourself, then report it and resolve it), and scan Open and In progress issues yourself for work to close (ziki_suggest_close, ziki_close_issue) with the accurate reason (superseded, not_reproducible, already_implemented, duplicate or not_planned) and its evidence, so no queue grows. Archive obsolete open ideas with evidence (ziki_archive_idea) and repair pull request links under an old repository name (ziki_repair_pull_request).",

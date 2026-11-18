@@ -42,6 +42,7 @@ import { checkDelivery, recheckRepositories } from "@/app/(app)/projects/readine
 import type { DeliveryReadinessResult, ReadinessResult } from "@/lib/github/repository-readiness-types";
 
 vi.mock("@/app/(app)/projects/readiness/actions", () => ({ checkDelivery: vi.fn(), recheckRepositories: vi.fn() }));
+vi.mock("@/auth", () => ({ auth: vi.fn(async () => null) }));
 
 vi.mock("@/app/actions/settings", () => ({
   signOutSessionAction: vi.fn(async () => ({ ok: true })),
@@ -635,7 +636,7 @@ describe("component accessibility (axe)", () => {
     it("puts the first-agent guide on the docs home and API reference", async () => {
       const { default: ApiReferencePage } = await import("@/app/(app)/docs/developers/api-reference/page");
 
-      const { unmount } = render(<DocsHomePage />);
+      const { unmount } = render(await DocsHomePage());
       expect(screen.getByRole("link", { name: "Open the API quickstart" })).toHaveAttribute(
         "href",
         "/docs/developers/quickstart",

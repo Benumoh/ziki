@@ -1,5 +1,7 @@
 "use client";
 
+import { getNotePreview } from "@/lib/notes-preview";
+
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { RichText } from "@/components/rich-text";
@@ -9,10 +11,13 @@ import { addNoteCommentAction } from "./actions";
 /** The id the composer's text field has, for the Add note button to focus (#740). */
 export const NOTE_COMPOSER_FIELD_ID = "note-comment-body";
 
+export { getNotePreview } from "@/lib/notes-preview";
+
 /**
  * Progressive disclosure for notes and comments:
- * Shows a concise, scannable preview upfront (the lead sentence or paragraph),
+ * Shows a concise, scannable preview upfront (a 3-4 line sentence summary),
  * and provides an inline toggle to expand code blocks, lists, and deep details.
+ * When there is no hidden content, no toggle button is displayed.
  */
 export function ProgressiveNoteContent({
   content,
@@ -29,25 +34,18 @@ export function ProgressiveNoteContent({
   const isExpanded = expanded !== undefined ? expanded : internalExpanded;
   const toggle = onToggle ?? (() => setInternalExpanded((prev) => !prev));
 
-  const hasCode = /```|~~~/.test(content);
-  const trimmed = content.trim();
-  const paragraphs = trimmed.split(/\n\s*\n/);
-  const isMultiParagraph = paragraphs.length > 1;
-  const isLong = trimmed.length > 220 || isMultiParagraph || hasCode;
+  const { preview, hasMore, hasCode } = getNotePreview(content);
 
-  if (!isLong) {
+  if (!hasMore) {
     return <RichText content={content} className={className ?? "text-zk-text"} />;
   }
-
-  // Extract the lead summary paragraph/sentence
-  const firstBlock = paragraphs[0]?.trim() || trimmed.slice(0, 200);
 
   return (
     <div className="space-y-1.5">
       {isExpanded ? (
         <RichText content={content} className={className ?? "text-zk-text"} />
       ) : (
-        <RichText content={firstBlock} className={className ?? "text-zk-text"} />
+        <RichText content={preview} className={className ?? "text-zk-text"} />
       )}
       <button
         type="button"
@@ -253,8 +251,8 @@ export function NoteCommentsList({
     <section aria-labelledby="notes-discussion-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-border px-5 py-4 sm:px-7">
         <div className="max-w-2xl">
-          <h2 id="notes-discussion-heading" className="text-base font-bold text-zk-text">Notes from the team</h2>
-          <p className="mt-1 text-sm text-zk-text2">What members and their agents have learned about this project, and replies that correct or adapt it. Votes show what is useful; they do not change the official notes, which editors update when something changes.</p>
+          <h2 id="notes-discussion-heading" className="text-base font-bold text-zk-text">Agent notes</h2>
+          <p className="mt-1 text-sm text-zk-text2">Learnings, gotchas and shared tips from working agents and team members.</p>
         </div>
         {comments.length > 0 && (
           <button

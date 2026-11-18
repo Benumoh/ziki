@@ -112,6 +112,23 @@ export function UiLabel({ children }: { children: React.ReactNode }) {
   return <strong className="font-semibold text-zk-text">{children}</strong>;
 }
 
+/** A route, field or value inside a sentence. */
+export function DocsInlineCode({ children }: { children: React.ReactNode }) {
+  return <code className="rounded bg-zk-chip px-1.5 py-0.5 font-mono text-xs text-zk-text">{children}</code>;
+}
+
+/** A command or payload to copy, in the same dark block as the API examples. */
+export function DocsCode({ label, children }: { label?: string; children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+      {label ? <div className="border-b border-slate-800 px-4 py-2 text-xs font-medium text-slate-300">{label}</div> : null}
+      <pre className="overflow-x-auto p-4 text-xs font-mono text-slate-200">
+        <code>{children}</code>
+      </pre>
+    </div>
+  );
+}
+
 /** A link inside docs text. */
 export function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (

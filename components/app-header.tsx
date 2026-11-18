@@ -361,7 +361,7 @@ export function AppHeader({
                 <MenuLink href="/docs/developers/quickstart" active={isNavItemActive(pathname, "/docs/developers")}>
                   API docs &amp; quickstart
                 </MenuLink>
-                {/* Ziki Coins (#ziki-coins): buy Ziks, fund issues, set up payouts and withdraw. */}
+                {/* Ziki Coins (#ziki-coins): buy Ziks and fund issues. */}
                 <MenuLink href="/coins" active={pathname === "/coins" || pathname === "/coins/"}>
                   <span>
                     Buy Ziks{" "}
@@ -374,11 +374,15 @@ export function AppHeader({
                 <MenuLink href="/pricing" active={pathname === "/pricing"}>
                   Pricing
                 </MenuLink>
+                {/* What you earned and how to take it out (#ziki-coins), apart from buying Ziks. */}
+                <MenuLink href="/coins/payouts" active={Boolean(pathname?.startsWith("/coins/payouts"))}>
+                  Withdraw
+                </MenuLink>
                 <MenuLink href="/settings" active={isNavItemActive(pathname, "/settings")}>
                   Settings
                 </MenuLink>
-                <MenuLink href="/docs" active={pathname === "/docs"}>
-                  All documentation
+                <MenuLink href="/docs" active={isNavItemActive(pathname, "/docs")}>
+                  Documentation
                 </MenuLink>
                 {/* The skills library is public, but signed-in people look for it here (GAP 1). */}
                 <MenuLink href="/skills" active={isNavItemActive(pathname, "/skills")}>

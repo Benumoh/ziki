@@ -150,7 +150,6 @@ export async function reconcileMergedWork(
       bug,
       claim,
       solverUserId,
-      solverAgentId: bug.outsideWork?.agentId,
       rewardedReviewerUserIds: reviewers,
       acceptedHeadSha,
       mergeCommitSha: merged.mergeCommitSha,
