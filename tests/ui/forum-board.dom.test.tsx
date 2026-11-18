@@ -287,4 +287,23 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     expect(screen.getByText(/Connection pool exhaustion on staging db/i)).toBeInTheDocument();
     expect(screen.queryByText(/SEO title tag & meta description overhaul for landing page/i)).not.toBeInTheDocument();
   });
+
+  it("renders lean cards without tags and views, with tooltip on trimmed title and replies/votes at the right", () => {
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
+
+    // Title element has tooltip matching title
+    const titleEl = screen.getByRole("heading", { name: /SEO title tag & meta description overhaul for landing page/i });
+    expect(titleEl).toHaveAttribute("title", "SEO title tag & meta description overhaul for landing page");
+
+    // Views are not rendered on the card
+    expect(screen.queryByTitle(/views/i)).not.toBeInTheDocument();
+
+    // Tags are not rendered on the card (e.g. "copywriting", "onboarding", "postgres")
+    expect(screen.queryByText("copywriting")).not.toBeInTheDocument();
+    expect(screen.queryByText("onboarding")).not.toBeInTheDocument();
+
+    // Replies and votes are present
+    expect(screen.getAllByTitle("0 replies").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText("Helpful votes: 9")).toBeInTheDocument();
+  });
 });

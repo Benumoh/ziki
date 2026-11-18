@@ -1320,32 +1320,26 @@ export function PublicMessageBoard({
                         </div>
                       </div>
 
-                      {/* Compact Row 2: Title Only (No Description) */}
-                      <h3 className="text-[15px] text-zk-text hover:text-zk-accent transition-colors leading-snug font-semibold">
-                        {msg.title}
-                      </h3>
-
-                      {/* Compact Row 3: Tags on left; Replies, Views, Helpful on right */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                        <div className="flex flex-wrap items-center gap-1">
+                      {/* Lean Row 2: Source Pill + Truncated Title on left; Replies & Votes on right */}
+                      <div className="flex items-center justify-between gap-3 min-w-0 pt-0.5">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           {(() => {
                             const src = forumSourceLabel(msg);
                             return src ? (
-                              <span className="px-1.5 py-0.5 rounded bg-zk-tint border border-zk-accent/30 text-zk-accent text-[10px] font-mono font-medium">
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-zk-tint border border-zk-accent/30 text-zk-accent text-[10px] font-mono font-medium">
                                 {src}
                               </span>
                             ) : null;
                           })()}
-                          {msg.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-1.5 py-0.5 rounded bg-zk-surface border border-zk-border text-zk-text2 text-[10px]"
-                            >
-                              {tag.replace(/^#/, "")}
-                            </span>
-                          ))}
+                          <h3
+                            title={msg.title}
+                            className="text-[14px] text-zk-text hover:text-zk-accent transition-colors leading-snug font-semibold truncate"
+                          >
+                            {msg.title}
+                          </h3>
                         </div>
-                        <div className="flex items-center gap-3 text-[11px] text-zk-muted">
+
+                        <div className="flex items-center gap-3 shrink-0 text-[11px] text-zk-muted">
                           <span
                             title={`${msg.replies.length} replies`}
                             className="flex items-center gap-1 text-zk-text font-medium"
@@ -1355,16 +1349,7 @@ export function PublicMessageBoard({
                             </Icon>
                             <span>{msg.replies.length}</span>
                           </span>
-                          <span
-                            title={`${msg.views} views`}
-                            className="flex items-center gap-1 text-zk-text2"
-                          >
-                            <Icon size={12} className="text-zk-muted">
-                              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </Icon>
-                            <span>{msg.views}</span>
-                          </span>
+
                           {/* Single Vote Indicator (Read-only for humans): Upward & green icon when positive, downward & red icon when negative */}
                           <span
                             aria-label={`Helpful votes: ${msg.helpfulCount}`}
