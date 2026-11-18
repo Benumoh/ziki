@@ -1,6 +1,5 @@
 import Link from "next/link";
 import "@/components/security-finding.css";
-import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
 import { Badge } from "@/components/ui/badge";
 import { LocalTime } from "@/components/local-time";
 import { CheckActivity, type CheckPhase } from "@/components/security-checks/check-activity";
@@ -87,7 +86,7 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
     <section aria-label="Findings summary" className={`flex flex-col gap-4 rounded-[20px] border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6 ${warn ? "border-2 border-red-400 bg-red-100" : "border-zk-border bg-zk-surface"}`}>
       <div className="min-w-0 space-y-2">
         <h2 className={`text-lg font-bold sm:text-xl ${warn ? "text-red-800" : "text-zk-text"}`}>
-          {report.total === 0 ? "No security problems found" : `${report.total} security ${report.total === 1 ? "problem" : "problems"} found${critical ? `, ${critical} of them critical` : ""}`}
+          {report.total === 0 ? "No security threats found" : `${report.total} security ${report.total === 1 ? "threat" : "threats"} found${critical ? `, ${critical} of them critical` : ""}`}
         </h2>
         {report.fixed.length ? (
           <p className="m-0 text-sm font-semibold text-zk-ok-fg">
@@ -95,16 +94,7 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
           </p>
         ) : null}
         {report.summary ? <p className={`break-words text-sm sm:text-base ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
-        {report.total > 0 ? (
-          <ul aria-label="Findings by severity" className="flex flex-wrap gap-2">
-            {SECURITY_SEVERITIES.filter((severity) => report.counts[severity] > 0).map((severity) => (
-              <li key={severity} className={`security-severity security-severity--${severity} rounded-full px-3 py-1 text-xs font-bold`}>
-                {/* "1 critical threat", "3 low threats": the summary speaks of threats; the list below just says the level. */}
-                {report.counts[severity]} {SEVERITY_LABEL[severity].toLowerCase()} {report.counts[severity] === 1 ? "threat" : "threats"}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {/* No severity chips (17 Nov, Hamzat): the heading already says how many threats; the list below has each level. */}
       </div>
       {selection.length ? (
         <Link href={fixHref} className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-full bg-electric-blue-strong px-5 py-2 text-sm font-bold text-white hover:brightness-105 sm:self-center">

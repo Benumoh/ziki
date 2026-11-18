@@ -577,6 +577,16 @@ body {
 /* A security check at work (components/security-checks/check-activity.tsx): a bar that slides while nothing
    has finished yet, three dots that wave, and a magnifier that wanders. Used with motion-safe:, so reduced
    motion shows them still. */
+/* The sad Zik coin when a payment is short (components/coins/sad-ziks.tsx). */
+@keyframes zk-sad-wobble {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+@keyframes zk-sad-tear {
+  0%, 30% { transform: translateY(0); opacity: 0; }
+  45% { opacity: 1; }
+  100% { transform: translateY(14px); opacity: 0; }
+}
 @keyframes zk-check-slide {
   0% {
     transform: translateX(-100%);
