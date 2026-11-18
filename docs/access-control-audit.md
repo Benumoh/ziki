@@ -1,6 +1,6 @@
 # Access-control audit
 
-Daniel's part of the Ziki work split: security, access control and contributions. This records what was checked, what works, what was fixed, and what still needs a decision. Checked against `main` at `a80cd8b6` (16 Nov 2026).
+Daniel's part of the Ziki work split: security, access control and contributions. This records what was checked, what works, what was fixed, and what still needs a decision. Checked against `main` at `a80cd8b6` (16 Nov 2026), and rechecked after merging `main` at `18820855` (18 Nov 2026).
 
 ## The rules
 
@@ -23,7 +23,7 @@ A private project someone can't see always answers exactly like a missing one (4
 | Organisation area `/<org>/<project>/org/*` | Layout requires organisation membership. Invites and join requests are listed for owners and admins only. | ✅ Works. |
 | Issue addresses `/<org>/<project>/<n>`, and the issue page's title and share tags | `findProjectIssue`. Signed out: public projects only. | ✅ Fixed in #679 (Ziki #930). |
 | Public issues and project metadata | `findPublicProject`, `findPublicIssue`: public, unarchived, and never a security finding | ✅ Works. |
-| Discover, sitemap, project SEO | `visibility: "public"`, unarchived | ✅ Works. Maria's SEO work uses the same rule. |
+| Discover, sitemap, project SEO | `visibility: "public"`, unarchived. The sitemap's issues are also never deleted and never a security finding. | ✅ Works. Maria's SEO work uses the same rule. |
 | Files `GET /api/attachments/{id}` | Signed in. Then: the finding's own rule for security evidence; organisation member, project member or a public project for issue files; project people only for idea files; admins only for files on deleted issues; the uploader only for files not yet attached | ✅ Works. Tested for every role. |
 | Files via the agent API `GET /api/v1/attachments/{id}` | The agent's organisation only, and the finding rule | ✅ Works. |
 | Agent API `/api/v1/*` | One key per organisation. Every project and issue lookup is limited to the key's organisation. | ✅ Works (`tests/security/project-scope.test.ts`, `agent-key.test.ts`). |
@@ -61,3 +61,4 @@ These are left as they are: changing them would change the product's requirement
 - Merged: #679 (signed-out issue lookups, request to join), #689 (reporter emails).
 - Tests: `tests/security/access-control-matrix.test.ts` (new: every role against public and private pages and files), `join-requests.test.ts`, `signed-out-issue-scope.test.ts`, `reporter-email-scope.test.ts`, `project-scope.test.ts`, `security-findings.test.ts`.
 - Local run (Node 24, 16 Nov 2026), those six files: 6 of 6 files passed, 98 of 98 tests.
+- Browser tests: `e2e/access-control.spec.ts` (new). The seed adds an organisation none of the test accounts belong to, with a public and a private project. The spec opens them signed out, as a regular user, as a site admin of another organisation, and as the site super admin. A private project, its issues, its ideas and its organisation area must look exactly like a project that doesn't exist, and its issue's title must never reach the page. Each check attaches a full-page screenshot to the Playwright report (`pnpm e2e`, then `pnpm exec playwright show-report`). CI runs it on every pull request.
