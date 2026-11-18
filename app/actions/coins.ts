@@ -34,7 +34,8 @@ export async function buyZiksAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   let url: string;
   try {
-    url = await createPackCheckout(user.id, user.email ?? undefined, String(formData.get("packId") ?? ""));
+    // From a scan's checkout (#deeper-scan-gate): Stripe sends them back to that scan. Checked again in createPackCheckout.
+    url = await createPackCheckout(user.id, user.email ?? undefined, String(formData.get("packId") ?? ""), formData.get("returnTo"));
   } catch (error) {
     const message = failure(error);
     redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
