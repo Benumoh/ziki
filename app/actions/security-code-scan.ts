@@ -8,6 +8,13 @@ import { OWNERS_ONLY_MESSAGE } from "@/lib/security-checks";
 import { codeScanQuote, startCodeScan, type CodeScanOutcome, type CodeScanQuote, type CodeScanSource } from "@/lib/security-checks/code-scan";
 import { kickCheck } from "@/lib/security-checks/engine";
 import { prisma } from "@/lib/prisma";
+import { saveCodeFindings } from "@/lib/security-checks/code-findings";
+import { saveQuickScan } from "@/lib/security-checks/entry";
+import { previewScan } from "@/lib/security-checks/preview";
+import { summarisePreview } from "@/lib/security-checks/preview-summary";
+import { repoAccessFor } from "@/lib/security-checks/repo-reader";
+import { withSiteAddress } from "@/lib/security-checks/site-address";
+import { targetAddress } from "@/lib/security-checks/target";
 
 /**
  * Connect code (#security-code-scan, 18 Nov): the website scan's Code scan step. Only workspace owners and admins,
@@ -45,7 +52,23 @@ export async function startPaidCodeScan(checkId: string, source: CodeScanSource)
   if (!who) return { ok: false, reason: "not_found", error: OWNERS_ONLY_MESSAGE };
   const outcome = await startCodeScan(who.organisationId, who.userId, checkId, clean);
   if (outcome.ok) {
-    after(() => kickCheck(prisma, outcome.checkId));
+    const organisationId = who.organisationId;
+    const visitor = `user:${who.userId}`;
+    after(async () => {
+      await kickCheck(prisma, outcome.checkId);
+      // The repo's own quick scan (#security-repo-scan): Ziki reads it at once (a private one through the project's
+      // GitHub App), so the code scan's Quick scan section has results while agents work. A failure doesn't stop them.
+      try {
+        const check = await prisma.securityCheck.findUnique({ where: { id: outcome.checkId }, select: { targetId: true, target: { select: { kind: true, value: true } } } });
+        if (!check) return;
+        const result = await previewScan(targetAddress(check.target), { visitor, repoAccess: await repoAccessFor(organisationId, check.target) });
+        if (!result.ok) return;
+        await saveQuickScan(check.targetId, await withSiteAddress(summarisePreview(result)));
+        await saveCodeFindings(prisma, outcome.checkId, result);
+      } catch {
+        // Logged where it failed; the agents' scan goes on.
+      }
+    });
     revalidatePath("/security");
     revalidatePath(`/security/checks/${checkId}`);
   }

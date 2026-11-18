@@ -13,8 +13,16 @@ import type { CodeProject } from "@/lib/security-checks/code-scan";
  * Where a check is, as three small steps on one line (18 Nov, Chloe; Mark's 16 Nov call: "security should be
  * in phases… you see something on the top that tells you done, not done"): Quick scan, then the Deeper scan
  * (the agents' check), then the Code scan, which is locked until the person connects their code and pays.
- * Small one-line chips joined by a line, as GitHub shows a run's steps.
+ * One-line steps joined by a line, as GitHub shows a run's steps. They share the full width, like the risk meter
+ * under them (18 Nov, Chloe).
  */
+/** One step's box (review, 18 Nov: one shared style instead of four copies). The step that's running is tinted blue so it stands out. */
+const CHIP = "flex h-12 w-full min-w-0 items-center gap-2.5 rounded-xl border px-4 text-sm font-semibold";
+const CHIP_REST = "border-zk-border bg-zk-surface";
+const CHIP_NOW = "border-electric-blue-strong/40 bg-zk-tint";
+/** Ziki's keyboard focus outline, on every control in the steps. */
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent";
+
 export function ScanSteps({
   site,
   quickFound,
@@ -51,15 +59,15 @@ export function ScanSteps({
   const deepState =
     phase === "planning" ? "Planning" : phase === "stopped" ? "Stopped" : deepDone ? `Done · ${deepFound} found` : phase === "writing" ? "Writing the report" : `Agents checking · ${done} of ${total}`;
   return (
-    <ol aria-label="Steps of this security check" className="mt-0 flex list-none flex-col gap-1.5 p-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-0">
+    <ol aria-label="Steps of this security check" className="mt-0 flex list-none flex-col p-0 sm:flex-row sm:items-center">
       <Step state="done" name="Quick scan" detail={quickFound === null ? "Not run" : `Done · ${quickFound} found`} jumpTo="quick-scan-results" />
       <Joint done />
       {paymentRequired ? (
-        <li className="flex">
-          <span className="inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text sm:w-auto">
+        <li className="flex min-w-0 sm:flex-1">
+          <span className={`${CHIP} ${CHIP_REST} text-zk-text`}>
             <LockIcon />
             {/* Its name jumps to the Deeper scan section (18 Nov); Start opens the checkout. */}
-            <button type="button" onClick={() => jumpTo("deeper-scan-results")} className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-zk-accent">
+            <button type="button" onClick={() => jumpTo("deeper-scan-results")} className={`rounded hover:underline ${FOCUS}`}>
               Deeper scan
             </button>
             {/* The price shows only once the start pop-up opens (18 Nov, Chloe). The pop-up and payment are the
@@ -67,8 +75,9 @@ export function ScanSteps({
             <button
               type="button"
               aria-haspopup="dialog"
+              aria-label="Start the deeper scan"
               onClick={() => window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"))}
-              className="ml-auto inline-flex h-6 items-center rounded-full bg-electric-blue-strong px-3 text-xs font-bold text-white hover:brightness-105 sm:ml-1"
+              className={`ml-auto inline-flex h-9 shrink-0 items-center rounded-full bg-electric-blue-strong px-4 text-[13px] font-bold text-white hover:brightness-105 ${FOCUS}`}
             >
               Start
             </button>
@@ -80,28 +89,28 @@ export function ScanSteps({
       {codeStep ? <Joint done={deepDone} /> : null}
       {!codeStep ? null : codeScan ? (
         // Paid for (#security-code-scan): the code scan is its own scan; the step says where it stands and opens it.
-        <li className="flex">
+        <li className="flex min-w-0 sm:flex-1">
           <Link
             href={`/security/checks/${encodeURIComponent(codeScan.checkId)}`}
-            className="inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text hover:bg-zk-chip sm:w-auto"
+            className={`${CHIP} ${codeScan.finished ? `${CHIP_REST} hover:bg-zk-chip` : `${CHIP_NOW} hover:brightness-[0.98]`} text-zk-text ${FOCUS}`}
           >
             {codeScan.finished ? (
-              <span aria-hidden="true" className="grid h-4 w-4 place-items-center rounded-full bg-green-600 text-white">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-green-600 text-white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
               </span>
             ) : (
-              <span aria-hidden="true" className="h-4 w-4 rounded-full border-2 border-electric-blue-strong border-r-zk-tint motion-safe:animate-spin" />
+              <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-full border-2 border-electric-blue-strong border-r-zk-tint motion-safe:animate-spin" />
             )}
-            Code scan
-            <span className={`text-xs ${codeScan.finished ? "font-medium text-zk-muted" : "font-semibold text-zk-accent"}`}>
+            <span className="shrink-0 whitespace-nowrap">Code scan</span>
+            <span aria-live="polite" className={`min-w-0 truncate text-[13px] tabular-nums ${codeScan.finished ? "font-medium text-zk-muted" : "font-semibold text-zk-accent"}`}>
               {codeScan.finished ? `Done · ${codeScan.found} found` : "Agents reading the code"}
             </span>
-            <span aria-hidden="true" className="ml-auto text-zk-muted sm:ml-1">&rarr;</span>
+            <span aria-hidden="true" className="ml-auto shrink-0 text-zk-muted">&rarr;</span>
           </Link>
         </li>
       ) : (
-        <li className="flex">
-          <span className="inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-muted sm:w-auto">
+        <li className="flex min-w-0 sm:flex-1">
+          <span className={`${CHIP} ${CHIP_REST} text-zk-muted`}>
             <LockIcon />
             Code scan
             <ConnectCode site={site} price={codePrice} checkId={checkId} />
@@ -119,42 +128,44 @@ export function ScanSteps({
 function jumpTo(id: string) {
   const section = document.getElementById(id) ?? document.getElementById("check-results");
   if (section instanceof HTMLDetailsElement) section.open = true;
-  section?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  section?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
 }
 
 function Step({ state, name, detail, jumpTo: target }: { state: "done" | "now" | "locked"; name: string; detail: string; jumpTo?: string }) {
-  const chip = "inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text sm:w-auto";
+  const chip = `${CHIP} ${state === "now" ? CHIP_NOW : CHIP_REST} text-zk-text`;
   const Box = target ? "button" : "span";
   return (
-    <li className="flex">
+    <li className="flex min-w-0 sm:flex-1">
       <Box
         {...(target ? { type: "button" as const, onClick: () => jumpTo(target), title: `Go to ${name}` } : {})}
-        className={target ? `${chip} cursor-pointer text-left hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-zk-accent` : chip}
+        className={target ? `${chip} cursor-pointer text-left ${state === "now" ? "hover:brightness-[0.98]" : "hover:bg-zk-chip"} ${FOCUS}` : chip}
       >
         {state === "done" ? (
-          <span aria-hidden="true" className="grid h-4 w-4 place-items-center rounded-full bg-green-600 text-white">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-green-600 text-white">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
           </span>
         ) : state === "now" ? (
-          <span aria-hidden="true" className="h-4 w-4 rounded-full border-2 border-electric-blue-strong border-r-zk-tint motion-safe:animate-spin" />
+          <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-full border-2 border-electric-blue-strong border-r-zk-tint motion-safe:animate-spin" />
         ) : (
           <LockIcon />
         )}
-        {name}
-        <span className={`text-xs ${state === "now" ? "font-semibold text-zk-accent" : "font-medium text-zk-muted"}`}>{detail}</span>
+        <span className="shrink-0 whitespace-nowrap">{name}</span>
+        <span aria-live="polite" className={`min-w-0 truncate text-[13px] tabular-nums ${state === "now" ? "font-semibold text-zk-accent" : "font-medium text-zk-muted"}`}>{detail}</span>
         <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (in progress)" : " (locked)"}</span>
       </Box>
     </li>
   );
 }
 
+/** The line joining two steps: across between them on wider screens, down from the icon when they stack on a phone (18 Nov, Chloe). */
 function Joint({ done }: { done: boolean }) {
-  return <li aria-hidden="true" className={`hidden h-0.5 w-7 sm:block ${done ? "bg-green-600" : "bg-zk-border"}`} />;
+  return <li aria-hidden="true" className={`ml-[26px] h-3 w-0.5 shrink-0 sm:ml-0 sm:h-0.5 sm:w-6 ${done ? "bg-green-600" : "bg-zk-muted/50"}`} />;
 }
 
 function LockIcon() {
   return (
-    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
       <rect x="5" y="11" width="14" height="9" rx="2" />
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
@@ -259,7 +270,7 @@ function ConnectCode({ site, price, checkId }: { site: string; price: number; ch
         type="button"
         onClick={open}
         aria-haspopup="dialog"
-        className="ml-auto inline-flex h-6 items-center rounded-full border border-electric-blue-strong/25 bg-zk-tint px-2.5 text-xs font-bold text-zk-accent hover:brightness-95 sm:ml-1"
+        className={`ml-auto inline-flex h-9 shrink-0 items-center rounded-full border border-electric-blue-strong/25 bg-zk-tint px-4 text-[13px] font-bold text-zk-accent hover:brightness-95 ${FOCUS}`}
       >
         Connect code
       </button>
@@ -283,7 +294,7 @@ function ConnectCode({ site, price, checkId }: { site: string; price: number; ch
             <button type="button" onClick={() => setMode("read")} aria-pressed={mode === "read"} className={option("read")}>
               <span className="min-w-0">
                 <span className="flex items-center gap-2 text-sm font-bold text-zk-text">
-                  Read-only <span className="rounded-full bg-zk-ok-bg px-2 py-px text-[10px] font-extrabold uppercase tracking-wide text-zk-ok-fg">Safest</span>
+                  Read-only <span className="rounded-full bg-zk-ok-bg px-2 py-px text-xs font-extrabold uppercase tracking-wide text-zk-ok-fg">Safest</span>
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-zk-muted">Ziki reads the code and tells you each fix to copy. Nothing in your repo is changed.</span>
               </span>

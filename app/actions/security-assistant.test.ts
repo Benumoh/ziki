@@ -49,6 +49,8 @@ vi.mock("@/lib/security-checks/site-chat", async (importOriginal) => ({
   scansContextNote: mocks.scansNote,
 }));
 vi.mock("@/lib/security-checks/preview", () => ({ previewScan: mocks.preview }));
+// No project of the workspace connected a private repo here (#security-repo-scan).
+vi.mock("@/lib/security-checks/repo-reader", () => ({ repoAccessFor: async () => null }));
 
 import { deeperScanCost, startPaidDeeperScan } from "./security-deeper-scan";
 import { removeScan, replaceScan, talkToSecurityAssistant } from "./security-assistant";
@@ -103,7 +105,7 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
   it("scans a plain link without the AI, adds it to the person's scans at once, and saves the quick scan", async () => {
     const answer = await talkToSecurityAssistant(say("https://www.settle.ng"));
     expect(mocks.ask).not.toHaveBeenCalled();
-    expect(mocks.preview).toHaveBeenCalledWith("settle.ng", { visitor: "user:u1" });
+    expect(mocks.preview).toHaveBeenCalledWith("settle.ng", { visitor: "user:u1", repoAccess: null });
     // No proof step: added straight away (14 Nov plan).
     expect(mocks.addTargetAndCheck).toHaveBeenCalledWith("org1", "u1", expect.objectContaining({ kind: "website", value: "settle.ng" }));
     expect(mocks.saveQuickScan).toHaveBeenCalledWith("t1", expect.objectContaining({ total: 2, risk: "high" }));
@@ -134,7 +136,7 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
     ] });
     const answer = await talkToSecurityAssistant(say("github.com/settle/app"));
     // The scan reads its link back through the same parser, so a repo must go in as a GitHub address, not "owner/name".
-    expect(mocks.preview).toHaveBeenCalledWith("github.com/settle/app", { visitor: "user:u1" });
+    expect(mocks.preview).toHaveBeenCalledWith("github.com/settle/app", { visitor: "user:u1", repoAccess: null });
     expect(mocks.addTargetAndCheck).toHaveBeenCalledTimes(1);
     expect(answer).toMatchObject({ kind: "scan", target: "github.com/settle/app", summary: { kind: "repo", total: 2, risk: "high" } });
     expect(JSON.stringify(answer)).not.toContain("SECRET");
@@ -211,7 +213,7 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
     // Never quick-scanned before, so it looks afresh rather than reusing a quick scan from the last 10 minutes.
     mocks.findOwnScan.mockResolvedValue({ checkId: "c1", targetId: "t1", target: { id: "t1", kind: "website", value: "settle.ng", previewAt: null } });
     const answer = await replaceScan("c1");
-    expect(mocks.preview).toHaveBeenCalledWith("settle.ng", { visitor: "user:u1", fresh: true });
+    expect(mocks.preview).toHaveBeenCalledWith("settle.ng", { visitor: "user:u1", fresh: true, repoAccess: null });
     expect(mocks.saveQuickScan).toHaveBeenCalledWith("t1", expect.objectContaining({ total: 2 }));
     expect(mocks.addTargetAndCheck).not.toHaveBeenCalled();
     expect(answer).toMatchObject({ ok: true, summary: { total: 2 } });
