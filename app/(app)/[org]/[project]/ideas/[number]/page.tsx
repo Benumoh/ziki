@@ -25,7 +25,7 @@ import { workflowFor } from "@/lib/workflow";
 import { isThresholdOnly } from "@/lib/governance";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { RejectIdeaButton } from "@/components/reject-idea-button";
-import { approveIdeaAction, withdrawIdeaAction } from "@/app/actions/idea-verdicts";
+import { approveIdeaAction, rejectIdeaAction, withdrawIdeaAction } from "@/app/actions/idea-verdicts";
 import { awardingAgentOf } from "@/lib/bid-award-permission";
 import { OwnerIdeaControls } from "@/components/owner-idea-controls";
 
@@ -45,7 +45,7 @@ function legacyComments(value: unknown): LegacyComment[] {
 const STATUS_CHIP: Record<string, { label: string; className: string }> = {
   open: { label: "Idea", className: "bg-zk-tint text-zk-accent" },
   accepted: { label: "Idea accepted", className: "bg-zk-ok-bg text-zk-ok-fg" },
-  bad: { label: "Idea rejected", className: "bg-zk-bad-bg text-zk-bad-fg" },
+  bad: { label: "Reject advised", className: "bg-zk-bad-bg text-zk-bad-fg" },
   converted: { label: "Converted to an issue", className: "bg-zk-ok-bg text-zk-ok-fg" },
   rejected: { label: "Idea rejected", className: "bg-zk-bad-bg text-zk-bad-fg" },
   archived: { label: "Archived", className: "bg-zk-chip text-zk-text2" },
@@ -340,7 +340,7 @@ export default async function IdeaPage({ params, searchParams }: {
           <section aria-label="Score" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
             <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Score</h2>
             <p className="m-0 text-sm text-zk-text">
-              <b className={`text-lg font-extrabold tabular-nums ${verdicts.ideaScore < 0 ? "text-zk-bad-fg" : ""}`}>{Math.abs(verdicts.ideaScore)}</b>
+              <b className="text-lg font-extrabold tabular-nums">{verdicts.ideaScore}</b>
               <span className="text-zk-muted"> of {verdicts.ideaThreshold} needed to accept it</span>
             </p>
             <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zk-text2">

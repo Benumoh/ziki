@@ -3,7 +3,7 @@ import { Prisma, type SecurityCheckStatus, type SecuritySeverity, type SecurityT
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { prisma } from "@/lib/prisma";
 import type { PreviewSummary } from "./preview-summary";
-import { SECURITY_CHECK_PRICE_COINS, FINISHED_CHECK_STATUSES, FREE_SCANS_PER_WORKSPACE_PER_MONTH, freeScanAllowed, freeScanMonthStart, ownershipProofRequired } from "@/lib/security-checks";
+import { DEEPER_SCAN_PRICE_ZIKS, FINISHED_CHECK_STATUSES, FREE_SCANS_PER_WORKSPACE_PER_MONTH, freeScanAllowed, freeScanMonthStart, ownershipProofRequired } from "@/lib/security-checks";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 
 /**
@@ -15,7 +15,7 @@ import type { ParsedTarget } from "@/lib/security-checks/target";
 export type AddedCheck = {
   targetId: string;
   checkId: string;
-  /** Ownership was already proven for this target, so its free scan starts straight away. */
+  /** Ownership was already proven; the deeper scan still waits for payment. */
   verified: boolean;
   /** An unfinished check for this target already existed and was reused. */
   reused: boolean;
@@ -34,15 +34,15 @@ export function newOwnershipToken(): string {
 }
 
 /**
- * Store the target (or reuse the workspace's existing one) and open a free
+ * Store the target (or reuse the workspace's existing one) and open an unpaid
  * check (#security-checks, plan C1). The person's own unfinished check on that
  * target is reused rather than opening a second one. Checks are per person:
  * someone else in the workspace gets their own.
  *
- * Every check is free, within limits: a site gets one free scan, and a
+ * The quick scan is free, within limits: a site gets one free scan, and a
  * workspace gets FREE_SCANS_PER_WORKSPACE_PER_MONTH a month. Past either, no
- * check is opened and the client is told why. Clients pay per finding, when
- * they unlock its fix.
+ * check is opened and the client is told why. A new deeper scan waits for payment;
+ * per-finding remediation payments remain separate.
  */
 export async function addTargetAndCheck(
   organisationId: string,
@@ -61,8 +61,8 @@ export async function addTargetAndCheck(
   if (open) return { targetId: stored.id, checkId: open.id, verified, reused: true };
 
   const [targetFreeScans, workspaceFreeScansThisMonth] = await Promise.all([
-    prisma.securityCheck.count({ where: { targetId: stored.id, free: true } }),
-    prisma.securityCheck.count({ where: { organisationId, free: true, createdAt: { gte: freeScanMonthStart(now) } } }),
+    prisma.securityCheck.count({ where: { targetId: stored.id, previousCheckId: null } }),
+    prisma.securityCheck.count({ where: { organisationId, previousCheckId: null, createdAt: { gte: freeScanMonthStart(now) } } }),
   ]);
   const answer = freeScanAllowed({ targetFreeScans, workspaceFreeScansThisMonth });
   if (!answer.allowed) {
@@ -79,10 +79,10 @@ export async function addTargetAndCheck(
       organisationId,
       targetId: stored.id,
       requestedById: userId,
-      free: true,
-      priceCoins: SECURITY_CHECK_PRICE_COINS,
-      // A target proven once never asks again: its new checks are ready for agents.
-      // No proof step while it's switched off (14 Nov plan): the check is queued at once.
+      free: false,
+      priceCoins: DEEPER_SCAN_PRICE_ZIKS,
+      // The queue state is also payment-gated: creating the row never starts agents.
+      // Ownership remains a separate prerequisite when proof is enabled.
       status: verified || !ownershipProofRequired() ? "queued" : "awaiting_ownership",
     },
     select: { id: true },
@@ -132,13 +132,31 @@ export async function findScannedCheck(organisationId: string, userId: string, t
   return check ? { checkId: check.id, summary: readQuickScan(check.target.previewSummary), finished: check.postedAt !== null } : null;
 }
 
+/**
+ * Whether a fix was paid for on this site since its last quick scan (#security-rescan, 17 Nov): a finding unlocked,
+ * or moved to the app, after the quick scan ran. Then scanning again looks at the site afresh instead of reusing a
+ * quick scan from the last 10 minutes. True when it never had a quick scan.
+ */
+export async function fixPaidSinceQuickScan(target: { id: string; previewAt: Date | null }): Promise<boolean> {
+  if (!target.previewAt) return true;
+  const paid = await prisma.securityCheckResult.count({
+    where: {
+      check: { targetId: target.id },
+      OR: [{ unlockedAt: { gt: target.previewAt } }, { finding: { createdAt: { gt: target.previewAt } } }],
+    },
+  });
+  return paid > 0;
+}
+
 /** One of this person's scans in this workspace, with its site, for replacing its quick scan. */
 export async function findOwnScan(organisationId: string, userId: string, checkId: string) {
   const check = await prisma.securityCheck.findFirst({
     where: { id: checkId, organisationId, requestedById: userId },
-    select: { id: true, target: { select: { id: true, kind: true, value: true } } },
+    select: { id: true, target: { select: { id: true, kind: true, value: true, previewAt: true } } },
   });
-  return check ? { checkId: check.id, targetId: check.target.id, target: { kind: check.target.kind, value: check.target.value } } : null;
+  return check
+    ? { checkId: check.id, targetId: check.target.id, target: { id: check.target.id, kind: check.target.kind, value: check.target.value, previewAt: check.target.previewAt } }
+    : null;
 }
 
 async function findOrCreateTarget(organisationId: string, userId: string, target: ParsedTarget) {
@@ -180,6 +198,8 @@ export function nextStepPath(check: { targetId: string; checkId: string; verifie
 }
 
 export type WorkspaceCheckRow = {
+  /** Seyi: show payment before deeper-scan progress for a new unpaid check. */
+  paymentRequired?: boolean;
   id: string;
   targetId: string;
   kind: SecurityTargetKind;
@@ -247,14 +267,17 @@ export function parseSiteFilter(value: unknown): SiteFilter {
 /** The workspace's checks, newest first: the returning user's list on the Security page. */
 export async function listWorkspaceChecks(organisationId: string, userId: string, take = 20): Promise<WorkspaceCheckRow[]> {
   const rows = await prisma.securityCheck.findMany({
-    // Only the checks this person asked for: others in the workspace don't see them.
-    where: { organisationId, requestedById: userId },
+    // Only the checks this person asked for: others in the workspace don't see them. A scan followed by a
+    // rescan (#security-rescan) leaves the list: the site shows once, as its newest scan.
+    where: { organisationId, requestedById: userId, nextCheck: { is: null } },
     orderBy: { createdAt: "desc" },
     take,
     select: {
       id: true,
       status: true,
       postedAt: true,
+      free: true,
+      paidAt: true,
       summary: true,
       createdAt: true,
       target: { select: { id: true, kind: true, value: true, verifiedAt: true, previewSummary: true } },
@@ -263,6 +286,7 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
   });
   return rows.map((row) => ({
     id: row.id,
+    paymentRequired: !row.free && row.paidAt === null,
     targetId: row.target.id,
     kind: row.target.kind,
     value: row.target.value,

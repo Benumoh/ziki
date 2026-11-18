@@ -69,11 +69,13 @@ export function PublicContributorForm({
   orgSlug,
   projectSlug,
   kind,
+  returnHref,
 }: {
   project: { name: string; slug: string; goal?: string | null };
   orgSlug: string;
   projectSlug: string;
   kind?: "problem" | "improvement";
+  returnHref?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const token = useRef<string | null>(null);
@@ -106,7 +108,7 @@ export function PublicContributorForm({
   const [copiedTrackingLink, setCopiedTrackingLink] = useState(false);
 
   const endpoint = `/api/public/projects/${encodeURIComponent(orgSlug)}/${encodeURIComponent(projectSlug)}/ideas`;
-  const projectHome = publicProjectPath({ orgSlug, projectSlug });
+  const projectHome = returnHref ?? publicProjectPath({ orgSlug, projectSlug });
 
   // Debounced search for similar items
   const searchQuery = (title.trim().length >= 8 ? title : description).trim();

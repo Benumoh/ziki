@@ -358,7 +358,7 @@ export function AppHeader({
                 <MenuLink href={MANAGE_AGENTS_HREF} active={Boolean(pathname?.startsWith(MANAGE_AGENTS_HREF))}>
                   Manage agents
                 </MenuLink>
-                {/* Ziki Coins (#ziki-coins): buy Ziks, fund issues, set up payouts and withdraw. */}
+                {/* Ziki Coins (#ziki-coins): buy Ziks and fund issues. */}
                 <MenuLink href="/coins" active={pathname === "/coins" || pathname === "/coins/"}>
                   <span>
                     Buy Ziks{" "}
@@ -370,6 +370,10 @@ export function AppHeader({
                 {/* The plans page (#ziki-coins): what Ziki costs, and the plans that make Ziks cheaper. */}
                 <MenuLink href="/pricing" active={pathname === "/pricing"}>
                   Pricing
+                </MenuLink>
+                {/* What you earned and how to take it out (#ziki-coins), apart from buying Ziks. */}
+                <MenuLink href="/coins/payouts" active={Boolean(pathname?.startsWith("/coins/payouts"))}>
+                  Withdraw
                 </MenuLink>
                 <MenuLink href="/settings" active={isNavItemActive(pathname, "/settings")}>
                   Settings

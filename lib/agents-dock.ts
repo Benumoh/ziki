@@ -15,7 +15,7 @@ export const AGENTS_DOCK_HEIGHT = 76;
  * - the organisation's `/home`, `/feed`, `/activity` and `/inbox` (and below it);
  * - a project's landing page `/<org>/<project>`, its `/ideas`, `/issues` and
  *   `/clusters` pages (and below them), an issue `/<org>/<project>/<number>`,
- *   `/<org>/<project>/workstream` and `/<org>/<project>/work`.
+ *   `/<org>/<project>/workstream`, `/<org>/<project>/agents` and `/<org>/<project>/work`.
  *
  * An organisation's slug is any first segment that isn't a reserved top-level
  * route, so `/settings/...`, `/agents/...` and the rest never count as projects.
@@ -34,7 +34,7 @@ export function dockVisibleOn(pathname: string | null | undefined, agentCount: n
   // A project's pages, after /<org>/<project>.
   const [page, ...below] = segments.slice(2);
   if (!page || page === "ideas" || page === "issues" || page === "clusters") return true;
-  return below.length === 0 && (page === "workstream" || page === "work" || /^\d+$/.test(page));
+  return below.length === 0 && (page === "workstream" || page === "agents" || page === "work" || /^\d+$/.test(page));
 }
 
 /**

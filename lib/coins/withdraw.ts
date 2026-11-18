@@ -49,8 +49,8 @@ export async function startPayoutOnboarding(userId: string, email: string | unde
   const link = await stripe.accountLinks.create({
     account: accountId,
     type: "account_onboarding",
-    refresh_url: absoluteUrl("/coins?payouts=refresh"),
-    return_url: absoluteUrl("/coins?payouts=return"),
+    refresh_url: absoluteUrl("/coins/payouts?payouts=refresh"),
+    return_url: absoluteUrl("/coins/payouts?payouts=return"),
   });
   return link.url;
 }

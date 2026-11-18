@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 /** Where a running check is, for what to say: Ziki is planning the parts, agents are checking them, Ziki is writing the report. */
-export type CheckPhase = "planning" | "checking" | "writing";
+export type CheckPhase = "planning" | "checking" | "writing" | "done" | "stopped";
 
 /** Playful lines, each swapped for the next every few seconds, so a page that is only waiting never looks frozen. */
 const LINES: Record<CheckPhase, string[]> = {
@@ -27,12 +27,16 @@ const LINES: Record<CheckPhase, string[]> = {
     "Sorting the findings, worst first…",
     "Putting a bow on your report…",
   ],
+  done: ["Every part is checked. Here's what the agents found."],
+  stopped: ["This check was stopped before every part was checked."],
 };
 
 const TITLE: Record<CheckPhase, string> = {
   planning: "Planning the checks",
   checking: "Agents are on it",
   writing: "Writing your report",
+  done: "Check finished",
+  stopped: "Check stopped",
 };
 
 const ROTATE_MS = 3200;
@@ -45,17 +49,20 @@ const ROTATE_MS = 3200;
  */
 export function CheckActivity({ site, phase, done, total }: { site: string; phase: CheckPhase; done: number; total: number }) {
   const [index, setIndex] = useState(0);
+  // A finished or stopped check stands still.
+  const moving = phase !== "done" && phase !== "stopped";
   useEffect(() => {
+    if (!moving) return;
     const timer = setInterval(() => setIndex((current) => current + 1), ROTATE_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [moving]);
   const lines = LINES[phase];
   const line = lines[index % lines.length]!;
 
   return (
     <div className="flex items-center gap-4">
       <span aria-hidden="true" className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-zk-border bg-zk-tint text-zk-accent sm:h-16 sm:w-16">
-        <span className="absolute inset-0 rounded-2xl bg-zk-accent/10 motion-safe:animate-pulse" />
+        <span className={`absolute inset-0 rounded-2xl bg-zk-accent/10 ${moving ? "motion-safe:animate-pulse" : ""}`} />
         <svg
           width="28"
           height="28"
@@ -65,7 +72,7 @@ export function CheckActivity({ site, phase, done, total }: { site: string; phas
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="relative motion-safe:[animation:zk-check-peek_3.4s_ease-in-out_infinite]"
+          className={`relative ${moving ? "motion-safe:[animation:zk-check-peek_3.4s_ease-in-out_infinite]" : ""}`}
         >
           <circle cx="10.5" cy="10.5" r="6.5" />
           <path d="M15.5 15.5L21 21" />
@@ -74,11 +81,11 @@ export function CheckActivity({ site, phase, done, total }: { site: string; phas
       <div className="min-w-0 flex-1">
         {/* Ziki's big headline style (as on Coming soon): bigger and heavier than a page title. */}
         <h1 id="check-headline" className="m-0 wrap-break-word text-2xl font-extrabold tracking-[-0.02em] text-zk-text sm:text-[28px]">
-          Ziki is checking {site}
+          {moving ? `Ziki is checking ${site}` : `Ziki checked ${site}`}
         </h1>
         <p className="m-0 mt-1 flex items-center gap-2 text-[15px] font-bold text-zk-accent">
           {TITLE[phase]}
-          <span aria-hidden="true" className="inline-flex items-end gap-1">
+          <span aria-hidden="true" className={moving ? "inline-flex items-end gap-1" : "hidden"}>
             {[0, 1, 2].map((dot) => (
               <span
                 key={dot}

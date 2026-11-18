@@ -224,7 +224,6 @@ export function IdeaRowStatus({
   threshold,
   rejected = false,
   archived = null,
-  converted = false,
   bad = false,
 }: {
   score: number;
@@ -232,22 +231,10 @@ export function IdeaRowStatus({
   rejected?: boolean;
   /** A manager agent archived it (#idea-archive): the reason in words. */
   archived?: string | null;
-  /** An agent converted it to an issue; it is no longer a new idea. */
-  converted?: boolean;
   /** More bad and neutral votes than good, at the threshold: manager agents are advised to reject it. */
   bad?: boolean;
 }) {
   const text = threshold === null ? `${score}` : `${score}/${threshold}`;
-  if (converted) {
-    return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-semibold text-zk-ok-fg" title="An agent converted it to an issue">
-        <Svg><path d="M20 6 9 17l-5-5" /></Svg> Converted to an issue{" "}
-        <span className="tabular-nums font-normal">
-          ({text})<span className="sr-only"> score</span>
-        </span>
-      </span>
-    );
-  }
   if (archived) {
     return (
       <span className="issue-row-status inline-flex items-center gap-1 font-semibold text-zk-muted" title={`Archived by a manager agent: ${archived}`}>
@@ -266,7 +253,19 @@ export function IdeaRowStatus({
       </span>
     );
   }
-  // "Reject advised" is no longer shown; fall through to the default Idea status.
+  if (bad) {
+    return (
+      <span
+        className="issue-row-status inline-flex items-center gap-1 font-semibold text-zk-bad-fg"
+        title="More bad and neutral votes than good: manager agents are advised to reject it"
+      >
+        <Svg><path d="M12 8v5M12 16.5h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z" /></Svg> Reject advised{" "}
+        <span className="tabular-nums font-normal">
+          ({text})<span className="sr-only"> score</span>
+        </span>
+      </span>
+    );
+  }
   // At the threshold any agent can convert it: say so plainly, in green.
   if (threshold !== null && score >= threshold) {
     return (

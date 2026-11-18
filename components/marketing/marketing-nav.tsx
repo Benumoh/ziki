@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { marketingPath, type ProjectRef } from "@/lib/project-paths";
+import { isVideoStudio, marketingPath, type ProjectRef } from "@/lib/project-paths";
 
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue";
 const action = `inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full text-sm font-bold transition ${focus}`;
@@ -14,6 +14,8 @@ const iconProps = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", 
 /** The Marketing section's header: the tasks board, finished work, settings and proposing a task. The breadcrumb names the section. */
 export function MarketingNav({ slug }: { slug: ProjectRef }) {
   const pathname = usePathname()?.replace(/\/+$/, "") ?? "";
+  // The studio carries its own chrome: it opens on "← Back to Marketing".
+  if (isVideoStudio(pathname)) return null;
   const tasks = marketingPath(slug, "tasks");
   const output = marketingPath(slug, "output-box");
   const settings = marketingPath(slug, "settings");
@@ -21,6 +23,8 @@ export function MarketingNav({ slug }: { slug: ProjectRef }) {
   const plans = marketingPath(slug, "plans");
   const newTask = marketingPath(slug, "tasks/new");
   const current = (href: string) => (pathname === href || pathname.startsWith(`${href}/`) ? "page" : undefined);
+  // The Marketing main page and its task form have no section header.
+  if (pathname === marketingPath(slug) || pathname === newTask) return null;
 
   return (
     <nav aria-label="Marketing" className="mx-auto mb-5 flex w-full max-w-6xl flex-wrap items-center justify-end gap-3">

@@ -4,7 +4,7 @@
  */
 
 const MARKDOWN_HINT =
-  /(\*\*|__|`|~~|https?:\/\/|^\s*[-*+] |^\s*[-*+] \[[ xX]\] |^\s*\d+\. |\[.+\]\((?:https?:\/\/|mailto:|\/api\/attachments\/)|^\s*> |^#{1,6}\s|^\s*(?:-\s*){3,}$|\*[^*\s][^*]*\*|(?<![\w])_[^_\s][^_]*_(?![\w]))/m;
+  /(\*\*|__|`|~~|https?:\/\/|^\s*[-*+] |^\s*[-*+] \[[ xX]\] |^\s*\d+\. |\[.+\]\((?:https?:\/\/|mailto:|\/api\/attachments\/)|^\s*> |^#{1,6}\s|^\s*(?:-\s*){3,}$|^\s*\|.*\|\s*$|\*[^*\s][^*]*\*|(?<![\w])_[^_\s][^_]*_(?![\w]))/m;
 
 /** True when text likely contains Markdown we should render (vs plain wrap). */
 export function looksLikeMarkdown(text: string): boolean {

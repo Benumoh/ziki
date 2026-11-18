@@ -193,13 +193,15 @@ export async function findPublicIdeaMatches(
     where: {
       slug: ref.projectSlug,
       archivedAt: null,
-      visibility: "public",
-      acceptsGuestIdeas: true,
       organisation: { slug: ref.orgSlug, archivedAt: null },
     },
-    select: { id: true, organisationId: true },
+    select: { id: true, organisationId: true, visibility: true, acceptsGuestIdeas: true },
   });
   if (!project) return { status: 404, error: "not_found", message: "Public issue intake is not available for this project." };
+  // Never expose internal issues or duplicate suggestions for private projects (#1048).
+  if (project.visibility === "private") {
+    return { status: 200, matches: [] };
+  }
 
   const consume = dependencies.consume ?? consumeRateLimits;
   const limited = await consume([
@@ -241,11 +243,9 @@ export async function createPublicIdea(
     where: {
       slug: ref.projectSlug,
       archivedAt: null,
-      visibility: "public",
-      acceptsGuestIdeas: true,
       organisation: { slug: ref.orgSlug, archivedAt: null },
     },
-    select: { id: true, name: true, organisationId: true },
+    select: { id: true, name: true, organisationId: true, visibility: true, acceptsGuestIdeas: true },
   });
   if (!project) return { status: 404, error: "not_found", message: "Public issue intake is not available for this project." };
 
@@ -299,7 +299,8 @@ export async function createPublicIdea(
     return { status: 429, error: "rate_limited", message: "Too many reports were submitted. Please wait and try again.", retryAfterSeconds: retrySeconds(limited.retryAfterMs) };
   }
 
-  if (!input.acknowledgeSimilar) {
+  // Never expose internal issues on a private project's shared feedback portal (#1048).
+  if (!input.acknowledgeSimilar && project.visibility !== "private") {
     const matches = await findSimilarIssues(db as PrismaClient, {
       organisationId: project.organisationId,
       projectId: project.id,

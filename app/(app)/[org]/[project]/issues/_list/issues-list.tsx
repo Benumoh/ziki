@@ -44,6 +44,8 @@ import { IdeasList, type IdeaListRow } from "@/components/ideas-list";
 import { WhimsicalEmptyState } from "@/components/whimsical-empty-state";
 import { isUnstructuredDraft } from "@/lib/ideas";
 import { workflowFor } from "@/lib/workflow";
+import { priorityNow, type PriorityNowIssue } from "@/lib/priority-now";
+import { PriorityNowStrip } from "@/components/priority-now-strip";
 import { OPEN_BID_WHERE } from "@/lib/open-bids";
 import { ideaVotes, isBadIdea } from "@/lib/idea-rejection";
 import { archiveReasonLabel } from "@/lib/idea-archive";
@@ -99,6 +101,7 @@ import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/pr
 import { IssueRowStatus } from "@/components/issue-row-status";
 import { BidsVoteBadge, ImportanceVoteBadge } from "@/components/vote-badge";
 import { RewardBadge } from "@/components/reward-badge";
+import { escrowByBug } from "@/lib/coins/ledger";
 import { mergePathOf } from "@/lib/merge-history";
 import { IssuesToolsToggle } from "@/components/issues-tools-toggle";
 import { LoadError } from "@/components/load-error";
@@ -658,6 +661,8 @@ export async function IssuesList({
     return issuesQueryError(listed.reference);
   }
   const bugs = listed.bugs;
+  // #ziki-coins: which rows on this page have Ziks behind them, for the Funded badge.
+  const funded = await loadOrEmpty("funded", () => escrowByBug(prisma, bugs.map((bug) => bug.id)), new Map<string, number>());
   // #live-check: where each Live row on this page has its fix.
   const liveChecks = await loadOrEmpty("live checks", () => loadLiveChecks(bugs.filter((bug) => bug.status === "resolved")), new Map<string, LiveCheck>());
   // #live-confirm: what each agent found, for the Live rows on this page, shown when a row is opened.
@@ -841,39 +846,21 @@ export async function IssuesList({
           delete ideaRowWhere.OR;
           ideaRowWhere.id = { in: indexedIdeaIds };
         }
-        const rows = await prisma.idea.findMany({
+        let rows = await prisma.idea.findMany({
           where: ideaRowWhere,
           orderBy: getIdeaOrderBy(currentIdeaSort),
           skip: indexedIdeaIds ? 0 : ideaPagination.skip,
           take: indexedIdeaIds ? indexedIdeaIds.length : ideaPagination.take,
           select: {
             id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true,
-            status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true, convertedAt: true,
+            status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true,
             // Its newest verdict, for the Last update column.
             verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
             reporter: { select: { name: true } },
             _count: { select: { verdicts: true } },
           },
         });
-        // A project's New ideas list can be empty while the organisation still
-        // holds earlier ideas in other statuses (converted, rejected or archived).
-        // Show those instead, so the section reflects the history instead of going
-        // blank while real ideas exist.
-        const fallbackRows = rows.length === 0 && ideasView === "new" && !qParam
-          ? await prisma.idea.findMany({
-              where: { ...ideaRowWhere, status: { in: ["converted", "rejected", "archived"] } },
-              orderBy: { updatedAt: "desc" },
-              take: ideaPagination.take,
-              select: {
-                id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true, status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true, convertedAt: true,
-                verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
-                reporter: { select: { name: true } },
-                _count: { select: { verdicts: true } },
-              },
-            })
-          : [];
-        const listRows = fallbackRows.length > 0 ? fallbackRows : rows;
-        let validatedRows = listRows;
+        let validatedRows = rows;
         let forcePgIdeaFallback = false;
         if (indexedIdeaIds && qParam) {
           try {
@@ -890,31 +877,29 @@ export async function IssuesList({
           }
         }
         if (indexedIdeaIds && (forcePgIdeaFallback || validatedRows.length < Math.min(ideaPagination.take, Math.max(0, ideaPagination.totalCount - ideaPagination.skip)))) {
-          validatedRows = await prisma.idea.findMany({ where: originalIdeaWhere, orderBy: getIdeaOrderBy(currentIdeaSort), skip: ideaPagination.skip, take: ideaPagination.take, select: {
+          rows = await prisma.idea.findMany({ where: originalIdeaWhere, orderBy: getIdeaOrderBy(currentIdeaSort), skip: ideaPagination.skip, take: ideaPagination.take, select: {
             id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true,
-            status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true, convertedAt: true,
+            status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true,
             verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
             reporter: { select: { name: true } }, _count: { select: { verdicts: true } },
           } });
-        } else {
-          validatedRows = listRows;
-        }
+        } else rows = validatedRows;
         const thresholds = new Map<string, number | null>();
-        for (const id of new Set(validatedRows.map((row) => row.projectId))) {
+        for (const id of new Set(rows.map((row) => row.projectId))) {
           thresholds.set(id, await workflowFor(id).then((w) => w.ideaThreshold).catch(() => null));
         }
         // Each idea's weighted votes (#724): the good and bad columns, and to mark the bad ones red (lib/idea-rejection.ts).
-        const totals = await ideaVoteTotals(prisma, validatedRows.map((row) => row.id));
+        const totals = await ideaVoteTotals(prisma, rows.map((row) => row.id));
         // Ideas the viewer already gave a verdict on, any way (#idea-path): those show their way on, not Approve.
         const approvedByMe = new Set(
           userId
             ? (await prisma.ideaVerdict.findMany({
-                where: { ideaId: { in: validatedRows.map((row) => row.id) }, onBehalfOfUserId: userId },
+                where: { ideaId: { in: rows.map((row) => row.id) }, onBehalfOfUserId: userId },
                 select: { ideaId: true },
               })).map((verdict) => verdict.ideaId)
             : [],
         );
-        const listed = validatedRows.map((row) => {
+        const listed = rows.map((row) => {
           const votes = totals.get(row.id) ?? NO_VOTES;
           return { row, votes };
         });
@@ -929,7 +914,6 @@ export async function IssuesList({
           verdicts: row._count.verdicts,
           rejected: ideasView === "rejected",
           archived: row.status === "archived" ? archiveReasonLabel(row.archiveReason, row.archiveDuplicateOf) : null,
-          converted: Boolean(row.convertedAt),
           good: votes.good,
           badVotes: votes.bad,
           approvedByMe: approvedByMe.has(row.id),
@@ -942,10 +926,6 @@ export async function IssuesList({
         }));
       }, [] as IdeaListRow[])
     : [];
-
-  // When the New ideas list had no open idea, it falls back to the project's
-  // earlier ideas, so the section is never left blank.
-  const showingEarlierIdeas = ideasView === "new" && !qParam && ideaRows.length > 0 && ideaRows.every((row) => Boolean(row.converted) || row.rejected || Boolean(row.archived));
 
   // #301: when searching, show why a row matched. Only rows whose title
   // doesn't already contain the query need their description, so the list
@@ -1127,6 +1107,13 @@ export async function IssuesList({
   const yourCall = stageIndex !== IN_PROGRESS_STAGE || !organisationId || !projectId || allProjects || !userId
     ? []
     : await loadOrEmpty("your call", () => loadYourCall(projectId, { userId, isAdmin: Boolean(membershipRole && isOrganisationAdmin(membershipRole, effectiveRole)) }), []);
+  // Priority now (#priority-now): the top Open issues and who each is offered to, at the top of In Progress.
+  const priorityIssues = stageIndex !== IN_PROGRESS_STAGE || isDeletedView || !organisationId || !projectId || allProjects
+    ? []
+    : await loadOrEmpty("priority now", async () => {
+      const { offerWindowSeconds } = await workflowFor(projectId);
+      return priorityNow({ organisationId, projectId, offerWindowSeconds });
+    }, [] as PriorityNowIssue[]);
   const statusCount = (value: string) =>
     value === YOUR_WORK_STATUS ? yourWorkCount : value === IDEAS_STATUS ? ideasCount : value === REJECTED_IDEAS_STATUS ? rejectedIdeasCount : value === ERROR_STATUS ? errorCount : value === POSSIBLY_DELIVERED ? possiblyDeliveredCount : countForStatus(value);
   const statusLink = (value: string) => (value === IDEAS_STATUS ? statusHref(null) : statusHref(value));
@@ -1247,6 +1234,8 @@ export async function IssuesList({
 
         {nextStep && organisationId ? <OrganisationNextStepCard step={nextStep} organisationId={organisationId} /> : null}
 
+        {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
+
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}
         {isYourWorkView && organisationId ? <ProjectWeekPanel people={weekPeople} viewerId={userId ?? null} /> : null}
@@ -1304,7 +1293,6 @@ export async function IssuesList({
             }
             // Open ideas, none yet and no search: what Ziki is for and where to type (#ideas-welcome).
             welcome={ideasView === "new" && !qParam ? <IdeasWelcome projectId={project.id} /> : undefined}
-            note={showingEarlierIdeas && ideasView === "new" ? "No new ideas right now — showing earlier ideas from this list." : undefined}
             empty={
               ideasView === "drafts"
                 ? "No unstructured draft ideas are waiting to be structured."
@@ -1314,7 +1302,7 @@ export async function IssuesList({
             }
           />
         ) : null}
-        {isIdeasView && ideaRows.length > 0 && !showingEarlierIdeas ? (
+        {isIdeasView && ideaRows.length > 0 ? (
           <PaginationControls
             basePath={ideasPath(ref, ideasView ?? "new")}
             page={ideaPagination.page}
@@ -1450,7 +1438,7 @@ export async function IssuesList({
                         details={liveFix ? <LiveRowDetails check={liveFix} confirmations={liveConfirmations.get(bug.id) ?? []} /> : null}
                       >
                         <div className="issues-vote w-[76px] shrink-0">
-                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} />
+                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} funded={funded.has(bug.id)} />
                         </div>
                         {isMyWorkTab ? (
                           <span className="hidden w-10 shrink-0 items-center lg:flex">
@@ -1665,7 +1653,7 @@ export async function IssuesList({
       </div>
     </div>
     {/* The Ideas panel is narrower and centred, so each idea's status sits close to it. */}
-    <div className={`issues-page mx-auto w-full space-y-5 rounded-2xl ${isIdeasView ? "max-w-[920px] bg-zk-bg p-4" : "max-w-6xl"}`}>
+    <div className={`issues-page mx-auto w-full space-y-5 ${isIdeasView ? "max-w-[920px]" : "max-w-6xl"}`}>
       {headerContent}
       <div className="flex items-start gap-5 max-lg:flex-col max-lg:gap-3">
         {/* The Ideas stage has no sidebar: its Filter menu switches to Rejected ideas (#ideas-filter). */}

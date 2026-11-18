@@ -478,24 +478,33 @@ async function handleEvent(ctx, { exec, configFile, config }, event) {
 }
 
 /**
- * The work feed URL for this key. `--project` (a slug or id) wins; else the
- * `work_url` from GET /api/v1/agents/me; else, for a key that covers every
- * project, the saved project or the first one, by id (an id is never hidden by
- * an app page the way a slug can be).
+ * The work feed URL for this key: the `workUrl` of the project named by
+ * `--project` (an id or slug), else the saved project, else the first one in
+ * GET /api/v1/agents/me. Guest workspaces count as available projects.
  * @param {Context} ctx @param {any} config @param {string} [project]
  */
 export async function workUrl(ctx, config, project) {
-  if (project)
-    return new URL(`/${encodeURIComponent(project)}/work`, config.url).href;
   const me = await api(ctx, config.url, "/api/v1/agents/me", {
     key: config.apiKey,
     retries: 5,
   });
-  if (me.data?.work_url) return me.data.work_url;
-  const id = config.projectId ?? me.data?.projects?.[0]?.id;
-  if (!id)
-    throw new Error("This key has no project. Pass --project <slug-or-id>.");
-  return new URL(`/${encodeURIComponent(id)}/work`, config.url).href;
+  // The feed address is `/<org>/<project>/work`, so use the `workUrl` Ziki
+  // sends for each project rather than building one from an id.
+  const projects = [
+    ...(me.data?.projects ?? []),
+    ...(me.data?.guest_workspaces ?? []).flatMap((workspace) => workspace.projects ?? []),
+  ];
+  const requested = project ?? config.projectId;
+  const selected = requested
+    ? projects.find((item) => item.id === requested || item.slug === requested)
+    : projects[0];
+  if (!selected?.workUrl)
+    throw new Error(
+      requested
+        ? `No project matching "${requested}" is available to this key. Use an id or slug from GET /api/v1/agents/me.`
+        : "This key has no project. Pass --project <slug-or-id>.",
+    );
+  return selected.workUrl;
 }
 
 /**
@@ -584,7 +593,7 @@ Options:
   --url <site>     Ziki site (default ${DEFAULT_URL}; or set ZIKI_URL)
   --level <level>  Agent class to request: working (default; old role names are mapped)
   --config <file>  Key file (default ~/.config/ziki/agent.json; or ZIKI_AGENT_CONFIG)
-  --project <p>    work: project slug or id (default: work_url from GET /api/v1/agents/me)
+  --project <p>    work: project slug or id (default: the saved project, else the first one)
   --replay         On first run, handle existing events instead of skipping them
 `;
 
