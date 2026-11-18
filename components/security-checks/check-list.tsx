@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import "@/components/security-finding.css";
 import { FixPanel } from "@/components/security-checks/fix-panel";
+import { MakeFixable } from "@/components/security-checks/make-fixable";
 import { type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
 import type { ResultFix } from "@/lib/security-checks/report";
@@ -61,6 +62,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
           <summary className={SECTION_HEADING}>
             Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
           </summary>
+          {/* An older scan (before 18 Nov) has only titles here: make them real, fixable findings once. */}
+          {quick.scanRows?.length && !quick.findings?.length ? <MakeFixable checkId={checkId} /> : null}
           <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
         </details>
       )}
