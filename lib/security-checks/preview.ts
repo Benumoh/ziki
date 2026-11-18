@@ -2,6 +2,7 @@ import "server-only";
 import { isIP } from "node:net";
 import http from "node:http";
 import https from "node:https";
+import { createHash } from "node:crypto";
 import tls from "node:tls";
 import { getDomain } from "tldts";
 import type { SecuritySeverity, SecurityTargetKind } from "@prisma/client";
@@ -39,6 +40,8 @@ export const PREVIEW_CACHE_MS = 10 * 60 * 1000;
 const TIMEOUT_MS = 5_000;
 /** How much of a public text file (robots.txt, security.txt) is read. */
 const TEXT_MAX_CHARS = 64_000;
+/** Same-site redirects followed for a public text file. */
+const TEXT_MAX_REDIRECTS = 3;
 /** Same-site HTTPS redirects followed before the homepage is called unreadable (browsers allow about 20). */
 export const MAX_REDIRECTS = 10;
 const EXPIRING_DAYS = 14;
@@ -66,8 +69,33 @@ export type PreviewResult =
       counts: Record<SecuritySeverity, number>;
       /** Worst first. */
       findings: PreviewFinding[];
+      /** What it saw, as short hashes per part, so a rescan can tell whether the site changed (18 Nov). */
+      fingerprint?: SiteFingerprint;
     }
   | { ok: false; reason: string; retryAfterSeconds?: number };
+
+/** The parts of a site whose fingerprint is kept, each a short hash of what the quick scan saw. */
+export type FingerprintPart = "certificate" | "tls" | "headers" | "cookies" | "files" | "email" | "repo";
+export type SiteFingerprint = Partial<Record<FingerprintPart, string>>;
+
+const hashOf = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+/** The security headers whose values are kept, with per-request values (CSP nonces) left out so they don't look like changes. */
+const FINGERPRINT_HEADERS = [
+  "strict-transport-security", "content-security-policy", "content-security-policy-report-only", "x-frame-options", "x-content-type-options",
+  "referrer-policy", "permissions-policy", "cross-origin-opener-policy", "server", "x-powered-by",
+];
+
+/** Cookie names and settings, without their values or expiry, which change on every visit. */
+function cookieShape(headers: PageAnswer["headers"]): string[] {
+  const raw = headers["set-cookie"];
+  return (Array.isArray(raw) ? raw : raw ? [raw] : [])
+    .map((cookie) => {
+      const [pair, ...attributes] = cookie.split(";").map((part) => part.trim());
+      const kept = attributes.map((part) => part.toLowerCase()).filter((part) => !/^(expires|max-age)=/.test(part)).sort();
+      return [pair!.split("=")[0], ...kept].join(";");
+    })
+    .sort();
+}
 
 /* ------------------------------------------------------------------ */
 /* The network, behind one seam so the rules can be tested             */
@@ -98,7 +126,7 @@ export type PreviewNetwork = {
   txt(host: string): Promise<string[][]>;
   /** Which of the old TLS versions (TLSv1, TLSv1.1) the server on port 443 still agrees to; empty when none. */
   oldTls?(host: string): Promise<string[]>;
-  /** One GET of a small public text file, without following redirects; null when nothing answers. */
+  /** One GET of a small public text file, following same-site HTTPS redirects (example.com to www.example.com); null when nothing answers. */
   text?(url: string): Promise<TextAnswer | null>;
   /** The file and folder names a public repo shows at its top level, in `.github` and in `docs`. */
   repo(owner: string, name: string): Promise<RepoAnswer>;
@@ -248,7 +276,17 @@ async function scan(
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const finding of findings) counts[finding.severity] += 1;
-  return { ok: true, kind, target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings };
+  // A part is only fingerprinted when it was really seen, so a failed look never reads as a change.
+  const fingerprint: SiteFingerprint = {};
+  if (certificate) fingerprint.certificate = hashOf([certificate.validTo?.toISOString() ?? null, [...(certificate.names ?? [])].sort(), certificate.authorized]);
+  if (certificate && oldTls) fingerprint.tls = hashOf([certificate.protocol, oldTls]);
+  if (page) {
+    fingerprint.headers = hashOf(FINGERPRINT_HEADERS.map((name) => (header(page.headers, name) ?? "").replace(/'nonce-[^']*'/g, "'nonce'")));
+    fingerprint.cookies = hashOf(cookieShape(page.headers));
+  }
+  if (robots || securityTxt) fingerprint.files = hashOf([robots?.status ?? null, robots?.body ?? null, securityTxt?.status ?? null, securityTxt?.body ?? null]);
+  if (mailDomain && (spf !== null || dmarc !== null)) fingerprint.email = hashOf([spf, dmarc]);
+  return { ok: true, kind, target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings, fingerprint };
 }
 
 /* ------------------------------------------------------------------ */
@@ -317,7 +355,8 @@ async function scanRepo(value: string, network: PreviewNetwork, now: number): Pr
   findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const finding of findings) counts[finding.severity] += 1;
-  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings };
+  const fingerprint: SiteFingerprint = { repo: hashOf([[...answer.root].sort(), [...answer.github].sort(), [...answer.docs].sort()]) };
+  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings, fingerprint };
 }
 
 const SEVERITY_ORDER: Record<SecuritySeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -878,44 +917,58 @@ export const realPreviewNetwork: PreviewNetwork = {
     return accepted;
   },
   async text(url) {
-    const target = new URL(url);
-    const host = target.hostname.replace(/^\[|\]$/g, "");
-    if (isIP(host) && !isPublicAddress(host)) throw new PrivateAddressError(host);
-    return new Promise((resolve, reject) => {
-      const request = https.request(
-        target,
-        {
-          method: "GET",
-          agent: false,
-          lookup: publicOnlyLookup(),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-          rejectUnauthorized: false,
-          headers: { "User-Agent": USER_AGENT, Accept: "text/plain,*/*;q=0.1" },
-        },
-        (response) => {
-          const status = response.statusCode ?? 0;
-          // A redirect or error page says the file isn't there; nothing more is read.
-          if (status !== 200) {
-            response.destroy();
-            resolve({ status, body: "" });
-            return;
-          }
-          let body = "";
-          response.setEncoding("utf8");
-          response.on("data", (chunk: string) => {
-            body += chunk;
-            if (body.length >= TEXT_MAX_CHARS) response.destroy();
-          });
-          response.on("close", () => resolve({ status, body: body.slice(0, TEXT_MAX_CHARS) }));
-          response.on("error", () => resolve({ status, body: body.slice(0, TEXT_MAX_CHARS) }));
-        },
-      );
-      request.on("error", (error: NodeJS.ErrnoException) => {
-        if (error instanceof PrivateAddressError || error.code === "EPRIVATE") reject(new PrivateAddressError(host));
-        else resolve(null);
-      });
-      request.end();
-    });
+    // Many sites send /robots.txt and /.well-known/security.txt on to www. (netflix.com does): follow that, on the same site only.
+    let next = new URL(url);
+    const site = next.hostname;
+    for (let hop = 0; hop <= TEXT_MAX_REDIRECTS; hop++) {
+      const answer = await readTextOnce(next);
+      if (!answer || !answer.location) return answer && { status: answer.status, body: answer.body };
+      const moved = new URL(answer.location, next);
+      if (moved.protocol !== "https:" || !sameSite(moved.hostname, site)) return { status: answer.status, body: "" };
+      next = moved;
+    }
+    return null;
   },
 };
 
+/** One GET of a small text file: its status, body (only on 200) and where a redirect points. */
+async function readTextOnce(target: URL): Promise<(TextAnswer & { location: string | null }) | null> {
+  const host = target.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host) && !isPublicAddress(host)) throw new PrivateAddressError(host);
+  return new Promise((resolve, reject) => {
+    const request = https.request(
+      target,
+      {
+        method: "GET",
+        agent: false,
+        lookup: publicOnlyLookup(),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        rejectUnauthorized: false,
+        headers: { "User-Agent": USER_AGENT, Accept: "text/plain,*/*;q=0.1" },
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        const location = status >= 300 && status < 400 && typeof response.headers.location === "string" ? response.headers.location : null;
+        // A redirect or error page has no file to read.
+        if (status !== 200) {
+          response.destroy();
+          resolve({ status, body: "", location });
+          return;
+        }
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => {
+          body += chunk;
+          if (body.length >= TEXT_MAX_CHARS) response.destroy();
+        });
+        response.on("close", () => resolve({ status, body: body.slice(0, TEXT_MAX_CHARS), location: null }));
+        response.on("error", () => resolve({ status, body: body.slice(0, TEXT_MAX_CHARS), location: null }));
+      },
+    );
+    request.on("error", (error: NodeJS.ErrnoException) => {
+      if (error instanceof PrivateAddressError || error.code === "EPRIVATE") reject(new PrivateAddressError(host));
+      else resolve(null);
+    });
+    request.end();
+  });
+}

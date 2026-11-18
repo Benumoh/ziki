@@ -197,6 +197,9 @@ function FindingRow({ finding, checked, onToggle }: { finding: ListFinding; chec
         <span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Rechecking</span>
       ) : finding.recheck === "still_there" ? (
         <span className="whitespace-nowrap rounded-full bg-zk-warn-bg px-2.5 py-0.5 text-xs font-semibold text-zk-warn-fg">Still there</span>
+      ) : finding.isNew ? (
+        // Found for the first time by this rescan (18 Nov): calm blue, in the same place as Still there.
+        <span className="whitespace-nowrap rounded-full bg-zk-info-bg px-2.5 py-0.5 text-xs font-semibold text-zk-info-fg">New</span>
       ) : null}
       {finding.fix ? (
         <Link href={finding.fix.issue?.href ?? finding.fix.findingHref} className="whitespace-nowrap text-xs font-semibold text-zk-accent hover:underline">

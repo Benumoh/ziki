@@ -12,6 +12,7 @@ import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { loadCheckReport } from "@/lib/security-checks/report";
+import { siteChangeSentence } from "@/lib/security-checks/site-change";
 import { orgCard } from "../../../[org]/[project]/org/org-ui";
 
 export const metadata = { title: "Security check" };
@@ -80,7 +81,8 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
         </p>
       ) : report.previousCheckId ? (
         <p className="m-0 px-0.5 text-sm text-zk-text2">
-          A rescan: agents recheck what the last scan found and look for anything new.{" "}
+          A rescan: the same checks as last time, and what the last scan found is rechecked.{" "}
+          {report.siteChange ? `${siteChangeSentence(report.siteChange)} ` : null}
           <Link href={`/security/checks/${encodeURIComponent(report.previousCheckId)}`} className={linkClass}>See the earlier scan</Link>
         </p>
       ) : null}

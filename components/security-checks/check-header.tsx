@@ -88,10 +88,8 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
         <h2 className={`text-lg font-bold sm:text-xl ${warn ? "text-red-800" : "text-zk-text"}`}>
           {report.total === 0 ? "No security threats found" : `${report.total} security ${report.total === 1 ? "threat" : "threats"} found${critical ? `, ${critical} of them critical` : ""}`}
         </h2>
-        {report.fixed.length ? (
-          <p className="m-0 text-sm font-semibold text-zk-ok-fg">
-            {report.fixed.length} {report.fixed.length === 1 ? "problem" : "problems"} from the last scan fixed
-          </p>
+        {report.previousCheckId ? (
+          <RescanCounts report={report} />
         ) : null}
         {report.summary ? <p className={`break-words text-sm sm:text-base ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
         {/* No severity chips (17 Nov, Hamzat): the heading already says how many threats; the list below has each level. */}
@@ -102,5 +100,31 @@ function FindingsSummary({ report }: { report: Extract<CheckReport, { posted: tr
         </Link>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * On a rescan (18 Nov): how many findings are new since the last scan, still there, and fixed, in one line.
+ * New ones carry the blue New label in the list; parts left out when there are none.
+ */
+function RescanCounts({ report }: { report: CheckReport }) {
+  const fresh = report.findings.filter((finding) => finding.recheck === null).length;
+  const still = report.findings.filter((finding) => finding.recheck === "still_there").length;
+  const fixed = report.fixed.length;
+  if (!fresh && !still && !fixed) return null;
+  const parts = [
+    fresh ? <span key="new" className="text-zk-info-fg">{fresh} new since the last scan</span> : null,
+    still ? <span key="still">{still} still there</span> : null,
+    fixed ? <span key="fixed" className="text-zk-ok-fg">{fixed} fixed</span> : null,
+  ].filter(Boolean);
+  return (
+    <p className="m-0 text-sm font-semibold text-zk-text2">
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i ? " · " : null}
+          {part}
+        </span>
+      ))}
+    </p>
   );
 }

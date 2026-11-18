@@ -460,6 +460,24 @@ describe("yes/no facts the quick scan checks for every scan (18 Nov: same answer
     expect(cookieFindings({ "set-cookie": ["sid=1; Secure; HttpOnly; SameSite=Lax; Domain=.settle.ng"] }).map((f) => f.id)).toEqual(["cookie-domain-wide"]);
   });
 
+  it("fingerprints the site so a rescan can tell a real change from per-visit noise", async () => {
+    const withPage = (headers: PageAnswer["headers"], certificate = GOOD_CERT) =>
+      network({ ...WELL_KEPT, pages: { ...WELL_KEPT.pages, "https://settle.ng/": { headers } }, certificate });
+    const base = { ...SAFE_HEADERS, "content-security-policy": "script-src 'nonce-abc123'", "set-cookie": ["sid=111; Secure; HttpOnly; Expires=Wed, 19 Nov 2026 10:00:00 GMT"] };
+    const first = await scan("settle.ng", withPage(base));
+    clearPreviewCache();
+    // Another visit: a new nonce, a new cookie value and expiry. Not a change.
+    const again = await scan("settle.ng", withPage({ ...base, "content-security-policy": "script-src 'nonce-zzz999'", "set-cookie": ["sid=222; Secure; HttpOnly; Expires=Thu, 20 Nov 2026 10:00:00 GMT"] }));
+    clearPreviewCache();
+    // A renewed certificate and a cookie that lost HttpOnly: both changes.
+    const changed = await scan("settle.ng", withPage({ ...base, "set-cookie": ["sid=333; Secure"] }, { ...GOOD_CERT, validTo: new Date(NOW + 90 * DAY) }));
+    if (!first.ok || !again.ok || !changed.ok) throw new Error("scan failed");
+    expect(again.fingerprint).toEqual(first.fingerprint);
+    expect(changed.fingerprint!.certificate).not.toBe(first.fingerprint!.certificate);
+    expect(changed.fingerprint!.cookies).not.toBe(first.fingerprint!.cookies);
+    expect(changed.fingerprint!.headers).toBe(first.fingerprint!.headers);
+  });
+
   it("checks old TLS and the public files on a full website scan, and says it looked at them", async () => {
     const text = vi.fn(async (url: string) =>
       url.endsWith("/robots.txt") ? { status: 200, body: "Disallow: /staging/" } : { status: 404, body: "" },

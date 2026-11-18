@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { SEVERITY_PRICE } from "@/lib/security-checks";
 import { fixBucketOf } from "./fix-bucket";
 import type { PreviewArea, PreviewFinding, PreviewResult } from "./preview";
@@ -13,7 +13,9 @@ import { PREVIEW_AREA_LABEL } from "./preview-summary";
  *
  * On a rescan, code rechecks its own earlier findings: one the new quick scan still sees is still there, one it no
  * longer sees in an area it did look at is fixed, and only problems it hadn't found before are added. An earlier
- * finding whose fix is still in progress is left alone, as agents leave theirs (`openEarlierFindings`).
+ * finding whose fix is still in progress is left alone, as agents leave theirs (`toRecheck` in engine.ts).
+ *
+ * It also keeps the quick scan's fingerprint of the site on the check, so a rescan can say whether the site changed.
  */
 
 /** How each code finding is fixed, by its kind (`PreviewFinding.id`, before any `:` detail). */
@@ -81,6 +83,9 @@ export async function saveCodeFindings(
       select: { organisationId: true, requestedById: true, targetId: true, previousCheckId: true, status: true },
     });
     if (!check || check.status === "cancelled") return outcome;
+    if (result.fingerprint) {
+      await tx.securityCheck.update({ where: { id: checkId }, data: { siteFingerprint: result.fingerprint as Prisma.InputJsonObject } });
+    }
 
     const parts = new Map(
       (await tx.securityCheckItem.findMany({ where: { checkId, kind: "automatic" }, select: { id: true, title: true } })).map((part) => [part.title, part.id]),

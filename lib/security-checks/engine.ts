@@ -216,13 +216,16 @@ function toRecheck(rows: ReadonlyArray<EarlierRow>): EarlierFinding[] {
     .map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
 }
 
-/** The findings a rescan rechecks (#security-rescan): `earlierOpenRows` less the ones still being fixed. */
-export async function openEarlierFindings(
+/**
+ * How many earlier findings a rescan rechecks, for its confirm (18 Nov): agents' ones and Ziki's own code findings
+ * (rechecked by the rescan's quick scan), less the ones still being fixed.
+ */
+export async function earlierFindingsToRecheck(
   db: Db,
   check: { organisationId: string; requestedById: string; targetId: string },
   excludeCheckId: string,
-): Promise<EarlierFinding[]> {
-  return toRecheck(await earlierOpenRows(db, check, excludeCheckId));
+): Promise<number> {
+  return (await earlierOpenRows(db, check, excludeCheckId)).filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing").length;
 }
 
 /** Recheck parts are named this way, so a later rescan can tell them apart from the parts it repeats. */

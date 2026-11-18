@@ -5,7 +5,7 @@ import type { PreviewFinding, PreviewResult } from "./preview";
 const now = new Date("2026-11-18T09:00:00Z");
 
 const tx = {
-  securityCheck: { findUnique: vi.fn() },
+  securityCheck: { findUnique: vi.fn(), update: vi.fn() },
   securityCheckItem: { findMany: vi.fn(), create: vi.fn() },
   securityCheckResult: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
 };
@@ -37,6 +37,11 @@ describe("Ziki's code checks join the scan's main list (18 Nov)", () => {
       checkId: "c1", itemId: "auto1", severity: "medium", title: csp.title, description: csp.detail, howToFix: howToFixFor(csp), priceCoins: expect.any(Number),
     });
     expect(howToFixFor(csp)).toContain("Content-Security-Policy");
+  });
+
+  it("keeps the quick scan's fingerprint of the site on the check, for the next rescan to compare (18 Nov)", async () => {
+    await saveCodeFindings(db as never, "c1", { ...result([]), fingerprint: { certificate: "c1", headers: "h1" } }, now);
+    expect(tx.securityCheck.update).toHaveBeenCalledWith({ where: { id: "c1" }, data: { siteFingerprint: { certificate: "c1", headers: "h1" } } });
   });
 
   it("doesn't add a finding twice when the same check's quick scan runs again", async () => {

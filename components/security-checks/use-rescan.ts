@@ -64,7 +64,7 @@ export function useRescan() {
       const confirmed = await confirm({
         title: one ? `Scan ${first.site} again?` : `Scan ${ready.length} targets again?`,
         body:
-          `Agents recheck the ${earlier} ${earlier === 1 ? "problem" : "problems"} found before, to see what's fixed, and look for anything new. ` +
+          `The same checks as last time: the ${earlier} ${earlier === 1 ? "problem" : "problems"} found before ${earlier === 1 ? "is" : "are"} rechecked to see what's fixed. ` +
           `It costs ${price} Ziks; you have ${first.balance}.`,
         confirmLabel: `Scan again for ${price} Ziks`,
       });

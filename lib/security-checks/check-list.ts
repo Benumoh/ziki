@@ -24,6 +24,8 @@ export type ListFinding = {
   checkId: string;
   /** On a rescan: an earlier finding still being rechecked, or still there. Null for this scan's own findings. */
   recheck: RecheckStatus | null;
+  /** On a rescan, a finding this scan found for the first time (18 Nov): shown with a New label. */
+  isNew: boolean;
   /** What sending it to the app costs now, in Ziks. */
   price: number;
 };
@@ -95,6 +97,7 @@ function deeperScanTab(report: CheckReport): ListTab {
     price: finding.price,
     checkId: finding.checkId,
     recheck: finding.recheck,
+    isNew: report.previousCheckId !== null && finding.recheck === null,
   });
   const findings = report.findings.map(toRow);
   const fixed = report.fixed.map(toRow);
