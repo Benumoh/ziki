@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { howToFixFor, saveCodeFindings } from "./code-findings";
+import { agentAlreadyFound, ensureCodeBaseline, howToFixFor, saveCodeFindings } from "./code-findings";
 import type { PreviewFinding, PreviewResult } from "./preview";
 
 const now = new Date("2026-11-18T09:00:00Z");
 
 const tx = {
   securityCheck: { findUnique: vi.fn(), update: vi.fn() },
-  securityCheckItem: { findMany: vi.fn(), create: vi.fn() },
+  securityCheckItem: { findMany: vi.fn(), create: vi.fn(), count: vi.fn() },
   securityCheckResult: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
 };
-const db = { $transaction: vi.fn((work: (client: typeof tx) => unknown) => work(tx)) };
+const db = { $transaction: vi.fn((work: (client: typeof tx) => unknown) => work(tx)), securityCheckItem: tx.securityCheckItem };
 
 const csp: PreviewFinding = { id: "missing-csp", severity: "medium", area: "headers", title: "No Content Security Policy", detail: "No CSP header." };
 const tls: PreviewFinding = { id: "old-tls-accepted", severity: "low", area: "certificate", title: "The site still accepts old versions of TLS", detail: "TLS 1.0." };
@@ -81,6 +81,53 @@ describe("Ziki's code checks join the scan's main list (18 Nov)", () => {
   it("does nothing for a removed scan", async () => {
     tx.securityCheck.findUnique.mockResolvedValue({ organisationId: "o1", requestedById: "u1", targetId: "t1", previousCheckId: null, status: "cancelled" });
     await expect(saveCodeFindings(db as never, "c1", result([csp]), now)).resolves.toEqual({ added: 0, stillThere: 0, fixed: 0 });
+    expect(tx.securityCheckResult.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("a rescan's quick scan is compared, not added again (18 Nov, Tolu)", () => {
+  // What agents found on netflix.com on 18 Nov, in their own words.
+  const netflixAgents = [
+    "No Content Security Policy to limit outside scripts",
+    "No Referrer-Policy or Permissions-Policy header",
+    "No cross-origin isolation headers",
+    "Old TLS 1.0 and 1.1 and a no-forward-secrecy cipher are still accepted",
+    "Public certificate lists internal staging host names",
+    "Two cookies on the homepage can travel over plain HTTP",
+    "Sign-in cookies are shared with every netflix.com subdomain",
+  ];
+  const kind = (id: string) => ({ id });
+
+  it("knows when an agent already found the same problem, in its own words", () => {
+    for (const id of ["missing-csp", "missing-referrer-policy", "missing-permissions-policy", "missing-cross-origin-isolation", "old-tls-accepted", "certificate-internal-names", "cookie-not-secure", "cookie-domain-wide"]) {
+      expect([id, agentAlreadyFound(kind(id), netflixAgents)]).toEqual([id, true]);
+    }
+    // Nothing an agent said is about these, so they stay.
+    for (const id of ["missing-hsts", "missing-nosniff", "robots-private-paths", "missing-security-txt", "missing-spf"]) {
+      expect([id, agentAlreadyFound(kind(id), netflixAgents)]).toEqual([id, false]);
+    }
+  });
+
+  it("doesn't add a code finding an agent already reported on the same site", async () => {
+    // Asked in turn: this check's code findings, then agents' open findings on the site.
+    tx.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ title: "No Content Security Policy to limit outside scripts" }]);
+    const hsts: PreviewFinding = { id: "missing-hsts", severity: "medium", area: "headers", title: "Browsers aren't told to always use HTTPS", detail: "No HSTS." };
+    await expect(saveCodeFindings(db as never, "c1", result([csp, hsts]), now)).resolves.toMatchObject({ added: 1 });
+    expect(tx.securityCheckResult.create.mock.calls.map(([call]) => call.data.title)).toEqual([hsts.title]);
+    expect(tx.securityCheckResult.findMany.mock.calls[1]![0].where).toMatchObject({
+      check: { organisationId: "o1", requestedById: "u1", targetId: "t1" }, item: { kind: "check" },
+    });
+  });
+
+  it("saves the quick scan into an earlier scan that has none first, so the rescan finds it Still there, not New", async () => {
+    tx.securityCheckItem.count.mockResolvedValueOnce(0);
+    await expect(ensureCodeBaseline(db as never, "c0", result([csp]), now)).resolves.toBe(true);
+    expect(tx.securityCheckResult.create.mock.calls[0]![0].data).toMatchObject({ checkId: "c0", title: csp.title });
+
+    // An earlier scan that already has its quick scan saved is left as it is.
+    vi.clearAllMocks();
+    tx.securityCheckItem.count.mockResolvedValueOnce(3);
+    await expect(ensureCodeBaseline(db as never, "c0", result([csp]), now)).resolves.toBe(false);
     expect(tx.securityCheckResult.create).not.toHaveBeenCalled();
   });
 });
