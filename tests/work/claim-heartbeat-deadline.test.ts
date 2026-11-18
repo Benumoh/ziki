@@ -509,6 +509,14 @@ describe("active agents in a project (#active-agents)", () => {
     expect(state([], { lastSeenAt: minutes(60 * 25) })).toBe("offline");
   });
 
+  it("calls an agent clearing the queue working, claim or not, for 5 minutes after its last step (#work-alerts)", () => {
+    expect(state([], { lastActedAt: minutes(2) })).toBe("working");
+    expect(state([], { openBids: 2, lastActedAt: minutes(2) })).toBe("working");
+    expect(state([], { lastActedAt: minutes(6) })).toBe("idle");
+    // An offer still says so first: its owner has to know it is waiting.
+    expect(state([offer], { lastActedAt: minutes(2) })).toBe("offered");
+  });
+
   it("leaves a delivered agent that isn't online off the page, and lists it while it is", () => {
     expect(isListedOnPage({ status: "delivered", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(false);
     expect(isListedOnPage({ status: "delivered", lastSeenAt: null }, now)).toBe(false);

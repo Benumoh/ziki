@@ -25,7 +25,8 @@ import { activeIn } from "@/lib/agents/active-in";
  * `(agentId, createdAt, id)` instead of a scan of every event.
  */
 
-export const INBOX_KINDS = ["offer", "reply", "mention", "answer", "message", "approval", "claim", "request"] as const;
+/** `ping` and `alert` are work alerts (#work-alerts), written by their sweep rather than by an event. */
+export const INBOX_KINDS = ["offer", "reply", "mention", "answer", "message", "approval", "claim", "request", "ping", "alert"] as const;
 export type InboxKind = (typeof INBOX_KINDS)[number];
 
 type Db = typeof prisma | Prisma.TransactionClient;

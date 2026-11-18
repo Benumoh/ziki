@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import "@/components/security-finding.css";
 import { FixPanel } from "@/components/security-checks/fix-panel";
+import { MakeFixable } from "@/components/security-checks/make-fixable";
 import { type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
 import type { ResultFix } from "@/lib/security-checks/report";
@@ -24,7 +25,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
   const [quick, checks] = tabs;
   // Every finding not already in the app can be sent from here, a rescan's earlier ones still there included (18 Nov, Tolu).
-  const fixable = (checks.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id));
+  // The quick scan's findings can be ticked and fixed too, from their own section (18 Nov).
+  const fixable = [...(quick.findings ?? []), ...(checks.findings ?? [])].filter(({ id, fix }) => !fix && picked.includes(id));
   const selected = fixable.map(({ id }) => id);
   const toggle = (id: string) => {
     const next = picked.includes(id) ? picked.filter((item) => item !== id) : [...picked, id];
@@ -48,22 +50,48 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   }, [initialFix.length]);
 
   return (
-    <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
+    // The id: with the quick scan merged into the list, "View quick scan results" lands here (#deeper-scan-gate).
+    <div id="check-results" className="scroll-mt-24 space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
       {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
       {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
-      {/* Once Ziki's code checks are in the main list (18 Nov), the quick scan isn't shown apart: it would list them twice. */}
+      {/* Ziki's code checks (the quick scan) keep their own section at the top, before and after payment (18 Nov):
+          their findings can be ticked and fixed here, and the Deeper scan below lists only the agents' work. */}
+      {/* The id: the deeper scan's checkout jumps here from "View quick scan results" (#deeper-scan-gate). */}
       {quick.merged ? null : (
-        <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <details id="quick-scan-results" open={!(checks.findings ?? []).length} className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
           <summary className={SECTION_HEADING}>
             Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
           </summary>
-          <TabRows tab={quick} selected={selected} onToggle={toggle} />
+          {/* An older scan (before 18 Nov) has only titles here: make them real, fixable findings once. */}
+          {quick.scanRows?.length && !quick.findings?.length ? <MakeFixable checkId={checkId} /> : null}
+          <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
         </details>
       )}
-      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+      {/* The id: the Deeper scan step at the top of the page jumps here (18 Nov). */}
+      <details id="deeper-scan-results" open className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
-          <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
+          {checks.startable ? (
+            // Not started: a lock and Start, like the steps box at the top (18 Nov, Hamzat). It opens the same
+            // deeper-scan checkout, and doesn't open or close the section.
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-zk-text2">
+              <LockIcon />
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"));
+                }}
+                className="inline-flex h-7 items-center rounded-full bg-electric-blue-strong px-3.5 text-xs font-bold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
+              >
+                Start
+              </button>
+            </span>
+          ) : (
+            <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
+          )}
         </summary>
         <TabRows tab={checks} selected={selected} onToggle={toggle} onSelectAll={selectAll} />
         {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
@@ -98,7 +126,8 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
   const fixed = tab.fixed ?? [];
   const pending = tab.pending ?? [];
   const clear = tab.clear ?? [];
-  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length;
+  const notChecked = tab.notChecked ?? [];
+  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length && !notChecked.length;
   return (
     <ul className="m-0 mt-2 list-none divide-y divide-zk-border border-t border-zk-border p-0">
       {scanRows.map((row, i) => (
@@ -129,6 +158,19 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
       {pending.map((part) => (
         <li key={part.id}>
           <Row severity={null} title={part.title} right={<PartState state={part.state} />} lead={null} />
+        </li>
+      ))}
+      {/* Before the deeper scan is paid for (#deeper-scan-gate): what the 20 Ziks buys, each not checked yet. */}
+      {notChecked.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">What agents check that the quick scan can&apos;t · {notChecked.length}</li> : null}
+      {notChecked.map((item) => (
+        <li key={item.title}>
+          <Row
+            severity={null}
+            title={item.title}
+            sub={item.why}
+            lead={null}
+            right={<span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-bold text-zk-text2">Not checked</span>}
+          />
         </li>
       ))}
       {clear.length ? (
@@ -282,5 +324,15 @@ function ThreatChip({ severity }: { severity: SecuritySeverity }) {
     <span className={`security-severity security-severity--${severity} inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold`}>
       {SEVERITY_LABEL[severity]}
     </span>
+  );
+}
+
+/** The same small lock as the steps box's locked Deeper scan. */
+function LockIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
   );
 }

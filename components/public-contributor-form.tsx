@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CharacterCounter } from "@/components/ui/character-counter";
 import { copyText } from "@/lib/clipboard";
-import { publicProjectPath } from "@/lib/public-project-paths";
+import { publicFeedbackPath, publicIssueDetailPath } from "@/lib/public-project-paths";
+import { rememberPublicSubmission } from "@/lib/saved-public-submissions";
 import type { PublicIdeaMatch } from "@/lib/public-idea-intake";
 
 const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
@@ -70,13 +72,16 @@ export function PublicContributorForm({
   projectSlug,
   kind,
   returnHref,
+  signedIn = false,
 }: {
   project: { name: string; slug: string; goal?: string | null };
   orgSlug: string;
   projectSlug: string;
   kind?: "problem" | "improvement";
   returnHref?: string;
+  signedIn?: boolean;
 }) {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const token = useRef<string | null>(null);
 
@@ -108,7 +113,7 @@ export function PublicContributorForm({
   const [copiedTrackingLink, setCopiedTrackingLink] = useState(false);
 
   const endpoint = `/api/public/projects/${encodeURIComponent(orgSlug)}/${encodeURIComponent(projectSlug)}/ideas`;
-  const projectHome = returnHref ?? publicProjectPath({ orgSlug, projectSlug });
+  const projectHome = returnHref ?? publicFeedbackPath({ orgSlug, projectSlug });
 
   // Debounced search for similar items
   const searchQuery = (title.trim().length >= 8 ? title : description).trim();
@@ -238,10 +243,12 @@ export function PublicContributorForm({
       };
 
       if (result.ok && body.trackingPath) {
+        if (token.current) rememberPublicSubmission({ orgSlug, projectSlug, token: token.current });
         setSubmittedData({
           title: finalTitle,
           trackingPath: body.trackingPath,
         });
+        router.refresh();
         return;
       }
 
@@ -281,75 +288,52 @@ export function PublicContributorForm({
         : submittedData.trackingPath;
 
     return (
-      <div className="space-y-6">
-        <div className="rounded-2xl border border-zk-border bg-zk-surface p-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/10 text-blue-500">
-            <svg
-              className="h-8 w-8 text-blue-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+      <section aria-labelledby="report-received-title" className="w-full overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <header className="border-b border-zk-divider px-5 py-7 sm:px-8 sm:py-8">
+          <div className="flex items-start gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-zk-tint text-zk-accent" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6" /></svg>
+            </span>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-zk-accent">{project.name} · Feedback submitted</p>
+              <h2 id="report-received-title" className="text-2xl font-bold tracking-tight text-zk-text sm:text-3xl">Report received</h2>
+              <p className="max-w-lg text-sm leading-6 text-zk-text2">Thank you for helping improve {project.name}. Your feedback is now an idea for agents to review.</p>
+            </div>
           </div>
-          <h2 className="text-3xl font-bold tracking-tight text-zk-text sm:text-4xl">Report received</h2>
-          <p className="mt-1 text-sm text-zk-muted">
-            Thank you for contributing to {project.name}.
-          </p>
+        </header>
 
-          <div className="mt-6 rounded-xl border border-zk-border bg-zk-chip/40 p-4 text-left">
-            <h3 className="font-semibold text-zk-text">{submittedData.title}</h3>
-            <div className="mt-2">
-              <span className="inline-flex items-center rounded-full bg-blue-500/15 px-2.5 py-0.5 text-sm font-semibold text-blue-600 dark:text-blue-400">
-                Awaiting review
-              </span>
+        <div className="space-y-6 px-5 py-6 sm:px-8 sm:py-7">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zk-muted">Your feedback</h3>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-zk-tint px-2.5 py-1 text-xs font-semibold text-zk-accent"><span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />Awaiting review</span>
+            </div>
+            <p className="break-words text-base font-semibold leading-7 text-zk-text">{submittedData.title}</p>
+          </div>
+
+          <div className="rounded-xl border border-zk-border bg-zk-card p-4 sm:p-5">
+            <label htmlFor="tracking-link-input" className="block text-sm font-semibold text-zk-text">Your private tracking link</label>
+            <p className="mt-1 text-sm leading-6 text-zk-text2">Keep this link to check progress. Anyone with it can view your report.</p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <Input id="tracking-link-input" readOnly value={fullTrackingUrl} className="min-w-0 flex-1 bg-zk-surface font-mono text-xs text-zk-text2" />
+              <button type="button" aria-label={copiedTrackingLink ? "Tracking link copied" : "Copy tracking link"} onClick={async () => { setCopiedTrackingLink(await copyText(fullTrackingUrl)); setTimeout(() => setCopiedTrackingLink(false), 2000); }} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-zk-border bg-zk-surface px-4 py-2 text-sm font-semibold text-zk-text transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></svg>
+                <span role="status">{copiedTrackingLink ? "Link copied" : "Copy link"}</span>
+              </button>
             </div>
           </div>
 
-          <div className="mt-6 rounded-xl border border-zk-border bg-zk-chip/40 p-4 text-left space-y-2">
-            <label htmlFor="tracking-link-input" className="block text-sm font-bold uppercase tracking-wider text-zk-text2">
-              Your private tracking link
-            </label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="tracking-link-input"
-                readOnly
-                value={submittedData.trackingPath}
-                className="bg-zk-surface font-mono text-sm text-zk-text"
-              />
-              <Button
-                type="button"
-                variant="primary"
-                onClick={async () => {
-                  setCopiedTrackingLink(await copyText(fullTrackingUrl));
-                  setTimeout(() => setCopiedTrackingLink(false), 2000);
-                }}
-                className="shrink-0"
-              >
-                {copiedTrackingLink ? "Copied" : "Copy link"}
-              </Button>
-            </div>
-            <p className="text-sm text-zk-muted">Save this link to check progress. Keep it private.</p>
-            <Link href={submittedData.trackingPath} className="text-sm font-semibold text-zk-accent hover:underline">Track your report</Link>
-          </div>
-
-          <p className="mt-6 text-sm text-zk-muted">
-            Open your private tracking link to see the current status of your report.
-          </p>
-
-          <div className="mt-6">
-            <Link
-              href={projectHome}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-zk-chip px-6 text-sm font-semibold text-zk-text transition hover:bg-zk-border"
-            >
-              Back to project
-            </Link>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link href={submittedData.trackingPath} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-zk-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">Track your report <span aria-hidden="true">→</span></Link>
+            <Link href={projectHome} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zk-border bg-zk-surface px-5 py-2.5 text-sm font-semibold text-zk-text transition hover:bg-zk-chip">Back to product</Link>
           </div>
         </div>
-      </div>
+
+        <footer className="border-t border-zk-divider px-5 py-4 text-sm sm:px-8">
+          <Link href={signedIn ? "/my-submissions" : "/login?callbackUrl=%2Fmy-submissions"} className="font-semibold text-zk-accent hover:underline">{signedIn ? "View My submissions" : "Sign in to view My submissions"}</Link>
+          {!signedIn ? <p className="mt-1 text-xs leading-5 text-zk-muted">Optional. You can track this report without an account.</p> : null}
+        </footer>
+      </section>
     );
   }
 
@@ -569,9 +553,9 @@ export function PublicContributorForm({
                 <li key={`${match.kind}-${match.number}`} className="py-2 first:pt-0 last:pb-0">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zk-text">
+                      <Link href={publicIssueDetailPath({ orgSlug, projectSlug }, match.number)} className="block truncate text-sm font-semibold text-zk-accent hover:underline">
                         {match.title}
-                      </p>
+                      </Link>
                       <p className="text-sm text-zk-muted">
                         Existing public issue
                       </p>
@@ -600,7 +584,7 @@ export function PublicContributorForm({
             {pending ? "Sending…" : isImprovement ? "Send suggestion" : "Send report"}
           </Button>
           <p className="text-center text-sm text-zk-muted">
-            Only the project team can see your submission until it becomes an issue.
+            Your feedback is submitted as an idea for the project team to review.
           </p>
         </div>
       </div>

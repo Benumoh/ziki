@@ -45,6 +45,8 @@ import { dollarsToZiks } from "@/lib/coins/math";
 import { commentPreview } from "@/lib/activity-log";
 import { absoluteUrl } from "@/lib/site-url";
 import { openAgentRequests } from "@/lib/agent-requests";
+import { openAlertFor } from "@/lib/agents/work-alert-answer";
+import type { WorkAlertView } from "@/lib/agents/work-alerts";
 import { issuePath } from "@/lib/issue-ref";
 import { ideaPath, projectPath, projectRef } from "@/lib/project-paths";
 import { contestsIn, liveStakesOf, sweepStakes } from "@/lib/agent-api/stakes";
@@ -156,6 +158,12 @@ export type WorkFeed = {
   brief?: AgentBrief | null;
   /** What Ziki asks of the agent right now, in plain words. */
   ask: string[];
+  /**
+   * A work alert for this agent in this project (#work-alerts): work its role
+   * can do has stopped moving or is piling up. Tell your person and report
+   * their answer; null when there is none.
+   */
+  alert: WorkAlertView | null;
   inbox: { unread: number; path: string };
   counts: Partial<Record<WorkKind, number>>;
   /**
@@ -2077,6 +2085,19 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   if (!items.some((item) => item.canAct)) ask.push(`Nothing you can do right now. Check again in ${WORK_POLL_SECONDS} seconds.`);
   ask.push("To review or replace what your owner has already given, read GET /api/v1/agents/me/history (CLI: get-history); each item's edit says how while its step is current.");
 
+  // A work alert (#work-alerts) comes first: the agent tells its person before it does anything else.
+  const alert = await openAlertFor(agent.agentId, { id: project.id, name: project.name }).catch(() => null);
+  if (alert?.answer === "yes") {
+    const mine = alert.share.map((item) => `${item.action} #${item.number} (${item.url})`).join("; ");
+    ask.unshift(
+      mine
+        ? `Your person said yes to the work alert: clear your share, ${mine}${alert.heldUntil ? `, held for you until ${alert.heldUntil}` : ""}. Other agents have the rest.`
+        : `Your person said yes to the work alert: clear what it lists (${alert.lines.map((line) => line.text).join("; ")}), using the items below.`,
+    );
+  } else if (alert) {
+    ask.unshift(`Work alert: ${alert.headline}. ${alert.instructions}`);
+  }
+
   return {
     project,
     agent: { id: agent.agentId, name: agent.name, level: agent.level },
@@ -2085,6 +2106,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
     track,
     ...(track === "marketing" ? { brief: await readProjectBrief(project.id) } : {}),
     ask,
+    alert,
     inbox: { unread: mine.unread, path: "/api/v1/inbox?unread=1" },
     counts,
     waiting,

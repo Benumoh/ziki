@@ -4,10 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { LocalTime } from "@/components/local-time";
 import { CheckActivity, type CheckPhase } from "@/components/security-checks/check-activity";
 import { statusClass, substatusClass } from "@/lib/labels";
-import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
+import { CHECK_STATUS_LABEL, DEEPER_SCAN_COVERS, DEEPER_SCAN_PRICE_ZIKS, FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
+import { DeeperScanStart } from "@/components/security-checks/deeper-scan-offer";
 import type { CheckReport } from "@/lib/security-checks/report";
 import { firstSentence } from "@/lib/security-checks/short-line";
-import { SECURITY_CHECK_PRICE_COINS } from "@/lib/security-checks";
+import { CODE_SCAN_PRICE_ZIKS } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { PREVIEW_RISK_LABEL, previewRisk, type PreviewRisk } from "@/lib/security-checks/preview-summary";
 import { ScanSteps } from "@/components/security-checks/scan-steps";
@@ -34,19 +35,26 @@ export function phaseOf(report: Pick<CheckReport, "status" | "parts" | "progress
  * The top of a check's page (16 Nov, Hamzat): where it stands, the lively strip (a wandering magnifier and a
  * line that changes while agents work), and the progress bar with the numbers.
  */
-export function CheckHeader({ report }: { report: CheckReport }) {
+export function CheckHeader({ report, backFromBuying = false }: { report: CheckReport; backFromBuying?: boolean }) {
   const phase = phaseOf(report);
   const { done, total } = report.progress;
   return (
     <div className="space-y-5 bg-linear-to-b from-zk-tint/60 to-transparent p-4 sm:p-6">
       <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zk-text2">
-        <Badge className={STATUS_CLASS[report.status]}>{CHECK_STATUS_LABEL[report.status]}</Badge>
+        {/* Waiting for the deeper scan's payment (#deeper-scan-gate): "Quick scan done", not "Waiting to start". */}
+        <Badge className={STATUS_CLASS[report.status]}>{report.paymentRequired ? "Quick scan done" : CHECK_STATUS_LABEL[report.status]}</Badge>
         <span>
           <LocalTime date={report.createdAt} absolute />
           {total ? ` · ${total} ${total === 1 ? "check" : "checks"}` : ""}
         </span>
       </p>
-      <CheckActivity site={report.target.value} phase={phase} done={done} total={total} />
+      {/* Waiting for the deeper scan's payment (#deeper-scan-gate): nothing is moving yet, so instead of "Ziki is
+          planning" it says the quick scan is done; Start in the steps below opens the checkout. */}
+      {report.paymentRequired ? (
+        <DeeperScanStart checkId={report.checkId} site={report.target.value} price={DEEPER_SCAN_PRICE_ZIKS} covers={DEEPER_SCAN_COVERS[report.target.kind]} backFromBuying={backFromBuying} />
+      ) : (
+        <CheckActivity site={report.target.value} phase={phase} done={done} total={total} />
+      )}
       {/* The three steps (18 Nov): quick scan, the agents' deeper scan, and the code scan, locked until paid for. */}
       <ScanSteps
         site={report.target.value}
@@ -56,7 +64,11 @@ export function CheckHeader({ report }: { report: CheckReport }) {
         phase={phase}
         done={done}
         total={total}
-        codePrice={SECURITY_CHECK_PRICE_COINS}
+        codePrice={CODE_SCAN_PRICE_ZIKS}
+        checkId={report.checkId}
+        codeScan={report.codeScan}
+        // A repo's own scan is the code scan: no Connect code step on it.
+        codeStep={report.target.kind !== "repo"}
         // Set once the deeper scan needs paying for (PR 827); false until then.
         paymentRequired={"paymentRequired" in report ? Boolean(report.paymentRequired) : false}
       />
@@ -105,10 +117,6 @@ function FindingsSummary({ report }: { report: CheckReport }) {
     ? (finished ? "No problems found" : "Nothing found yet")
     : `${all} ${all === 1 ? "problem" : "problems"} ${finished ? "found" : "found so far"}`;
   const breakdown = SECURITY_SEVERITIES.filter((severity) => counts[severity] > 0).map((severity) => `${counts[severity]} ${severity}`).join(", ");
-  const areas = report.quickScan?.areas ?? [];
-  const httpsArea = areas.find((area) => area.area === "https");
-  const certificate = areas.find((area) => area.area === "certificate");
-  const secure = httpsArea || certificate ? (httpsArea?.problems ?? 0) + (certificate?.problems ?? 0) === 0 : null;
   const sources = [quickTotal ? `${quickTotal} from the quick scan` : null, agentTotal || finished ? `${agentTotal} from the agents${finished ? "" : " so far"}` : null].filter(Boolean).join(" · ");
   const at = RISK_AT[risk];
 
@@ -125,11 +133,7 @@ function FindingsSummary({ report }: { report: CheckReport }) {
             />
             <span className={`font-semibold ${warn ? "text-red-800" : "text-zk-text"}`}>{title}</span>
             {breakdown ? <span className={warn ? "text-red-900/80" : "text-zk-muted"}>· {breakdown}</span> : null}
-            {secure === null ? null : (
-              <span className={`ml-auto inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${secure ? "bg-zk-ok-bg text-zk-ok-fg" : "security-severity security-severity--high"}`}>
-                {secure ? "✓ HTTPS set up" : "! HTTPS needs work"}
-              </span>
-            )}
+            {/* No HTTPS pill here (18 Nov, Hamzat): only Fix remaining findings sits on the right. */}
           </h2>
           {/* A rescan keeps the box to one line under the title (18 Nov, Tolu: "too clustered"): new, still there and
               fixed. Where they came from and the summary sentence show on a first scan only. */}

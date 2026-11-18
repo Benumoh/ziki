@@ -2,7 +2,8 @@ import "server-only";
 import type { AgentLevel, AgentWorkMode, Status } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
-import { agentsLastSeen, isStale } from "@/lib/agents/last-seen";
+import { agentsLastActed, agentsLastSeen, isStale } from "@/lib/agents/last-seen";
+import { ACTING_WINDOW_MS } from "@/lib/agents/work-alerts";
 import { AGENT_IDLE_WINDOW_MS, AGENT_WORKING_WINDOW_MS, isClaimStalled } from "@/lib/dashboard-overview";
 import { isDeliveryOverdue } from "@/lib/claim-deadline";
 import { workflowFor } from "@/lib/workflow";
@@ -112,6 +113,7 @@ export function projectAgentState({
   paused,
   hasUnansweredQuestion,
   lastSeenAt,
+  lastActedAt = null,
   now,
 }: {
   claims: HeldClaimSignal[];
@@ -119,6 +121,8 @@ export function projectAgentState({
   paused: boolean;
   hasUnansweredQuestion: boolean;
   lastSeenAt: Date | null;
+  /** Its last step in the project (a vote, confirmation, bid, judgement, report…), lib/agents/last-seen.ts. */
+  lastActedAt?: Date | null;
   now: Date;
 }): { status: ProjectAgentStatus; detail: string } {
   if (paused) return { status: "paused", detail: "Paused by its owner: its clocks are frozen" };
@@ -157,6 +161,11 @@ export function projectAgentState({
 
   const offered = claims.find((claim) => claim.status === "offered");
   if (offered) return { status: "offered", detail: `Offered #${offered.issueNumber}, not accepted yet` };
+
+  // Working without a claim (#work-alerts): voting, confirming, judging, reviewing or merging right now.
+  if (lastActedAt && now.getTime() - lastActedAt.getTime() <= ACTING_WINDOW_MS) {
+    return { status: "working", detail: `Clearing the project's queue: last step ${spanText(now.getTime() - lastActedAt.getTime())} ago` };
+  }
 
   const delivered = claims.find((claim) => claim.status === "active");
   if (delivered) return { status: "delivered", detail: `Delivered #${delivered.issueNumber}, waiting for review` };
@@ -266,7 +275,10 @@ export async function loadProjectAgents({
   });
   if (agents.length === 0) return { agents: [], hidden: 0, offerWindowSeconds: workflow.offerWindowSeconds };
 
-  const seenBy = await agentsLastSeen(agents.map((agent) => agent.id));
+  const [seenBy, actedBy] = await Promise.all([
+    agentsLastSeen(agents.map((agent) => agent.id)),
+    agentsLastActed(agents.map((agent) => agent.id), projectId, new Date(now.getTime() - ACTING_WINDOW_MS)),
+  ]);
   const offerWindowMs = workflow.offerWindowSeconds * 1000;
 
   let hidden = 0;
@@ -297,6 +309,7 @@ export async function loadProjectAgents({
       paused: agent.pausedAt !== null,
       hasUnansweredQuestion: agent.questions.length > 0,
       lastSeenAt,
+      lastActedAt: actedBy.get(agent.id) ?? null,
       now,
     });
     rows.push({

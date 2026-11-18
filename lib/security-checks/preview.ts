@@ -6,12 +6,14 @@ import { createHash } from "node:crypto";
 import tls from "node:tls";
 import { getDomain } from "tldts";
 import type { SecuritySeverity, SecurityTargetKind } from "@prisma/client";
-import { GitHubError, githubApiUrl, githubClientFor, installationIdForRepo } from "@/lib/github/client";
 import { logger } from "@/lib/logger";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { PREVIEW_SCANS_PER_VISITOR_PER_HOUR, scanLimitsEnabled } from "@/lib/security-checks";
 import { isPublicAddress, PrivateAddressError, publicOnlyLookup, realNetwork } from "@/lib/security-checks/ownership";
 import { parseSecurityTarget } from "@/lib/security-checks/target";
+import { osvLookup, type OsvLookup } from "@/lib/security-checks/osv";
+import { repoReader, type RepoReader } from "@/lib/security-checks/repo-reader";
+import { dependabotFindings, dependencyFindings, filesToRead, hygieneFindings, packagesIn, secretFileFindings, secretFindings, workflowFindings } from "@/lib/security-checks/repo-scan";
 
 /**
  * The quick preview scan on the public security page (#security-checks, 12 Nov
@@ -47,7 +49,7 @@ export const MAX_REDIRECTS = 10;
 const EXPIRING_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type PreviewArea = "https" | "certificate" | "headers" | "cookies" | "files" | "email" | "secrets" | "policy" | "updates";
+export type PreviewArea = "https" | "certificate" | "headers" | "cookies" | "files" | "email" | "secrets" | "policy" | "updates" | "dependencies" | "workflows";
 
 export type PreviewFinding = {
   /** Stable for each kind of problem, so a page can key and count them. */
@@ -128,21 +130,17 @@ export type PreviewNetwork = {
   oldTls?(host: string): Promise<string[]>;
   /** One GET of a small public text file, following same-site HTTPS redirects (example.com to www.example.com); null when nothing answers. */
   text?(url: string): Promise<TextAnswer | null>;
-  /** The file and folder names a public repo shows at its top level, in `.github` and in `docs`. */
-  repo(owner: string, name: string): Promise<RepoAnswer>;
+  /** A reader for a repo (repo-reader.ts): public ones only, unless `access` names the workspace's App installation. */
+  repo(owner: string, name: string, access: { installationId: string | null }): Promise<RepoReader>;
+  /** Known security holes in packages (osv.ts). */
+  osv: OsvLookup;
 };
-
-/** What a visitor to github.com sees of a repo: names only, never a file's contents. */
-export type RepoAnswer =
-  | { status: "ok"; root: string[]; github: string[]; docs: string[] }
-  | { status: "not_found" }
-  | { status: "unavailable"; /** Why GitHub couldn't be read, in a few words, for the person and the logs. */ detail?: string };
 
 /* ------------------------------------------------------------------ */
 /* The scan                                                            */
 /* ------------------------------------------------------------------ */
 
-const REPO_NOT_FOUND = "We couldn't see that repo on GitHub. It may be private or the name may be wrong. You can still show it's yours and agents will check it properly.";
+const REPO_NOT_FOUND = "We couldn't see that repo on GitHub. It may be private or the name may be wrong. To check a private repo, connect it to a project with Ziki's GitHub App first.";
 const REPO_UNAVAILABLE = "We couldn't read that repo from GitHub just now. Try again in a little while.";
 const unavailableReason = (detail?: string) => (detail ? `We couldn't read that repo from GitHub just now (${detail}). Try again in a little while.` : REPO_UNAVAILABLE);
 const LIMIT_REASON = "You've run a few previews already. Try again in a little while, or sign up to check your site properly.";
@@ -162,14 +160,24 @@ export async function previewScan(
     now = Date.now(),
     limited = scanLimitsEnabled(),
     fresh = false,
-  }: { visitor: string; network?: PreviewNetwork; now?: number; limited?: boolean; fresh?: boolean },
+    repoAccess = null,
+  }: {
+    visitor: string;
+    network?: PreviewNetwork;
+    now?: number;
+    limited?: boolean;
+    fresh?: boolean;
+    /** For a private repo: the workspace's App installation (`privateRepoAccess`). Only signed-in callers pass it. */
+    repoAccess?: { installationId: string } | null;
+  },
 ): Promise<PreviewResult> {
   const parsed = parseSecurityTarget(link);
   if (!parsed.ok) return { ok: false, reason: parsed.error };
   const { kind, value } = parsed.target;
 
   // `fresh` skips the 10-minute reuse: a fix was paid for since the last look (#security-rescan, 17 Nov), so look again.
-  const cacheKey = `${kind}:${value}`;
+  // A private repo's result is kept apart, so a visitor without access never gets it from the cache.
+  const cacheKey = `${kind}:${value}:${repoAccess?.installationId ?? "public"}`;
   const cached = cache.get(cacheKey);
   if (!fresh && cached && now - cached.at < PREVIEW_CACHE_MS) return cached.result;
 
@@ -180,7 +188,7 @@ export async function previewScan(
   }
 
   try {
-    const result = kind === "repo" ? await scanRepo(value, network, now) : await scan(kind, value, network, now);
+    const result = kind === "repo" ? await scanRepo(value, network, now, repoAccess) : await scan(kind, value, network, now);
     if (result.ok) {
       cache.set(cacheKey, { at: now, result });
       for (const [key, entry] of cache) if (now - entry.at >= PREVIEW_CACHE_MS) cache.delete(key);
@@ -293,70 +301,53 @@ async function scan(
 /* A public repo                                                       */
 /* ------------------------------------------------------------------ */
 
-/** Files that usually hold real secrets: the repo should never publish them. Examples and templates are fine. */
-const SECRET_FILE = /^(\.env(\.(local|production|prod|development|staging))?|id_(rsa|dsa|ecdsa|ed25519)|credentials\.json|service-?account[\w-]*\.json|\.htpasswd|\.netrc|.+\.(pem|key|p12|pfx|jks|keystore))$/i;
-/** A file at the top of a repo that says it depends on packages from somewhere. */
-const DEPENDENCY_FILE = /^(package\.json|requirements[\w.-]*\.txt|pyproject\.toml|pipfile|gemfile|go\.mod|cargo\.toml|composer\.json|pom\.xml|build\.gradle(\.kts)?|pubspec\.yaml)$/i;
-const SECURITY_POLICY_FILE = /^security\.(md|markdown|txt)$/i;
-const UPDATE_BOT_FILE = /^(dependabot\.ya?ml|renovate\.json5?|\.renovaterc(\.json5?)?)$/i;
-
 /**
- * A quick, code-only look at a public repo (13 Nov): the same promise as for a
- * site. It reads only the names of the files and folders any visitor to
- * github.com sees, never a file's contents and never anything it would have to
- * log in for. A private or missing repo says so and still goes on to "Show
- * it's yours".
+ * The repo quick scan (#security-repo-scan, 18 Nov): Ziki reads the repo itself, in seconds, with no agents. A public
+ * repo is read as any visitor could; a private one only through the workspace's GitHub App (`repoAccess`). It opens
+ * lockfiles, workflows and a few config files (repo-scan.ts says which and why), looks package versions up in OSV.dev,
+ * and adds GitHub's own Dependabot alerts when the App may read them. It never runs anything and never repeats a secret.
  */
-async function scanRepo(value: string, network: PreviewNetwork, now: number): Promise<PreviewResult> {
+async function scanRepo(value: string, network: PreviewNetwork, now: number, repoAccess: { installationId: string } | null): Promise<PreviewResult> {
   const [owner, name] = value.split("/");
-  const answer = await network.repo(owner, name);
-  if (answer.status === "not_found") return { ok: false, reason: REPO_NOT_FOUND };
-  if (answer.status === "unavailable") return { ok: false, reason: unavailableReason(answer.detail) };
+  const reader = await network.repo(owner!, name!, { installationId: repoAccess?.installationId ?? null });
+  const meta = await reader.meta();
+  if (meta.status === "not_found") return { ok: false, reason: REPO_NOT_FOUND };
+  if (meta.status === "unavailable") return { ok: false, reason: unavailableReason(meta.detail) };
+  const tree = await reader.tree();
+  if (!tree) return { ok: false, reason: REPO_UNAVAILABLE };
+  const files = tree.files;
 
-  const findings: PreviewFinding[] = [];
-  const checked: PreviewArea[] = ["secrets", "policy"];
+  const findings: PreviewFinding[] = [...secretFileFindings(value, files), ...hygieneFindings(value, files, meta.pushedAt, now)];
+  const checked: PreviewArea[] = ["secrets", "policy", "updates", "workflows"];
+  const toRead = filesToRead(files);
+  const read = async (path: string) => ({ path, text: await reader.file(path) });
+  const [locks, workflows, configs, alerts] = await Promise.all([
+    Promise.all(toRead.lockfiles.map(read)),
+    Promise.all(toRead.workflows.map(read)),
+    Promise.all(toRead.configs.map(read)),
+    reader.dependabotAlerts(),
+  ]);
 
-  for (const file of answer.root.filter((entry) => SECRET_FILE.test(entry))) {
-    findings.push({
-      id: `secret-file:${file.toLowerCase()}`,
-      severity: "high",
-      area: "secrets",
-      // The file is named in the title: each is its own finding, matched by title across scans (code-findings.ts).
-      title: `A file that usually holds secrets is in the repo: ${file}`,
-      detail: `${value} publishes a file named ${file}. If it holds real keys or passwords, anyone can read them, so they should be removed from the repo and changed.`,
-    });
-  }
+  // Workflows are checked for risky patterns and for keys pasted into them.
+  for (const { path, text } of workflows) if (text) findings.push(...workflowFindings(path, text), ...secretFindings(path, text));
+  for (const { path, text } of configs) if (text) findings.push(...secretFindings(path, text));
 
-  const hasPolicy = [...answer.root, ...answer.github, ...answer.docs].some((entry) => SECURITY_POLICY_FILE.test(entry));
-  if (!hasPolicy) {
-    findings.push({
-      id: "no-security-policy",
-      severity: "low",
-      area: "policy",
-      title: "The repo has no security policy",
-      detail: `${value} has no SECURITY.md, so a person who finds a problem doesn't know how to report it privately.`,
-    });
-  }
+  // Packages: GitHub's own alerts when the App may read them, else (or as well) OSV.dev for the versions in lockfiles.
+  const packages = locks.flatMap(({ path, text }) => (text ? packagesIn(path, text) : []));
+  const fromGitHub = alerts ? dependabotFindings(alerts) : [];
+  const vulnerable = packages.length ? await network.osv(packages) : [];
+  const fromOsv = vulnerable ? dependencyFindings(vulnerable) : [];
+  if (packages.length || fromGitHub.length) checked.push("dependencies");
+  const seen = new Set(fromGitHub.map((finding) => finding.id));
+  findings.push(...fromGitHub, ...fromOsv.filter((finding) => !seen.has(finding.id)));
 
-  // Only judged when the repo says it depends on packages: a repo with no dependencies has nothing to keep up to date.
-  if (answer.root.some((entry) => DEPENDENCY_FILE.test(entry))) {
-    checked.push("updates");
-    if (![...answer.root, ...answer.github].some((entry) => UPDATE_BOT_FILE.test(entry))) {
-      findings.push({
-        id: "no-dependency-updates",
-        severity: "low",
-        area: "updates",
-        title: "Nothing keeps the repo's dependencies up to date",
-        detail: `${value} has no Dependabot or Renovate setup, so known problems in its packages can sit there unnoticed.`,
-      });
-    }
-  }
-
-  findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+  // One finding per id: the same secret file can't be counted twice.
+  const unique = [...new Map(findings.map((finding) => [finding.id, finding])).values()];
+  unique.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   const counts: Record<SecuritySeverity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
-  for (const finding of findings) counts[finding.severity] += 1;
-  const fingerprint: SiteFingerprint = { repo: hashOf([[...answer.root].sort(), [...answer.github].sort(), [...answer.docs].sort()]) };
-  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings, fingerprint };
+  for (const finding of unique) counts[finding.severity] += 1;
+  const fingerprint: SiteFingerprint = { repo: hashOf([files.map((file) => `${file.path}:${file.size}`).sort()]) };
+  return { ok: true, kind: "repo", target: value, checkedAt: new Date(now).toISOString(), checked, counts, findings: unique, fingerprint };
 }
 
 const SEVERITY_ORDER: Record<SecuritySeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -751,71 +742,8 @@ export function emailFindings(spf: readonly (readonly string[])[] | null, dmarc:
 const USER_AGENT = "ZikiSecurityPreview/1.0 (+https://ziki.dev/security)";
 
 export const realPreviewNetwork: PreviewNetwork = {
-  async repo(owner, name) {
-    // Public data only. Ziki's GitHub App is used when it covers the repo (its limit is the highest), else Ziki's token, else none.
-    // Those can see private repos too, so a repo is only looked into once GitHub says it is public: what the quick look reads
-    // is what any visitor to github.com sees, never more.
-    const installationId = await installationIdForRepo(owner, name).catch(() => null);
-    const github = await githubClientFor({ githubInstallationId: installationId });
-    const base = `/repos/${owner}/${name}`;
-    let detail = "";
-    const viaClient = async (suffix: string): Promise<unknown | "not_found" | "unavailable"> => {
-      try {
-        const body = await github.getOrNull<unknown>(`${base}${suffix}`);
-        return body === null ? "not_found" : body;
-      } catch (error) {
-        detail = error instanceof GitHubError && error.status ? `GitHub answered ${error.status}` : "Ziki couldn't reach GitHub";
-        logger.warn(`[security-preview] couldn't read ${owner}/${name}${suffix} from GitHub (${github.auth}): ${detail}`, error instanceof Error ? error.message : error);
-        return "unavailable";
-      }
-    };
-    // A token GitHub rejects, or a spent limit on it, shouldn't stop a look at a public repo: ask once with no token at all.
-    const anonymously = async (suffix: string): Promise<unknown | "not_found" | "unavailable"> => {
-      try {
-        const response = await fetch(`${githubApiUrl()}${base}${suffix}`, {
-          headers: { Accept: "application/vnd.github+json", "User-Agent": USER_AGENT },
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-          cache: "no-store",
-        });
-        if (response.status === 404) return "not_found";
-        if (!response.ok) {
-          detail ||= `GitHub answered ${response.status}`;
-          return "unavailable";
-        }
-        return await response.json();
-      } catch {
-        detail ||= "Ziki couldn't reach GitHub";
-        return "unavailable";
-      }
-    };
-    const read = async (suffix: string): Promise<unknown | "not_found" | "unavailable"> => {
-      const first = await viaClient(suffix);
-      return first === "unavailable" && github.auth !== "none" ? anonymously(suffix) : first;
-    };
-    const namesIn = (body: unknown): string[] =>
-      Array.isArray(body) ? body.flatMap((entry) => (typeof (entry as { name?: unknown })?.name === "string" ? [(entry as { name: string }).name] : [])) : [];
-
-    const repo = await read("");
-    if (repo === "not_found") return { status: "not_found" };
-    if (repo === "unavailable") return { status: "unavailable", detail };
-    // Private, or not clearly public: treated as not seen, so nothing about it is read.
-    if ((repo as { private?: unknown } | null)?.private !== false) return { status: "not_found" };
-
-    const root = await read("/contents");
-    if (root === "not_found") return { status: "not_found" };
-    if (root === "unavailable") return { status: "unavailable", detail };
-    const rootNames = namesIn(root);
-    // A policy can sit in .github or docs; the update bot's setup sits in .github. A folder that can't be read counts as empty.
-    const folder = async (suffix: string) => {
-      const body = await read(suffix);
-      return body === "not_found" || body === "unavailable" ? [] : namesIn(body);
-    };
-    const [dotGithub, docs] = await Promise.all([
-      rootNames.includes(".github") ? folder("/contents/.github") : Promise.resolve([] as string[]),
-      rootNames.includes("docs") ? folder("/contents/docs") : Promise.resolve([] as string[]),
-    ]);
-    return { status: "ok", root: rootNames, github: dotGithub, docs };
-  },
+  repo: (owner, name, access) => repoReader(owner, name, access),
+  osv: osvLookup,
   async page(url) {
     const target = new URL(url);
     const host = target.hostname.replace(/^\[|\]$/g, "");
