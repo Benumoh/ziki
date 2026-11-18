@@ -609,6 +609,8 @@ export function ScansArea({
   useEffect(() => {
     keepChatOpen(adding);
   }, [adding]);
+  // The scan whose result is in the chat: its row waits until "See progress", so it isn't shown twice.
+  const [inChat, setInChat] = useState<string | null>(null);
   // A scan was removed: close the chat box (its kept conversation is already cleared).
   useEffect(() => {
     const close = () => {
@@ -618,8 +620,6 @@ export function ScansArea({
     window.addEventListener("zk:chat-forget", close);
     return () => window.removeEventListener("zk:chat-forget", close);
   }, []);
-  // The scan whose result is in the chat: its row waits until "See progress", so it isn't shown twice.
-  const [inChat, setInChat] = useState<string | null>(null);
 
   const chat = adding ? (
     <SecurityChat
