@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient, SecurityCheckStatus, SecuritySeverity } from "@prisma/client";
 import { award } from "@/lib/points/award";
 import { logger } from "@/lib/logger";
-import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, agentsMayWork, fallbackWindowMs, ownershipProofRequired, provenTargetWhere } from "@/lib/security-checks";
+import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, agentsMayWork, fallbackWindowMs, ownershipProofRequired, provenTargetWhere, scanPaymentWhere } from "@/lib/security-checks";
 import { cleanParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
 import { pickAgentFor, type CandidateAgent } from "./assign";
 import { quickScanForAgents, type QuickScanLine } from "./preview-summary";
@@ -11,9 +11,9 @@ import { realNetwork } from "./ownership";
 /**
  * The security check engine (#security-checks, 12 Nov plan H1).
  *
- * 1. The check starts as soon as it is added (14 Nov plan: no proof while
- *    `SECURITY_OWNERSHIP_PROOF_REQUIRED` is off; with it on, once ownership is
- *    proven) with `startCheck`, called when it is added, or by the sweep: Ziki's own AI splits it into parts. It is
+ * 1. A new deeper scan starts after payment (18 Nov), and ownership proof when required.
+ *    Historical free checks remain eligible. `startCheck`, called after payment or by the sweep,
+ *    has Ziki's own AI split it into parts. It is
  *    not an agent and earns nothing.
  * 2. Each part goes to a security-cleared agent (its owner's `User.securityClearedAt`)
  *    when that agent asks for security work (`listAgentJobs`), never pushed by the
@@ -115,6 +115,7 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
     where: {
       id: checkId,
       ...provenTargetWhere(),
+      ...scanPaymentWhere(),
       OR: [
         { status: { in: startableStatuses() } },
         { status: "splitting", startedAt: { lt: stuckBefore }, items: { none: { kind: "check" } } },
@@ -247,6 +248,7 @@ export async function startWaitingChecks(db: EngineDb, now = new Date(), deps: E
   const waiting = await db.securityCheck.findMany({
     where: {
       ...provenTargetWhere(),
+      ...scanPaymentWhere(),
       OR: [{ status: { in: startableStatuses() } }, { status: "splitting", startedAt: { lt: stuckBefore }, items: { none: { kind: "check" } } }],
     },
     orderBy: { createdAt: "asc" },
@@ -331,7 +333,7 @@ export async function assignWaitingJobs(db: Db, now: Date, agentId: string): Pro
       status: "waiting",
       agentId: null,
       ...(window === null ? {} : { createdAt: { gte: new Date(now.getTime() - window) } }),
-      check: { status: "checking", ...provenTargetWhere() },
+      check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true, check: { select: { organisationId: true } } },
@@ -342,7 +344,7 @@ export async function assignWaitingJobs(db: Db, now: Date, agentId: string): Pro
     const agent = pickAgentFor(item.check.organisationId, agents, MAX_OPEN_JOBS_PER_AGENT);
     if (!agent) break;
     const { count } = await db.securityCheckItem.updateMany({
-      where: { id: item.id, status: "waiting", agentId: null },
+      where: { id: item.id, status: "waiting", agentId: null, check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() } },
       data: { status: "checking", agentId: agent.id, assignedAt: now },
     });
     if (count === 1) {
@@ -376,7 +378,7 @@ export type SecurityJob = {
 export async function listAgentJobs(db: Db, agentId: string, now = new Date()): Promise<SecurityJob[]> {
   await assignWaitingJobs(db, now, agentId);
   const items = await db.securityCheckItem.findMany({
-    where: { agentId, status: "checking", kind: "check" },
+    where: { agentId, status: "checking", kind: "check", check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() } },
     orderBy: [{ assignedAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
@@ -406,7 +408,7 @@ async function heldJob(tx: Tx, agentId: string, itemId: string) {
       status: true,
       agentId: true,
       checkId: true,
-      check: { select: { status: true, target: { select: { verifiedAt: true } } } },
+      check: { select: { status: true, free: true, paidAt: true, target: { select: { verifiedAt: true } } } },
     },
   });
   if (!item || item.agentId !== agentId || item.kind !== "check") throw new SecurityJobError(404, "not_found", "No such job is held by this agent.");
@@ -534,7 +536,7 @@ export async function postReportIfComplete(db: EngineDb, checkId: string, now = 
   if (open > 0 || parts === 0) return false;
   const stuckBefore = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
   const { count } = await db.securityCheck.updateMany({
-    where: { id: checkId, status: "checking", postedAt: null, OR: [{ collatingAt: null }, { collatingAt: { lt: stuckBefore } }] },
+    where: { id: checkId, status: "checking", postedAt: null, ...scanPaymentWhere(), OR: [{ collatingAt: null }, { collatingAt: { lt: stuckBefore } }] },
     data: { collatingAt: now },
   });
   if (count !== 1) return false;
@@ -552,7 +554,7 @@ export async function postReportIfComplete(db: EngineDb, checkId: string, now = 
   const { summary } = await writeSummary(check.target, [...check.results, ...check.rechecked], { ai: deps.ai });
 
   const { count: posted } = await db.securityCheck.updateMany({
-    where: { id: checkId, status: "checking", postedAt: null, collatingAt: now },
+    where: { id: checkId, status: "checking", postedAt: null, collatingAt: now, ...scanPaymentWhere() },
     data: { status: "done", finishedAt: now, postedAt: now, summary },
   });
   return posted === 1;
@@ -564,6 +566,7 @@ export async function postFinishedReports(db: EngineDb, now = new Date(), deps: 
   const ready = await db.securityCheck.findMany({
     where: {
       status: "checking",
+      ...scanPaymentWhere(),
       postedAt: null,
       OR: [{ collatingAt: null }, { collatingAt: { lt: stuckBefore } }],
       items: { some: { kind: "check" }, none: { kind: "check", status: { in: ["waiting", "checking"] } } },

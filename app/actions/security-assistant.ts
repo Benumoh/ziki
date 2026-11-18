@@ -30,7 +30,7 @@ import { prisma } from "@/lib/prisma";
  * is instant. Anything else goes to the assistant, which answers and picks
  * out the site. Once a site is clear, Dave's quick scan looks at it and the
  * chat shows what it found as short titles (never the detail or the fix), and the
- * asset is added to the person's scans at once, so the full check starts:
+ * asset is added to the person's scans at once, so the free result is saved:
  * no proof step (14 Nov plan, C1/C3). A public GitHub repo gets a quick look
  * too (its file names only); a private one is still added.
  */
@@ -200,8 +200,8 @@ export async function talkToSecurityAssistant(history: AssistantTurn[]): Promise
 }
 
 /**
- * Try now from the public page: add the site and start the agents' check, with no chat. The person asked for the
- * agents already, so the Security page opens the scan's progress page straight from here (never the chat box).
+ * Try now from the public page: add the site and save the free quick scan, with no chat. The person asked for the
+ * deeper scan, but must pay before it starts. The scan page opens straight from here.
  * A site already in their scans goes to its page too.
  */
 export async function startFromOutside(site: string): Promise<{ ok: true; checkId: string } | { ok: false; error: string }> {
@@ -219,7 +219,7 @@ export async function startFromOutside(site: string): Promise<{ ok: true; checkI
 
 /**
  * Every asset (a website, a server or a public repo) gets the quick scan, and
- * is added to the person's scans straight away, so the full check starts. A
+ * is added to the person's scans straight away, while the deeper scan waits for payment. A
  * site the scan couldn't reach isn't added; a private repo (the scan can't
  * see it) or a scan that only hit the limit still is.
  */
@@ -246,9 +246,7 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
   if (!addable) return { kind: "scan", reply: "", target: address, summary: null, note: result.ok ? null : result.reason, checkId: null };
   const added = await addTargetAndCheck(organisationId, userId, target);
   if ("refused" in added) return { kind: "reply", reply: refusedMessage(added.refused, target.value) };
-  // Start it as soon as this answers. Waiting for the one-minute sweep left a new scan on "Waiting to start" for minutes
-  // (the sweep can be busy for a long time), and once for ten (15 Nov test); kickCheck never throws, and the sweep still catches a miss.
-  after(() => kickCheck(prisma, added.checkId));
+  // Save the free quick scan only. The deeper-scan payment action starts agents after charging.
   if (summary) await saveQuickScan(added.targetId, summary);
   // The conversation that led to this scan becomes the start of the site's saved chat,
   // so "See result" later carries on from it (14 Nov call).
