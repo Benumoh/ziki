@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { copyText } from "@/lib/clipboard";
-import { publicFeedbackPath, publicOrgFeedbackPath } from "@/lib/public-project-paths";
+import { publicOrgFeedbackPath } from "@/lib/public-project-paths";
 
 export function FeedbackPortalPopover({
   orgSlug,
-  projectSlug,
   projectName,
 }: {
   orgSlug: string;
@@ -18,8 +17,7 @@ export function FeedbackPortalPopover({
   const [copied, setCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const portalPath = publicFeedbackPath({ orgSlug, projectSlug });
-  const orgPortalPath = publicOrgFeedbackPath(orgSlug);
+  const portalPath = publicOrgFeedbackPath(orgSlug);
   const displayUrl = `ziki.dev${portalPath}`;
 
   useEffect(() => {
@@ -85,12 +83,12 @@ export function FeedbackPortalPopover({
       {open ? (
         <div
           role="dialog"
-          aria-label={`${projectName} feedback portal`}
+          aria-label="Project feedback portal"
           className="absolute right-0 z-30 mt-2 w-80 rounded-2xl border border-zk-border bg-zk-surface p-5 shadow-xl sm:w-96"
         >
-          <h3 className="text-base font-bold text-zk-text">{projectName} feedback portal</h3>
+          <h3 className="text-base font-bold text-zk-text">Project feedback portal</h3>
           <p className="mt-1 text-xs text-zk-text2">
-            Share this link with customers and testers.
+            Share this portal for {projectName} and other projects with customers and testers.
           </p>
 
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-zk-border bg-zk-card px-3 py-2 text-xs text-zk-text">
@@ -146,7 +144,7 @@ export function FeedbackPortalPopover({
 
           <div className="mt-3.5 border-t border-zk-divider pt-3">
             <Link
-              href={orgPortalPath}
+              href={portalPath}
               onClick={() => setOpen(false)}
               className="inline-block text-xs font-semibold text-electric-blue-strong hover:underline"
             >

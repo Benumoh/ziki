@@ -87,6 +87,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
  */
 function narrowPage(pathname: string, ref: ProjectRef): boolean {
   const [first, second] = pathname.slice(projectPath(ref).length).replace(/^\/+|\/+$/g, "").split("/");
+  if (["feedback", "contribute", "report", "track", "public-issues"].includes(first ?? "")) return true;
   if (first === "workstream" || first === "agents") return true;
   return first === "ideas" && !(second && /^[0-9]+$/.test(second));
 }

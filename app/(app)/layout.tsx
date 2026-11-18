@@ -65,7 +65,7 @@ export default async function AppLayout({
   const intakeSegments = !session?.user ? publicIntakeSegments(reqPath) : null;
   const publicIssues = !session?.user ? publicIssuesSegments(reqPath) : null;
   const orgFeedback = !session?.user ? publicOrgFeedbackSegments(reqPath) : null;
-  const overviewSegments = !session?.user ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
+  const overviewSegments = !session?.user && !orgFeedback ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
   const isFeedbackOrTrack = intakeSegments?.kind === "feedback" || intakeSegments?.kind === "track";
   const overviewProject = overviewSegments
     ? await prisma.project.findFirst({

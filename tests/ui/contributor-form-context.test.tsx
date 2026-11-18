@@ -2,6 +2,9 @@
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+
 import { PublicContributorForm } from "@/components/public-contributor-form";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("contributor form context", () => {

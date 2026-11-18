@@ -1,7 +1,9 @@
 "use client";
 
+import { PortalSearch } from "@/components/portal-search";
 import { useState } from "react";
 import Link from "next/link";
+import { FEEDBACK_PLATFORMS } from "@/lib/feedback-product-info";
 import { publicFeedbackPath } from "@/lib/public-project-paths";
 
 export type OrgFeedbackProjectCardItem = {
@@ -9,6 +11,7 @@ export type OrgFeedbackProjectCardItem = {
   slug: string;
   name: string;
   description: string;
+  platforms?: string[];
 };
 
 function ProjectPlatformIcon({ slug, name }: { slug: string; name: string }) {
@@ -99,62 +102,52 @@ export function OrgFeedbackPortal({
   orgName,
   projects,
   initialQuery = "",
+  returnHref,
 }: {
   orgSlug: string;
   orgName: string;
   projects: OrgFeedbackProjectCardItem[];
   initialQuery?: string;
+  returnHref?: string;
 }) {
   const [query, setQuery] = useState(initialQuery);
+  const [selectedProject, setSelectedProject] = useState("all");
   const needle = query.trim().toLowerCase();
-  const filtered = needle
-    ? projects.filter(
-        (project) =>
-          project.name.toLowerCase().includes(needle) ||
-          project.description.toLowerCase().includes(needle) ||
-          project.slug.toLowerCase().includes(needle),
-      )
-    : projects;
+  const filtered = projects.filter(project =>
+    (selectedProject === "all" || project.platforms?.includes(selectedProject)) &&
+    (!needle || [project.name, project.description, project.slug].some(value => value.toLowerCase().includes(needle)))
+  );
 
   return (
-    <div className="mx-auto flex min-h-[75vh] w-full max-w-5xl flex-col justify-between px-4 pb-8 pt-2">
+    <div className="mx-auto flex min-h-[75vh] w-full max-w-[920px] flex-col justify-between pb-8 pt-2">
       <div className="space-y-6">
         <div className="space-y-2">
           <Link
-            href={`/${encodeURIComponent(orgSlug)}`}
+            href={returnHref ?? `/${encodeURIComponent(orgSlug)}`}
             className="inline-flex min-h-8 items-center gap-1.5 text-sm font-semibold text-electric-blue-strong hover:underline"
           >
-            <span aria-hidden="true">←</span> {orgName}
+            <span aria-hidden="true">←</span> {returnHref === "/discover" ? "Back to Discover" : "Back to projects"}
           </Link>
           <h1 className="text-3xl font-extrabold tracking-tight text-zk-text sm:text-4xl">
-            Share feedback with {orgName}
+            {orgName} project portal
           </h1>
           <p className="text-base text-zk-text2">
-            Choose a project to report a problem or suggest an improvement.
+            Choose a project to browse its feedback, report a problem, or suggest an improvement.
           </p>
         </div>
 
-        <div className="relative">
-          <svg
-            className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-zk-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search projects"
-            aria-label="Search projects"
-            className="w-full rounded-xl border border-zk-border bg-zk-surface py-2.5 pl-10 pr-4 text-sm text-zk-text placeholder:text-zk-muted focus:border-zk-accent focus:outline-none focus:ring-1 focus:ring-zk-accent"
-          />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <nav aria-label="Filter projects" className="flex flex-wrap gap-2">
+            {[{ slug: "all", name: "All projects" }, ...FEEDBACK_PLATFORMS].map(project => (
+              <button key={project.slug} type="button" onClick={() => setSelectedProject(project.slug)} aria-pressed={selectedProject === project.slug} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${selectedProject === project.slug ? "border-zk-accent bg-zk-tint text-zk-accent" : "border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip"}`}>{project.slug !== "all" ? <span className="inline-flex [&_svg]:h-4 [&_svg]:w-4"><ProjectPlatformIcon slug={project.slug} name={project.name} /></span> : null}{project.name}</button>
+            ))}
+          </nav>
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+          <Link href={`/${encodeURIComponent(orgSlug)}/feedback?view=ideas`} className="inline-flex min-h-10 items-center rounded-xl border border-zk-border bg-zk-surface px-4 py-2 text-sm font-semibold text-zk-accent hover:bg-zk-chip">View all feedback ideas →</Link>
+            <PortalSearch label="Search projects" value={query} onValueChange={setQuery} />
+          </div>
         </div>
+
 
         {filtered.length === 0 ? (
           <div className="rounded-2xl border border-zk-border bg-zk-surface p-10 text-center">
@@ -166,28 +159,34 @@ export function OrgFeedbackPortal({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((project) => (
-              <article
-                key={project.id}
-                className="flex flex-col justify-between rounded-2xl border border-zk-border bg-zk-surface p-6 transition hover:border-zk-border-hover"
-              >
-                <div className="space-y-3">
-                  <ProjectPlatformIcon slug={project.slug} name={project.name} />
-                  <h2 className="text-xl font-bold text-zk-text">{project.name}</h2>
-                  <p className="line-clamp-2 text-sm text-zk-text2">{project.description}</p>
-                </div>
-
-                <div className="mt-5">
-                  <Link
-                    href={publicFeedbackPath({ orgSlug, projectSlug: project.slug })}
-                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full border border-electric-blue-strong/60 px-4 py-1.5 text-xs font-bold text-electric-blue-strong transition hover:bg-electric-blue-strong/10"
-                  >
-                    View feedback <span aria-hidden="true">→</span>
-                  </Link>
-                </div>
-              </article>
-            ))}
+          <div className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <caption className="sr-only">Products available in the {orgName} project portal</caption>
+                <thead className="border-b border-zk-border bg-zk-card text-xs font-semibold text-zk-text2">
+                  <tr><th scope="col" className="px-5 py-3.5">Product</th><th scope="col" className="hidden px-5 py-3.5 sm:table-cell">About</th><th scope="col" className="px-5 py-3.5 text-right">Explore</th></tr>
+                </thead>
+                <tbody className="divide-y divide-zk-divider">
+                  {filtered.map(project => (
+                    <tr key={project.id} className="transition hover:bg-zk-chip/40">
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <Link href={publicFeedbackPath({ orgSlug, projectSlug: project.slug })} className="text-base font-bold text-zk-text hover:text-zk-accent">{project.name}</Link>
+                            <p className="mt-1 line-clamp-2 max-w-48 text-xs text-zk-muted sm:hidden">{project.description}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden max-w-sm px-5 py-5 text-sm leading-6 text-zk-text2 sm:table-cell"><p className="line-clamp-2">{project.description}</p></td>
+                      <td className="whitespace-nowrap px-5 py-5 text-right">
+                        <Link href={publicFeedbackPath({ orgSlug, projectSlug: project.slug })} aria-label={`View details for ${project.name}`} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-zk-border bg-zk-surface px-3 py-2 text-xs font-semibold text-zk-accent transition hover:border-zk-accent hover:bg-zk-tint">View details <span aria-hidden="true">→</span></Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-zk-divider bg-zk-card px-5 py-3 text-xs text-zk-muted">Showing {filtered.length} of {projects.length} projects</div>
           </div>
         )}
       </div>
