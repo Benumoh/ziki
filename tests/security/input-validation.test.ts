@@ -10,7 +10,11 @@ import { deliveryBodySchema } from "@/lib/agent-api/delivery";
 import { testVerdictBodySchema } from "@/lib/agent-api/test-verdict";
 import { addRowsSchema } from "@/lib/proof";
 import { isScanned, preflight, scanFile } from "@/lib/security/preflight-scan";
+import { parseRedesignListQuery } from "@/lib/redesign-read";
+import { encodeCursor } from "@/lib/agent-api/create-policy";
+import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
+import { parseEstimate, rewardView } from "@/lib/agent-api/reward-estimates";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
 const valid = { title: "Login button broken", description: "Clicking sign in does nothing on mobile." };
@@ -94,6 +98,19 @@ describe("agent profiles", () => {
   });
 });
 
+describe("agent work mode (#agent-work-mode)", () => {
+  it("needs one of the two modes (there is no never) and whole-number caps, empty for none", () => {
+    expect(parseWorkSettings({})).toMatchObject({ ok: false, field: "workMode" });
+    expect(parseWorkSettings({ workMode: "never" })).toMatchObject({ ok: false, field: "workMode" });
+    expect(parseWorkSettings({ workMode: "automatic", maxActiveTasks: "0" })).toMatchObject({ ok: false, field: "maxActiveTasks" });
+    expect(parseWorkSettings({ workMode: "automatic", dailyTaskLimit: "2.5" })).toMatchObject({ ok: false, field: "dailyTaskLimit" });
+    expect(parseWorkSettings({ workMode: "ask_first", maxActiveTasks: "2", dailyTaskLimit: "", creditCeilingUsd: "20" })).toEqual({
+      ok: true,
+      settings: { workMode: "ask_first", maxActiveTasks: 2, dailyTaskLimit: null, creditCeilingUsd: 20 },
+    });
+  });
+});
+
 describe("agent write reasons (#236)", () => {
   const bodies = [
     [bidSchema, { summary: "I can fix it.", description: "I will update the implementation." }],
@@ -109,6 +126,35 @@ describe("agent write reasons (#236)", () => {
 
   it.each(bodies)("rejects a reason longer than 140 characters", (schema, body) => {
     expect(schema.safeParse({ ...body, reason: "x".repeat(141) }).success).toBe(false);
+  });
+});
+
+describe("reward estimates in Ziks (#rewards)", () => {
+  it("takes 10 to 100 Ziks in steps of 10 and refuses anything else", () => {
+    for (const value of [10, 40, 100]) expect(parseEstimate({ value }).value).toBe(value);
+    // The old dollar values (1 to 10) are refused now: an estimate is in Ziks.
+    for (const value of [0, 1, 5, 25, 105, 110, 2.5, -10]) expect(() => parseEstimate({ value })).toThrow(/Ziks/);
+  });
+
+  it("shows a reward in Ziks, though the issue stores it in dollars", () => {
+    expect(rewardView({ reward: 6.33, rewardEstimateCount: 3, rewardFixedAt: null })).toMatchObject({ reward: 63, estimates: 3, fixed: false });
+    expect(rewardView({ reward: 1, rewardEstimateCount: 0, rewardFixedAt: null }).reward).toBe(10);
+  });
+});
+
+describe("redesign list filters (#9)", () => {
+  const query = (text: string) => () => parseRedesignListQuery(new URLSearchParams(text));
+
+  it("refuses a status, mine, limit or cursor it can't read with a 400, instead of ignoring it", () => {
+    for (const bad of ["status=pending", "status=changes_requested", "mine=yes", "limit=0", "limit=-5", "limit=abc", "limit=1.5", "cursor=not-a-cursor", "cursor="]) {
+      expect(query(bad), bad).toThrow(expect.objectContaining({ status: 400 }));
+    }
+  });
+
+  it("reads each filter it offers", () => {
+    const cursor = { createdAt: new Date("2026-11-01T10:00:00.000Z"), id: "rd-9" };
+    expect(query(`status=superseded&mine=1&limit=500&cursor=${encodeCursor(cursor)}`)()).toEqual({ status: "superseded", mine: true, limit: 100, cursor });
+    expect(query("mine=false")()).toEqual({ status: null, mine: false, limit: 25, cursor: null });
   });
 });
 

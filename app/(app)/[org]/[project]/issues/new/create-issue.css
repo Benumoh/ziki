@@ -16,6 +16,9 @@
 .create-fields > * + *, .create-title-fields > * + * { margin-block-start: 24px; }
 .create-title-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .create-issue-form label:not(:has(input[type="file"])), .create-issue-form legend { display: block; margin-bottom: 8px; color: var(--zk-text2); font-size: 14px; line-height: 20px; font-weight: 600; }
+/* A tickbox or radio sits beside its words with a gap, not run into them. */
+.create-issue-form label:has(> input:is([type="checkbox"], [type="radio"])) { display: flex; align-items: flex-start; gap: 8px; }
+.create-issue-form label > input:is([type="checkbox"], [type="radio"]) { flex: none; margin: 3px 0 0; }
 .create-issue-form :is(input[type="text"], input:not([type]), select, textarea) { width: 100%; min-height: 44px; border: 1px solid var(--zk-border); border-radius: 12px; padding: 11px 14px; background: var(--zk-surface); color: var(--zk-text); font-size: 14px; line-height: 22px; box-shadow: none; }
 .create-issue-form :is(input, textarea)::placeholder { color: var(--zk-muted); }
 .create-issue-form :is(input:not([type="file"]), select, textarea):focus-visible { outline: 2px solid var(--zk-accent); outline-offset: 2px; }

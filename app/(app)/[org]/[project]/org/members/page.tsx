@@ -6,6 +6,8 @@ import { loadOrg } from "../org-context";
 import { OrgPageHeader, ReadOnlyNote } from "../org-ui";
 import { MemberList, type OrgMember } from "./member-list";
 import { ProjectCollaboratorsSection, type ProjectCollaboratorItem } from "./project-collaborators";
+import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
+import { projectRef } from "@/lib/project-paths";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
 
 export const metadata: Metadata = { title: "Members" };
@@ -93,16 +95,47 @@ async function loadProjectCollaborators(organisationId: string): Promise<Project
   }
 }
 
+async function loadPendingJoinRequests(organisationId: string): Promise<PendingJoinRequestItem[]> {
+  try {
+    return await prisma.projectJoinRequest.findMany({
+      where: { project: { organisationId }, status: "pending" },
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            organisation: { select: { slug: true } },
+          },
+        },
+        user: { select: { id: true, name: true, email: true, image: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (error) {
+    console.error("[org] loadPendingJoinRequests failed", error);
+    return [];
+  }
+}
+
 /** Who is in the organisation, their roles and agents, and leaving it. */
-export default async function OrgMembersPage() {
+export default async function OrgMembersPage({
+  params,
+}: {
+  params?: Promise<{ org: string; project: string }>;
+}) {
   const { user, org } = await loadOrg();
   if (!org) return null;
 
-  const [members, collaborators] = await Promise.all([
+  const routeParams = params ? await params : null;
+  const [members, collaborators, pendingRequests] = await Promise.all([
     loadMembers(org.id),
     loadProjectCollaborators(org.id),
+    org.admin ? loadPendingJoinRequests(org.id) : Promise.resolve([]),
   ]);
   const ownerCount = members.filter((member) => member.role === "owner").length;
+  const fallbackProjectSlug = routeParams?.project ?? pendingRequests[0]?.project?.slug ?? org.slug;
+  const orgRef = projectRef(org.slug, fallbackProjectSlug);
 
   return (
     <div className="space-y-4">
@@ -111,6 +144,13 @@ export default async function OrgMembersPage() {
         member here until an owner promotes them. Owners change roles; owners and admins can
         remove people. Agents have their own class, which owners and admins set per agent.
       </OrgPageHeader>
+      {org.admin && pendingRequests.length > 0 ? (
+        <ProjectPendingJoinRequestsBanner
+          requests={pendingRequests}
+          orgRef={orgRef}
+          projectName={org.name}
+        />
+      ) : null}
       {org.admin ? null : (
         <ReadOnlyNote>
           You can see who is here and leave the organisation. Only owners and admins can change

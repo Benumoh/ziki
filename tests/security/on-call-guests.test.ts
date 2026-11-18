@@ -6,110 +6,96 @@ const db = vi.hoisted(() => ({
   project: { findUnique: vi.fn() },
   organisation: { findUnique: vi.fn() },
 }));
-const release = vi.hoisted(() => vi.fn(async () => ({ releasedClaims: 1, withdrawnBids: 0 })));
 const audit = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
-vi.mock("@/lib/agent-api/revoke-release", () => ({ releaseWorkOfRevokedAgent: release }));
 vi.mock("@/lib/agents/audit", () => ({ audit }));
 
 import { requireAgent } from "@/lib/agents/require-agent";
 import { guestOrganisationFor, LIVE_GUEST } from "@/lib/agents/guest-access";
-import { addOnCallGuests, endGuestStay, GUEST_STAYS_PER_AGENT, pickFreeOnCallAgents } from "@/lib/on-call-guests";
+import { addOnCallGuests, GUEST_WORKSPACES_PER_PERSON, pickFreeOnCallPeople } from "@/lib/on-call-guests";
 import { ON_CALL_GUESTS_PER_NEW_WORKSPACE } from "@/lib/security-checks";
 
-const NOW = new Date("2026-11-12T22:00:00Z");
+const NOW = new Date("2026-11-14T12:00:00Z");
 /** A fixed "random" so the picks are predictable: always keep the order. */
 const noShuffle = () => 0.999;
 
+/** An on-call person as the query returns them: their agents, each with its live guest stays. */
+const person = (id: string, agents: { id: string; guestIn?: string[] }[]) => ({
+  id,
+  agents: agents.map((agent) => ({ id: agent.id, activations: (agent.guestIn ?? []).map((organisationId) => ({ organisationId })) })),
+});
+
 beforeEach(() => vi.clearAllMocks());
 
-describe("picking free on-call agents (12 Nov plan, D2)", () => {
-  it("asks only for on-call agents that are live, unpaused, recently seen and not the creator's", async () => {
-    const findMany = vi.fn(async () => []);
-    await pickFreeOnCallAgents({ agent: { findMany } } as never, 3, { excludeOwnerIds: ["creator"], now: NOW });
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        onCallAt: { not: null },
-        revokedAt: null,
-        pausedAt: null,
-        ownerUserId: { notIn: ["creator"] },
-        apiKeys: { some: { revokedAt: null, lastUsedAt: { gte: new Date(NOW.getTime() - 15 * 60 * 1000) } } },
-      },
-    }));
+describe("picking free on-call people (14 Nov plan, D2)", () => {
+  it("asks only for on-call people, not the creator, with an agent that is live, unpaused and recently seen", async () => {
+    const findMany = vi.fn<(query: { where: unknown; select: { agents: { where: unknown } } }) => Promise<never[]>>(async () => []);
+    await pickFreeOnCallPeople({ user: { findMany } } as never, 3, { excludeUserIds: ["creator"], now: NOW });
+    const query = findMany.mock.calls[0]![0];
+    expect(query.where).toEqual({
+      onCallAt: { not: null },
+      id: { notIn: ["creator"] },
+      agents: { some: { revokedAt: null, pausedAt: null, apiKeys: { some: { revokedAt: null, lastUsedAt: { gte: new Date(NOW.getTime() - 15 * 60 * 1000) } } } } },
+    });
+    // Every agent of theirs that isn't revoked comes along, paused ones included.
+    expect(query.select.agents.where).toEqual({ revokedAt: null });
   });
 
-  it("skips agents already on enough guest stays, takes one agent per owner, and at most n", async () => {
-    const agents = [
-      { id: "a1", ownerUserId: "ada", _count: { activations: 0 } },
-      { id: "a2", ownerUserId: "ada", _count: { activations: 0 } },
-      { id: "b1", ownerUserId: "bola", _count: { activations: GUEST_STAYS_PER_AGENT } },
-      { id: "c1", ownerUserId: "chi", _count: { activations: 1 } },
-      { id: "d1", ownerUserId: "dami", _count: { activations: 2 } },
+  it("skips people already guests in enough workspaces, keeps all their agents, and takes at most n", async () => {
+    const full = Array.from({ length: GUEST_WORKSPACES_PER_PERSON }, (_, i) => `org${i}`);
+    const people = [
+      person("ada", [{ id: "a1" }, { id: "a2", guestIn: ["org-x"] }]),
+      // Two agents in the same three workspaces count as three workspaces, not six.
+      person("bola", [{ id: "b1", guestIn: full }, { id: "b2", guestIn: full }]),
+      person("chi", [{ id: "c1", guestIn: ["org-y", "org-z"] }]),
+      person("dami", [{ id: "d1" }]),
     ];
-    const picked = await pickFreeOnCallAgents({ agent: { findMany: async () => agents } } as never, 2, { now: NOW, random: noShuffle });
+    const picked = await pickFreeOnCallPeople({ user: { findMany: async () => people } } as never, 2, { now: NOW, random: noShuffle });
     expect(picked).toEqual([
-      { id: "a1", ownerUserId: "ada" },
-      { id: "c1", ownerUserId: "chi" },
+      { userId: "ada", agentIds: ["a1", "a2"] },
+      { userId: "chi", agentIds: ["c1"] },
     ]);
+  });
+
+  it("picks nobody when asked for none", async () => {
+    const findMany = vi.fn();
+    expect(await pickFreeOnCallPeople({ user: { findMany } } as never, 0)).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
 
 describe("adding guests to a new workspace", () => {
-  it("adds free on-call agents as working guests, never the creator's own", async () => {
-    const createMany = vi.fn(async () => ({ count: 2 }));
-    type Candidate = { id: string; ownerUserId: string; _count: { activations: number } };
-    const findMany = vi.fn<(query: { where: { ownerUserId: unknown } }) => Promise<Candidate[]>>(async () => [
-      { id: "a1", ownerUserId: "ada", _count: { activations: 0 } },
-      { id: "c1", ownerUserId: "chi", _count: { activations: 0 } },
+  it("adds each free on-call person with all their agents as working guests, never the creator", async () => {
+    const createMany = vi.fn(async () => ({ count: 3 }));
+    const findMany = vi.fn<(query: { where: { id: unknown } }) => Promise<ReturnType<typeof person>[]>>(async () => [
+      person("ada", [{ id: "a1" }, { id: "a2" }]),
+      person("chi", [{ id: "c1" }]),
     ]);
-    const added = await addOnCallGuests({ agent: { findMany }, agentActivation: { createMany } } as never, { organisationId: "new-org", creatorId: "creator" }, { now: NOW, random: noShuffle });
-    expect(added).toEqual(["a1", "c1"]);
-    expect(findMany.mock.calls[0]![0].where.ownerUserId).toEqual({ notIn: ["creator"] });
+    const added = await addOnCallGuests({ user: { findMany }, agentActivation: { createMany } } as never, { organisationId: "new-org", creatorId: "creator" }, { now: NOW, random: noShuffle });
+    expect(added).toEqual(["a1", "a2", "c1"]);
+    expect(findMany.mock.calls[0]![0].where.id).toEqual({ notIn: ["creator"] });
     expect(createMany).toHaveBeenCalledWith({
       data: [
-        { agentId: "a1", organisationId: "new-org", level: "working", guestUntilFirstDelivery: true },
-        { agentId: "c1", organisationId: "new-org", level: "working", guestUntilFirstDelivery: true },
+        { agentId: "a1", organisationId: "new-org", level: "working", guest: true },
+        { agentId: "a2", organisationId: "new-org", level: "working", guest: true },
+        { agentId: "c1", organisationId: "new-org", level: "working", guest: true },
       ],
       skipDuplicates: true,
     });
-    expect(ON_CALL_GUESTS_PER_NEW_WORKSPACE).toBeGreaterThanOrEqual(2);
+    expect(audit).toHaveBeenCalledTimes(3);
+    expect(ON_CALL_GUESTS_PER_NEW_WORKSPACE).toBe(3);
   });
 
   it("adds nobody when nobody is free, and never fails the workspace on an error", async () => {
     const createMany = vi.fn();
-    expect(await addOnCallGuests({ agent: { findMany: async () => [] }, agentActivation: { createMany } } as never, { organisationId: "o", creatorId: "c" })).toEqual([]);
+    expect(await addOnCallGuests({ user: { findMany: async () => [] }, agentActivation: { createMany } } as never, { organisationId: "o", creatorId: "c" })).toEqual([]);
     expect(createMany).not.toHaveBeenCalled();
 
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const broken = { agent: { findMany: async () => { throw new Error("db down"); } } };
+    const broken = { user: { findMany: async () => { throw new Error("db down"); } } };
     await expect(addOnCallGuests(broken as never, { organisationId: "o", creatorId: "c" })).resolves.toEqual([]);
     spy.mockRestore();
-  });
-});
-
-describe("ending a guest stay", () => {
-  it("switches the guest off in that workspace only and hands back its work there", async () => {
-    const updateMany = vi.fn(async () => ({ count: 1 }));
-    const tx = { agentActivation: { updateMany } };
-    expect(await endGuestStay(tx as never, { agentId: "a1", organisationId: "client", actorUserId: "ada", reason: "first_delivery", now: NOW })).toBe(true);
-    expect(updateMany).toHaveBeenCalledWith({
-      where: { agentId: "a1", organisationId: "client", ...LIVE_GUEST },
-      data: { guestEndedAt: NOW, deactivatedAt: NOW },
-    });
-    expect(release).toHaveBeenCalledWith(tx, { agentId: "a1", organisationId: "client", actorUserId: "ada", now: NOW, keepIssueIds: [] });
-  });
-
-  it("keeps the claim on the task it just delivered and hands back only its other work", async () => {
-    const tx = { agentActivation: { updateMany: vi.fn(async () => ({ count: 1 })) } };
-    await endGuestStay(tx as never, { agentId: "a1", organisationId: "client", actorUserId: "ada", reason: "first_delivery", deliveredIssueId: "bug-delivered", now: NOW });
-    expect(release).toHaveBeenCalledWith(tx, expect.objectContaining({ keepIssueIds: ["bug-delivered"] }));
-  });
-
-  it("does nothing for an agent that isn't a live guest there (a normal member's agent stays)", async () => {
-    const tx = { agentActivation: { updateMany: vi.fn(async () => ({ count: 0 })) } };
-    expect(await endGuestStay(tx as never, { agentId: "a1", organisationId: "home", actorUserId: "ada", reason: "first_delivery" })).toBe(false);
-    expect(release).not.toHaveBeenCalled();
   });
 });
 

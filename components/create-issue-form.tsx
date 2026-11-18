@@ -24,6 +24,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ClaudeWorking } from "@/components/claude-working";
 import { initialDescription, templateSwitch } from "@/lib/issue-templates";
 import { SECURITY_SEVERITIES, SEVERITY_GUIDE, SEVERITY_LABEL } from "@/lib/security-severity";
+import "@/components/security-finding.css";
 import type { SecuritySeverity } from "@prisma/client";
 
 /** Must match the title limit enforced by createBugSchema. */
@@ -349,7 +350,7 @@ export function CreateIssueForm({
                       {...(level === "critical" ? errs.attrs("severity") : {})}
                     />
                     <span>
-                      <span className={`security-severity security-severity--${level} font-semibold`}>{SEVERITY_LABEL[level]}</span>
+                      <span className={`security-severity security-severity--text security-severity--${level} font-semibold`}>{SEVERITY_LABEL[level]}</span>
                       <span className="block text-xs text-zk-text2">{SEVERITY_GUIDE[level]}</span>
                     </span>
                   </label>

@@ -34,14 +34,19 @@ const skillSubmissionFindMany = vi.hoisted(() => vi.fn());
 const skillSubmissionFindUnique = vi.hoisted(() => vi.fn());
 const skillSubmissionUpdate = vi.hoisted(() => vi.fn());
 const projectFindMany = vi.hoisted(() => vi.fn());
+const redesignFindFirst = vi.hoisted(() => vi.fn());
+const redesignFindMany = vi.hoisted(() => vi.fn());
+const userFindUnique = vi.hoisted(() => vi.fn(async (): Promise<{ showActiveAgents: boolean } | null> => null));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     project: { findFirst, findUnique: projectFindUnique, findMany: projectFindMany },
+    redesignProposal: { findFirst: redesignFindFirst, findMany: redesignFindMany },
     bug: { findUnique: bugFindUnique, findMany: publishedTasks, groupBy: taskCounts, count: bugCount, findFirst: bugFindFirst },
     idea: { count: proposalCount, findMany: proposals, findFirst: ideaFindFirst },
     ideaVerdict: { groupBy: proposalVotes, findMany: myVerdicts },
     agent: { findMany: proposalAgents },
+    user: { findUnique: userFindUnique },
     membership: { findUnique: membershipFindUnique, findMany: membershipFindMany },
     projectMembership: { findUnique: projectMembershipFindUnique, upsert: projectMembershipUpsert },
     projectJoinRequest: { findUnique: projectJoinRequestFindUnique, upsert: projectJoinRequestUpsert, updateMany: projectJoinRequestUpdateMany },
@@ -64,13 +69,16 @@ vi.mock("next/cache", () => ({
 
 const section = vi.hoisted(() => ({
   notFound: vi.fn(() => { throw new Error("NOT_FOUND"); }),
+  forbidden: vi.fn(() => { throw new Error("FORBIDDEN"); }),
+  loadProjectAgents: vi.fn(async () => ({ agents: [], hidden: 0, offerWindowSeconds: 1800 })),
   redirect: vi.fn((to: string) => { throw new Error(`REDIRECT ${to}`); }),
   requireProject: vi.fn(),
   firstProjectRefFor: vi.fn(),
   requireUser: vi.fn(async () => ({ id: "ada" })),
   requireSuperAdmin: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ notFound: section.notFound, redirect: section.redirect, permanentRedirect: section.redirect }));
+vi.mock("next/navigation", () => ({ notFound: section.notFound, forbidden: section.forbidden, redirect: section.redirect, permanentRedirect: section.redirect }));
+vi.mock("@/lib/agents/project-agents", () => ({ loadProjectAgents: section.loadProjectAgents }));
 vi.mock("@/lib/project-route", () => ({ requireProject: section.requireProject, firstProjectRefFor: section.firstProjectRefFor }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: section.requireUser, requireSuperAdmin: section.requireSuperAdmin }));
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "viewer" } })) }));
@@ -96,6 +104,7 @@ import { readRejectedIdeas } from "@/app/(app)/[org]/[project]/marketing/ideas/r
 import { parseTaskView } from "@/components/marketing/tasks/model";
 import { marketingTabHref } from "@/lib/header-nav";
 import { issueProject } from "@/lib/agent-api/issues";
+import { getAgentRedesign, listAgentRedesigns } from "@/lib/redesign-read";
 import { getSkills, CORE_SKILL_TEMPLATES } from "@/app/(app)/skills/skills-data";
 import { projectRef } from "@/lib/project-paths";
 import { canManageProject } from "@/lib/project-permissions";
@@ -106,6 +115,7 @@ import { generateMetadata as projectOverviewMetadata } from "@/app/(app)/[org]/[
 import { sitemapSectionXml } from "@/lib/seo/sitemap";
 import IssueHistoryPage from "@/app/(app)/[org]/[project]/[number]/history/page";
 import ProjectIssueLayout from "@/app/(app)/[org]/[project]/[number]/layout";
+import ActiveAgentsPage from "@/app/(app)/[org]/[project]/agents/page";
 
 const agent = {
   agentId: "agent1",
@@ -134,6 +144,46 @@ describe("issueProject organisation scope (#user-agents)", () => {
     findFirst.mockResolvedValue(null);
     await expect(issueProject(agent, new URLSearchParams("projectId=project_elsewhere"))).rejects.toMatchObject({ status: 404 });
     expect(findFirst.mock.calls[0][0].where).toEqual({ id: "project_elsewhere", organisationId: "organisation_zedu" });
+  });
+});
+
+describe("redesign proposals stay in the agent's organisation (#9)", () => {
+  const openProject = { archivedAt: null, organisation: { archivedAt: null } };
+  const row = {
+    id: "rd-1", organisationId: "organisation_zedu", projectId: "project_web", bugId: null, authorAgentId: "agent1", onBehalfOfUserId: "ada",
+    title: "Calmer dashboard", body: "Muted tiles.", previewUrl: "https://example.com/p", status: "proposed", approverId: null, approvedAt: null,
+    createdAt: new Date("2026-11-01T10:00:00Z"), updatedAt: new Date("2026-11-01T10:00:00Z"),
+    attachments: [{ id: "att1", filename: "tiles.png", contentType: "image/png", size: 120 }],
+    project: { slug: "web", organisation: { slug: "acme" } },
+  };
+
+  beforeEach(() => {
+    findFirst.mockReset();
+    redesignFindFirst.mockReset();
+    redesignFindMany.mockReset();
+  });
+
+  it("is a 404 for another organisation's proposal, or one in an archived project", async () => {
+    redesignFindFirst.mockResolvedValue(null);
+    await expect(getAgentRedesign(agent, "rd-elsewhere")).rejects.toMatchObject({ status: 404 });
+    expect(redesignFindFirst.mock.calls[0][0].where).toEqual({ id: "rd-elsewhere", organisationId: "organisation_zedu", project: openProject });
+  });
+
+  it("lists nothing for another organisation's project or an archived one: a 404 before any proposal is read", async () => {
+    findFirst.mockResolvedValue(null);
+    await expect(listAgentRedesigns(agent, new URLSearchParams("projectId=project_elsewhere"))).rejects.toMatchObject({ status: 404 });
+    expect(findFirst.mock.calls[0][0].where).toEqual({ id: "project_elsewhere", organisationId: "organisation_zedu", ...openProject });
+    expect(redesignFindMany).not.toHaveBeenCalled();
+  });
+
+  it("lists one project's proposals inside the organisation, with each mockup's url and the Design page", async () => {
+    findFirst.mockResolvedValue({ id: "project_web" });
+    redesignFindMany.mockResolvedValue([row]);
+    const page = await listAgentRedesigns(agent, new URLSearchParams("projectId=project_web&status=proposed&mine=1"));
+    expect(redesignFindMany.mock.calls[0][0].where).toEqual({ organisationId: "organisation_zedu", projectId: "project_web", status: "proposed", authorAgentId: "agent1" });
+    expect(page.nextCursor).toBeNull();
+    expect(page.items[0]).toMatchObject({ id: "rd-1", attachments: [{ id: "att1", url: "/api/v1/attachments/att1" }], designUrl: expect.stringMatching(/\/acme\/web\/design\/rd-1$/) });
+    expect(page.items[0]).not.toHaveProperty("project");
   });
 });
 
@@ -546,5 +596,55 @@ describe("search engines see only public projects (#seo-pages)", () => {
     const xml = await sitemapSectionXml("projects.xml");
     expect(projectFindMany.mock.calls[0][0].where).toMatchObject({ visibility: "public", archivedAt: null });
     expect(xml).toContain("/acme/web</loc>");
+  });
+
+  it("lists only the issues a guest's public list shows, at their public address", async () => {
+    publishedTasks.mockReset();
+    publishedTasks.mockResolvedValueOnce([{ number: 870, updatedAt: new Date("2026-11-10"), project: { slug: "web", organisation: { slug: "acme" } } }]);
+    const xml = await sitemapSectionXml("issues-1.xml");
+    // Public, unarchived projects only; never deleted, a security finding or closed.
+    expect(publishedTasks.mock.calls[0][0].where).toEqual({
+      isDeleted: false,
+      securityFinding: { is: null },
+      status: { in: ["open", "in_progress", "done", "merge", "resolved"] },
+      project: { visibility: "public", archivedAt: null, organisation: { archivedAt: null } },
+    });
+    expect(xml).toContain("/acme/web/public-issues/870</loc>");
+  });
+
+  it("has no issues file past the last public issue", async () => {
+    publishedTasks.mockReset();
+    publishedTasks.mockResolvedValueOnce([]);
+    await expect(sitemapSectionXml("issues-2.xml")).resolves.toBeNull();
+    expect(publishedTasks.mock.calls[0][0]).toMatchObject({ skip: 10_000, take: 10_000 });
+  });
+});
+
+describe("the Active agents page (#active-agents)", () => {
+  const open = () => ActiveAgentsPage({ params: Promise.resolve({ org: "acme", project: "web" }), searchParams: Promise.resolve({}) });
+  const context = (isOrgAdmin: boolean) => ({
+    user: { id: "ada" }, organisationId: "org-1", isOrgAdmin, isOrgMember: true, isProjectMember: false, canContribute: true,
+    project: { id: "p-1", slug: "web", name: "Web", orgSlug: "acme", ref: projectRef("acme", "web") },
+  });
+  beforeEach(() => vi.clearAllMocks());
+
+  it("opens for anyone who can open the project, not only the organisation's owners and admins", async () => {
+    section.requireProject.mockResolvedValue(context(false));
+    await expect(open()).resolves.toBeTruthy();
+    expect(section.loadProjectAgents).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p-1", organisationId: "org-1" }));
+  });
+
+  it("reads no agents for someone who hid it, and offers to show it again (only for them)", async () => {
+    section.requireProject.mockResolvedValue(context(false));
+    userFindUnique.mockResolvedValueOnce({ showActiveAgents: false });
+    await expect(open()).resolves.toBeTruthy();
+    expect(userFindUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "ada" } }));
+    expect(section.loadProjectAgents).not.toHaveBeenCalled();
+  });
+
+  it("is refused, before any agent is read, to someone who can't open the project", async () => {
+    section.requireProject.mockRejectedValue(new Error("NEXT_NOT_FOUND"));
+    await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(section.loadProjectAgents).not.toHaveBeenCalled();
   });
 });

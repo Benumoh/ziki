@@ -9,14 +9,16 @@ import {
   cancelOnCallInvite,
   inviteToOnCall,
   removeFromOnCall,
+  resolveInviteEmail,
   respondToOnCallInvite,
+  searchPeopleForOnCall,
   setSecurityClearance,
+  type PersonMatch,
 } from "@/lib/security-checks/on-call";
 
 /**
- * On-call agents (#on-call, 12 Nov plan H2). Super admins invite agents and
- * manage the list at /superadmin/on-call; an agent's owner answers the invite
- * on My agents. Errors come back to the page as `?error=<code>`.
+ * On-call people (#on-call, 14 Nov plan). Super admins invite people by email and
+ * manage the list at /superadmin/on-call; the invited person answers on My agents. Errors come back to the page as `?error=<code>`.
  */
 
 const ADMIN_PAGE = "/superadmin/on-call";
@@ -33,22 +35,26 @@ async function orRedirect(page: string, run: () => Promise<unknown>): Promise<vo
     if (error instanceof OnCallError) redirect(`${page}?error=${error.code}`);
     throw error;
   }
-  revalidatePath(page);
+  // The staff page and the pages under it (a person's own page) all show what was just changed.
+  if (page === ADMIN_PAGE) revalidatePath(page, "layout");
+  else revalidatePath(page);
 }
 
-/** Invite by username (the form) or by agent id (a recommendation's Invite button). */
+/** Invite a person by email, or by display name when it matches exactly one person. */
 export async function inviteOnCallAction(formData: FormData): Promise<void> {
   const admin = await requireSuperAdmin();
-  const agentId = field(formData, "agentId");
-  const username = field(formData, "username");
-  if (!agentId && !username) return;
-  await orRedirect(ADMIN_PAGE, () =>
-    inviteToOnCall(prisma, {
-      ...(agentId ? { agentId } : { username }),
-      invitedById: admin.id,
-      clearForSecurity: formData.get("clearForSecurity") === "on",
-    }),
-  );
+  const typed = field(formData, "email");
+  if (!typed) return;
+  await orRedirect(ADMIN_PAGE, async () => {
+    const email = await resolveInviteEmail(typed, prisma);
+    return inviteToOnCall(prisma, { email, invitedById: admin.id, clearForSecurity: formData.get("clearForSecurity") === "on" });
+  });
+}
+
+/** The invite box's search as staff type: people by display name or email. */
+export async function searchOnCallPeopleAction(query: string): Promise<PersonMatch[]> {
+  await requireSuperAdmin();
+  return searchPeopleForOnCall(typeof query === "string" ? query.slice(0, 100) : "", prisma);
 }
 
 export async function cancelOnCallInviteAction(formData: FormData): Promise<void> {
@@ -60,19 +66,19 @@ export async function cancelOnCallInviteAction(formData: FormData): Promise<void
 
 export async function removeOnCallAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
-  const agentId = field(formData, "agentId");
-  if (!agentId) return;
-  await orRedirect(ADMIN_PAGE, () => removeFromOnCall(prisma, agentId));
+  const userId = field(formData, "userId");
+  if (!userId) return;
+  await orRedirect(ADMIN_PAGE, () => removeFromOnCall(prisma, userId));
 }
 
 export async function setSecurityClearanceAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
-  const agentId = field(formData, "agentId");
-  if (!agentId) return;
-  await orRedirect(ADMIN_PAGE, () => setSecurityClearance(prisma, agentId, formData.get("cleared") === "true"));
+  const userId = field(formData, "userId");
+  if (!userId) return;
+  await orRedirect(ADMIN_PAGE, () => setSecurityClearance(prisma, userId, formData.get("cleared") === "true"));
 }
 
-/** The agent's owner accepts or declines an invite. */
+/** The invited person accepts or declines. */
 export async function respondOnCallInviteAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const inviteId = field(formData, "inviteId");

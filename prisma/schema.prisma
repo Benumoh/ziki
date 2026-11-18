@@ -119,6 +119,15 @@ enum AgentLevel {
   merger
 }
 
+/// How an agent takes work (#agent-work-mode), chosen by its owner when it first connects.
+/// There is no "never": an owner who wants no work pauses the agent instead.
+enum AgentWorkMode {
+  /// Bids, accepts, builds and submits on its own. Ziki accepts its won bids for it.
+  automatic
+  /// Bids on its own, but a won bid waits for the owner's one-tap yes.
+  ask_first
+}
+
 /// How a project's voted steps are decided (#vote-governance): a manager agent
 /// acts once the votes reach the threshold (manager), or the vote that crosses
 /// the threshold does it (threshold).
@@ -296,6 +305,15 @@ model User {
   securityFindingsReported  SecurityFinding[]       @relation("SecurityFindingReporter")
   securityTargetsAdded      SecurityTarget[]        @relation("SecurityTargetAddedBy")
   onCallInvitesSent         OnCallInvite[]          @relation("OnCallInviteSender")
+  /// On call (#on-call, 14 Nov plan): a person, not an agent. Set when they accept an invite; all their
+  /// agents then get priority work, and join new workspaces as guests. Null when not on call.
+  onCallAt                  DateTime?
+  /// Site-wide security clearance (#security-checks): set by staff, usually with an on-call invite.
+  /// Only the agents of a cleared person get security-check jobs or read results.
+  securityClearedAt         DateTime?
+  /// When the person borrowed Ziks to try Security (16 Nov call): a one-time overdraft of ZIKS_LOAN that only
+  /// Security payments may use, until their first purchase pays it back (lib/coins/loan.ts). Null if never borrowed.
+  ziksLoanAt                DateTime?
   securityChecksRequested   SecurityCheck[]         @relation("SecurityCheckRequester")
   name                      String
   email                     String                  @unique
@@ -314,9 +332,21 @@ model User {
   notifyStatusChanges       Boolean                 @default(true)
   /// #287: site-wide keyboard shortcuts; per user so it follows them.
   keyboardShortcuts         Boolean                 @default(true)
+  /// #active-agents: whether the person sees a project's Active agents page and its link in the Agents panel.
+  /// Everyone who can open the project may; this lets them hide it. Per user so it follows them.
+  showActiveAgents          Boolean                 @default(true)
   /// #618: optional EVM address (0x + 40 hex) points could later be sent to.
   /// Set only by the person themselves; read only by them and organisation admins.
   walletAddress             String?
+  /// Ziki Coins (#ziki-coins): the Stripe Connect Express account Ziks are withdrawn to, and whether Stripe says it can receive transfers.
+  stripeAccountId           String?                 @unique
+  payoutsEnabled            Boolean                 @default(false)
+  /// The person's Stripe customer, made when they first subscribe to a monthly Ziks plan, so their card is reused.
+  stripeCustomerId          String?                 @unique
+  coinEntries               CoinEntry[]
+  coinPurchases             CoinPurchase[]
+  coinSubscriptions         CoinSubscription[]
+  withdrawals               Withdrawal[]
   /// #earnings: what the person wants to earn each week, set on Your earnings. Null: the default goal.
   weeklyEarningsGoal        Decimal?                @db.Decimal(10, 2)
   /// Bumped on password reset; JWTs carrying an older value are rejected (#208).
@@ -330,6 +360,13 @@ model User {
   activities                BugActivity[]
   bugRevisions              BugRevision[]
   passwordResetTokens       PasswordResetToken[]
+  forumPosts                ForumPost[]             @relation("ForumPostAuthorUser")
+  forumReplies              ForumReply[]            @relation("ForumReplyAuthorUser")
+  forumVotesCast            ForumVote[]             @relation("ForumVoteVoterUser")
+  forumVotesReceived        ForumVote[]             @relation("ForumVoteTargetUser")
+  forumVerificationsCast    ForumVerification[]     @relation("ForumVerificationVerifierUser")
+  forumVerificationsReceived ForumVerification[]    @relation("ForumVerificationTargetUser")
+  forumOffers               ForumOffer[]            @relation("ForumOfferAskerUser")
   totpCredential            TotpCredential?
   totpBackupCodes           TotpBackupCode[]
   securityEvents            SecurityAuditEvent[]
@@ -414,6 +451,8 @@ model IssueType {
   isActive    Boolean   @default(true)
   /// Marketing types show only in the Marketing section.
   track       WorkTrack @default(product)
+  /// What a marketing type's work is for, shown on the Marketing home (#marketing-agent-home). Null: none set.
+  goal        String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bugs        Bug[]
@@ -426,6 +465,7 @@ model IssueType {
 }
 
 model Bug {
+  coinEntries               CoinEntry[]
   featurePlanItems          FeaturePlanItem[]
   previewBuilds             PreviewBuild[]
   pullRequestLinkRepairs    PullRequestLinkRepair[]
@@ -907,12 +947,15 @@ model Organisation {
   secretAlerts       SecretAlert[]
   proofRules         ProofRule[]
   proofChecks        ProofCheck[]
+  forumPosts         ForumPost[]
+  forumOffers        ForumOffer[]
 }
 
 /// A project inside an organisation (organisation), e.g. Zedu Web or Zedu Desktop.
 /// Organisations hold projects and nothing in between (#no-platforms).
 model Project {
   featurePlans          FeaturePlan[]
+  clusters              Cluster[]
   marketingPlans        MarketingPlan[]
   savedIssueViews        SavedIssueView[]
   agentNotes            AgentNote[]
@@ -976,6 +1019,7 @@ model Project {
   joinRequests          ProjectJoinRequest[]
   repositories          ProjectRepository[]
   proofRules            ProofRule[]
+  forumPosts            ForumPost[]
 
   @@unique([organisationId, slug])
 }
@@ -1329,17 +1373,10 @@ model ProjectJoinRequest {
 model Agent {
   /// Parts of security checks this agent holds or did (#security-checks).
   securityCheckItems   SecurityCheckItem[]
-  /// An on-call agent (#on-call): a normal working agent from a very active owner,
-  /// invited by a super admin and accepted by its owner. On-call agents get
-  /// priority work, such as security-check parts and new workspaces. Null when not on call.
-  onCallAt             DateTime?
-  /// Site-wide security clearance (#security-checks): set by a super admin, usually
-  /// with an on-call invite. Only cleared agents get security-check jobs or read results.
-  securityClearedAt    DateTime?
-  /// Invitations to go on call, newest last (#on-call).
-  onCallInvites        OnCallInvite[]
   requests             AgentRequest[]
   agentNotes           AgentNote[]
+  clusterMemberships   ClusterMember[]
+  clusterNotes         ClusterNote[]
   id                   String                @id @default(cuid())
   ownerUserId          String
   /// Display name, e.g. "Larry's Claude".
@@ -1349,6 +1386,19 @@ model Agent {
   revokedAt            DateTime?
   /// Owner has paused this agent; active claim clocks are frozen until resumed.
   pausedAt             DateTime?
+  /// How it takes work (#agent-work-mode). Null until its owner chooses: it then
+  /// accepts its own offers, as agents did before work modes.
+  workMode             AgentWorkMode?
+  /// When its owner last chose the work mode and limits.
+  workModeSetAt        DateTime?
+  /// Spending caps its owner set with the work mode (#agent-work-mode); null is no cap.
+  /// The most tasks it may hold In progress at once, across organisations.
+  maxActiveTasks       Int?
+  /// The most tasks it may take in any 24 hours.
+  dailyTaskLimit       Int?
+  /// The most it may spend on model credits in a day, in US dollars. Ziki can't
+  /// see that spend, so the agent reads the ceiling and stops taking work at it.
+  creditCeilingUsd     Int?
   /// The owner's standing brief (#605), returned by `GET /api/v1/agents/me`.
   instructions         String?
   /// The robot avatar its owner picked, a key from lib/agents/avatars.ts.
@@ -1419,6 +1469,11 @@ model Agent {
   penaltiesReceived ConfirmationPenalty[] @relation("PenaltiesReceived")
   assignedSupportThreads SupportThread[]  @relation("SupportThreadAssignee")
   threadMessages         ThreadMessage[]  @relation("ThreadMessageAgent")
+  forumPosts             ForumPost[]
+  forumReplies           ForumReply[]
+  forumVotes             ForumVote[]
+  forumVerifications     ForumVerification[]
+  forumReads             ForumRead[]
 
   @@index([ownerUserId])
 }
@@ -1441,11 +1496,12 @@ model AgentActivation {
   burst          Boolean      @default(false)
   /// An organisation owner or admin cleared it to read this organisation's private security findings (#security-findings).
   securityCleared Boolean     @default(false)
-  /// An on-call guest (#on-call): added automatically to a new workspace to give
-  /// quick wins. The agent works here, but its owner isn't a member and can't
-  /// browse the workspace. It leaves after delivering its first task here.
-  guestUntilFirstDelivery Boolean @default(false)
-  /// When the guest stay ended (first delivery, or removed by the workspace owner).
+  /// An on-call guest (#on-call, 14 Nov plan D2): one of an on-call person's agents,
+  /// added automatically to a new workspace to give quick wins. It works here at
+  /// working level, but its owner isn't a member and can't browse the workspace.
+  /// It stays until the workspace owner or a super admin removes it.
+  guest          Boolean      @default(false)
+  /// When the guest stay ended (removed by the workspace owner or a super admin).
   guestEndedAt   DateTime?
   /// When the higher budget stops (#596). Null on an enabled grant means it has no expiry.
   burstUntil     DateTime?
@@ -3132,6 +3188,114 @@ model AgentNote {
   @@index([agentId, projectId, createdAt])
 }
 
+/// An agent cluster (#agent-clusters, Ziki Major Feature #17): a standing group of
+/// agents on one project that helps its members get tasks done. An agent posts a
+/// task (what it is trying to achieve and what blocks it); the other members share
+/// the information that unblocks it. Everyone in the project sees a cluster's name,
+/// purpose, needed skills and members; only its active member agents (and their
+/// owners, read-only) see its tasks, shared information and private notes. A cluster
+/// with no activity for 14 days is archived (read-only, hidden) until a member reopens it.
+model Cluster {
+  id             String          @id @default(cuid())
+  organisationId String
+  projectId      String
+  name           String          @db.VarChar(80)
+  purpose        String          @db.VarChar(500)
+  creatorAgentId String
+  /// Skill tag slugs (the organisation's SkillTag) the cluster needs. An agent with
+  /// one of them may join; invites go to agents with a skill no member has yet.
+  neededSkills   String[]        @default([])
+  lastActivityAt DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members        ClusterMember[]
+  posts          ClusterPost[]
+  blockers       ClusterBlocker[]
+  notes          ClusterNote[]
+
+  @@index([projectId, lastActivityAt])
+}
+
+/// `invited`: a member asked the agent to join, for a skill the cluster lacks.
+/// `active`: a member, who can read and write inside.
+enum ClusterMemberStatus {
+  invited
+  active
+}
+
+model ClusterMember {
+  id               String              @id @default(cuid())
+  clusterId        String
+  agentId          String
+  status           ClusterMemberStatus
+  invitedByAgentId String?
+  joinedAt         DateTime?
+  createdAt        DateTime            @default(now())
+  cluster          Cluster             @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  agent            Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, agentId])
+  @@index([agentId, status])
+}
+
+/// A task (no `parentId`: a `title`, what it is trying to achieve in `body`, and its
+/// blockers) or a piece of shared information under one (`parentId`), optionally
+/// answering one of the task's blockers.
+model ClusterPost {
+  id            String           @id @default(cuid())
+  clusterId     String
+  parentId      String?
+  title         String?          @db.VarChar(200)
+  /// The Ziki issue a task is about.
+  issueNumber   Int?
+  body          String
+  /// The blocker a piece of shared information answers.
+  blockerId     String?
+  authorAgentId String
+  authorName    String
+  createdAt     DateTime         @default(now())
+  cluster       Cluster          @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  parent        ClusterPost?     @relation("ClusterPostReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies       ClusterPost[]    @relation("ClusterPostReplies")
+  blockers      ClusterBlocker[] @relation("ClusterTaskBlockers")
+  answers       ClusterBlocker?  @relation("ClusterBlockerAnswers", fields: [blockerId], references: [id], onDelete: SetNull)
+
+  @@index([clusterId, parentId, createdAt])
+  @@index([clusterId, issueNumber])
+}
+
+/// What is stopping a task. The task's author marks it solved once it has what it needs.
+model ClusterBlocker {
+  id               String        @id @default(cuid())
+  clusterId        String
+  taskId           String
+  text             String        @db.VarChar(1000)
+  raisedByAgentId  String
+  solvedAt         DateTime?
+  solvedByAgentId  String?
+  createdAt        DateTime      @default(now())
+  cluster          Cluster       @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  task             ClusterPost   @relation("ClusterTaskBlockers", fields: [taskId], references: [id], onDelete: Cascade)
+  answers          ClusterPost[] @relation("ClusterBlockerAnswers")
+
+  @@index([taskId, createdAt])
+}
+
+/// A member agent's private notes in a cluster: only that agent and its owner read them.
+model ClusterNote {
+  id        String   @id @default(cuid())
+  clusterId String
+  agentId   String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cluster   Cluster  @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, agentId])
+}
+
 /// One vote per person per note comment (#732): from the app or any of the
 /// person's agents, the same vote. `agentId` is the agent that gave it, if one did.
 model ProjectNoteCommentVote {
@@ -3390,6 +3554,9 @@ enum SecurityCheckItemKind {
   check
   /// Once every part is in: an always-on agent writes the one report the client sees.
   collate
+  /// Ziki's own code checks (the quick scan, 18 Nov): its findings join the main list. Never given to an agent,
+  /// never counted as a part, saved already done.
+  automatic
 }
 
 /// Where one job is (#security-checks).
@@ -3402,6 +3569,14 @@ enum SecurityCheckItemStatus {
   done
   /// Dropped: the check was cancelled, or the part does not apply.
   skipped
+}
+
+/// What a rescan's agent said about an earlier finding (#security-rescan, 17 Nov).
+enum SecurityRecheckState {
+  /// The problem is still there.
+  still_there
+  /// The problem is gone.
+  fixed
 }
 
 /// A website, server or repo a workspace wants checked (#security-checks).
@@ -3433,6 +3608,7 @@ model SecurityTarget {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   checks          SecurityCheck[]
+  chatMessages    SecurityChatMessage[]
 
   @@unique([organisationId, kind, value])
   @@index([organisationId, createdAt])
@@ -3454,13 +3630,12 @@ model SecurityCheck {
   requestedById  String
   requestedBy    User                  @relation("SecurityCheckRequester", fields: [requestedById], references: [id], onDelete: Cascade)
   status         SecurityCheckStatus   @default(awaiting_ownership)
-  /// The price in coins when the check was asked for. Replaced by per-finding
-  /// prices (SecurityCheckResult.priceCoins) and removed once the pay page uses them.
+  /// The scan admission price in Ziks: first deeper scan or follow-up rescan.
+  /// Separate from per-finding remediation prices.
   priceCoins     Int
-  /// A free scan (#security-checks): the first scan of a target is free, within
-  /// FREE_SCANS_PER_TARGET and FREE_SCANS_PER_WORKSPACE_PER_MONTH.
+  /// Historical free agent scans are grandfathered. New deeper scans are paid.
   free           Boolean               @default(false)
-  /// When the client paid; null while unpaid. Unlocks the full report and releases agent pay.
+  /// When scan admission was paid. New non-free checks cannot start agents until set.
   paidAt         DateTime?
   /// When the collate job was queued, after every part was in; null before. Guards against queuing it twice.
   collatingAt    DateTime?
@@ -3470,10 +3645,22 @@ model SecurityCheck {
   postedAt       DateTime?
   startedAt      DateTime?
   finishedAt     DateTime?
+  /// A rescan (#security-rescan, 17 Nov): the check it follows. Its agents recheck that check's open
+  /// findings (still there or fixed) and look for new ones. Null for a first scan.
+  previousCheckId String?              @unique
+  /// What the quick scan saw of the site, as short hashes per area (certificate, TLS, headers, cookies, files, email; a
+  /// repo's file lists), so a rescan can say whether the site changed since (18 Nov). Null before then, or when the
+  /// quick scan couldn't run.
+  siteFingerprint Json?
+  previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
+  /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
+  nextCheck      SecurityCheck?        @relation("SecurityRescan")
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   items          SecurityCheckItem[]
   results        SecurityCheckResult[]
+  /// Earlier findings this check (a rescan) rechecked.
+  rechecked      SecurityCheckResult[] @relation("SecurityRecheckCheck")
 
   @@index([organisationId, createdAt])
   @@index([targetId, createdAt])
@@ -3504,6 +3691,8 @@ model SecurityCheckItem {
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
   results          SecurityCheckResult[]
+  /// A rescan's recheck part: the earlier findings its agent says are still there or fixed.
+  recheckResults   SecurityCheckResult[]   @relation("SecurityRecheckItem")
 
   @@index([checkId, status])
   @@index([agentId, status])
@@ -3533,11 +3722,25 @@ model SecurityCheckResult {
   unlockedAt  DateTime?
   /// When its finder was paid for it, once, after the unlock.
   payoutReleasedAt DateTime?
+  /// Rechecked by a rescan (#security-rescan, 17 Nov): the finding stays this row, so its unlock, price and any
+  /// issue it was moved to carry over and nothing is paid twice. The latest rescan's answer; null until one.
+  recheckState   SecurityRecheckState?
+  recheckedAt    DateTime?
+  /// The rescan that rechecked it last.
+  recheckCheckId String?
+  recheckCheck   SecurityCheck?     @relation("SecurityRecheckCheck", fields: [recheckCheckId], references: [id], onDelete: SetNull)
+  /// The rescan part that holds it to recheck; set when the rescan is planned.
+  recheckItemId  String?
+  recheckItem    SecurityCheckItem? @relation("SecurityRecheckItem", fields: [recheckItemId], references: [id], onDelete: SetNull)
+  /// What the rechecking agent saw, in a line.
+  recheckNote    String?
   createdAt   DateTime          @default(now())
 
   @@index([checkId, severity])
   @@index([checkId, unlockedAt])
   @@index([itemId])
+  @@index([recheckCheckId])
+  @@index([recheckItemId])
 }
 
 /// Status of a support thread raised about a stuck fix (#requests).
@@ -3773,38 +3976,380 @@ enum OnCallInviteStatus {
   cancelled
 }
 
-/// A super admin's invitation for an agent to go on call (#on-call). The agent's
-/// owner accepts or declines; accepting sets Agent.onCallAt, and
-/// Agent.securityClearedAt when the invite clears it for security checks.
+/// Staff's invitation for a person, by email, to go on call (#on-call, 14 Nov plan). The
+/// person accepts or declines once signed in with that email; accepting sets
+/// User.onCallAt, and User.securityClearedAt when the invite clears them.
 model OnCallInvite {
   id               String             @id @default(cuid())
-  agentId          String
-  agent            Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  /// Lowercase. Matches the invited person's account email, now or when they sign up.
+  email            String
   invitedById      String
   invitedBy        User               @relation("OnCallInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
-  /// Whether accepting also clears the agent for security checks.
+  /// Whether accepting also clears the person for security checks.
   clearForSecurity Boolean            @default(false)
   status           OnCallInviteStatus @default(pending)
   respondedAt      DateTime?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
-  @@index([agentId, status])
+  @@index([email, status])
   @@index([status, createdAt])
 }
 
-/// A snapshot of on-call cover (#on-call, 12 Nov plan H3), taken by the platform
-/// cron once a minute. Coverage is the share of snapshots in the last 24 hours
-/// with at least one on-call agent online and free. Kept for 7 days.
-model OnCallSample {
-  id     String   @id @default(cuid())
-  at     DateTime @default(now())
-  /// On-call agents that aren't revoked.
-  onCall Int
-  /// Of those, online: not paused and seen in the last 15 minutes.
-  online Int
-  /// Of those, free: online with room for another security part.
-  free   Int
+// ---------------------------------------------------------------------------
+// Ziki Coins (#ziki-coins). Ziks are whole coins, 1 Zik = 10 US cents.
 
-  @@index([at])
+enum CoinAccount {
+  /// A person's spendable Ziks (userId).
+  wallet
+  /// The Ziks an issue's owner put behind its reward (bugId).
+  escrow
+  /// What Ziki keeps: the fee on released escrow and security check payments.
+  revenue
+}
+
+enum CoinKind {
+  purchase
+  fund_issue
+  release
+  fee
+  refund
+  withdrawal
+  withdrawal_reversal
+  check_payment
+}
+
+enum WithdrawalStatus {
+  pending
+  paid
+  failed
+}
+
+/// The Ziks ledger. Append-only like PointEntry: a row is never edited or
+/// deleted, a correction is a new row, and a balance is the sum of its rows.
+/// A move between accounts is two rows (one negative, one positive) written in
+/// one transaction; `sourceKey` is unique so the same event written twice adds
+/// one row.
+model CoinEntry {
+  id           String      @id @default(cuid())
+  account      CoinAccount
+  /// The wallet's person; null for escrow and revenue.
+  userId       String?
+  /// The escrow's issue; also set on the wallet and revenue rows of a fund, release, fee or refund.
+  bugId        String?
+  kind         CoinKind
+  /// Signed whole Ziks, never zero.
+  amount       Int
+  sourceKey    String      @unique
+  purchaseId   String?
+  withdrawalId String?
+  createdAt    DateTime    @default(now())
+  user         User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bug          Bug?        @relation(fields: [bugId], references: [id], onDelete: Restrict)
+
+  @@index([account, userId])
+  @@index([account, bugId])
+  @@index([kind])
+}
+
+/// One Stripe payment, written once when Stripe says it was paid: a pack of Ziks bought through Checkout (it has a
+/// session, a pack and its Ziks), or one invoice of a plan's monthly fee (it has an invoice, a plan and the
+/// subscription, and `zik` is 0 because the fee buys no Ziks). Both count toward what Stripe should be holding.
+model CoinPurchase {
+  id                    String            @id @default(cuid())
+  userId                String
+  stripeSessionId       String?           @unique
+  /// The paid invoice of a monthly plan; null for a pack.
+  stripeInvoiceId       String?           @unique
+  stripePaymentIntentId String?
+  /// The pack bought; null for a plan's invoice.
+  packId                String?
+  /// The plan whose monthly fee this invoice was (lib/coins/plans.ts); null for a pack.
+  planId                String?
+  subscriptionId        String?
+  zik                   Int
+  amountCents           Int
+  /// Stripe's processing fee on the charge, when it was read.
+  stripeFeeCents        Int?
+  currency              String            @default("usd")
+  createdAt             DateTime          @default(now())
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subscription          CoinSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([subscriptionId])
+}
+
+/// A person's Ziki plan (a monthly fee for a discount on Ziks packs), kept in step with Stripe's subscription by its
+/// webhooks. This row only says which plan the person has and until when; the discount is applied at checkout.
+model CoinSubscription {
+  id                   String         @id @default(cuid())
+  userId               String
+  stripeSubscriptionId String         @unique
+  planId               String
+  /// Stripe's status: active, past_due, canceled, incomplete, unpaid, trialing.
+  status               String
+  /// When the current month ends, and so when the next payment is due.
+  currentPeriodEnd     DateTime?
+  /// True once the person asked to stop: the plan runs to the end of the period it is paid for.
+  cancelAtPeriodEnd    Boolean        @default(false)
+  /// Where to pay a failed invoice, while there is one.
+  payUrl               String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  purchases            CoinPurchase[]
+
+  @@index([userId])
+}
+
+/// Earned Ziks sent to a person's connected Stripe account as a Transfer.
+model Withdrawal {
+  id               String           @id @default(cuid())
+  userId           String
+  zik              Int
+  amountCents      Int
+  status           WithdrawalStatus @default(pending)
+  /// Sent to Stripe as the Transfer's idempotency key, so a retry never pays twice.
+  idempotencyKey   String           @unique
+  stripeTransferId String?          @unique
+  failureReason    String?
+  createdAt        DateTime         @default(now())
+  paidAt           DateTime?
+  user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([status])
+}
+
+/// A message in the chat under one site's scan on Security (#security-checks, 14 Nov call):
+/// one saved chat per site per person, so it carries on after a refresh or on another
+/// device. The server reads the history from here, never from the browser. Never holds
+/// a finding's locked detail.
+model SecurityChatMessage {
+  id             String         @id @default(cuid())
+  organisationId String
+  targetId       String
+  target         SecurityTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  /// The person whose chat this is; each person only sees their own.
+  userId         String
+  /// "user" or "assistant".
+  role           String
+  text           String
+  createdAt      DateTime       @default(now())
+
+  @@index([targetId, userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Ziki Agent Forum (#agent-forum)
+// Shared project memory and coordination layer for agents and supervisors.
+
+enum ForumScope {
+  platform
+  org
+  project
+}
+
+enum ForumPostKind {
+  ask
+  report
+}
+
+enum ForumResolution {
+  open
+  resolved
+  closed
+}
+
+enum ForumCloseReason {
+  duplicate
+  outdated
+  dismissed
+  expired
+  policy
+}
+
+enum ForumVerificationStatus {
+  unverified
+  verified
+  disputed
+  stale
+}
+
+enum ForumReplyKind {
+  answer
+  comment
+}
+
+enum ForumVerificationOutcome {
+  worked
+  failed
+  outdated
+}
+
+enum ForumOfferState {
+  reserved
+  paid
+  refunded
+}
+
+/// Tracks categorizing forum discussions (seeded with your_app, marketing, security).
+model ForumTrack {
+  slug     String      @id
+  label    String
+  position Int         @default(0)
+  enabled  Boolean     @default(true)
+  posts    ForumPost[]
+}
+
+/// A discussion thread in the agent forum.
+model ForumPost {
+  id             String                  @id @default(cuid())
+  scope          ForumScope
+  number         Int                     @default(autoincrement())
+  organisationId String?
+  projectId      String?
+  authorAgentId  String?
+  authorUserId   String
+  kind           ForumPostKind           @default(ask)
+  category       String                  @default("help_needed")
+  trackSlug      String
+  title          String                  @db.VarChar(255)
+  body           String                  @db.Text
+  tags           String[]                @default([])
+  sourceType     String?
+  sourceId       String?
+  resolution     ForumResolution         @default(open)
+  closeReason    ForumCloseReason?
+  verification   ForumVerificationStatus @default(unverified)
+  expiresAt      DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  organisation   Organisation?           @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project        Project?                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorAgent    Agent?                  @relation(fields: [authorAgentId], references: [id], onDelete: SetNull)
+  authorUser     User                    @relation("ForumPostAuthorUser", fields: [authorUserId], references: [id], onDelete: Cascade)
+  trackRef       ForumTrack              @relation(fields: [trackSlug], references: [slug])
+
+  replies        ForumReply[]
+  votes          ForumVote[]
+  verifications  ForumVerification[]
+  offer          ForumOffer?
+  reads          ForumRead[]
+
+  @@unique([id, authorUserId])
+  @@index([scope, organisationId, projectId])
+  @@index([trackSlug, kind, resolution])
+  @@index([createdAt])
+  @@index([authorUserId])
+  @@index([authorAgentId])
+}
+
+/// A reply to a forum post (answer on an ask, or comment on any post).
+model ForumReply {
+  id            String              @id @default(cuid())
+  postId        String
+  authorAgentId String?
+  authorUserId  String
+  body          String              @db.Text
+  kind          ForumReplyKind      @default(comment)
+  isSolution    Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  post          ForumPost           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorAgent   Agent?              @relation(fields: [authorAgentId], references: [id], onDelete: SetNull)
+  authorUser    User                @relation("ForumReplyAuthorUser", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  votes         ForumVote[]
+  verifications ForumVerification[]
+  paidOffers    ForumOffer[]        @relation("ForumOfferPaidReply")
+
+  @@unique([id, authorUserId])
+  @@index([postId, createdAt])
+  @@index([authorUserId])
+  @@index([authorAgentId])
+}
+
+/// Helpfulness vote event on a post or reply.
+model ForumVote {
+  id           String      @id @default(cuid())
+  postId       String
+  replyId      String?
+  targetUserId String
+  voterAgentId String?
+  voterUserId  String
+  value        Int         @default(1)
+  createdAt    DateTime    @default(now())
+
+  post         ForumPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reply        ForumReply? @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  targetUser   User        @relation("ForumVoteTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  voterAgent   Agent?      @relation(fields: [voterAgentId], references: [id], onDelete: SetNull)
+  voterUser    User        @relation("ForumVoteVoterUser", fields: [voterUserId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, replyId, voterUserId])
+  @@index([postId, replyId])
+  @@index([targetUserId])
+}
+
+/// Peer verification event on a report post or an answer reply.
+model ForumVerification {
+  id              String                   @id @default(cuid())
+  postId          String
+  replyId         String?
+  targetUserId    String
+  verifierAgentId String?
+  verifierUserId  String
+  outcome         ForumVerificationOutcome
+  evidence        String?                  @db.Text
+  createdAt       DateTime                 @default(now())
+
+  post            ForumPost                @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reply           ForumReply?              @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  targetUser      User                     @relation("ForumVerificationTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  verifierAgent   Agent?                   @relation(fields: [verifierAgentId], references: [id], onDelete: SetNull)
+  verifierUser    User                     @relation("ForumVerificationVerifierUser", fields: [verifierUserId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, replyId, verifierUserId])
+  @@index([postId, replyId])
+  @@index([targetUserId])
+}
+
+/// Project or organisation scoped bounty offer on an ask post.
+model ForumOffer {
+  id             String          @id @default(cuid())
+  postId         String          @unique
+  organisationId String
+  askerUserId    String
+  amount         Decimal         @db.Decimal(16, 6)
+  state          ForumOfferState @default(reserved)
+  paidReplyId    String?
+  ledgerRef      String?
+  expiresAt      DateTime?
+  createdAt      DateTime        @default(now())
+
+  post           ForumPost       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  organisation   Organisation    @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  askerUser      User            @relation("ForumOfferAskerUser", fields: [askerUserId], references: [id], onDelete: Cascade)
+  paidReply      ForumReply?     @relation("ForumOfferPaidReply", fields: [paidReplyId], references: [id], onDelete: SetNull)
+
+  @@index([organisationId, state])
+  @@index([askerUserId])
+}
+
+/// Tracks agent read receipts of forum posts for relevance and audit.
+model ForumRead {
+  postId  String
+  agentId String
+  readAt  DateTime  @default(now())
+  used    Boolean?
+
+  post    ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  agent   Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([postId, agentId])
+  @@index([agentId, readAt])
 }

@@ -203,6 +203,21 @@ describe("deliverWork: the latest pull request report decides whether it can be 
     db.tx.delivery.create.mockResolvedValue({ id: "d1" });
   });
 
+  it("an on-call guest's delivery doesn't end its stay: guests stay (14 Nov plan, D2)", async () => {
+    await deliverWork(agent("working", "ada"), "bug1", body());
+    const asMember = db.prisma.$transaction.mock.calls.length;
+    db.prisma.$transaction.mockClear();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(await deliverWork({ ...agent("working", "ada"), guest: true }, "bug1", body())).toMatchObject({ status: 201 });
+      // The same work as any agent's delivery, and nothing more: no extra transaction ends the stay.
+      expect(db.prisma.$transaction.mock.calls.length).toBe(asMember);
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("refuses a pull request reported merged, closed or missing, naming who reported it", async () => {
     for (const [state, error] of [
       ["merged", "pull_request_merged"],

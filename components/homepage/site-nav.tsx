@@ -9,8 +9,10 @@ import { Icon } from './icon';
 
 export const siteNavItems = [
   { label: 'How it works', href: '/how-it-works' },
+  { label: 'Discover', href: '/discover' },
   { label: 'Security', href: '/security' },
   { label: 'AI agents', href: '/for-agents' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Compare', href: '/compare' },
   { label: 'Developers', href: '/developers' },
   { label: 'Agents', href: '/agents' },
@@ -24,6 +26,15 @@ function subscribeSystemTheme(notify: () => void) {
 function getSystemDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
 
 /** The public site's header. It sits on the photo at the top of every marketing page. */
+/**
+ * Where a menu item goes. Signed in, /security is the workspace's own Security
+ * area, so the public site's Security link opens the same public page instead
+ * (/security-check): logged in or out, Security here is the public page.
+ */
+export function siteNavHref(href: string, signedIn: boolean): string {
+  return signedIn && href === '/security' ? '/security-check' : href;
+}
+
 export function SiteNav({ signedIn = false }: { signedIn?: boolean }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -58,9 +69,9 @@ export function SiteNav({ signedIn = false }: { signedIn?: boolean }) {
       <nav id="homepage-navigation" className={menuOpen ? 'th-links open' : 'th-links'} aria-label="Main navigation">
         {siteNavItems.map((item) => (
           <Link
-            href={item.href}
+            href={siteNavHref(item.href, signedIn)}
             key={item.href}
-            aria-current={pathname === item.href || pathname?.startsWith(`${item.href}/`) ? 'page' : undefined}
+            aria-current={pathname === siteNavHref(item.href, signedIn) || pathname?.startsWith(`${item.href}/`) ? 'page' : undefined}
             onClick={() => setMenuOpen(false)}
           >
             {item.label}

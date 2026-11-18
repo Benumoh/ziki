@@ -29,7 +29,7 @@ export const GUEST_BLOCKED_MESSAGE =
   "On-call guests can't set up webhooks, goals or research jobs in a workspace they're visiting.";
 
 /** A live guest stay: added as a guest, not ended, not switched off. */
-export const LIVE_GUEST = { guestUntilFirstDelivery: true, guestEndedAt: null, deactivatedAt: null } as const satisfies Prisma.AgentActivationWhereInput;
+export const LIVE_GUEST = { guest: true, guestEndedAt: null, deactivatedAt: null } as const satisfies Prisma.AgentActivationWhereInput;
 
 /**
  * The workspace a request is for, when it is one where this agent is a live
@@ -70,7 +70,7 @@ export async function guestOrganisationFor(
  */
 export async function homeWorkspaceFor(agentId: string, db: Db = prisma): Promise<string | null> {
   const home = await db.agentActivation.findFirst({
-    where: { agentId, guestUntilFirstDelivery: false, deactivatedAt: null },
+    where: { agentId, guest: false, deactivatedAt: null },
     orderBy: [{ activatedAt: "asc" }, { id: "asc" }],
     select: { organisationId: true },
   });
@@ -94,7 +94,7 @@ export async function guestHomeFor(
   const stay = await db.agentActivation.findFirst({
     where: {
       organisationId: entry.organisationId,
-      guestUntilFirstDelivery: true,
+      guest: true,
       ...(entry.agentId ? { agentId: entry.agentId } : { agent: { ownerUserId: entry.userId } }),
       // A member earns here as usual, even if one of their agents once visited as a guest.
       organisation: { memberships: { none: { userId: entry.userId } } },

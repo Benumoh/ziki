@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { prisma } from "@/lib/prisma";
+import { ownershipProofRequired } from "@/lib/security-checks";
 import { OWNERSHIP_METHODS, proveOwnership, recordOwnership, type OwnershipMethod } from "@/lib/security-checks/ownership";
 import { kickCheck } from "@/lib/security-checks/engine";
 
@@ -13,6 +14,10 @@ import { kickCheck } from "@/lib/security-checks/engine";
  * Step 2, show it's yours (#security-checks, part 2). One "Check now" tries
  * every way the target allows; only when one of them is really there is the
  * target marked proven and its checks let go to the agents (part 3).
+ *
+ * Switched off for now (14 Nov plan, D1): while SECURITY_OWNERSHIP_PROOF_REQUIRED
+ * isn't "true", nothing here runs and a stray "Check now" just goes back to
+ * Security. The code stays, so turning the setting on brings it all back.
  */
 
 export type VerifyState = {
@@ -25,6 +30,8 @@ export type VerifyState = {
 /** Look for the proof, every allowed way, and once one is there go on to pay or skip. */
 export async function verifySecurityTarget(targetId: string): Promise<VerifyState> {
   const user = await requireUser();
+  // Proof is off: every target already counts as proven, so there is nothing to check or record.
+  if (!ownershipProofRequired()) redirect("/security");
   const access = await currentOrganisationAccess(user.id, user.role);
   if (!access.organisationId) return { error: "Join or create a workspace to secure your assets." };
 

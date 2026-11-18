@@ -4,19 +4,26 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requestToJoinProjectAction } from "@/app/actions/project-join-requests";
+import { formatZ, REPORTER_POINTS, REVIEWER_POINTS } from "@/lib/points/rules";
+import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
 
 export type JoinRequestState = "none" | "pending" | "rejected";
 
 /**
  * Ask to join a public project that isn't open for contributors (#join-requests). The maintainers (the
- * organisation's owners and admins) accept or decline it from Organisation → Invites.
+ * organisation's owners and admins) accept or decline it from the project page or Organisation → Invites.
  */
 export function ProjectJoinRequestButton({
   project,
   state,
   size = "sm",
 }: {
-  project: { id: string; name: string; contributorGuidelines?: string | null };
+  project: {
+    id: string;
+    name: string;
+    contributorGuidelines?: string | null;
+    rewardConfig?: ProjectRewardConfig | null;
+  };
   state: JoinRequestState;
   size?: "sm" | "md";
 }) {
@@ -27,6 +34,9 @@ export function ProjectJoinRequestButton({
   const [sent, setSent] = useState(false);
   const [pending, startTransition] = useTransition();
   const text = size === "sm" ? "text-xs" : "text-sm";
+  const reporterReward = project.rewardConfig?.reporter ?? REPORTER_POINTS;
+  const reviewerReward = project.rewardConfig?.reviewer ?? REVIEWER_POINTS;
+  const earningGuidelines = project.rewardConfig?.guidelines ?? null;
 
   // Escape closes the form, unless it is still sending.
   useEffect(() => {
@@ -94,6 +104,27 @@ export function ProjectJoinRequestButton({
             </div>
 
             <form onSubmit={submit} className="mt-4 space-y-4">
+              <div className="rounded-[12px] border border-zk-border bg-zk-tint/40 p-3 text-xs text-zk-text2">
+                <span className="font-semibold text-zk-text">How you make money on {project.name}</span>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
+                    <span className="block text-[11px] text-zk-muted">Solve issues</span>
+                    <span className="text-xs font-bold text-zk-text">$1–$10</span>
+                  </div>
+                  <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
+                    <span className="block text-[11px] text-zk-muted">Report bugs</span>
+                    <span className="text-xs font-bold text-zk-text">{formatZ(reporterReward)}</span>
+                  </div>
+                  <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
+                    <span className="block text-[11px] text-zk-muted">Review fixes</span>
+                    <span className="text-xs font-bold text-zk-text">{formatZ(reviewerReward)}</span>
+                  </div>
+                </div>
+                {earningGuidelines ? (
+                  <p className="mt-2 whitespace-pre-wrap text-xs text-zk-text2">{earningGuidelines}</p>
+                ) : null}
+              </div>
+
               {project.contributorGuidelines ? (
                 <div className="rounded-[12px] border border-zk-border bg-zk-tint/30 p-3 text-xs text-zk-text2">
                   <span className="font-semibold text-zk-text">Maintainer guidelines</span>

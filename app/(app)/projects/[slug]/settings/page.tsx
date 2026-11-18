@@ -15,6 +15,8 @@ import { ProjectSettingsForm } from "./settings-form";
 import { ProjectAreasManager } from "./areas-manager";
 import { WorkflowSettingsForm } from "./workflow-settings-form";
 import { ProjectRepositoriesManager } from "./repositories-manager";
+import { RepositoryAccessPanel } from "./repository-access";
+import { repositoryAccessForSettings } from "@/lib/github/settings-access";
 import { PreviewSettingsForm } from "./preview-settings-form";
 import { ProjectGoals } from "@/app/(app)/[org]/[project]/goals/project-goals";
 import { CopyProjectIdButton } from "@/app/(app)/projects/copy-project-id";
@@ -152,6 +154,7 @@ export default async function ProjectSettingsPage({
       })
     : [];
   const checks = section === "checks" ? await projectChecks(organisationId, project.id, user) : null;
+  const repositoryAccess = section === "github" ? await repositoryAccessForSettings(project) : null;
   const previewSettings = section === "previews"
     ? previewSettingsValues(await prisma.projectPreviewSettings.findUnique({ where: { projectId: project.id } }))
     : null;
@@ -243,6 +246,7 @@ export default async function ProjectSettingsPage({
                 >
                   {project.githubInstallationId ? "Change installation" : "Connect GitHub App"}
                 </a>
+                {repositoryAccess ? <RepositoryAccessPanel access={repositoryAccess} /> : null}
                 <ProjectRepositoriesManager
                   projectSlug={project.slug}
                   repositories={project.repositories}

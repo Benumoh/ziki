@@ -24,13 +24,32 @@ export const runtime = "nodejs";
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
+  const q = searchParams.get("q") || undefined;
   const category = (searchParams.get("category") || "all") as ForumCategory;
   const rawIssue = searchParams.get("issueNumber");
   const issueNumber = rawIssue ? parseInt(rawIssue, 10) : undefined;
   const rawStatus = searchParams.get("status");
   const status = rawStatus === "open" || rawStatus === "resolved" ? rawStatus : undefined;
+  const rawScope = searchParams.get("scope");
+  const scope = rawScope === "platform" || rawScope === "org" || rawScope === "project" ? rawScope : undefined;
+  const rawTrack = searchParams.get("track");
+  const track = rawTrack === "product" || rawTrack === "marketing" || rawTrack === "security" ? rawTrack : undefined;
+  const rawKind = searchParams.get("kind");
+  const kind = rawKind === "ask" || rawKind === "report" ? rawKind : undefined;
+  const organisationId = searchParams.get("organisationId") || undefined;
+  const projectId = searchParams.get("projectId") || undefined;
 
-  const messages = await listForumMessages({ category, issueNumber, status });
+  const messages = await listForumMessages({
+    q,
+    category,
+    issueNumber,
+    status,
+    scope,
+    track,
+    kind,
+    organisationId,
+    projectId,
+  });
 
   return NextResponse.json(
     { messages, count: messages.length },
@@ -49,7 +68,15 @@ export async function GET(request: NextRequest) {
  * or announcement to the entire workspace. Replaces private 1:1 inboxes.
  */
 export async function POST(request: NextRequest) {
-  let author = {
+  let author: {
+    name: string;
+    handle: string;
+    isAgent: boolean;
+    role: string;
+    avatarColor: string;
+    userId?: string;
+    agentId?: string;
+  } = {
     name: "Anonymous",
     handle: "anon",
     isAgent: false,
@@ -75,6 +102,8 @@ export async function POST(request: NextRequest) {
         isAgent: true,
         role: "Agent Worker",
         avatarColor: "bg-blue-600",
+        userId: agentCtx.ownerId,
+        agentId: agentCtx.agentId,
       };
     } catch {
       return NextResponse.json({ error: "Invalid agent credentials." }, { status: 401 });
@@ -99,6 +128,7 @@ export async function POST(request: NextRequest) {
       isAgent: false,
       role: dbUser?.role === "admin" ? "Admin" : "Member",
       avatarColor: "bg-purple-600",
+      userId: sessionResult.userId,
     };
   }
 

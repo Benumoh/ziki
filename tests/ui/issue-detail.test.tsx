@@ -23,6 +23,7 @@ vi.mock("@/app/actions/issues", () => ({
   editPullRequestUrlAction: mocks.editPullRequestUrl,
 }));
 vi.mock("@/app/actions/issue-bids", () => ({ awardIssueBidAction: vi.fn() }));
+vi.mock("@/app/actions/human-steps", () => ({ voteForBidAction: vi.fn() }));
 vi.mock("@/app/actions/confirmations", () => ({ giveConfirmationAction: vi.fn() }));
 vi.mock("@/app/actions/watch", () => ({ setWatchingAction: vi.fn() }));
 const decisionActions = vi.hoisted(() => ({ respond: vi.fn(async () => ({ ok: true as const })), agree: vi.fn(async () => ({ ok: true as const })) }));
@@ -48,6 +49,8 @@ import { MarketingTaskDetail } from "@/components/marketing/marketing-task-detai
 import { projectRef } from "@/lib/project-paths";
 import { DecisionCard } from "@/components/decision-card";
 import { decisionFor, type DecisionIssue, type DecisionSuggestion } from "@/lib/your-decision";
+import { designDecisionsFor } from "@/lib/design-view";
+import { DesignDecisionButtons } from "@/components/design-decision-buttons";
 
 const PR = "https://github.com/emerjent/ziki/pull/42";
 
@@ -355,6 +358,21 @@ describe("IssueBidsPanel (#issue-bids)", () => {
 
     render(<IssueBidsPanel bids={bids} awardThreshold={3} />);
     expect(screen.queryByRole("button", { name: /Award/ })).toBeNull();
+  });
+
+  it("lets a viewer with an agent vote for open bids only, as their agent would (#owner-control)", () => {
+    const at = new Date("2026-10-29T12:00:00Z");
+    const bids: BidEntryView[] = [
+      { ...bid, id: "open1", agentName: "Open agent", votes: 1 },
+      { ...bid, id: "withdrawn1", agentName: "Withdrawn agent", withdrawnAt: at },
+    ];
+    const { unmount } = render(<IssueBidsPanel bids={bids} canAward awardThreshold={3} />);
+    expect(screen.getAllByTestId("bid-vote")).toHaveLength(1);
+    expect(screen.getByTestId("bid-vote").closest("li")).toHaveTextContent("Open agent");
+    unmount();
+
+    render(<IssueBidsPanel bids={bids} awardThreshold={3} />);
+    expect(screen.queryByTestId("bid-vote")).toBeNull();
   });
 
   it("marks an open bid whose bidder is at capacity, and offers no Award button for it (#bidder-capacity)", () => {
@@ -928,5 +946,52 @@ describe("TakeItBackPanel (#851)", () => {
     expect(takeItBackReasonError("")).toBeTruthy();
     expect(takeItBackReasonError("why")).toBeTruthy();
     expect(takeItBackReasonError("The merge broke saves.")).toBeNull();
+  });
+});
+
+describe("design decisions (#9)", () => {
+  const waiting = { status: "proposed" as const, authorOwnerId: "mira" };
+  const buttons = () => screen.queryAllByRole("button").map((button) => button.textContent);
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("offers decisions only to an organisation owner or admin who doesn't own the proposing agent", () => {
+    const unlinked = { ...waiting, bugId: null };
+    expect(designDecisionsFor(unlinked, { userId: "demo", membershipRole: "owner" })).toEqual(["approved", "rejected"]);
+    expect(designDecisionsFor(unlinked, { userId: "ada", membershipRole: "admin" })).toEqual(["approved", "rejected"]);
+    // A plain member, someone outside the organisation, and the agent's owner even as the organisation's owner: none.
+    expect(designDecisionsFor(unlinked, { userId: "theo", membershipRole: "member" })).toEqual([]);
+    expect(designDecisionsFor(unlinked, { userId: "olu", membershipRole: null })).toEqual([]);
+    expect(designDecisionsFor(unlinked, { userId: "mira", membershipRole: "owner" })).toEqual([]);
+    // A decided proposal offers nothing to anyone.
+    for (const status of ["approved", "rejected", "superseded"] as const) {
+      expect(designDecisionsFor({ ...unlinked, status }, { userId: "demo", membershipRole: "owner" })).toEqual([]);
+    }
+    render(<DesignDecisionButtons id="rd-1" decisions={designDecisionsFor(unlinked, { userId: "theo", membershipRole: "member" })} />);
+    expect(buttons()).toEqual([]);
+  });
+
+  it("offers Choose and Reject on a proposal linked to an issue, and Reject posts to the people-only decision route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ proposal: { id: "rd-2", status: "rejected" } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const decisions = designDecisionsFor({ ...waiting, bugId: "issue-31" }, { userId: "demo", membershipRole: "owner" });
+    expect(decisions).toEqual(["chosen", "rejected"]);
+    const user = userEvent.setup({ delay: null });
+    render(<DesignDecisionButtons id="rd-2" decisions={decisions} />);
+    expect(buttons()).toEqual(["Choose this design", "Reject"]);
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/v1\/redesigns\/rd-2\/decision$/);
+    expect(JSON.parse(String(init.body))).toEqual({ decision: "rejected" });
+  });
+
+  it("keeps the buttons and says why when the decision is refused", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "This proposal has already been decided." }) }));
+    const user = userEvent.setup({ delay: null });
+    render(<DesignDecisionButtons id="rd-3" decisions={["approved", "rejected"]} />);
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This proposal has already been decided.");
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
   });
 });

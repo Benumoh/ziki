@@ -4,8 +4,15 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { optionalUser } from "@/lib/auth-helpers";
 import { pageMetadata } from "@/lib/seo/site";
+import { OPEN_ISSUES_WHERE } from "@/lib/project-overview";
 import { DiscoverProjectCard, type DiscoverableProject } from "@/components/discover-project-card";
 import { DiscoverFilters } from "@/components/discover-filters";
+import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
+import {
+  buildDirectoryAreas,
+  filterDirectoryProjects,
+  normalizeAreaSlug,
+} from "@/lib/public-directory";
 
 /** The list itself is the page; a search or filter of it is kept out of search results (#seo-pages). */
 export async function generateMetadata(props: DiscoverPageProps): Promise<Metadata> {
@@ -14,7 +21,7 @@ export async function generateMetadata(props: DiscoverPageProps): Promise<Metada
     title: "Discover open-source projects for AI agents",
     description: "Find public projects on Ziki where people and AI agents build software together. Join one, bring your agents and earn for work that ships.",
     path: "/discover",
-    noindex: Boolean(searchParams.q?.trim() || searchParams.open || searchParams.from),
+    noindex: Boolean(searchParams.q?.trim() || searchParams.open || searchParams.from || searchParams.area?.trim()),
   });
 }
 
@@ -22,16 +29,28 @@ type DiscoverPageProps = {
   searchParams: Promise<{
     q?: string;
     open?: string;
+    area?: string;
     /** `earn` when the person came from the Earn page (#earnings): the way back is there, not the organisations page. */
     from?: string;
   }>;
 };
+
+function areaHref(areaSlug: string, query: string, openOnly: boolean, fromEarn: boolean): string {
+  const params = new URLSearchParams();
+  if (areaSlug && areaSlug !== "all") params.set("area", areaSlug);
+  if (query) params.set("q", query);
+  if (openOnly) params.set("open", "true");
+  if (fromEarn) params.set("from", "earn");
+  const qs = params.toString();
+  return qs ? `/discover?${qs}` : "/discover";
+}
 
 export default async function DiscoverPage(props: DiscoverPageProps) {
   const user = await optionalUser();
   const searchParams = await props.searchParams;
   const query = (searchParams.q ?? "").trim();
   const openOnly = searchParams.open === "true";
+  const selectedArea = normalizeAreaSlug(searchParams.area ?? "");
   const fromEarn = searchParams.from === "earn";
 
   // 1. Fetch user's existing memberships and requests in parallel if logged in
@@ -66,21 +85,9 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
     organisation: { archivedAt: null },
   };
 
-  if (openOnly) {
-    where.isOpenForContributors = true;
-  }
-
-  if (query) {
-    where.OR = [
-      { name: { contains: query, mode: "insensitive" } },
-      { goal: { contains: query, mode: "insensitive" } },
-      { organisation: { name: { contains: query, mode: "insensitive" } } },
-    ];
-  }
-
   const projects = await prisma.project.findMany({
     where,
-    orderBy: [{ isOpenForContributors: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ acceptsGuestIdeas: "desc" }, { isOpenForContributors: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       slug: true,
@@ -91,6 +98,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
       isOpenForContributors: true,
       acceptsGuestIdeas: true,
       contributorGuidelines: true,
+      rewardConfig: true,
       organisationId: true,
       organisation: {
         select: {
@@ -99,16 +107,27 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
           slug: true,
         },
       },
+      areas: {
+        orderBy: { name: "asc" },
+        select: { name: true, slug: true },
+      },
       _count: {
         select: {
-          bugs: { where: { isDeleted: false, status: { notIn: ["resolved", "closed"] } } },
+          bugs: { where: OPEN_ISSUES_WHERE },
           ideas: { where: { isDeleted: false, status: "open" } },
         },
       },
     },
   });
 
-  const cardsData: DiscoverableProject[] = projects.map((p) => {
+  const directoryAreas = buildDirectoryAreas(projects);
+  const filteredProjects = filterDirectoryProjects(projects, {
+    area: selectedArea,
+    query,
+    openOnly,
+  });
+
+  const cardsData: DiscoverableProject[] = filteredProjects.map((p) => {
     let userStatus: "member" | "pending" | "rejected" | "none" | "guest" = !user ? "guest" : "none";
     if (user) {
       if (memberOrgIds.has(p.organisationId) || memberProjectIds.has(p.id) || user.role === "super_admin") {
@@ -130,6 +149,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
       isOpenForContributors: p.isOpenForContributors,
       acceptsGuestIdeas: p.acceptsGuestIdeas,
       contributorGuidelines: p.contributorGuidelines,
+      rewardConfig: parseProjectRewardConfig(p.rewardConfig),
       organisation: p.organisation,
       _count: p._count,
       userStatus,
@@ -164,8 +184,51 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
         )}
       </div>
 
+      {/* Area Selection */}
+      <nav aria-label="Project areas" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Link
+          href={areaHref("all", query, openOnly, fromEarn)}
+          aria-current={!selectedArea || selectedArea === "all" ? "page" : undefined}
+          className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-zk-accent ${
+            !selectedArea || selectedArea === "all"
+              ? "border-zk-accent bg-zk-accent/10 text-zk-text"
+              : "border-zk-border bg-zk-surface text-zk-text2 hover:border-zk-border-hover hover:text-zk-text"
+          }`}
+        >
+          <span>All areas</span>
+          <span className="rounded-full bg-zk-chip px-2 py-0.5 text-xs text-zk-muted">
+            {projects.length}
+          </span>
+        </Link>
+        {directoryAreas.map((area) => {
+          const isActive = selectedArea === area.slug;
+          return (
+            <Link
+              key={area.slug}
+              href={areaHref(area.slug, query, openOnly, fromEarn)}
+              aria-current={isActive ? "page" : undefined}
+              className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-zk-accent ${
+                isActive
+                  ? "border-zk-accent bg-zk-accent/10 text-zk-text"
+                  : "border-zk-border bg-zk-surface text-zk-text2 hover:border-zk-border-hover hover:text-zk-text"
+              }`}
+            >
+              <span className="truncate">{area.label}</span>
+              <span className="rounded-full bg-zk-chip px-2 py-0.5 text-xs text-zk-muted">
+                {area.count}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
       {/* Search and Filters */}
-      <DiscoverFilters initialQuery={query} initialOpenOnly={openOnly} fromEarn={fromEarn} />
+      <DiscoverFilters
+        initialQuery={query}
+        initialOpenOnly={openOnly}
+        selectedArea={selectedArea}
+        fromEarn={fromEarn}
+      />
 
       {/* Project Grid */}
       {cardsData.length === 0 ? (
@@ -188,13 +251,13 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
           </div>
           <h3 className="mt-4 text-base font-semibold text-zk-text">No projects found</h3>
           <p className="mt-1 text-sm text-zk-text2">
-            {query || openOnly
-              ? "Try adjusting your search query or filters."
+            {query || openOnly || (selectedArea && selectedArea !== "all")
+              ? "Try adjusting your area selection, search query, or filters."
               : "There are no public projects available right now. Check back soon or create your own organisation."}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
           {cardsData.map((project) => (
             <DiscoverProjectCard key={project.id} project={project} />
           ))}

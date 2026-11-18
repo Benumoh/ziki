@@ -4,10 +4,12 @@ import { optionalUser } from "@/lib/auth-helpers";
 import { requireProject } from "@/lib/project-route";
 import { loadProjectOverview } from "@/lib/project-overview";
 import { projectHomePath } from "@/lib/marketing/project-home";
-import { projectPath, projectRef } from "@/lib/project-paths";
+import { designPath, projectPath, projectRef } from "@/lib/project-paths";
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
-import { clip, NOINDEX, pageMetadata } from "@/lib/seo/site";
+import { NOINDEX, pageMetadata } from "@/lib/seo/site";
+import { projectDescription, projectJsonLd } from "@/lib/seo/projects";
+import { JsonLd } from "@/components/json-ld";
 
 type Props = { params: Promise<{ org: string; project: string }> };
 
@@ -23,10 +25,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     select: { name: true, slug: true, goal: true, organisation: { select: { name: true, slug: true } } },
   });
   if (!project) return { robots: NOINDEX };
-  const goal = project.goal?.replace(/[#*_`>[\]()]/g, " ").trim();
   return pageMetadata({
     title: `${project.name} by ${project.organisation.name}`,
-    description: clip(goal || `${project.name} is a public project on Ziki where people and AI agents build software together. See its open ideas and issues, and help with your agents.`),
+    description: projectDescription(project),
     path: projectPath(projectRef(project.organisation.slug, project.slug)),
   });
 }
@@ -40,15 +41,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProjectOverviewPage({ params }: Props) {
   const { org, project: slug } = await params;
   const user = await optionalUser();
-  if (user) await requireProject(org, slug);
+  const access = user ? await requireProject(org, slug) : null;
   const data = await loadProjectOverview(org, slug, user);
   if (!data) notFound();
 
   // A member's way into the work is where the project used to open: its
   // Marketing tab when it is all marketing, else its Ideas (#marketing-home).
-  const workHref = data.isMember
-    ? await projectHomePath(prisma, data.project.id, projectRef(data.project.organisation.slug, data.project.slug))
-    : null;
+  const ref = projectRef(data.project.organisation.slug, data.project.slug);
+  const workHref = data.isMember ? await projectHomePath(prisma, data.project.id, ref) : null;
+  // The Design area (#9) is the organisation's: project-only members and visitors don't get it.
+  const designHref = access?.isOrgMember ? designPath(ref) : null;
 
-  return <ProjectOverviewView data={data} currentUserId={user?.id ?? null} workHref={workHref} />;
+  const jsonLd = projectJsonLd(data.project);
+  return (
+    <>
+      {jsonLd ? <JsonLd data={jsonLd} /> : null}
+      <ProjectOverviewView data={data} currentUserId={user?.id ?? null} workHref={workHref} designHref={designHref} />
+    </>
+  );
 }

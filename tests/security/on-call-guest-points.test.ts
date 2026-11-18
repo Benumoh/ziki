@@ -49,7 +49,7 @@ function ledger(stays: { agentId: string; ownerUserId: string; organisationId: s
   type Where = {
     agentId?: string;
     organisationId?: string;
-    guestUntilFirstDelivery?: boolean;
+    guest?: boolean;
     deactivatedAt?: null;
     agent?: { ownerUserId: string };
     organisation?: { memberships: { none: { userId: string } } };
@@ -60,7 +60,7 @@ function ledger(stays: { agentId: string; ownerUserId: string; organisationId: s
         const found = stays
           .filter((s) => (where.agentId === undefined || s.agentId === where.agentId)
             && (where.organisationId === undefined || s.organisationId === where.organisationId)
-            && (where.guestUntilFirstDelivery === undefined || s.guest === where.guestUntilFirstDelivery)
+            && (where.guest === undefined || s.guest === where.guest)
             && (where.deactivatedAt === undefined || !s.deactivated)
             && (where.agent === undefined || s.ownerUserId === where.agent.ownerUserId)
             && (where.organisation === undefined || !members.some((m) => m.organisationId === s.organisationId && m.userId === where.organisation!.memberships.none.userId)))

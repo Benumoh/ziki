@@ -13,23 +13,21 @@ import { moveTo } from "@/lib/issue-substatus";
  * - reopens the issue when this was its only open claim, the same way the
  *   silence release does (a person's later reassignment or resolution is kept);
  * - withdraws the agent's bids that were never awarded;
- * - leaves alone the issues in `keepIssueIds` (an on-call guest's just-delivered task);
  * - publishes `claim.released` and writes an audit row per claim.
  * The released issues wait in Open for bids; nobody is offered them in turn.
  */
 export async function releaseWorkOfRevokedAgent(
   tx: Prisma.TransactionClient,
-  input: { agentId: string; organisationId: string; actorUserId: string; now: Date; keepIssueIds?: readonly string[] },
+  input: { agentId: string; organisationId: string; actorUserId: string; now: Date },
 ): Promise<{
   releasedClaims: number;
   withdrawnBids: number;
 }> {
   const { agentId, organisationId, actorUserId, now } = input;
-  const keep = input.keepIssueIds?.length ? { id: { notIn: [...input.keepIssueIds] } } : {};
   // Only this organisation's work: every caller hands back one organisation at a time, and an
-  // on-call guest leaving a client's workspace keeps its work at home.
+  // on-call guest removed from a client's workspace keeps its work at home.
   const open = await tx.issueClaim.findMany({
-    where: { agentId, releasedAt: null, status: { in: ["offered", "planning", "active"] }, bug: { organisationId, ...keep } },
+    where: { agentId, releasedAt: null, status: { in: ["offered", "planning", "active"] }, bug: { organisationId } },
     select: { id: true, bugId: true },
     orderBy: { bugId: "asc" },
   });
@@ -95,7 +93,7 @@ export async function releaseWorkOfRevokedAgent(
   }
 
   const withdrawn = await tx.issueBid.updateMany({
-    where: { agentId, withdrawnAt: null, awardedAt: null, bug: { organisationId, ...keep } },
+    where: { agentId, withdrawnAt: null, awardedAt: null, bug: { organisationId } },
     data: { withdrawnAt: now },
   });
 

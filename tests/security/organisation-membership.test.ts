@@ -26,6 +26,14 @@ const userFindFirst = vi.hoisted(() => vi.fn());
 const userFindMany = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const $transaction = vi.hoisted(() => vi.fn());
 const $executeRaw = vi.hoisted(() => vi.fn());
+const redesignFindFirst = vi.hoisted(() => vi.fn());
+const redesignFindMany = vi.hoisted(() => vi.fn());
+const redesignGroupBy = vi.hoisted(() => vi.fn());
+const requireProject = vi.hoisted(() => vi.fn());
+const navigation = vi.hoisted(() => ({
+  redirect: vi.fn(),
+  notFound: vi.fn(() => { throw new Error("NOT_FOUND"); }),
+}));
 
 vi.mock("@/lib/organisation-context", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/organisation-context")>()),
@@ -33,7 +41,12 @@ vi.mock("@/lib/organisation-context", async (importOriginal) => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/points/signup-bonus", () => ({ awardSignupBonus: vi.fn(async () => undefined) }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("next/navigation", () => navigation);
+// The Design pages (#9) resolve their project here; nothing else in this file does.
+vi.mock("@/lib/project-route", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/project-route")>()),
+  requireProject,
+}));
 vi.mock("@/lib/notify", () => ({ notifyLater: vi.fn() }));
 // Tidying an idea with Claude is a network call: as with no API key, it leaves the text as typed.
 vi.mock("@/lib/idea-structuring", async (importOriginal) => ({
@@ -79,6 +92,7 @@ vi.mock("@/lib/prisma", () => ({
     projectMembership: { findUnique: projectMembershipFindUnique, findFirst: projectMembershipFindFirst },
     issueWatch: { upsert: issueWatchUpsert, updateMany: vi.fn(), createMany: issueWatchCreateMany },
     user: { findUnique: userFindUnique, findFirst: userFindFirst, findMany: userFindMany },
+    redesignProposal: { findFirst: redesignFindFirst, findMany: redesignFindMany, groupBy: redesignGroupBy },
     $transaction,
     $executeRaw,
   },
@@ -296,5 +310,67 @@ describe("canContributeToProject permissions", () => {
     membershipFindUnique.mockResolvedValue(null);
     const allowed = await canContributeToProject({ id: "stranger-1", role: "user" }, "p-1", "t-1");
     expect(allowed).toBe(false);
+  });
+});
+
+describe("the Design area belongs to the project's organisation (#9)", () => {
+  const params = Promise.resolve({ org: "acme", project: "web" });
+  const viewer = (access: { isOrgMember: boolean; isProjectMember: boolean }) => ({
+    user: { id: "viewer", role: "user" },
+    organisationId: "org-acme",
+    project: { id: "project-web", slug: "web", name: "Web", ref: "acme/web", organisationId: "org-acme", orgSlug: "acme" },
+    isOrgAdmin: false,
+    canContribute: access.isOrgMember || access.isProjectMember,
+    ...access,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("is a 404 for someone outside the organisation and for a project-only member, before any proposal is read", async () => {
+    const { default: DesignPage } = await import("@/app/(app)/[org]/[project]/design/page");
+    const { default: DesignProposalPage } = await import("@/app/(app)/[org]/[project]/design/[id]/page");
+    for (const access of [{ isOrgMember: false, isProjectMember: false }, { isOrgMember: false, isProjectMember: true }]) {
+      requireProject.mockResolvedValue(viewer(access));
+      await expect(DesignPage({ params, searchParams: Promise.resolve({}) })).rejects.toThrow("NOT_FOUND");
+      await expect(DesignProposalPage({ params: Promise.resolve({ org: "acme", project: "web", id: "rd-1" }) })).rejects.toThrow("NOT_FOUND");
+    }
+    expect(redesignFindMany).not.toHaveBeenCalled();
+    expect(redesignFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("shows a member this project's waiting proposals, read inside its organisation", async () => {
+    const { default: DesignPage } = await import("@/app/(app)/[org]/[project]/design/page");
+    requireProject.mockResolvedValue(viewer({ isOrgMember: true, isProjectMember: false }));
+    redesignFindMany.mockResolvedValue([]);
+    redesignGroupBy.mockResolvedValue([]);
+    await DesignPage({ params, searchParams: Promise.resolve({}) });
+    expect(redesignFindMany.mock.calls[0][0].where).toEqual({ organisationId: "org-acme", projectId: "project-web", status: { in: ["proposed"] } });
+  });
+
+  it("is a 404 for a proposal in another project, even of the same organisation", async () => {
+    const { default: DesignProposalPage } = await import("@/app/(app)/[org]/[project]/design/[id]/page");
+    requireProject.mockResolvedValue(viewer({ isOrgMember: true, isProjectMember: false }));
+    redesignFindFirst.mockResolvedValue(null);
+    membershipFindUnique.mockResolvedValue({ role: "member" });
+    await expect(DesignProposalPage({ params: Promise.resolve({ org: "acme", project: "web", id: "rd-other" }) })).rejects.toThrow("NOT_FOUND");
+    expect(redesignFindFirst.mock.calls[0][0].where).toEqual({ id: "rd-other", organisationId: "org-acme", projectId: "project-web" });
+  });
+
+  it("sends an old /redesigns link to the Design page only for a member of the proposal's organisation", async () => {
+    const { default: OldRedesignPage } = await import("@/app/(app)/redesigns/[id]/page");
+    vi.mocked(requireUser).mockResolvedValue({ id: "viewer", role: "user" } as never);
+    redesignFindFirst.mockResolvedValueOnce(null);
+    await expect(OldRedesignPage({ params: Promise.resolve({ id: "rd-elsewhere" }) })).rejects.toThrow("NOT_FOUND");
+    expect(redesignFindFirst.mock.calls[0][0].where).toEqual({
+      id: "rd-elsewhere",
+      project: { archivedAt: null, organisation: { archivedAt: null, memberships: { some: { userId: "viewer" } } } },
+    });
+    expect(navigation.redirect).not.toHaveBeenCalled();
+
+    redesignFindFirst.mockResolvedValueOnce({ id: "rd-1", project: { slug: "web", organisation: { slug: "acme" } } });
+    await OldRedesignPage({ params: Promise.resolve({ id: "rd-1" }) });
+    expect(navigation.redirect).toHaveBeenCalledWith("/acme/web/design/rd-1");
   });
 });

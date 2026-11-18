@@ -1,23 +1,17 @@
 import { requireUser } from "@/lib/auth-helpers";
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
-import { listAgentJobs, type AgentJobRow } from "@/lib/security-checks/your-work";
+import { listAgentJobs, listOwnWorkspaces, type AgentJobRow } from "@/lib/security-checks/your-work";
 import { formatZ } from "@/lib/points/rules";
 import { KindIcon } from "@/components/security-checks/entry-box";
 import { SecurityTabs } from "@/components/security-checks/security-tabs";
-import { StageSidebar } from "@/components/stage-sidebar";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { listWorkspaceChecks } from "@/lib/security-checks/entry";
 import { LocalTime } from "@/components/local-time";
+import Link from "next/link";
 // The same table as a project's Your Work list, so this reads like the rest of Ziki.
 import "../../[org]/[project]/issues/_list/issues.css";
 
 export const metadata = { title: "Your work" };
-
-type Tab = "checking" | "done";
-const TABS: { tab: Tab; label: string }[] = [
-  { tab: "checking", label: "Checking" },
-  { tab: "done", label: "Done" },
-];
 
 /**
  * Your work on Security (#security-checks): what your agents are checking for
@@ -25,22 +19,19 @@ const TABS: { tab: Tab; label: string }[] = [
  * pays you, never the client's stages, payment or results. Fixing happens later,
  * in a project's issues, once the client sends a problem there.
  */
-export default async function SecurityYourWorkPage(props: { searchParams?: Promise<{ tab?: string | string[] }> }) {
-  const params = (await props.searchParams) ?? {};
-  // Opens on what your agents are checking now; Done is the other tab.
-  const selected: Tab = params.tab === "done" ? "done" : "checking";
+export default async function SecurityYourWorkPage() {
   const user = await requireUser();
   const access = await currentOrganisationAccess(user.id, user.role);
-  const [jobs, checks] = await Promise.all([
+  const [jobs, checks, ownWorkspaces] = await Promise.all([
     listAgentJobs(user.id),
     access.organisationId && access.admin ? listWorkspaceChecks(access.organisationId, user.id) : Promise.resolve([]),
+    // A plain member can switch to a workspace they own, where their own scans live (never moved there unasked).
+    access.admin ? Promise.resolve([]) : listOwnWorkspaces(user.id, access.organisationId),
   ]);
-  const checkCount = checks.length;
-  const counts: Record<Tab, number> = {
-    checking: jobs.filter((job) => job.status === "checking").length,
-    done: jobs.filter((job) => job.status === "done").length,
-  };
-  const shown = jobs.filter((job) => job.status === selected);
+  // Removed (cancelled) scans don't count.
+  const checkCount = checks.filter((check) => check.status !== "cancelled").length;
+  // One list, no sidebar: everything your agents worked on, each with its own status.
+  const shown = jobs;
 
   return (
     <div className="flex w-full flex-col pb-10">
@@ -49,22 +40,26 @@ export default async function SecurityYourWorkPage(props: { searchParams?: Promi
 
       <section aria-label="Jobs" className="mx-auto w-full max-w-6xl rounded-[20px] border border-zk-border bg-zk-surface p-3 sm:p-6">
         <p className="mb-4 mt-0 px-1 text-sm text-zk-muted">Jobs your agents do for others. You see the job and the pay, not their results.</p>
+        {ownWorkspaces.length > 0 ? (
+          <p className="mb-4 mt-0 px-1 text-sm text-zk-text2" data-testid="own-workspaces">
+            You&apos;re a member of {access.organisationName ?? "this workspace"}, so you see your agents&apos; work here. To scan your own sites, switch to{" "}
+            {ownWorkspaces.map((workspace, index) => (
+              <span key={workspace.id}>
+                {index > 0 ? ", " : ""}
+                <Link href={`/organisations/open?organisation=${encodeURIComponent(workspace.id)}&next=${encodeURIComponent("/security")}`} className="font-semibold text-zk-accent hover:underline">
+                  {workspace.name}
+                </Link>
+              </span>
+            ))}
+            .
+          </p>
+        ) : null}
 
-        {/* Checking or Done down the left, like the steps beside a project's issues. */}
-        <div className="flex items-start gap-5 max-lg:flex-col max-lg:gap-3">
-        <StageSidebar
-          steps={TABS.map(({ tab, label }) => ({
-            label,
-            count: counts[tab],
-            href: tab === "checking" ? "/security/work" : `/security/work?tab=${tab}`,
-            selected: selected === tab,
-          }))}
-        />
-        <div className="w-full min-w-0 flex-1">
+        <div className="w-full min-w-0">
         {shown.length === 0 ? (
           <div className="rounded-[10px] border border-zk-border bg-zk-bg px-6 py-12 text-center">
             <p className="m-0 font-semibold text-zk-text">
-              {jobs.length === 0 ? "Your agents aren't checking anything yet" : selected === "checking" ? "Your agents aren't checking anything right now" : "Nothing finished yet"}
+              Your agents haven&apos;t worked on anything yet
             </p>
             <p className="mx-auto mb-0 mt-1 max-w-md text-sm text-zk-text2">
               When one of your agents is given part of a security check, it shows here while it works and after it reports back.
@@ -89,7 +84,6 @@ export default async function SecurityYourWorkPage(props: { searchParams?: Promi
             </p>
           </>
         )}
-        </div>
         </div>
       </section>
     </div>

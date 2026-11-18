@@ -1,5 +1,30 @@
+import { execFileSync } from "node:child_process";
 import type { NextConfig } from "next";
+import packageJson from "./package.json";
 import { BASE_PATH } from "./lib/base-path";
+
+function resolveBuildVersion(): string {
+  const explicit = process.env.NEXT_PUBLIC_APP_VERSION?.trim() || process.env.APP_VERSION?.trim();
+  if (explicit) return explicit;
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(packageJson.version);
+  if (!match) return packageJson.version;
+  try {
+    const count = Number.parseInt(
+      execFileSync("git", ["rev-list", "--count", "HEAD"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+      10,
+    );
+    if (Number.isInteger(count) && count > 0) {
+      const basePatch = Number.parseInt(match[3] ?? "0", 10);
+      return `${match[1]}.${match[2]}.${Math.max(basePatch, count)}`;
+    }
+  } catch {
+    // Docker builds without .git fall back to package.json version (+ SOURCE_COMMIT at runtime).
+  }
+  return packageJson.version;
+}
 
 const nextConfig: NextConfig = {
   // #585: the production image ships only the traced standalone server.
@@ -24,6 +49,7 @@ const nextConfig: NextConfig = {
   env: {
     // Vercel refuses a function request body over 4.5 MB, so attachments there stop at 4 MB (lib/attachments.ts).
     ATTACHMENT_MAX_MB: process.env.ATTACHMENT_MAX_MB || (process.env.VERCEL === "1" ? "4" : "5"),
+    NEXT_PUBLIC_APP_VERSION: resolveBuildVersion(),
     NEXTAUTH_URL:
       process.env.NEXTAUTH_URL ||
       (BASE_PATH
@@ -33,7 +59,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/llms.txt": ["./docs/ziki-for-agents.md"],
     // The security report PDF embeds its own font (components/security-checks/report-pdf.tsx).
-    "/security/checks/[id]/report.pdf": ["./assets/fonts/**"],
+    // pdfkit loads its built-in font files (Helvetica.cjs and the like) by a path the tracer can't follow, so
+    // the production image left them out and every download failed with "Cannot find module .../standard-fonts/Helvetica.cjs".
+    "/security/checks/[id]/report.pdf": ["./assets/fonts/**", "./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/**"],
   },
   async headers() {
     // #222: the app previously sent no security headers at all, which left
@@ -116,6 +144,17 @@ const nextConfig: NextConfig = {
     ];
     if (!BASE_PATH) {
       return [
+        {
+          source: "/:path*",
+          has: [
+            {
+              type: "host",
+              value: "www.ziki.dev",
+            },
+          ],
+          destination: "https://ziki.dev/:path*",
+          permanent: true,
+        },
         ...list,
         {
           source: "/bug-tracker",

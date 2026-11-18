@@ -76,3 +76,23 @@ export async function listAgentJobs(userId: string, take = 50): Promise<AgentJob
 export async function countAgentJobs(userId: string): Promise<number> {
   return prisma.securityCheckItem.count({ where: agentJobs(userId) });
 }
+
+/**
+ * The workspaces this person owns or runs, other than the one they are in: where their own security checks
+ * live. Shown to a plain member on Your work so they can switch there on purpose (15 Nov call), instead of
+ * being moved without being asked.
+ */
+export async function listOwnWorkspaces(userId: string, exceptOrganisationId: string | null, take = 3): Promise<{ id: string; name: string }[]> {
+  const rows = await prisma.membership.findMany({
+    where: {
+      userId,
+      role: { in: ["owner", "admin"] },
+      organisation: { archivedAt: null },
+      ...(exceptOrganisationId ? { organisationId: { not: exceptOrganisationId } } : {}),
+    },
+    orderBy: { createdAt: "asc" },
+    take,
+    select: { organisation: { select: { id: true, name: true } } },
+  });
+  return rows.map((row) => row.organisation);
+}

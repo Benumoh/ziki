@@ -13,6 +13,7 @@ import { readAgentProfile, updateAgentProfile } from "@/lib/agents/profile";
 import { profileErrorResponse } from "@/lib/agent-api/agent-profiles";
 import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { agentWorkStatus } from "@/lib/agents/work-gate";
+import { WORK_ROW_SELECT, workCapUsage, workModeView } from "@/lib/agents/work-mode";
 
 /**
  * GET /api/v1/agents/me — who this key belongs to (#427). Any level may call
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
       "read",
     );
     if (!budget.allowed) return agentBudgetExceededResponse(budget.retryAfterSeconds, budget);
-    const [projects, instructions, profile, orgSlug, activations] = await Promise.all([
+    const [projects, instructions, profile, orgSlug, activations, workRow, workUsage] = await Promise.all([
       listAgentProjectSummaries(agent.organisationId),
       readAgentInstructions(agent.agentId),
       readAgentProfile(agent.agentId),
@@ -40,14 +41,17 @@ export async function GET(req: NextRequest) {
       prisma.agentActivation.findMany({
         where: { agentId: agent.agentId, deactivatedAt: null },
         orderBy: { activatedAt: "asc" },
-        select: { level: true, guestUntilFirstDelivery: true, guestEndedAt: true, organisation: { select: { id: true, slug: true, name: true } } },
+        select: { level: true, guest: true, guestEndedAt: true, organisation: { select: { id: true, slug: true, name: true } } },
       }),
+      // #agent-work-mode: how its owner said it takes work, and its caps.
+      prisma.agent.findUnique({ where: { id: agent.agentId }, select: WORK_ROW_SELECT }),
+      workCapUsage(prisma, agent.agentId),
     ]);
     // On-call guests (12 Nov plan, D2): the workspaces it is a guest in, each with its projects'
     // work feeds. This same key works there: pass ?projectId= on every call.
     const guestWorkspaces = await Promise.all(
       activations
-        .filter((row) => row.guestUntilFirstDelivery && !row.guestEndedAt)
+        .filter((row) => row.guest && !row.guestEndedAt)
         .map(async (row) => ({
           organisation_id: row.organisation.id,
           org_slug: row.organisation.slug,
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest) {
           org_slug: row.organisation.slug,
           name: row.organisation.name,
           level: row.level,
-          guest: row.guestUntilFirstDelivery,
+          guest: row.guest,
         })),
         guest_workspaces: guestWorkspaces,
         // #owner-history: the owner's entries and comments, newest first, with how to replace each.
@@ -86,6 +90,9 @@ export async function GET(req: NextRequest) {
           workUrl: orgSlug ? absoluteUrl(projectPath(projectRef(orgSlug, project.slug), "/work")) : null,
         })),
         instructions,
+        // #agent-work-mode: Work automatically or Ask me first, the owner's caps and how much of them it uses.
+        // A null mode means the owner hasn't chosen: ask them (next_step says how).
+        work_mode: workRow ? workModeView(workRow, workUsage) : null,
         // #agent-profile: who it says it is. Set with PATCH here, /me/skills and /me/picture.
         profile: profile
           ? { ...profile, picture_url: profile.picture_url ? absoluteUrl(profile.picture_url) : null }

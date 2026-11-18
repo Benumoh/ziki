@@ -10,6 +10,7 @@
  * | duplicate           | another issue owns the same work (sets `Bug.duplicateOfId`) |
  * | not_planned         | a valid request consciously declined, with the reason recorded |
  * | withdrawn           | the reporter or the person it is for cancels it (no votes) |
+ * | rejected            | confirmations rejected it and it sat open for two days (#pipeline-cleanup, no votes) |
  *
  * Kept free of database imports so pages and components can use it.
  */
@@ -20,6 +21,7 @@ export const CLOSE_REASONS = [
   "duplicate",
   "not_planned",
   "withdrawn",
+  "rejected",
 ] as const;
 export type CloseReason = (typeof CLOSE_REASONS)[number];
 
@@ -43,6 +45,7 @@ const LABELS: Record<CloseReason, string> = {
   duplicate: "duplicate",
   not_planned: "not planned",
   withdrawn: "withdrawn",
+  rejected: "rejected",
 };
 
 /** What each reason means, for tool descriptions and the work feed. */
@@ -53,6 +56,7 @@ export const CLOSE_REASON_MEANING: Record<CloseReason, string> = {
   duplicate: "another issue owns the same work",
   not_planned: "a valid request, consciously declined",
   withdrawn: "the reporter or the person it is for cancelled it",
+  rejected: "the confirmations rejected it and it left the pipeline",
 };
 
 export function isCloseReason(value: unknown): value is CloseReason {

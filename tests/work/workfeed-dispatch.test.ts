@@ -3,11 +3,14 @@ import type { AgentContext } from "@/lib/agents/require-agent";
 
 type RecordedQuery = { model: string; method: string; args: { where?: Record<string, unknown> } | undefined };
 const queries = vi.hoisted(() => [] as RecordedQuery[]);
+const customResolvers = vi.hoisted(() => ({} as Record<string, (args: unknown) => Promise<unknown>>));
 vi.mock("@/lib/prisma", () => {
   const delegate = (model: string) =>
     new Proxy({}, {
       get: (_target, method: string) => async (args: RecordedQuery["args"]) => {
         queries.push({ model, method, args });
+        const key = `${model}.${method}`;
+        if (customResolvers[key]) return customResolvers[key](args);
         return method === "findMany" || method === "groupBy" ? [] : method === "count" ? 0 : null;
       },
     });
@@ -129,7 +132,7 @@ function work(overrides: Partial<ProjectWork> = {}): ProjectWork {
   };
 }
 
-const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [] };
+const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [], askFirst: false };
 
 /** #plan-review: a complex issue's award held by this agent, with where its plan is. */
 const planningClaim = (plan: AgentWork["planning"][number]["plan"]): AgentWork["planning"][number] => ({
@@ -319,7 +322,7 @@ describe("itemsFor", () => {
     const offeredAt = new Date("2026-10-29T10:00:00Z");
     const mine: AgentWork = {
       ...nothingMine,
-      offers: [{ id: "o1", offeredAt, bug: { id: "b9", number: 9, title: "Offered" } }],
+      offers: [{ id: "o1", offeredAt, dispatcherUserId: null, awardedBid: { id: "bid9" }, bug: { id: "b9", number: 9, title: "Offered", difficulty: "medium" } }],
     };
     const items = itemsFor(agent("working"), work({ ready: [{ id: "b1", number: 1, title: "x", importance: 3 }] }), mine);
     expect(items[0]).toMatchObject({ kind: "offer", key: "offer:o1", dueAt: "2026-10-29T10:30:00.000Z" });
@@ -387,6 +390,45 @@ describe("workFeed marketing track response shape and items", () => {
     expect(feed.track).toBe("marketing");
     expect(feed.brief).toBeNull();
     expect(feed.workUrl).toContain("?track=marketing");
+  });
+
+  it("queries open forum asks for the project in workFeed", async () => {
+    clearWorkCache();
+    queries.length = 0;
+    await workFeed(agent("working"), { id: "p1", slug: "acme", name: "Acme", orgSlug: "acme" }, "product");
+    const forumQuery = queries.find((q) => q.model === "forumPost" && q.method === "findMany");
+    expect(forumQuery).toBeTruthy();
+    expect(forumQuery?.args?.where).toEqual({
+      projectId: "p1",
+      kind: "ask",
+      resolution: "open",
+    });
+  });
+
+  it("maps open forum asks into work feed items with kind forum_help_request", async () => {
+    clearWorkCache();
+    queries.length = 0;
+    customResolvers["forumPost.findMany"] = async () => [
+      {
+        id: "fm-help-1",
+        title: "Database connection pool exhaustion",
+        body: "Getting connection timeout under high load.",
+        offer: { amount: 50 },
+      },
+    ];
+
+    try {
+      const feed = await workFeed(agent("working"), { id: "p1", slug: "acme", name: "Acme", orgSlug: "acme" }, "product");
+      const askItem = feed.items.find((item) => item.kind === "forum_help_request");
+      expect(askItem).toBeTruthy();
+      expect(askItem?.key).toBe("forum_ask:fm-help-1");
+      expect(askItem?.title).toBe("Peer blocker: Database connection pool exhaustion");
+      expect(askItem?.actions[0].path).toBe("/api/v1/forum/fm-help-1/replies");
+      expect(feed.counts.forum_help_request).toBe(1);
+      expect(feed.ask.some((a) => a.includes("forum help request"))).toBe(true);
+    } finally {
+      delete customResolvers["forumPost.findMany"];
+    }
   });
 
   it("excludes product-only items from marketing feed", () => {

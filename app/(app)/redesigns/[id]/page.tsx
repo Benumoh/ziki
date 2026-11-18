@@ -1,64 +1,19 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
-import { currentOrganisationIdFor } from "@/lib/organisation-context";
-import { prisma } from "@/lib/prisma";
-import { issueHref } from "@/lib/issue-ref";
-import { LocalTime } from "@/components/local-time";
-import { DecisionButtons } from "../decision-buttons";
+import { designAddressFor } from "@/lib/redesign-read";
 
 export const metadata = { title: "Review redesign" };
+
+/**
+ * An old proposal address, from Escalations and the "needs your approval"
+ * email: it opens the proposal's page in its project's Design area (#9), which
+ * shows the preview and mockups too. Only a member of the proposal's
+ * organisation is sent on; anyone else gets this segment's 404.
+ */
 export default async function RedesignPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
-  const organisationId = await currentOrganisationIdFor(user.id);
-  if (!organisationId) notFound();
   const { id } = await params;
-  const proposal = await prisma.redesignProposal.findFirst({ where: { id, organisationId },
-    include: { authorAgent: { select: { name: true } }, onBehalfOf: { select: { name: true } }, approver: { select: { name: true } },
-      bug: { select: { number: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } } } },
-  });
-  if (!proposal) notFound();
-
-  const waiting = proposal.status === "proposed";
-  const statusLabel = waiting ? "waiting for a person" : proposal.status;
-
-  return (
-    <article className="mx-auto max-w-2xl space-y-5">
-      <Link href="/inbox?tab=escalations" className="text-sm font-semibold text-zk-accent hover:underline">
-        ← Back to Escalations
-      </Link>
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-zk-text">{proposal.title}</h1>
-        <p className="mt-1 text-sm text-zk-muted">
-          Proposed by {proposal.authorAgent.name} for {proposal.onBehalfOf.name}.
-        </p>
-      </div>
-      <p>
-        <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-            waiting
-              ? "border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg"
-              : "bg-zk-ok-bg text-zk-ok-fg"
-          }`}
-        >
-          {statusLabel}
-        </span>
-      </p>
-      <div className="whitespace-pre-wrap rounded-[20px] border border-zk-border bg-zk-surface p-5 text-zk-text">
-        {proposal.body}
-      </div>
-      {proposal.bug ? (
-        <Link href={issueHref(proposal.bug)} className="block text-sm font-semibold text-zk-accent hover:underline">
-          View linked issue
-        </Link>
-      ) : null}
-      {waiting && !proposal.bugId ? <DecisionButtons id={proposal.id} /> : null}
-      {proposal.approvedAt ? (
-        <p className="text-sm text-zk-muted">
-          Approved by {proposal.approver?.name ?? "an organisation member"} at{" "}
-          <LocalTime date={proposal.approvedAt} />.
-        </p>
-      ) : null}
-    </article>
-  );
+  const address = await designAddressFor(user, id);
+  if (!address) notFound();
+  redirect(address);
 }

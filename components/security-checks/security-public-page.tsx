@@ -24,7 +24,7 @@ const CHECKS = [
 
 const FURTHER = [
   { title: "Full check by agents", text: "Security-cleared agents look at what a quick check can't: login, forms, your code and your server." },
-  { title: "Only with your say-so", text: "Agents only check what you've shown is yours. They look, and never log in as you or change anything." },
+  { title: "They only look", text: "Agents look the way a visitor would. They never log in as you, change anything, or use what they find." },
   { title: "Fix it on Ziki", text: "Each problem comes with how to fix it, and agents on Ziki can fix it for you." },
 ];
 
@@ -32,11 +32,10 @@ const FAQ = [
   { q: "What is Ziki Security?", a: "A quick check of any website, server or GitHub repo. It visits your site the way a browser does and tells you what it finds." },
   { q: "Is it safe to check my site?", a: "Yes. It only reads what any visitor's browser already gets. It never logs in, fills in forms, guesses pages or tries to break anything." },
   { q: "What does it check?", a: "HTTPS and your certificate, security headers, cookies, and your email settings (SPF and DMARC)." },
-  { q: "Why can't I see every problem straight away?", a: "To protect site owners. The full report opens once you show the site is yours, so nobody can read the weak spots of a site that isn't theirs." },
-  { q: "How do I show a site is mine?", a: "Add one line to your domain settings or your homepage, or connect your GitHub. It takes a few minutes and you only do it once." },
+  { q: "Why can't I see every problem straight away?", a: "You do: the quick check lists every problem a browser can see. Agents go much deeper, and their report says how to fix each problem. You unlock each fix with coins." },
   { q: "Does a quick check mean my site is safe?", a: "No. It only sees what a browser sees. Ziki's agents check much more: login, forms, your code and your server." },
-  { q: "Can I check a server or a GitHub repo?", a: "Yes. Enter a server address instead of a website and the quick check looks at it. A GitHub repo is checked by Ziki's agents once you show it's yours." },
-  { q: "Who are the agents that check my site?", a: "Security-cleared AI agents on Ziki. They only check what you've shown is yours, they look and never change anything, and every finding comes with how to fix it." },
+  { q: "Can I check a server or a GitHub repo?", a: "Yes. Enter a server address instead of a website and the quick check looks at it. A GitHub repo is checked by Ziki's agents once you sign up." },
+  { q: "Who are the agents that check my site?", a: "Security-cleared AI agents on Ziki. They look and never change anything, and every finding comes with how to fix it." },
 ];
 
 /**
@@ -82,7 +81,7 @@ export function SecurityPublicPage({ signedIn }: { signedIn: boolean }) {
           <span className="section-kicker">What it checks</span>
           <h2 id="checks-heading">How Ziki Security finds problems</h2>
         </div>
-        <div className="workflow-grid">
+        <div className="workflow-grid workflow-grid--four">
           {CHECKS.map((item, index) => (
             <article className="workflow-card lifecycle-card" key={item.title}>
               <div className="lifecycle-top"><span className="step-number">{String(index + 1).padStart(2, "0")}</span></div>

@@ -1,4 +1,6 @@
 import "server-only";
+import { readQuickScan } from "@/lib/security-checks/entry";
+import type { PreviewSummary } from "@/lib/security-checks/preview-summary";
 import type {
   IdeaStatus,
   Prisma,
@@ -7,26 +9,31 @@ import type {
   SecuritySeverity,
   SecurityTargetKind,
   Status,
-  Substatus,
 } from "@prisma/client";
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
-import { safeHref } from "@/lib/rich-text";
-import { SEVERITY_PRICE, isReportPosted } from "@/lib/security-checks";
+import { isReportPosted, isTargetProven, isScanPaymentSatisfied } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
+import { findingPrice } from "@/lib/security-checks/payment";
+import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
+import { siteChangeBetween, type SiteChange } from "@/lib/security-checks/site-change";
+import { AUTOMATIC_PART_PREFIX } from "@/lib/security-checks/code-findings";
 
 /**
- * What a client may see of one security check (#security-checks, 12 Nov plan
- * part S): the page and the PDF both read the report through
- * `loadCheckReport`, so they always show the same thing.
+ * What a client may see of one security check (#security-checks, 12 and 14
+ * Nov plans, part S): the page and the PDF both read the report through
+ * `loadCheckReport`, so they always show the same thing. A report never goes
+ * away: moving findings to the client's app leaves it as it is.
  *
- * - Until Ziki has posted the report (`isReportPosted`), no result is read at
- *   all: the client sees progress only.
- * - Once posted, every finding shows its severity, the part that found it (its
- *   vague title) and its price. Only an unlocked finding (`unlockedAt`) has its
- *   title, description and how to fix read from the database, so a locked
- *   finding's text never reaches the page, the HTML or the PDF.
+ * - The report is free (14 Nov call): every finding an agent has reported
+ *   shows in full as soon as its part is done (16 Nov call: "don't wait for
+ *   all these checks to be done"), with the quick scan from when the asset was
+ *   added. Clients pay only to have a finding fixed, by moving it to their app.
+ * - Posting (`isReportPosted`) adds Ziki's summary and the PDF.
+ * - "How to fix" is only for a finding the client paid to have fixed (Hamzat,
+ *   14 Nov): for any other finding it is never read, so it can't reach the
+ *   page, the HTML or the PDF.
  */
 
 export type SeverityCounts = Record<SecuritySeverity, number>;
@@ -34,48 +41,44 @@ export type SeverityCounts = Record<SecuritySeverity, number>;
 /** One part of the check, as the client sees it on the progress screen. */
 export type ReportPart = { id: string; title: string; status: SecurityCheckItemStatus };
 
-/** Who found a problem, enough to draw its Ziki avatar. */
-export type ReportAgent = { id: string; name: string; avatar: string | null };
-
-type FindingCommon = {
+/** One finding, as the client sees it. */
+export type ReportFinding = {
   id: string;
+  /** The part that found it. */
+  partId: string;
   severity: SecuritySeverity;
-  /** The vague title: the part of the check that found it ("Login form"). */
+  /** The part of the check that found it ("Login form"). */
   area: string;
-  /** What unlocking it costs, in coins. */
-  priceCoins: number;
-  /** The agent that found it; null if it has since been removed. */
-  agent: ReportAgent | null;
-};
-
-/** A finding not unlocked yet: no title, description or fix, by construction. */
-export type LockedFinding = FindingCommon & { locked: true };
-
-/** An unlocked finding, in full. */
-export type UnlockedFinding = FindingCommon & {
-  locked: false;
   title: string;
   description: string;
-  howToFix: string;
-  /** Where its fix is, once it was sent with Fix on Ziki and became a private finding; null until then. */
+  /** Only for a finding the client paid to have fixed (moved to their app); null otherwise. */
+  howToFix: string | null;
+  /** Where its fix is, once it was moved to the client's app and became a private finding; null until then. */
   fix: ResultFix | null;
+  /** The scan that found it: this one, or an earlier one for a finding a rescan rechecks. Its page lives under that scan. */
+  checkId: string;
+  /**
+   * On a rescan (#security-rescan): an earlier finding's recheck. `checking` until its agent answers, then
+   * `still_there` or `fixed`. Null for a finding this scan found.
+   */
+  recheck: RecheckStatus | null;
+  /** What the rechecking agent saw, when it said. */
+  recheckNote: string | null;
+  /** What sending it to the app costs now, in Ziks: 0 once unlocked or moved. */
+  price: number;
 };
 
-export type ReportFinding = LockedFinding | UnlockedFinding;
+/** Where an earlier finding stands on a rescan. */
+export type RecheckStatus = "checking" | "still_there" | "fixed";
 
-/** Where a sent problem's fix stands. "fixing" until its issue is Live ("fixed"), or closed or rejected ("closed"). */
-export type FixBucket = "fixing" | "fixed" | "closed";
+export type { FixBucket } from "@/lib/security-checks/fix-bucket";
 
-/** A sent problem's fix, read from its private finding (#security-findings): what the finding's own page shows. */
+/** A moved problem's fix, read from its private finding (#security-findings). */
 export type ResultFix = {
+  /** The private finding's page: where the mark links while there is no issue yet. */
   findingHref: string;
   bucket: FixBucket;
-  /** The issue's step (Ziki's status words and colours); null before the idea becomes an issue. */
-  substatus: Substatus | null;
-  /** The stage in words while there is no issue: "Reported", "Waiting for verdicts", "Rejected", "Archived". */
-  stageLabel: string | null;
   issue: { number: number; href: string } | null;
-  pullRequestHref: string | null;
   /** The latest independent re-check (Independent verification on the finding's page). */
   recheck: { passed: boolean; by: string | null } | null;
 };
@@ -83,7 +86,7 @@ export type ResultFix = {
 type FindingRow = {
   id: string;
   project: { slug: string; organisation: { slug: string } };
-  bug: { number: number; status: Status; substatus: Substatus; pullRequestUrl: string | null; isDeleted: boolean } | null;
+  bug: { number: number; status: Status; isDeleted: boolean } | null;
   idea: { status: IdeaStatus; isDeleted: boolean } | null;
   verifications: { passed: boolean; reviewer: { name: string | null } | null }[];
 };
@@ -92,30 +95,11 @@ type FindingRow = {
 export function fixOf(finding: FindingRow | null): ResultFix | null {
   if (!finding) return null;
   const bug = finding.bug && !finding.bug.isDeleted ? finding.bug : null;
-  const idea = finding.idea && !finding.idea.isDeleted ? finding.idea : null;
   const latest = finding.verifications[0];
-  const bucket: FixBucket =
-    bug?.status === "resolved"
-      ? "fixed"
-      : bug?.status === "closed" || (!bug && (idea?.status === "rejected" || idea?.status === "archived"))
-        ? "closed"
-        : "fixing";
-  const stageLabel = bug
-    ? null
-    : idea?.status === "open"
-      ? "Waiting for verdicts"
-      : idea?.status === "rejected"
-        ? "Rejected"
-        : idea?.status === "archived"
-          ? "Archived"
-          : "Reported";
   return {
     findingHref: `/security/findings/${finding.id}`,
-    bucket,
-    substatus: bug?.substatus ?? null,
-    stageLabel,
+    bucket: fixBucketOf(finding),
     issue: bug ? { number: bug.number, href: issuePath(refOf(finding.project), bug.number) } : null,
-    pullRequestHref: bug?.pullRequestUrl ? safeHref(bug.pullRequestUrl) : null,
     recheck: latest ? { passed: latest.passed, by: latest.reviewer?.name ?? null } : null,
   };
 }
@@ -125,7 +109,7 @@ const FINDING_OF_RESULT = {
     select: {
       id: true,
       project: { select: { slug: true, organisation: { select: { slug: true } } } },
-      bug: { select: { number: true, status: true, substatus: true, pullRequestUrl: true, isDeleted: true } },
+      bug: { select: { number: true, status: true, isDeleted: true } },
       idea: { select: { status: true, isDeleted: true } },
       verifications: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -137,6 +121,8 @@ const FINDING_OF_RESULT = {
 } satisfies Prisma.SecurityCheckResultSelect;
 
 type ReportBase = {
+  /** New checks wait for payment. Seyi uses this to show checkout instead of progress. */
+  paymentRequired?: boolean;
   checkId: string;
   status: SecurityCheckStatus;
   createdAt: Date;
@@ -146,23 +132,39 @@ type ReportBase = {
   target: { id: string; kind: SecurityTargetKind; value: string; input: string; verified: boolean };
   parts: ReportPart[];
   progress: { done: number; total: number; percent: number };
-  /** How many different agents worked on the parts. */
-  agentCount: number;
+  /** A rescan's earlier scan, and the rescan that followed this one (#security-rescan); null when there is none. */
+  previousCheckId: string | null;
+  nextCheckId: string | null;
+  /** On a rescan, whether the site changed since the earlier scan (18 Nov); null when that can't be told. */
+  siteChange: SiteChange | null;
 };
 
-/** Before the report is posted: progress only, nothing about the results. */
-export type UnpostedReport = ReportBase & { posted: false };
-
-/** The posted report: Ziki's summary, then every finding worst first, locked or unlocked. */
-export type PostedReport = ReportBase & {
-  posted: true;
-  /** Ziki AI's plain summary, kept general so it gives away no locked finding. */
-  summary: string | null;
+/** What every report has, posted or not: the quick scan and every finding reported so far, worst first. */
+type ReportFindings = {
+  /** The quick scan run when the asset was added (`SecurityTarget.previewSummary`): the list's first phase. */
+  quickScan: PreviewSummary | null;
+  /** Ziki's code checks (the quick scan) saved their findings in the main list (18 Nov), so the quick scan isn't shown apart. */
+  codeInList: boolean;
+  /** Of `total`, how many came from Ziki's code checks (the quick scan) rather than agents, so they aren't counted twice. */
+  codeFound: number;
+  /** Every open finding: this scan's own, and on a rescan the earlier ones still there or still being rechecked. */
   findings: ReportFinding[];
+  /** On a rescan, the earlier findings its agents found fixed. Not counted, priced or shown in the totals. */
+  fixed: ReportFinding[];
   counts: SeverityCounts;
   total: number;
   /** Finished parts that found nothing, by title. */
   clearParts: string[];
+};
+
+/** Still being checked: findings show as their parts are done. */
+export type UnpostedReport = ReportBase & ReportFindings & { posted: false };
+
+/** The posted report: also Ziki's summary, and the PDF. */
+export type PostedReport = ReportBase & ReportFindings & {
+  posted: true;
+  /** Ziki AI's plain summary. */
+  summary: string | null;
 };
 
 export type CheckReport = UnpostedReport | PostedReport;
@@ -201,12 +203,6 @@ export function clearPartTitles(parts: readonly ReportPart[], results: readonly 
   return parts.filter((part) => part.status === "done" && !withResults.has(part.id)).map((part) => part.title);
 }
 
-/** The locked findings of a report, and what unlocking all of them costs. */
-export function lockedOf(report: PostedReport): { findings: LockedFinding[]; totalCoins: number } {
-  const findings = report.findings.filter((finding): finding is LockedFinding => finding.locked);
-  return { findings, totalCoins: findings.reduce((sum, finding) => sum + finding.priceCoins, 0) };
-}
-
 /**
  * The report for one check, or null when the check doesn't exist, belongs to
  * another workspace, or was asked for by someone else: each check is its
@@ -219,16 +215,23 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       id: true,
       status: true,
       postedAt: true,
+      free: true,
+      paidAt: true,
       summary: true,
       createdAt: true,
       startedAt: true,
       finishedAt: true,
-      target: { select: { id: true, kind: true, value: true, input: true, verifiedAt: true } },
+      target: { select: { id: true, kind: true, value: true, input: true, verifiedAt: true, previewSummary: true } },
       items: {
         where: { kind: "check" },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, title: true, status: true, agentId: true },
+        select: { id: true, title: true, status: true },
       },
+      previousCheckId: true,
+      siteFingerprint: true,
+      previousCheck: { select: { siteFingerprint: true } },
+      nextCheck: { select: { id: true } },
+      _count: { select: { items: { where: { kind: "automatic" } } } },
     },
   });
   if (!check) return null;
@@ -236,7 +239,9 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
   const parts = check.items.map(({ id, title, status }) => ({ id, title, status }));
   const base: ReportBase = {
     checkId: check.id,
-    status: check.status,
+    paymentRequired: !isScanPaymentSatisfied(check),
+    // While ownership proof is off (14 Nov plan), a check still marked as waiting for it is simply waiting to start.
+    status: check.status === "awaiting_ownership" && isTargetProven(check.target) ? "queued" : check.status,
     createdAt: check.createdAt,
     startedAt: check.startedAt,
     finishedAt: check.finishedAt,
@@ -249,53 +254,76 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
     },
     parts,
     progress: partsProgress(parts),
-    agentCount: new Set(check.items.map((item) => item.agentId).filter(Boolean)).size,
+    previousCheckId: check.previousCheckId,
+    nextCheckId: check.nextCheck?.id ?? null,
+    siteChange: check.previousCheck ? siteChangeBetween(check.previousCheck.siteFingerprint, check.siteFingerprint) : null,
   };
 
-  // Not posted yet: progress only, so no result is read, not even a count.
-  if (!isReportPosted(check)) return { ...base, posted: false };
-
-  // Every finding: only what a locked one may show. No text at all.
-  const rows = await prisma.securityCheckResult.findMany({
-    where: { checkId: check.id },
+  // Every finding reported so far, in full: the report is free, and a finding shows once its part is done.
+  // On a rescan, also the earlier findings its recheck parts hold (#security-rescan).
+  const all = await prisma.securityCheckResult.findMany({
+    where: { OR: [{ checkId: check.id }, { recheckItem: { checkId: check.id } }] },
     select: {
       id: true,
+      checkId: true,
       itemId: true,
+      recheckItemId: true,
+      recheckCheckId: true,
+      recheckState: true,
+      recheckNote: true,
       severity: true,
-      priceCoins: true,
       unlockedAt: true,
+      priceCoins: true,
       createdAt: true,
-      item: { select: { title: true, agent: { select: { id: true, name: true, avatar: true } } } },
+      title: true,
+      description: true,
+      ...FINDING_OF_RESULT,
+      item: { select: { title: true } },
     },
   });
-  // The text, read only for findings the client has unlocked.
-  const unlocked = rows.some((row) => row.unlockedAt !== null)
-    ? await prisma.securityCheckResult.findMany({
-        where: { checkId: check.id, unlockedAt: { not: null } },
-        select: { id: true, title: true, description: true, howToFix: true, ...FINDING_OF_RESULT },
-      })
-    : [];
-  const textById = new Map(unlocked.map((row) => [row.id, row]));
+  // An earlier scan's finding that one of this rescan's recheck parts holds; everything else is this scan's own.
+  const earlier = (row: (typeof all)[number]) => row.checkId !== check.id && Boolean(row.recheckItemId);
+  // An earlier finding is "checking" until this rescan's agent answers for it.
+  const recheckOf = (row: (typeof all)[number]): RecheckStatus | null =>
+    !earlier(row) ? null : row.recheckCheckId === check.id && row.recheckState ? row.recheckState : "checking";
+  // An earlier finding sits under the recheck part that holds it on this scan.
+  const partOf = (row: (typeof all)[number]) => (earlier(row) && row.recheckItemId ? row.recheckItemId : row.itemId);
+  const rows = all.filter((row) => recheckOf(row) !== "fixed");
+  const fixedRows = all.filter((row) => recheckOf(row) === "fixed");
+  // "How to fix" only for the findings the client paid for: unlocked ("Tell me how to fix it") or moved to their app.
+  const paid = all.filter((row) => row.unlockedAt || fixOf(row.finding)).map((row) => row.id);
+  const howToFix = paid.length
+    ? new Map(
+        (
+          await prisma.securityCheckResult.findMany({ where: { id: { in: paid } }, select: { id: true, howToFix: true } })
+        ).map((row) => [row.id, row.howToFix]),
+      )
+    : new Map<string, string>();
 
-  return {
-    ...base,
-    posted: true,
-    summary: check.summary,
+  const toFinding = (row: (typeof all)[number]): ReportFinding => ({
+    id: row.id,
+    partId: partOf(row),
+    severity: row.severity,
+    area: row.item.title,
+    title: row.title,
+    description: row.description,
+    howToFix: howToFix.get(row.id) ?? null,
+    fix: fixOf(row.finding),
+    // Nothing more to pay once unlocked or moved; a rescan's earlier finding keeps the unlock it had.
+    price: row.unlockedAt || row.finding ? 0 : findingPrice(row),
+    checkId: earlier(row) ? row.checkId : check.id,
+    recheck: recheckOf(row),
+    recheckNote: row.recheckNote && row.recheckCheckId === check.id ? row.recheckNote : null,
+  });
+  const found: ReportFindings = {
+    quickScan: readQuickScan(check.target.previewSummary),
+    codeInList: check._count.items > 0,
+    codeFound: rows.filter((row) => row.item.title.startsWith(AUTOMATIC_PART_PREFIX)).length,
     counts: countBySeverity(rows),
     total: rows.length,
-    clearParts: clearPartTitles(parts, rows),
-    findings: worstFirst(rows).map((row): ReportFinding => {
-      const common = {
-        id: row.id,
-        severity: row.severity,
-        area: row.item.title,
-        priceCoins: row.priceCoins ?? SEVERITY_PRICE[row.severity],
-        agent: row.item.agent ?? null,
-      };
-      const text = textById.get(row.id);
-      return text
-        ? { ...common, locked: false, title: text.title, description: text.description, howToFix: text.howToFix, fix: fixOf(text.finding) }
-        : { ...common, locked: true };
-    }),
+    clearParts: clearPartTitles(parts, all.map((row) => ({ itemId: partOf(row) }))),
+    findings: worstFirst(rows).map(toFinding),
+    fixed: worstFirst(fixedRows).map(toFinding),
   };
+  return isReportPosted(check) ? { ...base, ...found, posted: true, summary: check.summary } : { ...base, ...found, posted: false };
 }

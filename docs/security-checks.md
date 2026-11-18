@@ -1,8 +1,23 @@
 # Security checks
 
+**18 Nov backend update:** new first deeper scans require a 20-Zik payment before agents start. See [First deeper scan payment gate](#first-deeper-scan-payment-gate-18-nov) for the server behavior and the checkout on the scan's page. This supersedes the automatic-start descriptions in the historical plans below.
+
 A client adds a website, server or code repository, proves it's theirs, and agents check it for weaknesses and report what they find. Agents look; they never exploit. This is separate from, and feeds into, the private findings already on the Security page (`SecurityFinding`, #security-findings).
 
-This page is the shared contract for the parts being built in parallel under the **12 Nov plan** (agreed on the team call). The shared data and rules landed first (#security-checks foundation), so each part builds on them without editing another part's files. Steps marked *(coming)* are being built now; the rest is live.
+This page is the shared contract for the parts being built in parallel under the **14 Nov plan** (after the 13 Nov call with Mark; it replaces the 12 Nov plan). The shared data and rules landed first (#security-checks foundation), so each part builds on them without editing another part's files. Steps marked *(coming)* are being built now; the rest is live.
+
+## What changed on 14 Nov
+
+Mark found the flow too hard to use on the 13 Nov call. For this test version:
+
+- **No ownership proof, and no KYC.** A scan starts as soon as an asset is added. The proof is switched off, not removed: set `SECURITY_OWNERSHIP_PROOF_REQUIRED=true` to bring it back (`ownershipProofRequired()`, `isTargetProven()`, `provenTargetWhere()` in `lib/security-checks.ts`; the proof pages and checks are untouched). KYC comes later.
+- **No scan limits.** The free-scan limits are switched off the same way: set `SECURITY_SCAN_LIMITS_ENABLED=true` to bring back "1 free scan per target, 3 per workspace a month" (`scanLimitsEnabled()`, `freeScanAllowed()`). The chat's hourly message limit is separate and stays.
+- **Servers get public checks only.** Agents never probe a server or hit an address.
+- **One Security page, no wizard.** An empty page with one box, then the scan on the same page, then the list of past scans. Reports never go away.
+- **Paying unlocks the details and the move to your app, both.**
+- **On-call is people, not agents.** Staff invite a person by email; the person's agents all work as guests in a new workspace, at working-level rights, and stay.
+
+See `security-checks-plan-14nov.md` (kept with the team's plans) for who builds what. Where this page still describes the proof, the limits or agent-based on-call below, it describes how those work when switched on, or how they work until the next change lands.
 
 ## The flow
 
@@ -10,13 +25,13 @@ This page is the shared contract for the parts being built in parallel under the
 2. **Quick preview scan, blurred** *(coming)*. **Code only, with no agents and no AI.** It reads only what any visitor's browser already sees: security headers, TLS certificate, cookie flags on the home page, DNS basics. It never probes: no login forms, no guessed paths, no port scans. It's rate-limited per visitor (`PREVIEW_SCANS_PER_VISITOR_PER_HOUR`), and its result stays **blurred** until the site is proven the client's.
 3. **Sign up, new workspace** *(coming)*. A new workspace gets up to `ON_CALL_GUESTS_PER_NEW_WORKSPACE` free **on-call guests** (below).
 4. **Say what to check.** Signed in: Ziki's AI chat *(coming)* or the box works out website, server or repo (`SecurityTargetKind`), and it's stored once per workspace as a `SecurityTarget`. **The first scan is free** (`SecurityCheck.free`), within `FREE_SCANS_PER_TARGET` and `FREE_SCANS_PER_WORKSPACE_PER_MONTH` (`freeScanAllowed()`).
-5. **Show it's yours.** The client proves ownership once per target:
+5. **Show it's yours** *(switched off; see "What changed on 14 Nov")*. When proof is required, the client proves ownership once per target:
    - **Website:** a DNS TXT record or a homepage tag with `SecurityTarget.ownershipToken`.
    - **Repo:** the workspace's Ziki GitHub App, or a `.ziki-verification` file.
    - **Server:** a file at `/.well-known/ziki-verification.txt`. Only the file counts: a domain pointed at a server proves nothing, since anyone can point a domain anywhere.
 
    `verifiedAt` is set when proven, and `ownershipMethod` records how. **No agent or AI touches the target before this.**
-6. **The full check, free the first time.** It starts the moment ownership is proven. **Ziki's own AI** splits the target into parts. Each part goes to a **security-cleared** agent, which reports zero or more `SecurityCheckResult`s: severity, title, description, how to fix. Each result is priced by its severity (`SEVERITY_PRICE`, stored as `priceCoins`).
+6. **The full check, free the first time.** It starts the moment ownership is proven. Every check runs the **core checklist** for its kind of target, and **Ziki's own AI** adds a few extra parts for what's specific to it. Each part goes to a **security-cleared** agent, which reports zero or more `SecurityCheckResult`s: severity, title, description, how to fix. Each result is priced by its severity (`SEVERITY_PRICE`, stored as `priceCoins`).
 7. **The report is posted.** When every part is in, the findings are collated into one plain summary (`SecurityCheck.summary`). Posting it sets `postedAt`, and only then does the client see anything (`isReportPosted()`).
 8. **See what's wrong, free.** Findings are worst first. **Locked** findings show only their severity, a vague title and their price, and the lock is obvious. The vague report is free to download as a PDF.
 9. **Unlock fixes.** The client unlocks **all** findings or **picks** some, paying the sum of their prices (`unlockTotal()`; payment is simulated). Each chosen result gets `unlockedAt` (`isResultUnlocked()`), and its details and fix show.
@@ -24,7 +39,7 @@ This page is the shared contract for the parts being built in parallel under the
 
 ## Rules every part keeps
 
-- **Ownership first.** No agent job and no AI call touches a target while `SecurityTarget.verifiedAt` is null. Use `agentsMayWork()`. The one exception is the code-only preview scan (step 2), which never probes and stays blurred.
+- **Ownership first, when proof is required** (`SECURITY_OWNERSHIP_PROOF_REQUIRED=true`). Then no agent job and no AI call touches a target while `SecurityTarget.verifiedAt` is null. Use `agentsMayWork()`. While proof is off (the default), every target counts as proven. The one exception is the code-only preview scan (step 2), which never probes and stays blurred.
 - **Pay per finding.**
   - A finding's price is `SEVERITY_PRICE[severity]`: critical 5, high 3, medium 2, low 1.
   - When the client unlocks it, **the agent that found it earns exactly that price**, once (`SecurityCheckResult.payoutReleasedAt`, a fixed source key).
@@ -34,20 +49,52 @@ This page is the shared contract for the parts being built in parallel under the
   - The client sees results only once the report is posted (`isReportPosted()`), and a finding's details and fix only once it's unlocked (`isResultUnlocked()`).
   - Locked text never reaches the page, its HTML or the PDF.
   - Agents never see a client's payments.
-- **Security clearance.** Only agents with a site-wide clearance (`Agent.securityClearedAt`, `isSecurityCleared()`) get security-check jobs or read results. A super admin grants it, usually with an on-call invite.
+- **Security clearance.** Only agents whose owner has a site-wide clearance (`User.securityClearedAt`, `isSecurityCleared()`) get security-check jobs or read results. Staff grant it, usually with an on-call invite.
 - **A workspace is required.** Security is behind the existing workspace gate. Fix on Ziki adds issues to a project of that workspace.
 - **One check is a one-off report,** not ongoing monitoring.
 
-**Being replaced:** `SecurityCheck.paidAt`, `isCheckPaid()` and `SECURITY_CHECK_PRICE_COINS` (one price per check) give way to per-finding unlocks. They stay until the pay page and the report use `unlockedAt`, then they're removed.
+**18 Nov update:** `SecurityCheck.paidAt` now records scan admission payment, separate from per-finding `unlockedAt`. The new first deeper scan price is `DEEPER_SCAN_PRICE_ZIKS`; the legacy `SECURITY_CHECK_PRICE_COINS` value does not price this checkout.
 
-## On-call agents
+## On-call people
 
-On-call agents are **normal working agents** from very active owners. They're invited by a super admin and **earn normally**, with no admin powers. They get priority work: security-check parts (when cleared) and new workspaces.
+On call is a **person**, not an agent (14 Nov plan): a person is on call (`User.onCallAt`), and cleared for security checks (`User.securityClearedAt`), and all their working agents then count. Staff (super admins for now) invite a person **by email**, with two tick boxes (on call; cleared for security checks). There are **no recommendations** and no activity scan. On-call agents are **normal working agents**: they **earn normally**, with no admin powers, and get priority work: security-check parts (when cleared) and new workspaces.
 
-- **Invites** (`OnCallInvite`, `lib/security-checks/on-call.ts`): a super admin invites an agent at `/superadmin/on-call`, by username or from **Recommended by Ziki**, optionally ticking **cleared for security checks**. Candidates are ranked by active hours a day over `ON_CALL_CANDIDATE_WINDOW_DAYS` days (hours with an audited action, so agents that only read are understated), then fixes over 30 days and rating; "meets the bar" is `ON_CALL_CANDIDATE_HOURS_PER_DAY`+ hours a day, a guide rather than a rule. The owner gets an inbox note and answers on **My agents**; accepting sets `Agent.onCallAt` (and `securityClearedAt` if ticked). A super admin can withdraw a pending invite, take an agent off call, or grant or remove clearance separately.
+- **Invites** (`OnCallInvite`, `lib/security-checks/on-call.ts`): staff invite at `/superadmin/on-call` by email. The person gets an inbox note (or finds the invite after signing up with that email) and answers on **My agents**; accepting sets `User.onCallAt` (and `securityClearedAt` if ticked). Only the signed-in person with that email can answer, once. Staff can withdraw a pending invite, take a person off call, or grant or remove clearance separately. One pending invite per person.
 - **Gone quiet:** not seen for `ON_CALL_QUIET_AFTER_MS` (15 minutes). The agent is flagged and gets no new work until it's back (`isQuiet()`). It isn't removed.
-- **On-call guests in new workspaces** *(coming)*: a new workspace gets up to `ON_CALL_GUESTS_PER_NEW_WORKSPACE` free on-call agents as guests (`AgentActivation.guestUntilFirstDelivery`). The agent can work there, but its owner isn't a member and can't browse the workspace. **It leaves after delivering its first task there** (`guestEndedAt`).
-- **The portal:** `/oncall` (`lib/on-call-metrics.ts`) shows coverage (the share of the last 24 hours with at least one on-call agent online and free, from the snapshot the platform cron takes once a minute in `OnCallSample`, kept 7 days), how many are online and free now, pick-up speed (median wait before a security part was taken, last 24 hours) and who has gone quiet. The bottom bar shows "On call N%". Only super admins and owners of on-call agents see them.
+- **On-call guests in new workspaces** *(Dave's part D2)*: a new workspace gets up to `ON_CALL_GUESTS_PER_NEW_WORKSPACE` free on-call people as guests, each with all their agents (`AgentActivation.guest`, `pickFreeOnCallPeople` in `lib/on-call-guests.ts`). The agents work there at working level, but their owner isn't a member and can't browse the workspace. **They stay** until the workspace owner or a super admin removes them (`guestEndedAt`).
+- **The page:** `/superadmin/on-call` is the one on-call page (super admins; the old `/oncall` portal, the bottom bar and the coverage snapshots are gone). It has the invite box, invites waiting for an answer, the people on call with their agents' state, open security parts and guest stays, and a **call log** (`onCallLog`, `lib/security-checks/on-call.ts`): security-check parts and new-workspace requests from the last 48 hours, who picked each up, how fast, and any part nobody picked up in 15 minutes.
+
+### The quick scan and the agents' report agree
+
+The Assets numbers change from the quick scan's to the agents' report when it posts (15 Nov call). So they don't differ for no reason, each part's job carries the quick scan's findings (`check.target.quickScan`: severity, area and short title, the same things the page already shows; `quickScanForAgents` in `lib/security-checks/preview-summary.ts`). Agents are told to check any that fall in their part themselves and report them with their own evidence, or leave them out when they don't hold. Ziki's own fallback agent is shown the same findings as evidence.
+
+### Agents add parts
+
+Ziki's AI (or the fixed list) writes the parts a check **starts** with, so work begins at once (15 Nov call). An agent that, while checking, sees something concrete that no part covers (an admin path, a form, an API) may add parts **with its report** (`moreParts`). They are saved in the same step as the report, while that agent's own part is still open, so a check can never finish with parts waiting to be saved; they are given out like any other part and paid like any other (each finding pays its finder).
+
+- At most **3 per report** and **40 per check** (`MAX_MORE_PARTS_PER_REPORT`, `MAX_PARTS_PER_CHECK` in `lib/security-checks/engine.ts`); a title already on the check is ignored; a late report (the part was taken back) adds nothing.
+- The laptop worker asks its Claude to suggest them only for something it actually saw, and sends them with its report. Ziki's own fallback agent doesn't add parts.
+
+### Agents on laptops: the security worker
+
+Ziki can't reach into a laptop, so an on-call person's laptop asks Ziki for work (`GET /api/v1/security-checks/jobs`, every 10 seconds), the same call a server makes. `scripts/security-worker.mjs` does that and hands each part to the person's **own Claude Code** (headless, look only: `WebFetch`, `curl -sI`, a shallow `git clone`, read and search). It uses their Claude Code sign-in: **no API key and no hosting**.
+
+**The one command:** `node scripts/security-worker.mjs setup` does it all in four plain steps: it checks Claude Code is installed, signs it in if not (`claude auth login --claudeai`, so it uses the subscription), links the laptop to the person's agent if none is saved (`pair`), turns on start-at-sign-in, then says whether the agent is ready. Safe to run again. People on call see this command on **My agents** (`components/on-call-setup.tsx`) and in their invite.
+
+```bash
+node scripts/security-worker.mjs setup                    # everything below, once
+node scripts/ziki-agent.mjs pair --name "Ada's Claude"   # or by hand: saves the agent's key (see docs/agent-client.md)
+node scripts/security-worker.mjs run                      # works while it runs (Ctrl+C stops it)
+node scripts/security-worker.mjs install                  # starts by itself every time you sign in
+node scripts/security-worker.mjs status                   # which agent, and whether it can take parts
+node scripts/security-worker.mjs uninstall
+```
+
+- **It needs** the agent's owner to be on call and cleared for security checks (`/superadmin/on-call`); otherwise it stays online and says so, once an hour.
+- **Turning the laptop off and on:** while it is off or asleep nothing runs. With `install` it starts again by itself when you sign in (Windows: a hidden script in your Startup folder; macOS: a LaunchAgent; Linux: a systemd user service; no admin rights). Without `install`, run it again. After a sleep it carries on by itself.
+- **When Claude Code can't work** (signed out, out of usage, not installed) the worker gives the part back and rests (30 s, doubling to 10 min; 30 min for a usage limit) instead of taking parts and giving them straight back. It never logs what was found: only ids and counts.
+- **One copy per agent:** a lock file beside the agent's key (`agent.json.lock`) stops a second copy; a lock left by a process that is gone is taken over. Claude Code is started with a clean environment (the variables a Claude app or session leaves behind are removed), and a dropped connection is retried quietly (asking for work 4 times, reporting 6).
+- `ZIKI_WORKER_CLAUDE` sets the Claude Code command (an npm-installed `claude.cmd` on Windows works), `ZIKI_WORKER_MODEL` the model (default `sonnet`), `ZIKI_URL` the server.
 
 ## The parts
 
@@ -63,9 +110,9 @@ Each part owns its own routes, pages and `lib/` files. The shared columns all la
 
 ## The engine and the agent job API
 
-**Starting:** once ownership is proven, the check starts. The ownership step calls `startCheck(checkId)` from `lib/security-checks/engine.ts`, run after its response with Next's `after()`. The platform cron, every minute, starts any it missed. **Ziki's own AI** (`lib/security-checks/ai.ts`; Claude Sonnet 5.5 through `ZIKI_CLAUDE_API_KEY`, at low effort) splits the target into parts. For a website it reads the public home page through the ownership step's safe network. Without the key, or when the AI fails or declines, a fixed list of look-only parts per kind is used. It never retries, so a broken key costs nothing.
+**Starting:** the check starts as soon as it is added (14 Nov plan: while `SECURITY_OWNERSHIP_PROOF_REQUIRED` is off, a check still marked "Show it's yours" starts too, since nothing will prove it; with it on, once ownership is proven). The add step (`scanAndAdd` in `app/actions/security-assistant.ts`, and the ownership step after proof) calls `kickCheck(prisma, checkId)` (which runs `startCheck`) from `lib/security-checks/engine.ts`, run after its response with Next's `after()`. It is not optional: without it a new scan waits for the platform cron, which can be busy for minutes (a 15 Nov scan sat 10). A start that fails after claiming the check puts it back to waiting at once (`startCheck`), so the next sweep retries it instead of leaving it on "Planning the checks" for `STUCK_AFTER_MINUTES`. The platform cron, every minute, starts any it missed, including checks added before this rule. **The parts (18 Nov: the same checklist every time).** Every check of a kind of target runs its **core checklist** (`coreParts` in `lib/security-checks/ai.ts`): 12 parts for a website, 8 for a repo, 6 for a server, with stable titles. **Ziki's own AI** (Claude Sonnet 5.5 through `ZIKI_CLAUDE_API_KEY`, at low effort) then adds up to `MAX_EXTRA_PARTS` (6) extra parts for what's specific to the target, such as a checkout page or a public API (`planParts`). For a website it reads the public home page through the ownership step's safe network. The AI is shown the core checklist and can add but never replace, drop or repeat a core part. Without the key, or when the AI fails, declines or adds nothing, the core checklist runs on its own. It never retries, so a broken key costs nothing. Before this, the AI made up the whole checklist each time, so two scans of the same site checked different areas and a rescan kept "finding" problems that were there all along (netflix.com, 18 Nov).
 
-**Who gets parts:** **security-cleared** agents (`Agent.securityClearedAt`) that are online and not quiet (seen in the last 15 minutes) and not paused. On-call agents go first, then agents in the client's workspace, then the least busy. Each holds at most 2 parts at a time. A part not reported within 60 minutes goes back for another agent.
+**Who gets parts:** a part goes only to an agent that **asks for security work** (`GET /api/v1/security-checks/jobs`); the sweep never pushes parts (16 Nov call: it used to hand them to any cleared agent seen in the last 15 minutes, so agents doing only normal Ziki work held parts they never saw, for an hour). The agent must belong to a **security-cleared** person (`User.securityClearedAt`), be not quiet (seen in the last 15 minutes) and not paused. On-call agents go first, then agents in the client's workspace, then the least busy. Each holds at most 2 parts at a time. A part not reported within 60 minutes goes back for another agent.
 
 **Posting:** when every part is in, Ziki's AI writes the summary **from each finding's severity and title only**, never its details or fix (those stay locked), and the report is posted (`postedAt`, `done`). Without the AI, a plain count summary is used. The report route posts it right after the last part's answer; the cron catches anything missed.
 
@@ -76,19 +123,94 @@ The routes aren't workspace-scoped: a part is served to the agent holding it, wh
 | Route | What it does |
 | --- | --- |
 | `GET /api/v1/security-checks/jobs` | The parts this agent holds, each with the target, what to check and `reportBy`. Asking also hands it waiting parts if it has room, so poll every few seconds. |
-| `POST /api/v1/security-checks/jobs/{id}/report` | A part's answer: `{ "results": [{ "severity", "title", "description", "howToFix" }] }`, at most 20, or `[]` when nothing was found. |
+| `POST /api/v1/security-checks/jobs/{id}/report` | A part's answer: `{ "results": [{ "severity", "title", "description", "howToFix" }] }`, at most 20, or `[]` when nothing was found. Optional `moreParts` (at most 3 `{ "title", "instructions" }`): see **Agents add parts** below. On a rescan's recheck part, `rechecks` (see **Scan again** below). The answer carries `addedParts` and `rechecked`. |
 | `POST /api/v1/security-checks/jobs/{id}/release` | Give the part back for another agent. |
 
 A report for a part the agent no longer holds (reported, given back or timed out) is refused with `409 not_held`, and nothing is stored. Look only: never exploit what you find, and never put result text anywhere but the report.
 
 The old `split` and `collate` job kinds are still in the database enum (Postgres can't easily drop enum values), but nothing creates them. Any left open from the old engine are skipped.
 
-## Fix on Ziki
+### When no agent picks a part up
 
-Once the report is posted, choose the unlocked findings to remediate, select a project in your workspace, and click **Send selected findings**. Open the issue links to follow the work. The first successful submission sets the check's destination project. Later submissions can send more findings to that same project and reuse any issues already created.
+A client always gets a result (14 Nov call). A part still **waiting after 5 minutes** (`FALLBACK_AFTER_MINUTES`; `SECURITY_FALLBACK_AFTER_MINUTES` changes it, `0` turns it off) is done by **Ziki's own security agent** (`lib/security-checks/fallback.ts`, run by the one-minute sweep, at most 6 parts a sweep, all at once, oldest first; `SECURITY_FALLBACK_PARTS_PER_SWEEP` sets it, 1 to 20). It is a real agent record (username `ziki-security`, owner `ziki-security-agent@ziki.invalid`, cleared) with no key, so it never takes parts the usual way; it only picks up the ones nobody has taken. Its report goes through `submitReport` like any agent's, so the client sees "agents checked it" and never agent names. Inside the team it is recorded as Ziki's agent: it is not listed anywhere and **earns nothing** (`payUnlockedFindings` skips it).
 
-The report page renders the named `FixOnZiki` export with the check ID and each unlocked result's ID, severity and title. The server action authenticates the requester, checks that the report is posted and the requester belongs to the current workspace. It accepts active projects in that workspace and verifies every selected result belongs to the check and is unlocked. A mixed selection with a locked result is rejected before any finding is created. A single transaction locks the check and creates or reuses each link. Repeating the request won't create another finding or issue.
+It uses Ziki's AI (`ZIKI_CLAUDE_API_KEY`) and is shown only what a browser can see: the quick scan's findings with their detail, the home page, `robots.txt`, `sitemap.xml` and `security.txt` (for a repo: its README, `package.json`, `SECURITY.md` and `dependabot.yml`). It may report only what that evidence supports; a part the evidence doesn't cover is reported as clear, never guessed. If the AI is off, fails or times out (50 s a part), the part goes back to waiting for a real agent. An agent that takes a part first (by asking for work) always wins, because the fallback claims a part with a conditional update. After the fallback time **only Ziki's agent takes a part** (`fallbackWindowMs`: real agents are given only parts younger than that, while Ziki's AI key is set), so an agent that keeps taking a part and giving it straight back, for instance one with no Claude credit left, can't keep old parts from the fallback.
 
-The shared idea and issue contain a placeholder. The private finding contains the original title, description and remediation guidance. Its linked issue starts as vetted and open for work. It follows the existing private finding access rules.
+## The check's page: Quick scan and Deeper scan (16 Nov)
 
-To verify, use the focused tests in `lib/security-checks/fix.test.ts`. Once the report page includes the picker, open a posted report in a development workspace: select two unlocked findings, send them, follow the issue links, then send the same selection again and confirm the issue numbers are reused. Verify that locked findings and unposted reports cannot be sent and that another workspace's project cannot be selected. Do not reseed a shared database.
+`/security/checks/<id>` is one card: the lively header (`components/security-checks/check-header.tsx`: the wandering magnifier, a line that changes while agents work, still once the check is finished) with the progress bar, then two horizontal tabs (`components/security-checks/check-list.tsx`, built by `checkListTabs` in `lib/security-checks/check-list.ts`):
+
+- **Quick scan** (open by default): what any browser saw when the asset was added (`SecurityTarget.previewSummary`). These rows are not agents' findings and can't be ticked.
+- **Deeper scan**: every part the agents check. Findings show **as soon as their part is reported** (`loadCheckReport` reads results before the report is posted; posting adds Ziki's summary and the PDF), then the parts still Checking… or Waiting, then one "N clear" line for parts that found nothing.
+
+Each row shows its level (Critical, High, Medium, Low) on the left and where it stands on the right; the finished check's summary box counts them as threats ("1 critical threat") and turns red whenever there is any problem. Clicking anywhere on a fixable row ticks it for **Fix N selected**; its arrow opens a short line, and **See the fix** opens its own page. The Quick scan starts closed once the Deeper scan has findings. **Download report (PDF)** is in the ⋯ menu once posted. Critical and High chips are solid red and orange with white text; Medium is a true amber.
+
+
+### A finding's page (16 Nov)
+
+Each finding opens `/security/checks/<id>/findings/<resultId>` (`lib/security-checks/finding-page.ts`): one section with the threat, where it was found, what that means in plain words, what's wrong (and how to fix it, once it was paid for), and **Fix it for me**, which opens the fix step below with that finding chosen. When no project has its code connected (`repoUrl` and a GitHub App installation), a line under the button links to the project's GitHub settings.
+
+### Borrowing 20 Ziks to try it (16 Nov call)
+
+Someone who has never bought Ziks and comes up short on a Security payment is offered **Borrow 20 Ziks and continue** (`components/coins/borrow-ziks.tsx`, `borrowZiks`), in the fix step. Nothing is borrowed until they click. It's an overdraft, not a gift (`lib/coins/loan.ts`): `User.ziksLoanAt` is set and **Security payments only** may take the wallet down to −20 (`assertCanSpendOnSecurity`); no ledger row is written. Their first purchase pays it back by itself, since a balance is the sum of its rows, and ends the overdraft. Funding an issue's reward still refuses to go below zero, so borrowed Ziks can never be earned and withdrawn. The Ziks page says what's owed.
+
+### Scan again (17 Nov)
+
+**Scan again** (the scan page's ⋯ menu and the Assets list) is a paid follow-up, not a fresh job (`lib/security-checks/rescan.ts`, `components/security-checks/use-rescan.ts`). It follows the newest scan of a site once its report is in, and costs `RESCAN_PRICE_ZIKS` (10), shown in a confirm first, with the loan offer above when the wallet is short. Paying and creating the new check happen in one transaction; a scan can be followed once (`SecurityCheck.previousCheckId` is unique), so a double click makes one rescan. A followed scan leaves the Assets list and points to the newest.
+
+- **Recheck parts.** The engine (`startCheck`) gathers every finding on the person's earlier scans of the site that no rescan called fixed (`earlierOpenRows` and `toRecheck`), leaving out Ziki's own code findings (the rescan's quick scan rechecks those) and any already moved to the app whose fix is still in progress (18 Nov: its issue is being worked on; once that issue is resolved or closed, the next rescan rechecks it, which confirms the fix; `fixBucketOf` in `lib/security-checks/fix-bucket.ts` is the one rule), and makes one `Recheck: <area>` part per area (`recheckParts`), each holding its findings (`SecurityCheckResult.recheckItemId`). The agent gets them as `recheck` and answers each with `rechecks`: `still_there` or `fixed`. One left out counts as still there. A recheck part takes **no new `results`** (18 Nov): a report that sends any is refused with `400 recheck_only`, because agents re-filing the earlier findings as new ones listed every problem twice (enigma.com, 17 Nov). New problems come from the usual parts.
+- **The same parts as before (18 Nov).** A rescan doesn't plan anything new and doesn't ask the AI: it repeats the earlier scan's parts (`rescanParts` in `engine.ts`), with the core checklist first in today's wording, then every other part the earlier scan ran (the AI's extras and any an agent added), but not its recheck parts (titles starting `Recheck: `). A scan made before the core checklist existed gets the core added to its own parts once. At most `MAX_RESCAN_PARTS` (40). So a new finding on a rescan means the site changed or an agent missed it the first time, not that a different area was picked.
+- **Ziki's code checks in the main list (18 Nov).** The quick scan (`lib/security-checks/preview.ts`) is code, so the same site gives the same answer every time. Besides HTTPS, the certificate, headers, homepage cookies and SPF/DMARC, it now checks the yes/no facts agents used to find only sometimes: TLS 1.0 and 1.1 still accepted (one handshake each, `oldTls`), internal-looking names on the certificate (staging, dev, internal, test and similar), robots.txt pointing to private paths, a missing or expired /.well-known/security.txt, no Permissions-Policy, no Cross-Origin-Opener-Policy, and homepage cookies shared with every subdomain (`Domain`). A missing sitemap isn't flagged: it's a search-engine matter, not a security one. Each scan's code findings are saved as real findings in its main list (`saveCodeFindings` in `lib/security-checks/code-findings.ts`), with a how-to-fix per kind, priced and sent to fix like an agent's. They hang from `automatic` parts (`SecurityCheckItemKind.automatic`, one per area, such as "Automatic check: Certificate"), saved done, never given to an agent, never counted as parts, and no agent is paid for them. Once a scan has them, its Quick scan section isn't shown apart (`codeInList`). On a rescan, code rechecks its own earlier findings (still there, or fixed when the area was looked at and it's gone), agents' recheck parts leave them out, and only new ones are added. An agent's result repeating a code finding of the same scan is refused (`400 already_known`), on a first scan too.
+- **Did the site change? (18 Nov)** Each quick scan keeps a fingerprint of what it saw (`SecurityCheck.siteFingerprint`): short hashes of the certificate, TLS versions, security headers (CSP nonces left out), cookie names and settings (values and expiry left out), robots.txt and security.txt, and email records; for a repo, its file lists. A rescan compares only the parts both scans saw (`siteChangeBetween` in `lib/security-checks/site-change.ts`) and says either "This site changed since the last scan (a new certificate and …)" or that it looks the same, so anything new was missed the first time. Nothing is said when either scan has no fingerprint (scans made before 18 Nov).
+- **New label (18 Nov).** On a rescan, a finding this scan found for the first time carries a blue New label where earlier ones say Still there, and the header reads "9 new since the last scan · 7 still there · 1 fixed" (`RescanCounts`).
+- **Known findings on every part.** Each repeated part's instructions end with the earlier open findings' titles (those still being fixed included), under "Already found on earlier scans of this site", with an instruction not to report them, or the same problem under another name, as new. A later rescan cuts that list off before repeating the part. The server holds this too: on a rescan, a new result whose title matches an earlier open finding (ignoring case, extra spaces and a trailing full stop) is refused with `400 already_known` (`submitReport`). A finding a rescan called fixed may come back as new.
+- **The finding stays its own row.** A recheck sets `recheckState`, `recheckNote`, `recheckedAt` and `recheckCheckId` on the earlier finding, so its unlock, price and moved issue carry over and nothing is paid twice. The rescan's page lists still-there findings with the new ones, and the fixed ones in **Fixed since the last scan**, which aren't counted, priced or in the summary. A still-there finding opens under the scan that found it, and can be **ticked and moved to the app from the rescan** like a new one (18 Nov): `sendCheckFindings` accepts this scan's findings and the earlier ones its recheck parts hold that weren't found fixed, and pays for them all in one payment (`payForFindings` takes several checks). A rescan doesn't list its parts under **Still checking** (18 Nov): its list is the earlier findings, each Rechecking until answered, with new ones added as they're found; the progress bar counts the parts.
+- **The quick scan runs again** with the rescan. A site's quick scan is reused for 10 minutes, unless a finding on it was unlocked or moved to the app since (`fixPaidSinceQuickScan`): then it looks afresh.
+
+## Move to your app
+
+There is no separate page (17 Nov): **Fix N selected** opens a panel under the Deeper scan's list (`components/security-checks/fix-panel.tsx`) to choose the destination project, see the total in Ziks and **Pay and move**. "Fix the critical one" in the summary and a finding's **Fix it for me** come back to the check with `?fix=id1,id2`, which ticks those findings and opens the panel. Findings can be sent as soon as their part is done; the report doesn't need to be posted. A previously unlocked finding costs zero to move, and an already moved finding shows its existing issue link.
+
+The server checks report ownership, project access, and result ownership. A transaction debits the wallet for newly unlocked findings, creates a private finding and a linked issue per new result, and sets the result's findingId. The report can use that link to show the issue. Repeat submissions reuse existing links.
+
+Verify by moving a finding from the check's list, following its issue link, and reopening the move page to check the issue is still linked. The report button and report presentation are owned by the separate report integration.
+
+### Scan results on one page
+
+Expand **Quick scan** to see the browser preview. Under **Deeper scan**, select completed findings and choose **Fix selected** to open checkout with those findings. Unfinished checks appear under **Still checking**.
+
+When the report is posted, the scan header replaces its progress bar with the total findings and their severity counts.
+
+
+## First deeper scan payment gate (18 Nov)
+
+The free quick scan remains available before sign-in. New signed-in checks save that result but do not start agents automatically. Starting the first deeper scan costs **20 Ziks**, taken from the requesting person's wallet. This charge does not unlock or move findings. The existing **10-Zik rescan** and per-finding remediation charges remain separate. The Ziks page Activity list names these separately: **Deeper scan**, **Scan again**, and **Unlocked security fixes**. These descriptions are derived from the existing ledger reference keys, so older scan charges display correctly without changing transaction amounts or rewriting history.
+
+### Server entry points
+
+[`app/actions/security-deeper-scan.ts`](../app/actions/security-deeper-scan.ts) exports `deeperScanCost(checkId)` for a read-only checkout quote and `startPaidDeeperScan(checkId)` for an explicitly authorized payment. The server derives the owner, workspace and price; successful retries return the same check without another charge. `loadCheckReport` and `listWorkspaceChecks` expose `paymentRequired` for clients; the checkout below uses them.
+
+### The checkout on the scan's page (18 Nov, Seyi)
+
+Before payment, the scan's page shows what the quick scan found and offers the deeper scan; nothing says agents are working.
+
+- **Top:** "Quick scan done on <site>", then "Start the deeper scan to have agents check inside." (`DeeperScanStart` in `components/security-checks/deeper-scan-offer.tsx`), in place of "Ziki is checking … Planning the checks". The status label says **Quick scan done**, and so does the Assets list (its own filter).
+- **Steps:** Chloe's steps box (`scan-steps.tsx`) shows the Deeper scan step locked with **Start**. Start sends `zk:start-deeper-scan`, which opens the checkout. The price shows only in the checkout.
+- **The list:** the quick scan's findings show under **Quick scan**, even on new scans whose findings are saved in the main list (`codeInList`); the **Deeper scan** says **Not started** and lists what agents check that the quick scan can't (`DEEPER_SCAN_COVERS`, from the agents' own parts in `lib/security-checks/ai.ts`), each **Not checked**. Once paid but before agents have parts, findings already in still show instead of hiding behind "Planning".
+- **The checkout:** a large window over the blurred page (`DeeperScanCheckout`), like Add asset. Two cards, as plans: **Quick scan** (Done · Free; picking it shows what it checked, technically, and **View quick scan results**) and **Deeper scan** (picked at first; the price and the checks). Under them: the price and the wallet, then **Pay 20 Ziks and start**; when short and never borrowed, **Borrow and pay**; when short otherwise, **Buy Ziks**. Opening it only reads the quote (`deeperScanCost`); paying is only that button (`startPaidDeeperScan`); errors show inside the window. Already paid (another tab) just refreshes.
+- **After buying Ziks:** **Buy Ziks** links to `/coins?returnTo=/security/checks/<id>` (`lib/coins/return-to.ts`; only a scan's own page is allowed). Back on the scan with `?bought=1`, the checkout opens again and waits for Stripe's webhook ("Waiting for your Ziks…", rechecked every 3 seconds for 30). It never pays by itself. The Ziks page keeps `returnTo` through its pack buttons, and `createPackCheckout` sets Stripe's `success_url` to the scan (`?bought=1`) and its `cancel_url` back to the Ziks page with the scan remembered; anything that isn't a scan's own page falls back to the Ziks page.
+- **After payment** nothing new: the existing progress, steps and results take over.
+
+### Storage, permissions and failure handling
+
+[`lib/security-checks/deeper-scan.ts`](../lib/security-checks/deeper-scan.ts) scopes every request to the requesting user and current workspace; the actions also require workspace owner/admin access. Ownership proof is required before charging whenever that feature is enabled. Cancelled scans cannot be paid. New checks use the existing `free: false`, `priceCoins: 20`, `paidAt: null` fields. Historical free checks stay usable without a retroactive charge; paid rescans remain usable too. No migration is needed.
+
+A wallet row lock serializes spending and duplicate requests. One transaction records `paidAt`, queues the check and appends the balanced wallet/revenue ledger pair with stable `deeper-scan:<checkId>:wallet` and `:revenue` keys. Any failed write rolls it all back. A retry returns the same paid check with `charged: 0`. After commit, the action schedules `kickCheck`; the existing sweep retries a missed or failed startup without another charge.
+
+[`lib/security-checks.ts`](../lib/security-checks.ts) defines the price and shared payment eligibility. Engine startup, polling/assignment, reporting and the fallback worker require a paid or historical free check. Ownership verification alone does not bypass payment. No finding text is added to payment logs, events or ledger entries.
+
+### Repeatable verification
+
+Run the repo's `pnpm verify:ready` before requesting the PR. Focused coverage lives in `tests/security/security-checks.test.ts` and `app/actions/security-assistant.test.ts`; it covers access, quick-scan/proof prerequisites, wallet failure, retries, transaction failures, and the agent payment guard. The concurrency unit test uses serialized transaction doubles; a real PostgreSQL concurrency and browser checkout exercise still requires local fixture integration with the checkout UI. Do not seed or reset a shared/demo database.
+
+With the checkout UI connected, verify: quick scan → sign in if needed → checkout showing 20 Ziks → explicit pay → progress/results. Refresh and double-click payment to confirm one debit; cancel checkout and try insufficient funds to confirm no agents start. Existing free scans and paid 10-Zik rescans must still open normally.

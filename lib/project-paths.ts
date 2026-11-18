@@ -98,14 +98,80 @@ export function marketingPath(slug: ProjectRef, section = ""): string {
   return projectPath(slug, section ? `/marketing/${section}` : "/marketing");
 }
 
+/**
+ * The video studio, `/<org>/<project>/marketing/video`. It brings its own
+ * chrome: the page opens on "← Back to Marketing", so the project breadcrumb
+ * and the Marketing action bar leave it alone and every other page keeps them.
+ */
+export function isVideoStudio(pathname: string): boolean {
+  return /\/marketing\/video\/?$/.test(pathname);
+}
+
 /** Filing a new report (it starts as an idea). */
 export function newIssuePath(slug: ProjectRef, query?: URLSearchParams | string): string {
   return withQuery(projectPath(slug, "/issues/new"), query);
 }
 
+/** The project's Design area (#9): `/<org>/<project>/design`, or one proposal's page, `/<org>/<project>/design/<id>`. */
+export function designPath(slug: ProjectRef, proposalId?: string, query?: URLSearchParams | string): string {
+  return withQuery(projectPath(slug, proposalId ? `/design/${encodeURIComponent(proposalId)}` : "/design"), query);
+}
+
 /** One goal's page with its split wizard and allocation ledger: `/<org>/<project>/goals/<id>`. */
 export function goalPath(slug: ProjectRef, goalId: string): string {
   return projectPath(slug, `/goals/${encodeURIComponent(goalId)}`);
+}
+
+/** An organisation's forum discussion board: `/<org>/forum`. */
+export function orgForumPath(orgSlug: string, query?: URLSearchParams | string): string {
+  return withQuery(`/${encodeURIComponent(orgSlug)}/forum`, query);
+}
+
+/** An organisation's forum post detail: `/<org>/forum/<postId>`. */
+export function orgForumPostPath(orgSlug: string, postId: string): string {
+  return `/${encodeURIComponent(orgSlug)}/forum/${encodeURIComponent(postId)}`;
+}
+
+/** A project's forum discussion board: `/<org>/<project>/forum`. */
+export function projectForumPath(ref: ProjectRef, query?: URLSearchParams | string): string {
+  return withQuery(projectPath(ref, "/forum"), query);
+}
+
+/** A project's forum post detail: `/<org>/<project>/forum/<postId>`. */
+export function projectForumPostPath(ref: ProjectRef, postId: string): string {
+  return projectPath(ref, `/forum/${encodeURIComponent(postId)}`);
+}
+
+/** Path to a forum board across any scope. */
+export function scopedForumPath(
+  scope: "platform" | "org" | "project",
+  orgSlug?: string | null,
+  projectSlug?: string | null,
+  query?: URLSearchParams | string
+): string {
+  if (scope === "project" && orgSlug && projectSlug) {
+    return projectForumPath(projectRef(orgSlug, projectSlug), query);
+  }
+  if (scope === "org" && orgSlug) {
+    return orgForumPath(orgSlug, query);
+  }
+  return withQuery("/forum", query);
+}
+
+/** Path to a forum post detail thread across any scope. */
+export function scopedForumPostPath(
+  scope: "platform" | "org" | "project",
+  postId: string,
+  orgSlug?: string | null,
+  projectSlug?: string | null
+): string {
+  if (scope === "project" && orgSlug && projectSlug) {
+    return projectForumPostPath(projectRef(orgSlug, projectSlug), postId);
+  }
+  if (scope === "org" && orgSlug) {
+    return orgForumPostPath(orgSlug, postId);
+  }
+  return `/forum/${encodeURIComponent(postId)}`;
 }
 
 /** The address without Next's `_rsc` cache marker, which an in-app navigation adds and a full page load must not carry. */

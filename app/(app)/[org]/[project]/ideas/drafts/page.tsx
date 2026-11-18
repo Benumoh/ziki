@@ -1,6 +1,8 @@
 import { IssuesList } from "../../issues/_list/issues-list";
 import { queryOf } from "../../issues/_list/route-page";
 
+export const metadata = { title: "Draft ideas" };
+
 type Props = {
   params: Promise<{ org: string; project: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

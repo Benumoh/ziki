@@ -69,7 +69,7 @@ export async function GET(
           })
         : false,
     );
-    const isPublicProject = bug.project?.visibility === "public";
+    const isPublicProject = bug.project?.visibility === "public" && !(!attachment.bug && attachment.idea);
     if (!isOrgMember && !isProjectMember && !isPublicProject && user.role !== "super_admin") {
       return notFound();
     }

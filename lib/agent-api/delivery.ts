@@ -22,7 +22,6 @@ import { deliverableText, marketingDeliveryBodySchema } from "@/lib/validations/
 import { linkAttachments } from "@/lib/attachment-link";
 import { MAX_ATTACHMENTS_PER_ITEM } from "@/lib/attachments";
 import { deliveryReceiptSchema, storedReceipt, type DeliveryReceipt } from "@/lib/delivery-receipt";
-import { endGuestStay } from "@/lib/on-call-guests";
 
 /**
  * Work delivered (#delivered-step): the In progress step's entry. The agent
@@ -450,14 +449,6 @@ export async function deliverWork(
   const judged = onBehalfOf ? await refreshJudgedStatus(prisma, bug.id, agent.ownerId) : null;
   if (!marketing && judged !== "accepted") {
     await createReviewOffers(prisma, { agentId: agent.agentId, organisationId: agent.organisationId }, bug.id, { pullRequestUrl: pullRequestUrl!, headSha }).catch(() => null);
-  }
-
-  // On-call guests (12 Nov plan, D2): a guest leaves the workspace after delivering its
-  // first task here. The delivery and its claim stand; only its stay and its other open work here end.
-  if (agent.guest) {
-    await prisma
-      .$transaction((tx) => endGuestStay(tx, { agentId: agent.agentId, organisationId: agent.organisationId, actorUserId: agent.ownerId, reason: "first_delivery", deliveredIssueId: bug.id }))
-      .catch((error) => console.error("[delivery] couldn't end an on-call guest's stay", error));
   }
 
   const entries = await deliveryEntries({ id: bug.id, pullRequestUrl });

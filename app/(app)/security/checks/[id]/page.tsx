@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { FixOnZiki } from "@/components/security-checks/fix-on-ziki";
+import { ScanActionsMenu } from "@/components/security-checks/scan-actions-menu";
+import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
-import { ReportProgress } from "@/components/security-checks/report-progress";
-import { ReportResults, parseFixFilter } from "@/components/security-checks/report-results";
-import { ReportSummary } from "@/components/security-checks/report-summary";
+import { CheckHeader } from "@/components/security-checks/check-header";
+import { checkListTabs } from "@/lib/security-checks/check-list";
+import { SiteChatButton, SiteChatHolder, SiteChatPanel } from "@/components/security-checks/site-chat-box";
 import { requireUser } from "@/lib/auth-helpers";
 import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
@@ -15,41 +16,38 @@ import { orgCard } from "../../../[org]/[project]/org/org-ui";
 
 export const metadata = { title: "Security check" };
 
-/** What each step tells the client while there are no parts to list yet. */
-const WAITING_NOTE: Partial<Record<keyof typeof CHECK_STATUS_LABEL, string>> = {
-  queued: "Ziki will start planning the checks in a moment.",
-  splitting: "Ziki is looking at it and planning the checks.",
-};
-
 /**
- * One security check (12 Nov plan, S1 and S2): live progress while Ziki
- * checks, then, once the report is posted, Ziki's summary and every finding
- * worst first, locked until the client unlocks it. Only the person who asked
- * for the check sees it.
+ * One security check (12 and 14 Nov plans, part S): live progress and the
+ * quick scan while Ziki checks, then, once the report is posted, Ziki's
+ * one-line summary and every finding worst first. The report is free; clients
+ * pay only to have findings fixed (14 Nov call).
+ * The report never goes away; moved findings are marked. Only the person who
+ * asked for the check sees it.
  */
-export default async function SecurityCheckPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ show?: string | string[] }>;
-}) {
-  const [{ id }, { show }, user] = await Promise.all([params, searchParams, requireUser()]);
+export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[]; bought?: string }> }) {
+  const [{ id }, query, user] = await Promise.all([params, searchParams, requireUser()]);
+  // `?fix=id1,id2`: tick these and open the fix panel ("Fix the critical one", a finding's "Fix it for me").
+  const initialFix = (Array.isArray(query.fix) ? query.fix.join(",") : query.fix ?? "").split(",").filter(Boolean).slice(0, 100);
   const access = await currentOrganisationAccess(user.id, user.role);
   if (!access.organisationId) notFound();
   const report = await loadCheckReport(id, access.organisationId, user.id);
   if (!report) notFound();
 
   const linkClass = "font-semibold text-zk-accent hover:underline";
-  const working = !FINISHED_CHECK_STATUSES.has(report.status);
+  // Waiting for the deeper scan's payment (#deeper-scan-gate) nothing moves, so the page doesn't refresh itself.
+  const working = !FINISHED_CHECK_STATUSES.has(report.status) && !report.paymentRequired;
   const kind = TARGET_KIND_LABEL[report.target.kind].toLowerCase();
 
   return (
     <div className="flex w-full flex-col gap-4 pb-10 sm:gap-6">
       {/* Live until the report is posted; a cancelled check has nothing more to show. */}
       {working && !report.posted ? <ReportLive /> : null}
-      {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx). */}
-      <nav aria-label="Breadcrumb" className="flex w-full items-center px-0.5 text-[13px] text-zk-text2">
+      {/* The top row and, under it, the site's chat when it's opened from the icon by "More actions" (16 Nov): one block, so a closed chat adds no gap. */}
+      <SiteChatHolder checkId={report.checkId} site={report.target.value}>
+      <div className="flex flex-col">
+      {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx), with the same "More actions" menu on the right. */}
+      <div className="flex w-full items-center justify-between gap-3">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center px-0.5 text-[13px] text-zk-text2">
         <ol className="flex min-w-0 flex-wrap items-center gap-0.5">
           <li className="min-w-0">
             <Link
@@ -63,7 +61,28 @@ export default async function SecurityCheckPage({
           <li aria-current="page" className="truncate px-1.5">{report.target.value}</li>
         </ol>
       </nav>
+      {/* Scan again, the PDF and Remove sit here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
+      {report.status !== "cancelled" ? (
+        <div className="flex shrink-0 items-center gap-2">
+          <SiteChatButton />
+          <ScanActionsMenu checkId={report.checkId} site={report.target.value} posted={report.posted} nextCheckId={report.nextCheckId} />
+        </div>
+      ) : null}
+      </div>
+      {report.status !== "cancelled" ? <SiteChatPanel /> : null}
+      </div>
+      </SiteChatHolder>
 
+      {/* Scanned again (#security-rescan): an older scan points to the newest. A rescan has no note of its own (18 Nov,
+          Tolu): its Still there and New labels say where each finding came from, with more on hover. */}
+      {report.nextCheckId ? (
+        <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
+          This site was scanned again since.{" "}
+          <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
+        </p>
+      ) : null}
+
+      {/* Only while ownership proof is on: with it off, the report shows such a check as waiting to start. */}
       {report.status === "awaiting_ownership" ? (
         <section aria-labelledby="ownership-heading" className={orgCard}>
           <Badge className={substatusClass.requires_confirmation}>{CHECK_STATUS_LABEL.awaiting_ownership}</Badge>
@@ -77,40 +96,14 @@ export default async function SecurityCheckPage({
         </section>
       ) : (
         <>
-          <ReportSummary report={report} />
+          {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
+          <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+            {/* Back from buying Ziks (#deeper-scan-gate): the checkout opens again, to press Pay. */}
+            <CheckHeader report={report} backFromBuying={query.bought === "1"} />
+            {/* Keyed by `?fix`, so "Fix the critical one" on this same page ticks its findings afresh. */}
+            <CheckList key={initialFix.join(",")} checkId={report.checkId} tabs={checkListTabs(report)} initialFix={initialFix} />
+          </section>
 
-          {/* Progress only, until Ziki has summed up every part and posted the report. */}
-          {!report.posted ? (
-            <section aria-labelledby="progress-heading" className={orgCard}>
-              <h2 id="progress-heading" className="text-base font-semibold text-zk-text">Progress</h2>
-              <div className="mt-3">
-                {report.parts.length ? (
-                  <>
-                    <ReportProgress progress={report.progress} parts={report.parts} />
-                    {working && report.progress.done === report.progress.total ? (
-                      <p className="mt-3 text-sm text-zk-text2">Every part is checked. Ziki is writing your report.</p>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-sm text-zk-text2">{WAITING_NOTE[report.status] ?? "No parts to check yet."}</p>
-                )}
-              </div>
-            </section>
-          ) : null}
-
-          {report.posted ? <ReportResults report={report} show={parseFixFilter(show)} /> : null}
-
-          {/* Fix on Ziki (part N): unlocked findings only. "Fix them on Ziki" above jumps here. */}
-          {report.posted && report.findings.some((finding) => !finding.locked) ? (
-            <div id="fix-on-ziki" className="scroll-mt-20 rounded-lg bg-zk-surface">
-              <FixOnZiki
-                checkId={report.checkId}
-                results={report.findings.flatMap((finding) =>
-                  finding.locked ? [] : [{ id: finding.id, severity: finding.severity, title: finding.title }],
-                )}
-              />
-            </div>
-          ) : null}
         </>
       )}
     </div>

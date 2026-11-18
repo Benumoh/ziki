@@ -179,7 +179,7 @@ async function activationFor(actor: Actor, agentId: string, organisationId: stri
       burst: true,
       burstUntil: true,
       deactivatedAt: true,
-      guestUntilFirstDelivery: true,
+      guest: true,
       agent: { select: { id: true, name: true, ownerUserId: true, revokedAt: true } },
     },
   });
@@ -291,7 +291,7 @@ export async function deactivateAgent(actor: Actor, agentId: string, organisatio
     // Removing an on-call guest early (12 Nov plan, D2) also ends its guest stay.
     await tx.agentActivation.update({
       where: { id: managed.activation.id },
-      data: { deactivatedAt: now, ...(managed.activation.guestUntilFirstDelivery ? { guestEndedAt: now } : {}) },
+      data: { deactivatedAt: now, ...(managed.activation.guest ? { guestEndedAt: now } : {}) },
     });
     await tx.agentApiKey.updateMany({ where: { agentId, organisationId, revokedAt: null }, data: { revokedAt: now } });
     const handedBack = await releaseWorkOfRevokedAgent(tx, { agentId, organisationId, actorUserId: actor.id, now });

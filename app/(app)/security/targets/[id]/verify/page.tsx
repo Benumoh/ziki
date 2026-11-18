@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { prisma } from "@/lib/prisma";
-import { FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
+import { FINISHED_CHECK_STATUSES, ownershipProofRequired, TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { OrgPageHeader, orgListCard } from "../../../../[org]/[project]/org/org-ui";
 import { OwnershipSteps } from "./ownership-steps";
 import { QuickScanLink } from "@/components/security-checks/quick-scan-link";
@@ -17,6 +17,10 @@ const KIND_NOUN = { website: "site", server: "server", repo: "repo" } as const;
  * Step 2, show it's yours (#security-checks, part 2). Before any agent looks
  * at a target, the client proves it is theirs with its secret code, once. Then
  * its checks are let go to the agents and the client goes back to Assets, where the free scan runs.
+ *
+ * Hidden for now (14 Nov plan, D1): while SECURITY_OWNERSHIP_PROOF_REQUIRED isn't
+ * "true" there is nothing to prove, so an old link lands back on Security, on
+ * this person's open check when there is one. The page stays for when proof returns.
  */
 export default async function VerifySecurityTargetPage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }, user] = await Promise.all([params, requireUser()]);
@@ -45,6 +49,7 @@ export default async function VerifySecurityTargetPage({ params }: { params: Pro
 
   const openCheck = target.checks[0] ?? null;
   const next = openCheck ? `/security?check=${encodeURIComponent(openCheck.id)}` : "/security";
+  if (!ownershipProofRequired()) redirect(next);
   const noun = KIND_NOUN[target.kind];
   const quickScan = readQuickScan(target.previewSummary);
 

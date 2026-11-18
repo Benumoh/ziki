@@ -1,3 +1,5 @@
+import { ZIKS_PER_DOLLAR } from "@/lib/coins/math";
+
 /**
  * The contributor ledger's rules (#428). Ziki has one currency, the $
  * (#z-currency): every ledger amount, award, goal and setting is in $, and
@@ -17,6 +19,14 @@ export const REWARD_MIN = 1;
 export const REWARD_MAX = 10;
 export const REWARD_DEFAULT = 1;
 export const REWARD_MAX_ESTIMATES = 15;
+
+/**
+ * The same range as people and agents see and give it (#ziki-coins): in Ziks, 10 (easy) to 100 (expensive), 10 at a
+ * time. The reward is stored in $ above; a Zik is 10 cents, so these are the stored range times ten.
+ */
+export const REWARD_ZIK_MIN = REWARD_MIN * ZIKS_PER_DOLLAR;
+export const REWARD_ZIK_MAX = REWARD_MAX * ZIKS_PER_DOLLAR;
+export const REWARD_ZIK_STEP = ZIKS_PER_DOLLAR;
 
 /** Reporter award, once the bug is accepted as real and not a duplicate. */
 export const REPORTER_POINTS = 1.5;

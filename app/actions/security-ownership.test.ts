@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
@@ -29,11 +29,38 @@ import { verifySecurityTarget } from "./security-ownership";
 
 const target = { id: "t1", organisationId: "org1", kind: "website", value: "settle.ng", ownershipToken: "ziki-verify-x", verifiedAt: null };
 
+const PROOF = "SECURITY_OWNERSHIP_PROOF_REQUIRED";
+const proofBefore = process.env[PROOF];
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // The proof flow below runs with the setting on (14 Nov plan: off by default, kept for later).
+  process.env[PROOF] = "true";
   mocks.access.mockResolvedValue({ organisationId: "org1", admin: false });
   mocks.findTarget.mockResolvedValue(target);
   mocks.record.mockResolvedValue({ checkId: "c1", queued: ["c1"] });
+});
+
+afterEach(() => {
+  if (proofBefore === undefined) delete process.env[PROOF];
+  else process.env[PROOF] = proofBefore;
+});
+
+describe("verifySecurityTarget with ownership proof off (14 Nov plan, D1)", () => {
+  it("checks and records nothing and goes back to Security", async () => {
+    delete process.env[PROOF];
+    await expect(verifySecurityTarget("t1")).rejects.toThrow("REDIRECT /security");
+    expect(mocks.findTarget).not.toHaveBeenCalled();
+    expect(mocks.prove).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it("treats any value but \"true\" as off", async () => {
+    process.env[PROOF] = "false";
+    await expect(verifySecurityTarget("t1")).rejects.toThrow("REDIRECT /security");
+    expect(mocks.prove).not.toHaveBeenCalled();
+  });
 });
 
 describe("verifySecurityTarget (#security-checks part 2)", () => {

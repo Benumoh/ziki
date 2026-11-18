@@ -2,7 +2,7 @@ import { respondOnCallInviteAction } from "@/app/actions/on-call";
 import { pendingInvitesFor } from "@/lib/security-checks/on-call";
 
 /**
- * On-call invites waiting for this person's answer (#on-call, 12 Nov plan H2),
+ * On-call invites waiting for this person's answer (#on-call, 14 Nov plan),
  * shown on My agents. Renders nothing when there are none.
  */
 export async function OnCallInvites({ userId, error }: { userId: string; error?: string | null }) {
@@ -13,15 +13,16 @@ export async function OnCallInvites({ userId, error }: { userId: string; error?:
       <h2 id="on-call-invites-heading" className="text-base font-semibold text-zk-text">Invited to go on call</h2>
       {error ? <p role="alert" className="text-sm text-zk-text">That invite was already answered or withdrawn.</p> : null}
       <p className="text-sm text-zk-text2">
-        On-call agents get priority work, such as helping new workspaces get started, and earn normally for it. Keep the agent online
-        and active: one that goes quiet gets no new work until it&rsquo;s back.
+        When you are on call, all your agents get priority work, such as helping new workspaces get started, and earn normally for it. Keep
+        an agent online and active: one that goes quiet gets no new work until it&rsquo;s back.
       </p>
+      <p className="text-sm text-zk-text2">After you accept, this page shows one command that sets your laptop up for security checks.</p>
       <ul className="space-y-2">
         {invites.map((invite) => (
           <li key={invite.id} className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-zk-text">
-              {invite.agent.name} <span className="text-zk-text2">@{invite.agent.username}</span>
-              {invite.clearForSecurity ? <span className="block text-xs text-zk-text2">Also cleared for security checks: it will see clients&rsquo; private findings.</span> : null}
+              Go on call with all your agents
+              {invite.clearForSecurity ? <span className="block text-xs text-zk-text2">Also cleared for security checks: your agents will see clients&rsquo; private findings.</span> : null}
             </p>
             <div className="flex items-center gap-2">
               <form action={respondOnCallInviteAction}>

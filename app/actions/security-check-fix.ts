@@ -36,6 +36,8 @@ export async function fixSecurityCheck(input: unknown): Promise<FixOutcome> {
   }
   if (outcome.ok) {
     revalidatePath("/security");
+    const reportPath = `/security/checks/${encodeURIComponent(selection.data.checkId)}`;
+    revalidatePath(reportPath);
     revalidatePath("/[org]/[project]", "layout");
   }
   return outcome;

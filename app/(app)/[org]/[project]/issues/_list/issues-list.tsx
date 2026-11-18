@@ -34,6 +34,7 @@ import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
 import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
 import { FirstQuestions } from "@/components/get-started/first-questions";
+import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
 import { NEXT_STEP_COOKIE, organisationNextStep, type OrganisationNextStep } from "@/lib/organisation-next-step";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
@@ -44,6 +45,8 @@ import { IdeasList, type IdeaListRow } from "@/components/ideas-list";
 import { WhimsicalEmptyState } from "@/components/whimsical-empty-state";
 import { isUnstructuredDraft } from "@/lib/ideas";
 import { workflowFor } from "@/lib/workflow";
+import { priorityNow, type PriorityNowIssue } from "@/lib/priority-now";
+import { PriorityNowStrip } from "@/components/priority-now-strip";
 import { OPEN_BID_WHERE } from "@/lib/open-bids";
 import { ideaVotes, isBadIdea } from "@/lib/idea-rejection";
 import { archiveReasonLabel } from "@/lib/idea-archive";
@@ -88,7 +91,7 @@ import { UnwatchButton, UnwatchFinishedButton } from "@/components/unwatch-butto
 import { parseTagFilter, serializeTags, tagTypeIds } from "@/lib/tag-filter";
 import { bugInOrganisation, isMissingOrganisationColumnError } from "@/lib/organisation-context";
 import { requireProject } from "@/lib/project-route";
-import { ideasPath, issuesPath, orgPath, projectPath, type ProjectRef } from "@/lib/project-paths";
+import { designPath, ideasPath, issuesPath, orgPath, projectPath, type ProjectRef } from "@/lib/project-paths";
 import { RichText } from "@/components/rich-text";
 import { isOrganisationAdmin } from "@/lib/organisation-role";
 import { cookies } from "next/headers";
@@ -99,6 +102,7 @@ import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/pr
 import { IssueRowStatus } from "@/components/issue-row-status";
 import { BidsVoteBadge, ImportanceVoteBadge } from "@/components/vote-badge";
 import { RewardBadge } from "@/components/reward-badge";
+import { escrowByBug } from "@/lib/coins/ledger";
 import { mergePathOf } from "@/lib/merge-history";
 import { IssuesToolsToggle } from "@/components/issues-tools-toggle";
 import { LoadError } from "@/components/load-error";
@@ -658,6 +662,8 @@ export async function IssuesList({
     return issuesQueryError(listed.reference);
   }
   const bugs = listed.bugs;
+  // #ziki-coins: which rows on this page have Ziks behind them, for the Funded badge.
+  const funded = await loadOrEmpty("funded", () => escrowByBug(prisma, bugs.map((bug) => bug.id)), new Map<string, number>());
   // #live-check: where each Live row on this page has its fix.
   const liveChecks = await loadOrEmpty("live checks", () => loadLiveChecks(bugs.filter((bug) => bug.status === "resolved")), new Map<string, LiveCheck>());
   // #live-confirm: what each agent found, for the Live rows on this page, shown when a row is opened.
@@ -728,8 +734,11 @@ export async function IssuesList({
       : [];
   // The next-step card (#agents-dock) where the empty agents bar used to be: the one next thing for you, from your role and what the
   // organisation has. Not while one of your agents is blocked (the agents bar says so), and dismissable per organisation.
+  // A project contributor who joined a public project (canContribute without an org-wide membershipRole) also gets the
+  // "Create an agent" card so they can start earning right after joining.
   let nextStep: OrganisationNextStep | null = null;
-  if (organisationId && userId && membershipRole && !isDeletedView) {
+  const nextStepRole: OrganisationRole | null = membershipRole ?? (canContribute ? "member" : null);
+  if (organisationId && userId && nextStepRole && !isDeletedView) {
     const dismissed = parseDismissed((await cookies()).get(NEXT_STEP_COOKIE)?.value).includes(organisationId);
     if (!dismissed) {
       const counts = await loadOrEmpty(
@@ -748,7 +757,7 @@ export async function IssuesList({
       if (counts) {
         nextStep = organisationNextStep({
           slug: ref,
-          membershipRole,
+          membershipRole: nextStepRole,
           appRole: effectiveRole,
           ...counts,
           blockedAgentCount: unconfiguredAgents.length,
@@ -1103,6 +1112,13 @@ export async function IssuesList({
   const yourCall = stageIndex !== IN_PROGRESS_STAGE || !organisationId || !projectId || allProjects || !userId
     ? []
     : await loadOrEmpty("your call", () => loadYourCall(projectId, { userId, isAdmin: Boolean(membershipRole && isOrganisationAdmin(membershipRole, effectiveRole)) }), []);
+  // Priority now (#priority-now): the top Open issues and who each is offered to, at the top of In Progress.
+  const priorityIssues = stageIndex !== IN_PROGRESS_STAGE || isDeletedView || !organisationId || !projectId || allProjects
+    ? []
+    : await loadOrEmpty("priority now", async () => {
+      const { offerWindowSeconds } = await workflowFor(projectId);
+      return priorityNow({ organisationId, projectId, offerWindowSeconds });
+    }, [] as PriorityNowIssue[]);
   const statusCount = (value: string) =>
     value === YOUR_WORK_STATUS ? yourWorkCount : value === IDEAS_STATUS ? ideasCount : value === REJECTED_IDEAS_STATUS ? rejectedIdeasCount : value === ERROR_STATUS ? errorCount : value === POSSIBLY_DELIVERED ? possiblyDeliveredCount : countForStatus(value);
   const statusLink = (value: string) => (value === IDEAS_STATUS ? statusHref(null) : statusHref(value));
@@ -1169,12 +1185,54 @@ export async function IssuesList({
     }
   }
 
+  let pendingJoinRequests: PendingJoinRequestItem[] = [];
+  if (
+    (isIdeasView || isYourWorkView) &&
+    !isDeletedView &&
+    organisationId &&
+    membershipRole &&
+    isOrganisationAdmin(membershipRole, effectiveRole)
+  ) {
+    try {
+      if (typeof prisma.projectJoinRequest?.findMany === "function") {
+        pendingJoinRequests = await prisma.projectJoinRequest.findMany({
+          where: { project: { organisationId, archivedAt: null }, status: "pending" },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            message: true,
+            createdAt: true,
+            project: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                organisation: { select: { slug: true } },
+              },
+            },
+            user: { select: { id: true, name: true, email: true, image: true } },
+          },
+        });
+      }
+    } catch {
+      // Keep the list working even if join requests couldn't be loaded.
+    }
+  }
+
   const listContent = (
     <div className="space-y-4">
         {statusParam === "resolved" && !isDeletedView ? <LiveRefresh /> : null}
 
         {/* #project-links: the site/code panel renders here (from ProjectLinks in the top right) while it is open. */}
         <div id={PROJECT_LINKS_SLOT_ID} className="empty:hidden" />
+
+        {pendingJoinRequests.length > 0 ? (
+          <ProjectPendingJoinRequestsBanner
+            requests={pendingJoinRequests}
+            orgRef={ref}
+            projectName={project.name}
+          />
+        ) : null}
 
         {/* Earnings (#earnings): the way to earn, on the page everyone lands on, closed with × like the panel above. */}
         {isIdeasView && !isDeletedView && earnProject ? <EarnPanel project={earnProject} line={earnBannerLine(earnProject)} /> : null}
@@ -1193,6 +1251,8 @@ export async function IssuesList({
 
 
         {nextStep && organisationId ? <OrganisationNextStepCard step={nextStep} organisationId={organisationId} /> : null}
+
+        {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
 
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}
@@ -1396,7 +1456,7 @@ export async function IssuesList({
                         details={liveFix ? <LiveRowDetails check={liveFix} confirmations={liveConfirmations.get(bug.id) ?? []} /> : null}
                       >
                         <div className="issues-vote w-[76px] shrink-0">
-                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} />
+                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} funded={funded.has(bug.id)} />
                         </div>
                         {isMyWorkTab ? (
                           <span className="hidden w-10 shrink-0 items-center lg:flex">
@@ -1600,10 +1660,11 @@ export async function IssuesList({
             askOnLoad={isIdeasView && unconfiguredAgents.length === 0}
           />
         ) : null}
-        {/* Project notes and settings, as icons, beside the tabs. */}
+        {/* Project notes, Design and settings, as icons, beside the tabs. */}
         {!isDeletedView ? (
           <ProjectIconLinks
             notesHref={canContribute ? projectPath(ref, "/notes") : undefined}
+            designHref={isOrgMember ? designPath(ref) : undefined}
             settingsHref={isOrgAdmin ? `/projects/${encodeURIComponent(slug)}/settings` : undefined}
           />
         ) : null}

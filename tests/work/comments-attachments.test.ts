@@ -20,6 +20,7 @@ vi.mock("@/lib/organisation-access", () => ({ organisationAccessFor }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     membership: { findUnique: vi.fn() },
+    projectMembership: { findUnique: vi.fn() },
     attachment: {
       findUnique: vi.fn(),
       delete: vi.fn(),
@@ -44,6 +45,21 @@ function makeRequest(id: string) {
 }
 
 describe("GET /api/attachments/[id]", () => {
+  it("keeps idea screenshots private until conversion, then uses issue visibility", async () => {
+    userMock.mockResolvedValue({ id: "outsider", role: "user" });
+    membershipFindUnique.mockResolvedValue(null);
+    vi.mocked(prisma.projectMembership.findUnique).mockResolvedValue(null);
+    const parent = { isDeleted: false, organisationId: "org", projectId: "project", project: { visibility: "public" } };
+    const file = { uploaderId: "reporter", filename: "shot.png", contentType: "image/png", size: 3, data: Buffer.from("png"), bug: null, idea: parent, comment: null, redesignProposal: null };
+    findUnique.mockResolvedValue(file);
+    expect((await makeRequest("private-shot")).status).toBe(404);
+    membershipFindUnique.mockResolvedValue({ userId: "triager" });
+    expect((await makeRequest("private-shot")).status).toBe(200);
+    membershipFindUnique.mockResolvedValue(null);
+    findUnique.mockResolvedValue({ ...file, bug: parent });
+    expect((await makeRequest("converted-shot")).status).toBe(200);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     userMock.mockResolvedValue({ id: "user-1", role: "user" });

@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ideasPath, marketingPath, orgHomePath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
+import { designPath, ideasPath, isVideoStudio, marketingPath, orgHomePath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
 
 /** The organisation's slug, and the project (none on the organisation's own page). */
 export type BreadcrumbProject = { orgSlug: string; slug?: string; name?: string };
@@ -70,7 +70,13 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
     if (!second) return named("Feature plans");
     return [{ label: "Feature plans", href: projectPath(ref, "/features") }, { label: second === "new" ? "New plan" : "Plan" }];
   }
-  const pages: Record<string, string> = { notes: "Notes", org: "Organisation", workstream: "Workstream", report: "Report an issue" };
+  // The Design area (#9): its list, and one proposal under it.
+  if (first === "design" && second) return [{ label: "Design", href: designPath(ref) }, { label: "Proposal" }];
+  if (first === "forum") {
+    if (second) return [{ label: "Forum", href: projectPath(ref, "/forum") }, { label: "Discussion" }];
+    return named("Forum");
+  }
+  const pages: Record<string, string> = { forum: "Forum", notes: "Notes", design: "Design", org: "Organisation", workstream: "Workstream", agents: "Active agents", report: "Report an issue" };
   return pages[first] ? named(pages[first]) : [];
 }
 
@@ -81,7 +87,7 @@ function sectionOf(pathname: string, ref: ProjectRef): Crumb[] {
  */
 function narrowPage(pathname: string, ref: ProjectRef): boolean {
   const [first, second] = pathname.slice(projectPath(ref).length).replace(/^\/+|\/+$/g, "").split("/");
-  if (first === "workstream") return true;
+  if (first === "workstream" || first === "agents") return true;
   return first === "ideas" && !(second && /^[0-9]+$/.test(second));
 }
 
@@ -94,8 +100,15 @@ const crumb = "rounded-md px-1.5 py-0.5 hover:bg-zk-chip hover:text-zk-text focu
  */
 export function ProjectBreadcrumb({ project }: { project: BreadcrumbProject }) {
   const pathname = usePathname() ?? "";
+  if (/(?:^|\/)forum(?:\/|$)/.test(pathname)) {
+    return null;
+  }
+  // The video studio opens on its own Back to Marketing link.
+  if (isVideoStudio(pathname)) return null;
   const projectsHref = orgHomePath(project.orgSlug);
   const ref = project.slug ? projectRef(project.orgSlug, project.slug) : null;
+  // The Marketing main page and its task form have no breadcrumb.
+  if (ref && [marketingPath(ref), marketingPath(ref, "tasks/new")].includes(pathname.replace(/\/+$/, ""))) return null;
   const onProjects = !ref;
   const section = ref ? sectionOf(pathname, ref) : [];
   const width = ref && narrowPage(pathname, ref) ? "max-w-[920px]" : "max-w-6xl";

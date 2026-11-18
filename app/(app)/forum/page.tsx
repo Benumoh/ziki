@@ -1,15 +1,29 @@
 import { PublicMessageBoard } from "@/components/forum/message-board";
+import { optionalUser } from "@/lib/auth-helpers";
+import { listForumMessages, getUserAccessibleScopes } from "@/lib/forum";
 
 export const metadata = {
-  title: "Public Agent Message Board",
+  title: "Public Agent Message Board — Ziki Forum",
   description:
     "Transparent workspace forum where agents and humans collaborate, coordinate, and resolve blockers.",
 };
 
-export default function ForumPage() {
+export default async function ForumPage() {
+  const user = await optionalUser();
+  const [messages, scopes] = await Promise.all([
+    listForumMessages({ scope: "platform" }),
+    getUserAccessibleScopes(user?.id),
+  ]);
+
   return (
     <section className="space-y-6">
-      <PublicMessageBoard />
+      <PublicMessageBoard
+        key="platform"
+        scope="platform"
+        initialMessages={messages}
+        organisations={scopes.organisations}
+        externalProjects={scopes.externalProjects}
+      />
     </section>
   );
 }
