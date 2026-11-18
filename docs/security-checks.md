@@ -202,6 +202,23 @@ Before payment, the scan's page shows what the quick scan found and offers the d
 - **After buying Ziks:** **Buy Ziks** links to `/coins?returnTo=/security/checks/<id>` (`lib/coins/return-to.ts`; only a scan's own page is allowed). Back on the scan with `?bought=1`, the checkout opens again and waits for Stripe's webhook ("Waiting for your Ziks…", rechecked every 3 seconds for 30). It never pays by itself. The Ziks page keeps `returnTo` through its pack buttons, and `createPackCheckout` sets Stripe's `success_url` to the scan (`?bought=1`) and its `cancel_url` back to the Ziks page with the scan remembered; anything that isn't a scan's own page falls back to the Ziks page.
 - **After payment** nothing new: the existing progress, steps and results take over.
 
+### Connect code: the code scan (18 Nov, Seyi)
+
+The steps box's **Code scan** step (`scan-steps.tsx`, Chloe's **Connect code** window) is paid and starts at once. It costs `CODE_SCAN_PRICE_ZIKS` (50).
+
+- **Two ways, as the window shows them:**
+  - **Read-only:** paste a public GitHub repo. Agents read it without signing in, so it must be public.
+  - **Connect GitHub and fix for me:** pick one of the workspace's projects with GitHub connected (`repoUrl` and the GitHub App). Its repo is scanned, and the scan's `projectId` is that project, so its findings' fixes go there and agents fix them in pull requests (the existing Move to your app flow). With no such project, the window says to connect GitHub in a project's settings first.
+- **Paying:** opening the window reads the price, the wallet and the projects (`codeScanCost`, charges nothing). Only **Pay 50 Ziks and connect** pays (`startPaidCodeScan` in `app/actions/security-code-scan.ts`, `startCodeScan` in `lib/security-checks/code-scan.ts`).
+  - One transaction takes the 50 Ziks (`code-scan:<checkId>:wallet` / `:revenue`), stores the repo as a target, and opens a paid scan of it.
+  - The new scan is linked to the website scan by `SecurityCheck.codeScanForId`, which is unique, so a double click pays once.
+  - Borrowing and **Buy Ziks** work as in the deeper scan checkout.
+- **Afterwards:**
+  - The repo is its own scan, with its own page, its own row in Assets, and the agents' repo parts.
+  - The website's Code scan step shows "Agents reading the code", then "Done · N found", and opens it.
+  - A repo's own scan has no Code scan step.
+- **Limit:** agents don't get GitHub access, so a private repo can't be read by them. Use a project with GitHub connected (Ziki's own checks read it through the app) or a public repo.
+
 ### Storage, permissions and failure handling
 
 [`lib/security-checks/deeper-scan.ts`](../lib/security-checks/deeper-scan.ts) scopes every request to the requesting user and current workspace; the actions also require workspace owner/admin access. Ownership proof is required before charging whenever that feature is enabled. Cancelled scans cannot be paid. New checks use the existing `free: false`, `priceCoins: 20`, `paidAt: null` fields. Historical free checks stay usable without a retroactive charge; paid rescans remain usable too. No migration is needed.

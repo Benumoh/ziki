@@ -3655,6 +3655,12 @@ model SecurityCheck {
   previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
   /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
   nextCheck      SecurityCheck?        @relation("SecurityRescan")
+  /// A code scan (#security-code-scan, 18 Nov): the website scan whose Connect code started it, paid for
+  /// separately (CODE_SCAN_PRICE_ZIKS). Unique, so a website scan gets one code scan, and a double click pays once.
+  codeScanForId  String?               @unique
+  codeScanFor    SecurityCheck?        @relation("SecurityCodeScan", fields: [codeScanForId], references: [id], onDelete: SetNull)
+  /// The code scan started from this website scan's Code scan step, if any.
+  codeScan       SecurityCheck?        @relation("SecurityCodeScan")
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   items          SecurityCheckItem[]

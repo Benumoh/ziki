@@ -25,6 +25,12 @@ export const SECURITY_CHECK_PRICE_COINS = 50;
 export const DEEPER_SCAN_PRICE_ZIKS = 20;
 
 /**
+ * What a code scan costs, in Ziks (#security-code-scan, 18 Nov): a website scan's Code scan step, paid when the
+ * person connects their code. Agents then read the repo (lib/security-checks/code-scan.ts).
+ */
+export const CODE_SCAN_PRICE_ZIKS = 50;
+
+/**
  * What the deeper scan checks that the free quick scan can't see (#deeper-scan-gate, 18 Nov): why it's worth paying
  * for, shown before payment on the check's page and in its checkout. Taken from the agents' own parts for each kind
  * (the fixed list in lib/security-checks/ai.ts), minus what the quick scan already covers (headers, HTTPS, cookies).
