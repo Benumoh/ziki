@@ -140,6 +140,7 @@ export type PublicIdeaResult =
 type PublicIntakeDb = Pick<PrismaClient, "project" | "idea" | "bug" | "user" | "attachment" | "agentEvent" | "webhookSubscription" | "$queryRaw" | "$transaction">;
 
 type PublicIdeaDependencies = {
+  submittedById?: string;
   db?: PublicIntakeDb;
   consume?: (items: RateLimitItem[]) => Promise<{ allowed: boolean; retryAfterMs: number }>;
   emit?: typeof publish;
@@ -319,7 +320,7 @@ export async function createPublicIdea(
   const description = publicIdeaDescription(input);
   try {
     const idea = await db.$transaction(async (tx) => {
-      const reporter = await tx.user.upsert({
+      const reporter = dependencies.submittedById ? { id: dependencies.submittedById } : await tx.user.upsert({
         where: { email: publicReporterEmail(project.id) },
         update: {},
         create: {
@@ -348,6 +349,9 @@ export async function createPublicIdea(
         },
         select: { id: true, number: true },
       });
+      if (dependencies.submittedById) {
+        await tx.publicSubmission.create({ data: { ideaId: created.id, userId: dependencies.submittedById } });
+      }
       if (checkedScreenshot) {
         await tx.attachment.create({
           data: {

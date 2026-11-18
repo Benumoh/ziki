@@ -347,6 +347,9 @@ export function AppHeader({
                 />
                 <AccountThemeSelector />
                 <div className="mx-2 h-px bg-zk-divider" />
+                <MenuLink href="/my-submissions" active={isNavItemActive(pathname, "/my-submissions")}>
+                  My submissions
+                </MenuLink>
                 {/* What your agents are doing and what needs you (#849). */}
                 <MenuLink href="/activity" active={isNavItemActive(pathname, "/activity")}>
                   Activity
