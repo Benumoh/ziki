@@ -48,12 +48,14 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   }, [initialFix.length]);
 
   return (
-    <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
+    // The id: with the quick scan merged into the list, "View quick scan results" lands here (#deeper-scan-gate).
+    <div id="check-results" className="scroll-mt-24 space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
       {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
       {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
       {/* Once Ziki's code checks are in the main list (18 Nov), the quick scan isn't shown apart: it would list them twice. */}
+      {/* The id: the deeper scan's checkout jumps here from "View quick scan results" (#deeper-scan-gate). */}
       {quick.merged ? null : (
-        <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+        <details id="quick-scan-results" open={!(checks.findings ?? []).length} className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
           <summary className={SECTION_HEADING}>
             Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
           </summary>
@@ -98,7 +100,8 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
   const fixed = tab.fixed ?? [];
   const pending = tab.pending ?? [];
   const clear = tab.clear ?? [];
-  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length;
+  const notChecked = tab.notChecked ?? [];
+  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length && !notChecked.length;
   return (
     <ul className="m-0 mt-2 list-none divide-y divide-zk-border border-t border-zk-border p-0">
       {scanRows.map((row, i) => (
@@ -129,6 +132,19 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
       {pending.map((part) => (
         <li key={part.id}>
           <Row severity={null} title={part.title} right={<PartState state={part.state} />} lead={null} />
+        </li>
+      ))}
+      {/* Before the deeper scan is paid for (#deeper-scan-gate): what the 20 Ziks buys, each not checked yet. */}
+      {notChecked.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">What agents check that the quick scan can&apos;t · {notChecked.length}</li> : null}
+      {notChecked.map((item) => (
+        <li key={item.title}>
+          <Row
+            severity={null}
+            title={item.title}
+            sub={item.why}
+            lead={null}
+            right={<span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-bold text-zk-text2">Not checked</span>}
+          />
         </li>
       ))}
       {clear.length ? (
