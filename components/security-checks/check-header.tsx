@@ -69,8 +69,8 @@ export function CheckHeader({ report }: { report: CheckReport }) {
 /** Where each level sits on the meter, in percent: the middle of its fifth. */
 const RISK_AT: Record<PreviewRisk, number> = { minimal: 10, low: 30, medium: 50, high: 70, critical: 90 };
 const RISKS: PreviewRisk[] = ["minimal", "low", "medium", "high", "critical"];
-/** Green to red across the whole meter; the fill shows it up to the risk, so the higher, the redder its end. */
-const RISK_GRADIENT = "linear-gradient(90deg, #16a34a 0%, #84cc16 22%, #facc15 45%, #f97316 68%, #dc2626 90%, #b91c1c 100%)";
+/** Ziki's severity colours across the whole meter (Minimal green, Low blue, Medium amber, High orange, Critical red); the fill shows it up to the risk, so the higher, the redder its end. */
+const RISK_GRADIENT = "linear-gradient(90deg, #16a34a 0%, #16a34a 12%, #0ea5e9 26%, #0ea5e9 34%, #f59e0b 46%, #f59e0b 54%, #ea580c 66%, #ea580c 74%, #dc2626 86%, #b91c1c 100%)";
 
 /**
  * The result in one box (18 Nov, Chloe): how many problems (the quick scan's and the agents'), where they came
@@ -103,20 +103,39 @@ function FindingsSummary({ report }: { report: CheckReport }) {
   const fixHref = `/security/checks/${encodeURIComponent(report.checkId)}?fix=${selection.map(({ id }) => encodeURIComponent(id)).join(",")}#fix-panel`;
   const title = all === 0
     ? (finished ? "No problems found" : "Nothing found yet")
-    : `${all} ${all === 1 ? "problem" : "problems"} ${finished ? "found" : "found so far"}${worst && (worst === "critical" || worst === "high") ? ` · ${counts[worst]} ${worst}` : ""}`;
+    : `${all} ${all === 1 ? "problem" : "problems"} ${finished ? "found" : "found so far"}`;
+  const breakdown = SECURITY_SEVERITIES.filter((severity) => counts[severity] > 0).map((severity) => `${counts[severity]} ${severity}`).join(", ");
+  const areas = report.quickScan?.areas ?? [];
+  const httpsArea = areas.find((area) => area.area === "https");
+  const certificate = areas.find((area) => area.area === "certificate");
+  const secure = httpsArea || certificate ? (httpsArea?.problems ?? 0) + (certificate?.problems ?? 0) === 0 : null;
   const sources = [quickTotal ? `${quickTotal} from the quick scan` : null, agentTotal || finished ? `${agentTotal} from the agents${finished ? "" : " so far"}` : null].filter(Boolean).join(" · ");
   const at = RISK_AT[risk];
 
   return (
     <section aria-label="Findings summary" className={`rounded-[20px] border p-4 sm:p-6 ${warn ? "border-2 border-red-400 bg-red-100" : "border-zk-border bg-zk-surface"}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <h2 className={`text-lg font-bold sm:text-xl ${warn ? "text-red-800" : "text-zk-text"}`}>{title}</h2>
+        <div className="min-w-0 flex-1 space-y-1">
+          {/* The same top line as the quick scan's meter on the front page (preview-result.tsx). */}
+          <h2 className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span
+              aria-hidden="true"
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${worst ? `security-severity security-severity--${worst}` : "bg-zk-ok-fg"}`}
+              style={worst ? { background: "var(--sev-dot)" } : undefined}
+            />
+            <span className={`font-semibold ${warn ? "text-red-800" : "text-zk-text"}`}>{title}</span>
+            {breakdown ? <span className={warn ? "text-red-900/80" : "text-zk-muted"}>· {breakdown}</span> : null}
+            {secure === null ? null : (
+              <span className={`ml-auto inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${secure ? "bg-zk-ok-bg text-zk-ok-fg" : "security-severity security-severity--high"}`}>
+                {secure ? "✓ HTTPS set up" : "! HTTPS needs work"}
+              </span>
+            )}
+          </h2>
           {/* A rescan keeps the box to one line under the title (18 Nov, Tolu: "too clustered"): new, still there and
               fixed. Where they came from and the summary sentence show on a first scan only. */}
-          {sources && !rescan ? <p className={`m-0 text-sm ${warn ? "text-red-900" : "text-zk-text2"}`}>{sources}</p> : null}
+          {sources && !rescan ? <p className={`m-0 text-xs ${warn ? "text-red-900/80" : "text-zk-muted"}`}>{sources}</p> : null}
           {/* A rescan says what's new, still there and fixed in one line (18 Nov); New ones carry a blue label below. */}
-          {report.previousCheckId ? <RescanCounts report={report} /> : null}
+          {rescan ? <RescanCounts report={report} /> : null}
           {finished && report.summary && !rescan ? <p className={`m-0 break-words text-sm ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
         </div>
         {finished && selection.length ? (

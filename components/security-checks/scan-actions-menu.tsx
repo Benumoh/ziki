@@ -6,6 +6,7 @@ import { removeScan } from "@/app/actions/security-assistant";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { useRescan } from "./use-rescan";
+import { forgetChatAfterRemove } from "./security-chat";
 
 /**
  * "More actions" on a scan's own page (17 Nov): Scan again (with agents, paid, after a confirm: useRescan) once the
@@ -82,6 +83,7 @@ export function ScanActionsMenu({ checkId, site, posted, nextCheckId }: { checkI
     start(async () => {
       const answer = await removeScan(checkId);
       if (answer.ok) {
+        forgetChatAfterRemove();
         toast("Scan removed.");
         router.push("/security");
       } else {
