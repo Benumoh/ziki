@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { CoinError, appendRows, lockUser, walletBalance } from "@/lib/coins/ledger";
 import { assertCanSpendOnSecurity, loanState } from "@/lib/coins/loan";
 import { ownershipProofRequired } from "@/lib/security-checks";
-import { openEarlierFindings } from "./engine";
+import { earlierFindingsToRecheck } from "./engine";
 
 /**
  * Scan again with agents (#security-rescan, 17 Nov): a paid follow-up of a finished scan. It is not a fresh job: the
@@ -38,16 +38,16 @@ async function rescannable(organisationId: string, userId: string, checkId: stri
   return { ok: true as const, check };
 }
 
-/** The confirm's numbers: how many earlier findings agents will recheck, the price and the wallet. Charges nothing. */
+/** The confirm's numbers: how many earlier findings are rechecked (by agents or Ziki's own checks), the price and the wallet. Charges nothing. */
 export async function rescanQuote(organisationId: string, userId: string, checkId: string): Promise<RescanQuote> {
   const found = await rescannable(organisationId, userId, checkId);
   if (!found.ok) return { ok: false, error: found.error };
   const [earlier, balance, loan] = await Promise.all([
-    openEarlierFindings(prisma, { organisationId, requestedById: userId, targetId: found.check.targetId }, ""),
+    earlierFindingsToRecheck(prisma, { organisationId, requestedById: userId, targetId: found.check.targetId }, ""),
     walletBalance(prisma, userId),
     loanState(prisma, userId),
   ]);
-  return { ok: true, site: found.check.target.value, earlier: earlier.length, price: RESCAN_PRICE_ZIKS, balance, canBorrow: loan.canBorrow };
+  return { ok: true, site: found.check.target.value, earlier, price: RESCAN_PRICE_ZIKS, balance, canBorrow: loan.canBorrow };
 }
 
 /**

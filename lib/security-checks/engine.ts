@@ -1,19 +1,19 @@
-import type { Prisma, PrismaClient, SecurityCheckStatus, SecuritySeverity } from "@prisma/client";
+import type { Prisma, PrismaClient, SecurityCheckStatus, SecuritySeverity, SecurityTargetKind } from "@prisma/client";
 import { award } from "@/lib/points/award";
 import { logger } from "@/lib/logger";
-import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, agentsMayWork, fallbackWindowMs, ownershipProofRequired, provenTargetWhere } from "@/lib/security-checks";
-import { cleanParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
+import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, agentsMayWork, fallbackWindowMs, ownershipProofRequired, provenTargetWhere, scanPaymentWhere } from "@/lib/security-checks";
+import { cleanParts, coreParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
 import { pickAgentFor, type CandidateAgent } from "./assign";
 import { quickScanForAgents, type QuickScanLine } from "./preview-summary";
-import { fixBucketOf } from "./fix-bucket";
+import { fixBucketOf, type FixSource } from "./fix-bucket";
 import { realNetwork } from "./ownership";
 
 /**
  * The security check engine (#security-checks, 12 Nov plan H1).
  *
- * 1. The check starts as soon as it is added (14 Nov plan: no proof while
- *    `SECURITY_OWNERSHIP_PROOF_REQUIRED` is off; with it on, once ownership is
- *    proven) with `startCheck`, called when it is added, or by the sweep: Ziki's own AI splits it into parts. It is
+ * 1. A new deeper scan starts after payment (18 Nov), and ownership proof when required.
+ *    Historical free checks remain eligible. `startCheck`, called after payment or by the sweep,
+ *    has Ziki's own AI split it into parts. It is
  *    not an agent and earns nothing.
  * 2. Each part goes to a security-cleared agent (its owner's `User.securityClearedAt`)
  *    when that agent asks for security work (`listAgentJobs`), never pushed by the
@@ -115,6 +115,7 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
     where: {
       id: checkId,
       ...provenTargetWhere(),
+      ...scanPaymentWhere(),
       OR: [
         { status: { in: startableStatuses() } },
         { status: "splitting", startedAt: { lt: stuckBefore }, items: { none: { kind: "check" } } },
@@ -131,14 +132,13 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
       select: { previousCheckId: true, organisationId: true, requestedById: true, targetId: true, target: { select: { kind: true, value: true } } },
     });
     if (!check) return false;
-    // A rescan (#security-rescan) starts from what was found before: those findings are rechecked, and the new parts look past them.
-    const earlier = check.previousCheckId ? await openEarlierFindings(db, check, checkId) : [];
-    const { parts } = await planParts(check.target, {
-      ai: deps.ai,
-      readPage: deps.readPage === undefined ? readPublicPage : deps.readPage,
-      earlier: earlier.map((finding) => finding.title),
-    });
-    const rechecks = recheckParts(earlier);
+    // A rescan (#security-rescan) rechecks what was found before and repeats the earlier scan's parts (18 Nov: the same
+    // checklist every time, so a new finding means the site changed, not that a different area was picked).
+    const earlierRows = check.previousCheckId ? await earlierOpenRows(db, check, checkId) : [];
+    const parts = check.previousCheckId
+      ? await rescanParts(db, check.previousCheckId, check.target, earlierRows.map((row) => row.title))
+      : (await planParts(check.target, { ai: deps.ai, readPage: deps.readPage === undefined ? readPublicPage : deps.readPage })).parts;
+    const rechecks = recheckParts(toRecheck(earlierRows));
 
     saved = await db.$transaction(async (tx) => {
       const { count: still } = await tx.securityCheck.updateMany({
@@ -171,18 +171,24 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
 /** An earlier finding a rescan looks at again, with the area (part title) that found it. */
 export type EarlierFinding = { id: string; title: string; area: string };
 
+type EarlierRow = {
+  id: string;
+  title: string;
+  /** `kind` is absent in older test data; `automatic` marks Ziki's own code checks. */
+  item: { title: string; kind?: string };
+  finding: FixSource | null;
+};
+
 /**
- * The findings a rescan rechecks (#security-rescan): every finding on this person's earlier scans of the same site,
- * in the same workspace, that no rescan has called fixed. Removed scans don't count. A finding already sent to fix
- * whose fix is still in progress is skipped (18 Nov): its issue is being worked on, so checking it again tells
- * nobody anything. Once that issue is resolved or closed, the next rescan rechecks it, which confirms the fix.
+ * Every finding on this person's earlier scans of the same site, in the same workspace, that no rescan has called
+ * fixed. Removed scans don't count.
  */
-export async function openEarlierFindings(
+async function earlierOpenRows(
   db: Db,
   check: { organisationId: string; requestedById: string; targetId: string },
   excludeCheckId: string,
-): Promise<EarlierFinding[]> {
-  const rows = await db.securityCheckResult.findMany({
+): Promise<EarlierRow[]> {
+  return db.securityCheckResult.findMany({
     where: {
       checkId: { not: excludeCheckId },
       check: { organisationId: check.organisationId, requestedById: check.requestedById, targetId: check.targetId, status: { not: "cancelled" } },
@@ -192,13 +198,96 @@ export async function openEarlierFindings(
     select: {
       id: true,
       title: true,
-      item: { select: { title: true } },
+      item: { select: { title: true, kind: true } },
       finding: { select: { bug: { select: { status: true, isDeleted: true } }, idea: { select: { status: true, isDeleted: true } } } },
     },
   });
+}
+
+/**
+ * The open earlier findings a rescan rechecks. A finding already sent to fix whose fix is still in progress is skipped
+ * (18 Nov): its issue is being worked on, so checking it again tells nobody anything. Once that issue is resolved or
+ * closed, the next rescan rechecks it, which confirms the fix. Ziki's own code findings aren't given to agents:
+ * the rescan's quick scan rechecks them (`saveCodeFindings`).
+ */
+function toRecheck(rows: ReadonlyArray<EarlierRow>): EarlierFinding[] {
   return rows
+    .filter((row) => row.item.kind !== "automatic")
     .filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing")
     .map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
+}
+
+/**
+ * How many earlier findings a rescan rechecks, for its confirm (18 Nov): agents' ones and Ziki's own code findings
+ * (rechecked by the rescan's quick scan), less the ones still being fixed.
+ */
+export async function earlierFindingsToRecheck(
+  db: Db,
+  check: { organisationId: string; requestedById: string; targetId: string },
+  excludeCheckId: string,
+): Promise<number> {
+  return (await earlierOpenRows(db, check, excludeCheckId)).filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing").length;
+}
+
+/** Recheck parts are named this way, so a later rescan can tell them apart from the parts it repeats. */
+export const RECHECK_TITLE_PREFIX = "Recheck: ";
+/** At most this many parts a rescan repeats: an old scan's own parts plus the core checklist. */
+export const MAX_RESCAN_PARTS = 40;
+/** Starts the list of earlier findings added to a rescan's parts; a later rescan cuts it off before repeating the part. */
+export const KNOWN_FINDINGS_HEADING = "\n\nAlready found on earlier scans of this site";
+const KNOWN_FINDINGS_MAX_CHARS = 1500;
+
+/**
+ * The parts a rescan repeats (18 Nov, Tolu: the same checklist every time). The core checklist for the target's kind
+ * comes first, then every other part the earlier scan ran (the AI's extras and any an agent added), with the same
+ * instructions. Its recheck parts aren't repeated: this rescan makes its own. No AI is asked, so nothing new is
+ * planned. Each part is told the earlier findings, so a known problem isn't filed again under another name.
+ * A scan made before the core checklist existed gets the core added to its own parts once.
+ */
+export async function rescanParts(
+  db: Db,
+  previousCheckId: string,
+  target: { kind: SecurityTargetKind; value: string },
+  knownTitles: ReadonlyArray<string>,
+): Promise<PlannedPart[]> {
+  const earlier = await db.securityCheckItem.findMany({
+    where: { checkId: previousCheckId, kind: "check" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { title: true, instructions: true },
+  });
+  const repeated = earlier
+    .filter((part) => !part.title.startsWith(RECHECK_TITLE_PREFIX))
+    .map((part) => ({ title: part.title, instructions: (part.instructions ?? "").split(KNOWN_FINDINGS_HEADING)[0]! }));
+  const seen = new Set<string>();
+  const parts: PlannedPart[] = [];
+  for (const part of [...coreParts(target.kind, target.value), ...repeated]) {
+    const title = part.title.trim().slice(0, 200);
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    parts.push({ title, instructions: withKnownFindings(part.instructions.trim() || title, knownTitles) });
+    if (parts.length === MAX_RESCAN_PARTS) break;
+  }
+  return parts;
+}
+
+/** A title as compared for repeats: case, extra spaces and a trailing full stop don't count. */
+function sameTitle(title: string): string {
+  return title.trim().replace(/\s+/g, " ").replace(/\.$/, "").toLowerCase();
+}
+
+/** Adds the earlier findings' titles to a part's instructions, so the agent doesn't report them as new. */
+function withKnownFindings(instructions: string, knownTitles: ReadonlyArray<string>): string {
+  const lines: string[] = [];
+  let length = 0;
+  for (const title of new Set(knownTitles)) {
+    const line = `- ${title.slice(0, 150)}`;
+    if (length + line.length > KNOWN_FINDINGS_MAX_CHARS) break;
+    lines.push(line);
+    length += line.length + 1;
+  }
+  if (lines.length === 0) return instructions;
+  const note = `${KNOWN_FINDINGS_HEADING} (they are rechecked separately; don't report them, or the same problem under another name, as new):\n${lines.join("\n")}`;
+  return `${instructions.slice(0, 4000 - note.length)}${note}`;
 }
 
 /** One recheck part per area of the earlier report, split so no part holds more than MAX_RECHECKS_PER_PART. */
@@ -209,7 +298,7 @@ export function recheckParts(earlier: ReadonlyArray<EarlierFinding>): { title: s
   for (const [area, ids] of byArea) {
     for (let at = 0; at < ids.length; at += MAX_RECHECKS_PER_PART) {
       parts.push({
-        title: `Recheck: ${area}`.slice(0, 200),
+        title: `${RECHECK_TITLE_PREFIX}${area}`.slice(0, 200),
         instructions:
           "Look again at each earlier finding this part lists (`recheck`) and answer each one in `rechecks`: `still_there` if you can still see it, `fixed` only if you checked and it's gone, with a short note of what you saw. Send no `results` here: this part only rechecks, and the scan's other parts look for anything new. Look only.",
         resultIds: ids.slice(at, at + MAX_RECHECKS_PER_PART),
@@ -247,6 +336,7 @@ export async function startWaitingChecks(db: EngineDb, now = new Date(), deps: E
   const waiting = await db.securityCheck.findMany({
     where: {
       ...provenTargetWhere(),
+      ...scanPaymentWhere(),
       OR: [{ status: { in: startableStatuses() } }, { status: "splitting", startedAt: { lt: stuckBefore }, items: { none: { kind: "check" } } }],
     },
     orderBy: { createdAt: "asc" },
@@ -331,7 +421,7 @@ export async function assignWaitingJobs(db: Db, now: Date, agentId: string): Pro
       status: "waiting",
       agentId: null,
       ...(window === null ? {} : { createdAt: { gte: new Date(now.getTime() - window) } }),
-      check: { status: "checking", ...provenTargetWhere() },
+      check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true, check: { select: { organisationId: true } } },
@@ -342,7 +432,7 @@ export async function assignWaitingJobs(db: Db, now: Date, agentId: string): Pro
     const agent = pickAgentFor(item.check.organisationId, agents, MAX_OPEN_JOBS_PER_AGENT);
     if (!agent) break;
     const { count } = await db.securityCheckItem.updateMany({
-      where: { id: item.id, status: "waiting", agentId: null },
+      where: { id: item.id, status: "waiting", agentId: null, check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() } },
       data: { status: "checking", agentId: agent.id, assignedAt: now },
     });
     if (count === 1) {
@@ -363,7 +453,7 @@ export type SecurityJob = {
   instructions: string | null;
   assignedAt: Date | null;
   reportBy: Date | null;
-  /** `quickScan`: what the quick browser scan already saw on this site (short titles only), so your report agrees with it where you look at the same thing. */
+  /** `quickScan`: what Ziki's quick code scan already found on this site (short titles only). Those are already in the report's list (18 Nov): don't report them again; a result repeating one is refused (`already_known`). */
   check: { id: string; target: { kind: string; value: string; quickScan: QuickScanLine[] } };
   /**
    * A rescan's recheck part (#security-rescan): the earlier findings to look at again. Answer each with
@@ -376,7 +466,7 @@ export type SecurityJob = {
 export async function listAgentJobs(db: Db, agentId: string, now = new Date()): Promise<SecurityJob[]> {
   await assignWaitingJobs(db, now, agentId);
   const items = await db.securityCheckItem.findMany({
-    where: { agentId, status: "checking", kind: "check" },
+    where: { agentId, status: "checking", kind: "check", check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() } },
     orderBy: [{ assignedAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
@@ -406,7 +496,18 @@ async function heldJob(tx: Tx, agentId: string, itemId: string) {
       status: true,
       agentId: true,
       checkId: true,
-      check: { select: { status: true, target: { select: { verifiedAt: true } } } },
+      check: {
+        select: {
+          status: true,
+          free: true,
+          paidAt: true,
+          previousCheckId: true,
+          organisationId: true,
+          requestedById: true,
+          targetId: true,
+          target: { select: { verifiedAt: true } },
+        },
+      },
     },
   });
   if (!item || item.agentId !== agentId || item.kind !== "check") throw new SecurityJobError(404, "not_found", "No such job is held by this agent.");
@@ -457,6 +558,23 @@ export async function submitReport(
         "recheck_only",
         "This part only rechecks earlier findings: answer each one in `rechecks` (`still_there` or `fixed`) and send no `results`. The scan's other parts look for anything new.",
       );
+    }
+    // A new result that repeats a finding already in the list is refused (18 Nov, Tolu): an earlier open finding on a
+    // rescan (rechecked by its own part) or one of this scan's own code checks (the quick scan, in the job's
+    // `quickScan`). A copy would list the same problem twice. Each part's instructions list the earlier ones; this holds
+    // even for an agent that ignores them. A finding a rescan called fixed may come back as new.
+    if (results.length > 0) {
+      const code = await tx.securityCheckResult.findMany({ where: { checkId: item.checkId, item: { kind: "automatic" } }, select: { title: true } });
+      const earlier = item.check.previousCheckId ? await earlierOpenRows(tx, item.check, item.checkId) : [];
+      const known = new Set([...code, ...earlier].map((row) => sameTitle(row.title)));
+      const repeat = results.find((result) => known.has(sameTitle(result.title)));
+      if (repeat) {
+        throw new SecurityJobError(
+          400,
+          "already_known",
+          `"${repeat.title.slice(0, 150)}" is already in this scan's list (found by Ziki's automatic checks or an earlier scan). Leave it out and report only what's new.`,
+        );
+      }
     }
     const { count } = await tx.securityCheckItem.updateMany({
       where: { id: itemId, agentId, status: "checking" },
@@ -534,7 +652,7 @@ export async function postReportIfComplete(db: EngineDb, checkId: string, now = 
   if (open > 0 || parts === 0) return false;
   const stuckBefore = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
   const { count } = await db.securityCheck.updateMany({
-    where: { id: checkId, status: "checking", postedAt: null, OR: [{ collatingAt: null }, { collatingAt: { lt: stuckBefore } }] },
+    where: { id: checkId, status: "checking", postedAt: null, ...scanPaymentWhere(), OR: [{ collatingAt: null }, { collatingAt: { lt: stuckBefore } }] },
     data: { collatingAt: now },
   });
   if (count !== 1) return false;
@@ -552,7 +670,7 @@ export async function postReportIfComplete(db: EngineDb, checkId: string, now = 
   const { summary } = await writeSummary(check.target, [...check.results, ...check.rechecked], { ai: deps.ai });
 
   const { count: posted } = await db.securityCheck.updateMany({
-    where: { id: checkId, status: "checking", postedAt: null, collatingAt: now },
+    where: { id: checkId, status: "checking", postedAt: null, collatingAt: now, ...scanPaymentWhere() },
     data: { status: "done", finishedAt: now, postedAt: now, summary },
   });
   return posted === 1;
@@ -564,6 +682,7 @@ export async function postFinishedReports(db: EngineDb, now = new Date(), deps: 
   const ready = await db.securityCheck.findMany({
     where: {
       status: "checking",
+      ...scanPaymentWhere(),
       postedAt: null,
       OR: [{ collatingAt: null }, { collatingAt: { lt: stuckBefore } }],
       items: { some: { kind: "check" }, none: { kind: "check", status: { in: ["waiting", "checking"] } } },

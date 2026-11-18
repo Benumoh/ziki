@@ -3,7 +3,7 @@ import { Prisma, type SecurityCheckStatus, type SecuritySeverity, type SecurityT
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { prisma } from "@/lib/prisma";
 import type { PreviewSummary } from "./preview-summary";
-import { SECURITY_CHECK_PRICE_COINS, FINISHED_CHECK_STATUSES, FREE_SCANS_PER_WORKSPACE_PER_MONTH, freeScanAllowed, freeScanMonthStart, ownershipProofRequired } from "@/lib/security-checks";
+import { DEEPER_SCAN_PRICE_ZIKS, FINISHED_CHECK_STATUSES, FREE_SCANS_PER_WORKSPACE_PER_MONTH, freeScanAllowed, freeScanMonthStart, ownershipProofRequired } from "@/lib/security-checks";
 import type { ParsedTarget } from "@/lib/security-checks/target";
 
 /**
@@ -15,7 +15,7 @@ import type { ParsedTarget } from "@/lib/security-checks/target";
 export type AddedCheck = {
   targetId: string;
   checkId: string;
-  /** Ownership was already proven for this target, so its free scan starts straight away. */
+  /** Ownership was already proven; the deeper scan still waits for payment. */
   verified: boolean;
   /** An unfinished check for this target already existed and was reused. */
   reused: boolean;
@@ -34,15 +34,15 @@ export function newOwnershipToken(): string {
 }
 
 /**
- * Store the target (or reuse the workspace's existing one) and open a free
+ * Store the target (or reuse the workspace's existing one) and open an unpaid
  * check (#security-checks, plan C1). The person's own unfinished check on that
  * target is reused rather than opening a second one. Checks are per person:
  * someone else in the workspace gets their own.
  *
- * Every check is free, within limits: a site gets one free scan, and a
+ * The quick scan is free, within limits: a site gets one free scan, and a
  * workspace gets FREE_SCANS_PER_WORKSPACE_PER_MONTH a month. Past either, no
- * check is opened and the client is told why. Clients pay per finding, when
- * they unlock its fix.
+ * check is opened and the client is told why. A new deeper scan waits for payment;
+ * per-finding remediation payments remain separate.
  */
 export async function addTargetAndCheck(
   organisationId: string,
@@ -61,8 +61,8 @@ export async function addTargetAndCheck(
   if (open) return { targetId: stored.id, checkId: open.id, verified, reused: true };
 
   const [targetFreeScans, workspaceFreeScansThisMonth] = await Promise.all([
-    prisma.securityCheck.count({ where: { targetId: stored.id, free: true } }),
-    prisma.securityCheck.count({ where: { organisationId, free: true, createdAt: { gte: freeScanMonthStart(now) } } }),
+    prisma.securityCheck.count({ where: { targetId: stored.id, previousCheckId: null } }),
+    prisma.securityCheck.count({ where: { organisationId, previousCheckId: null, createdAt: { gte: freeScanMonthStart(now) } } }),
   ]);
   const answer = freeScanAllowed({ targetFreeScans, workspaceFreeScansThisMonth });
   if (!answer.allowed) {
@@ -79,10 +79,10 @@ export async function addTargetAndCheck(
       organisationId,
       targetId: stored.id,
       requestedById: userId,
-      free: true,
-      priceCoins: SECURITY_CHECK_PRICE_COINS,
-      // A target proven once never asks again: its new checks are ready for agents.
-      // No proof step while it's switched off (14 Nov plan): the check is queued at once.
+      free: false,
+      priceCoins: DEEPER_SCAN_PRICE_ZIKS,
+      // The queue state is also payment-gated: creating the row never starts agents.
+      // Ownership remains a separate prerequisite when proof is enabled.
       status: verified || !ownershipProofRequired() ? "queued" : "awaiting_ownership",
     },
     select: { id: true },
@@ -198,6 +198,8 @@ export function nextStepPath(check: { targetId: string; checkId: string; verifie
 }
 
 export type WorkspaceCheckRow = {
+  /** Seyi: show payment before deeper-scan progress for a new unpaid check. */
+  paymentRequired?: boolean;
   id: string;
   targetId: string;
   kind: SecurityTargetKind;
@@ -239,10 +241,12 @@ export function agentReportOf(
 }
 
 /** A scan's place, on its card: being checked, its report ready, or findings moved to the app (14 Nov plan, C1). */
-export type ScanStage = "scanning" | "report" | "in_app" | "cancelled";
+export type ScanStage = "quick_only" | "scanning" | "report" | "in_app" | "cancelled";
 
-export function scanStage(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved">): ScanStage {
+export function scanStage(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved" | "paymentRequired">): ScanStage {
   if (check.status === "cancelled") return "cancelled";
+  // The quick scan is in; the deeper scan waits for its payment (#deeper-scan-gate).
+  if (check.paymentRequired) return "quick_only";
   if (check.moved > 0) return "in_app";
   return check.posted ? "report" : "scanning";
 }
@@ -274,6 +278,8 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
       id: true,
       status: true,
       postedAt: true,
+      free: true,
+      paidAt: true,
       summary: true,
       createdAt: true,
       target: { select: { id: true, kind: true, value: true, verifiedAt: true, previewSummary: true } },
@@ -282,6 +288,7 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
   });
   return rows.map((row) => ({
     id: row.id,
+    paymentRequired: !row.free && row.paidAt === null,
     targetId: row.target.id,
     kind: row.target.kind,
     value: row.target.value,

@@ -82,6 +82,54 @@ describe("the check's list: Quick scan and Deeper scan tabs (16 Nov)", () => {
     expect(deep.state).toEqual({ label: "0 of 2 done", tone: "working" });
   });
 
+  it("marks a rescan's own findings New, never an earlier one or a first scan's (18 Nov)", () => {
+    const rescan = { ...report([{ id: "p1", title: "Login", status: "done" }], [{}, { checkId: "c0", recheck: "still_there" }]), previousCheckId: "c0" } as CheckReport;
+    expect(checkListTabs(rescan)[1].findings!.map((f) => f.isNew)).toEqual([true, false]);
+    // Each label explains itself on hover instead of a note at the top (18 Nov, Tolu).
+    const changed = { ...rescan, siteChange: { changed: ["a new certificate"] } } as CheckReport;
+    expect(checkListTabs(changed)[1].findings!.map((f) => f.hint)).toEqual([
+      "Found for the first time on this scan. This site changed since the last scan (a new certificate).",
+      "Found on the earlier scan and found again on this one.",
+    ]);
+    expect(checkListTabs(report([{ id: "p1", title: "Login", status: "done" }], [{}]))[1].findings![0]!.hint).toBeNull();
+    expect(checkListTabs(report([{ id: "p1", title: "Login", status: "done" }], [{}]))[1].findings!.map((f) => f.isNew)).toEqual([false]);
+  });
+
+  it("keeps the quick scan's findings in their own section at the top once paid, tickable to fix, and the Deeper scan lists only the agents' (18 Nov)", () => {
+    const paid = {
+      ...report([{ id: "p1", title: "Login", status: "done" }], [{ area: "Automatic check: Security headers", title: "No HSTS header", partId: "auto" }, {}]),
+      codeInList: true,
+      paymentRequired: false,
+    } as CheckReport;
+    const [quick, deep] = checkListTabs(paid);
+    expect(quick.merged).toBeUndefined();
+    expect(quick.findings!.map((f) => [f.title, f.area])).toEqual([["No HSTS header", "Security headers"]]);
+    expect(quick.count).toBe(1);
+    expect(deep.findings!.map((f) => f.title)).toEqual(["Admin open"]);
+    expect(deep.count).toBe(1);
+  });
+
+  it("before the deeper scan is paid for, lists the quick scan's findings under Quick scan and says what the deeper scan will check (#deeper-scan-gate)", () => {
+    // A new scan (18 Nov): the quick scan's findings are saved in the list, under Ziki's automatic checks.
+    const unpaid = { ...report([], [{ area: "Automatic check: Security headers", severity: "low", title: "No HSTS header", description: "Browsers aren't told to use HTTPS. More text." }]), status: "queued", codeInList: true, paymentRequired: true } as CheckReport;
+    const [quick, deep] = checkListTabs(unpaid);
+    expect(quick.merged).toBeUndefined();
+    // Real findings, fixable before the deeper scan is bought: the same tick box, See the fix and Fix selected.
+    expect(quick.scanRows).toBeUndefined();
+    expect(quick.findings!.map((f) => [f.title, f.line, f.area])).toEqual([["No HSTS header", "Browsers aren't told to use HTTPS.", "Security headers"]]);
+    expect(deep.state).toEqual({ label: "Not started", tone: "waiting" });
+    expect(deep.findings).toBeUndefined();
+    expect(deep.notChecked!.map((item) => item.title)).toContain("Exposed files");
+  });
+
+  it("once paid but before agents have parts, the quick scan's findings still show and the Deeper scan says Planning", () => {
+    const planning = { ...report([], [{ area: "Automatic check: Cookies" }]), status: "queued", codeInList: true, paymentRequired: false } as CheckReport;
+    const [quick, deep] = checkListTabs(planning);
+    expect(quick.findings!.map((f) => f.title)).toEqual(["Admin open"]);
+    expect(deep.state.label).toBe("Planning");
+    expect(deep.findings).toEqual([]);
+  });
+
   it("names severities as threats", () => {
     expect(THREAT_LABEL).toEqual({ critical: "Critical threat", high: "High threat", medium: "Medium threat", low: "Low threat" });
   });

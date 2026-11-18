@@ -6,7 +6,7 @@ vi.mock("@/lib/points/award", () => ({ award: (...args: unknown[]) => award(...a
 vi.mock("@/lib/security-checks/ownership", () => ({ realNetwork: { get: vi.fn() } }));
 
 import { pickAgentFor } from "@/lib/security-checks/assign";
-import { defaultParts, defaultSummary, planParts, writeSummary, type SecurityAi } from "@/lib/security-checks/ai";
+import { MAX_EXTRA_PARTS, coreParts, defaultSummary, planParts, writeSummary, type SecurityAi } from "@/lib/security-checks/ai";
 import {
   JOB_TIMEOUT_MINUTES,
   SecurityJobError,
@@ -55,7 +55,7 @@ function fakeAi(answer: unknown) {
 }
 
 function heldItem(overrides: Record<string, unknown> = {}) {
-  return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", target: verified }, ...overrides };
+  return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", free: true, paidAt: null, target: verified }, ...overrides };
 }
 
 beforeEach(() => {
@@ -157,7 +157,7 @@ describe("who gets a part (#security-checks)", () => {
 });
 
 describe("starting a check: Ziki's AI splits it", () => {
-  it("claims the proven check, saves the AI's parts and moves it to checking", async () => {
+  it("claims the proven check, saves the core checklist then the AI's extras, and moves it to checking (18 Nov)", async () => {
     const db = fakeDb();
     db.securityCheck.updateMany.mockResolvedValue({ count: 1 });
     db.securityCheck.findUnique.mockResolvedValue({ target: { kind: "website", value: "settle.ng" } });
@@ -168,11 +168,14 @@ describe("starting a check: Ziki's AI splits it", () => {
     // Proof is off, so the start asks nothing of the target (with it on, it also asks for verifiedAt).
     expect(db.securityCheck.updateMany.mock.calls[0][0].where).toMatchObject({ id: "check1" });
     expect(db.securityCheck.updateMany.mock.calls[0][0].where).not.toHaveProperty("target");
-    expect(db.securityCheckItem.createMany.mock.calls[0][0].data).toHaveLength(8);
-    expect(db.securityCheckItem.createMany.mock.calls[0][0].data[0]).toMatchObject({ checkId: "check1", kind: "check", title: "Part 1" });
+    const core = coreParts("website", "settle.ng");
+    const saved = db.securityCheckItem.createMany.mock.calls[0][0].data;
+    // Every core part first, then the AI's extras, no more than MAX_EXTRA_PARTS of them.
+    expect(saved.map((part: { title: string }) => part.title)).toEqual([...core.map((part) => part.title), ...parts.slice(0, MAX_EXTRA_PARTS).map((part) => part.title)]);
+    expect(saved[0]).toMatchObject({ checkId: "check1", kind: "check", title: core[0]!.title });
   });
 
-  it("a rescan starts from the last report: one recheck part per area holding its open earlier findings, and new parts planned past them (#security-rescan)", async () => {
+  it("a rescan rechecks the open earlier findings and repeats the earlier scan's parts, with no new planning (#security-rescan, 18 Nov)", async () => {
     const db = fakeDb();
     db.securityCheck.updateMany.mockResolvedValue({ count: 1 });
     db.securityCheck.findUnique.mockResolvedValue({
@@ -191,9 +194,16 @@ describe("starting a check: Ziki's AI splits it", () => {
       // Its issue is resolved: rechecked, which confirms the fix.
       { id: "r5", title: "Cookie readable by scripts", item: { title: "Cookies" }, finding: { bug: { status: "resolved", isDeleted: false }, idea: null } },
     ]);
+    // The earlier scan's parts: its own recheck part, a core part, an extra the AI added, and one an agent added on a
+    // rescan before this one (with that rescan's list of known findings still on it).
+    db.securityCheckItem.findMany.mockResolvedValue([
+      { title: "Recheck: Older area", instructions: "Answer each earlier finding." },
+      { title: "Security headers", instructions: "Older wording for the headers." },
+      { title: "Checkout page", instructions: "Look at the checkout page." },
+      { title: "Status page", instructions: "Look at /status.\n\nAlready found on earlier scans of this site (old list):\n- Stale finding" },
+    ]);
     db.securityCheckItem.create.mockResolvedValueOnce({ id: "recheck-admin" }).mockResolvedValueOnce({ id: "recheck-cookies" });
-    const parts = Array.from({ length: 8 }, (_, i) => ({ title: `Part ${i + 1}`, instructions: "Look at it." }));
-    const { ai, calls } = fakeAi({ parts });
+    const { ai, calls } = fakeAi({ parts: [{ title: "Something new", instructions: "Look elsewhere." }] });
 
     expect(await startCheck(asDb(db), "rescan1", now, { ai, readPage: null })).toBe(true);
 
@@ -206,10 +216,23 @@ describe("starting a check: Ziki's AI splits it", () => {
       [["r1", "r2"], "recheck-admin"],
       [["r3", "r5"], "recheck-cookies"],
     ]);
-    // The new parts are still planned, and Ziki's AI is told what is already being rechecked.
-    expect(db.securityCheckItem.createMany.mock.calls[0][0].data).toHaveLength(8);
-    expect(calls[0]!.user).toContain("Admin page open");
-    expect(calls[0]!.user).not.toContain("Search built from input");
+
+    // The earlier scan's parts are repeated: the core checklist first (today's wording), then its own extras. Its
+    // recheck part isn't repeated, and Ziki's AI isn't asked for anything new.
+    expect(db.securityCheckItem.findMany.mock.calls[0][0].where).toEqual({ checkId: "check0", kind: "check" });
+    const saved: { title: string; instructions: string }[] = db.securityCheckItem.createMany.mock.calls[0][0].data;
+    expect(saved.map((part) => part.title)).toEqual([...coreParts("website", "settle.ng").map((part) => part.title), "Checkout page", "Status page"]);
+    expect(saved[0]!.instructions).not.toContain("Older wording");
+    expect(calls).toHaveLength(0);
+
+    // Every part is told what was already found, the finding still being fixed included, so none is filed again as new.
+    const status = saved.find((part) => part.title === "Status page")!;
+    expect(status.instructions.startsWith("Look at /status.\n\nAlready found on earlier scans of this site")).toBe(true);
+    expect(status.instructions).not.toContain("Stale finding");
+    for (const part of saved) {
+      expect(part.instructions).toContain("- Admin page open");
+      expect(part.instructions).toContain("- Search built from input");
+    }
   });
 
   it("puts a check whose split failed back to waiting at once, so the next sweep starts it, instead of leaving it stuck for ten minutes", async () => {
@@ -249,13 +272,26 @@ describe("starting a check: Ziki's AI splits it", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("falls back to the fixed parts when the AI fails, never back to queued", async () => {
-    const result = await planParts({ kind: "website", value: "settle.ng" }, { ai: fakeAi(new Error("down")).ai, readPage: null });
-    expect(result.source).toBe("default");
-    expect(result.parts).toEqual(defaultParts("website", "settle.ng"));
-    expect((await planParts({ kind: "repo", value: "a/b" }, { ai: null })).source).toBe("default");
-    // Too few parts from the AI also falls back.
-    expect((await planParts({ kind: "server", value: "1.2.3.4" }, { ai: fakeAi({ parts: [{ title: "Only one", instructions: "x" }] }).ai })).source).toBe("default");
+  it("runs the core checklist on its own when the AI is off, fails or adds nothing, never back to queued (18 Nov)", async () => {
+    const core = coreParts("website", "settle.ng");
+    expect(await planParts({ kind: "website", value: "settle.ng" }, { ai: fakeAi(new Error("down")).ai, readPage: null })).toEqual({ parts: core, source: "core" });
+    expect(await planParts({ kind: "repo", value: "a/b" }, { ai: null })).toEqual({ parts: coreParts("repo", "a/b"), source: "core" });
+    expect((await planParts({ kind: "server", value: "1.2.3.4" }, { ai: fakeAi({ parts: [] }).ai })).source).toBe("core");
+  });
+
+  it("lets the AI add parts but never replace or repeat a core one (18 Nov)", async () => {
+    const core = coreParts("website", "settle.ng");
+    const { ai, calls } = fakeAi({
+      parts: [
+        { title: "security HEADERS", instructions: "A core part again under other casing." },
+        { title: "Checkout page", instructions: "Look at the checkout page." },
+      ],
+    });
+    const result = await planParts({ kind: "website", value: "settle.ng" }, { ai, readPage: null });
+    expect(result.source).toBe("ai");
+    expect(result.parts.map((part) => part.title)).toEqual([...core.map((part) => part.title), "Checkout page"]);
+    // The AI is shown the core checklist it adds to.
+    expect(calls[0]!.user).toContain(`- ${core[0]!.title}`);
   });
 });
 
@@ -327,6 +363,35 @@ describe("reporting a part", () => {
     await expect(submitReport(asDb(refiled), "agentA", "item1", copy, now, [], [{ id: "r1", state: "still_there" }])).rejects.toMatchObject({ status: 400, code: "recheck_only" });
     expect(refiled.securityCheckResult.createMany).not.toHaveBeenCalled();
     expect(refiled.securityCheckItem.updateMany).not.toHaveBeenCalled();
+
+    // Any other part of a rescan can't file an earlier open finding again (18 Nov), whatever its casing or spacing;
+    // something new is saved as usual.
+    const rescanPart = heldItem({ checkId: "rescan1", check: { status: "checking", free: true, paidAt: null, target: verified, previousCheckId: "check0", organisationId: "org1", requestedById: "owner", targetId: "t1" } });
+    const repeated = fakeDb();
+    repeated.securityCheckItem.findUnique.mockResolvedValue(rescanPart);
+    // Asked in turn: the part's own rechecks, this scan's code findings, then the earlier open findings.
+    repeated.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "r1", title: "No Content Security Policy", item: { title: "Security headers" }, finding: null }]);
+    const again = [{ severity: "medium" as const, title: "  no content  security policy. ", description: "Seen again.", howToFix: "Add one." }];
+    await expect(submitReport(asDb(repeated), "agentA", "item1", again, now)).rejects.toMatchObject({ status: 400, code: "already_known" });
+    expect(repeated.securityCheckResult.findMany.mock.calls[2]![0].where).toMatchObject({ checkId: { not: "rescan1" }, check: { organisationId: "org1", requestedById: "owner", targetId: "t1" } });
+    expect(repeated.securityCheckResult.createMany).not.toHaveBeenCalled();
+    expect(repeated.securityCheckItem.updateMany).not.toHaveBeenCalled();
+
+    const fresh = fakeDb();
+    fresh.securityCheckItem.findUnique.mockResolvedValue(rescanPart);
+    fresh.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
+    fresh.securityCheckItem.findMany.mockResolvedValue([]);
+    fresh.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "r1", title: "No Content Security Policy", item: { title: "Security headers" }, finding: null }]);
+    const newer = [{ severity: "low" as const, title: "robots.txt lists internal pages", description: "New.", howToFix: "Trim it." }];
+    await expect(submitReport(asDb(fresh), "agentA", "item1", newer, now)).resolves.toMatchObject({ checkId: "rescan1", results: 1 });
+
+    // On a first scan too, an agent can't file again what Ziki's own code checks already put in the list.
+    const firstScan = fakeDb();
+    firstScan.securityCheckItem.findUnique.mockResolvedValue(heldItem());
+    firstScan.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ title: "No Content Security Policy" }]);
+    await expect(submitReport(asDb(firstScan), "agentA", "item1", again, now)).rejects.toMatchObject({ status: 400, code: "already_known" });
+    expect(firstScan.securityCheckResult.findMany.mock.calls[1]![0].where).toEqual({ checkId: "check1", item: { kind: "automatic" } });
+    expect(firstScan.securityCheckResult.createMany).not.toHaveBeenCalled();
   });
 
   it("adds no parts when the part is no longer the agent's (a late report adds nothing)", async () => {
@@ -374,14 +439,14 @@ describe("reporting a part", () => {
   it("refuses work on a check whose target lost its ownership proof, when proof is required", async () => {
     vi.stubEnv("SECURITY_OWNERSHIP_PROOF_REQUIRED", "true");
     const db = fakeDb();
-    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", target: { verifiedAt: null } } }));
+    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", free: true, paidAt: null, target: { verifiedAt: null } } }));
     await expect(submitReport(asDb(db), "agentA", "item1", [], now)).rejects.toBeInstanceOf(SecurityJobError);
     vi.unstubAllEnvs();
   });
 
   it("takes the work of a target with no proof while proof is off", async () => {
     const db = fakeDb();
-    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", target: { verifiedAt: null } } }));
+    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", free: true, paidAt: null, target: { verifiedAt: null } } }));
     db.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
     expect(await submitReport(asDb(db), "agentA", "item1", found, now)).toEqual({ checkId: "check1", results: 1, rechecked: 0, addedParts: 0 });
   });

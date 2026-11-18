@@ -115,7 +115,7 @@ describe("the fallback when no agent picks a part up (#security-checks, 14 Nov c
     expect(await sweepFallback(asDb(db), now, deps(ai))).toEqual({ worked: 1, failed: 0 });
 
     expect(db.securityCheckItem.updateMany.mock.calls[0]![0]).toEqual({
-      where: { id: "p1", status: "waiting", agentId: null },
+      where: { id: "p1", status: "waiting", agentId: null, check: { status: "checking", AND: [{ OR: [{ free: true }, { paidAt: { not: null } }] }] } },
       data: { status: "checking", agentId: "ziki-agent", assignedAt: now },
     });
     // It reads the part, the target, the quick scan and the page.

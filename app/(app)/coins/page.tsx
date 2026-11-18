@@ -11,6 +11,7 @@ import { ZikiPlans } from "@/components/coins/ziki-plans";
 import { discountedCents } from "@/lib/coins/plans";
 import { discountPercentFor, liveSubscriptionOf, syncUserSubscriptions } from "@/lib/coins/subscription";
 import { UrlNotice } from "@/components/coins/url-notice";
+import { safeReturnTo } from "@/lib/coins/return-to";
 
 export const metadata = { title: "Ziks" };
 export const dynamic = "force-dynamic";
@@ -31,6 +32,15 @@ const KIND_LABEL = {
   check_payment: "Unlocked security fixes",
 } as const;
 
+/** Scan admission and finding unlocks share an accounting kind, but not an Activity description. */
+function activityLabel(entry: { kind: keyof typeof KIND_LABEL; sourceKey: string }): string {
+  if (entry.kind === "check_payment") {
+    if (entry.sourceKey.startsWith("deeper-scan:")) return "Deeper scan";
+    if (entry.sourceKey.startsWith("rescan:")) return "Scan again";
+  }
+  return KIND_LABEL[entry.kind];
+}
+
 /**
  * Ziks (#ziki-coins): your wallet, the packs you can buy with Stripe, your plan,
  * and what moved. Buying is Stripe Checkout; the wallet is only credited when
@@ -40,7 +50,7 @@ function hasRecentPurchase(entries: { kind: string; createdAt: Date }[]): boolea
   return entries.some((entry) => entry.kind === "purchase" && Date.now() - entry.createdAt.getTime() < 10 * 60 * 1000);
 }
 
-type CoinsQuery ={ bought?: string; subscribed?: string; error?: string };
+type CoinsQuery = { bought?: string; subscribed?: string; error?: string; returnTo?: string };
 
 export default async function CoinsPage({ searchParams }: { searchParams?: Promise<CoinsQuery> }) {
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
@@ -55,12 +65,14 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       where: { account: "wallet", userId: user.id, kind: { in: ["purchase", "fund_issue", "refund", "check_payment"] } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 12,
-      select: { id: true, kind: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
+      select: { id: true, kind: true, sourceKey: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
     }),
   ]);
   const configured = stripeConfigured();
   // Whether the Stripe webhook has already credited what was just paid for (a purchase in the last few minutes).
   const justCredited = hasRecentPurchase(entries);
+  // Came from a deeper scan's checkout (#deeper-scan-gate): after paying, Stripe sends them back to that scan.
+  const returnTo = safeReturnTo(query.returnTo);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -106,6 +118,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
               <p className="m-0 text-xs text-zk-muted">Ziks</p>
               <form action={buyZiksAction} className="mt-4">
                 <input type="hidden" name="packId" value={pack.id} />
+                {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
                 <button
                   type="submit"
                   disabled={!configured}
@@ -132,7 +145,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
             {entries.map((entry) => (
               <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm text-zk-text">
                 <span className="flex-1">
-                  {KIND_LABEL[entry.kind]}
+                  {activityLabel(entry)}
                   {entry.bug ? <span className="text-zk-muted"> · #{entry.bug.number} {entry.bug.title}</span> : null}
                   <span className="block text-xs text-zk-muted"><LocalTime date={entry.createdAt} /></span>
                 </span>

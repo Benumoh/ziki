@@ -73,6 +73,18 @@ export function startNewChat() {
   kept.finished = false;
 }
 
+/**
+ * A scan was removed (18 Nov, Chloe): its result must not wait in the chat. The kept conversation is cleared and
+ * the box closed, so going back to Security shows a fresh, closed chat.
+ */
+export function forgetChatAfterRemove() {
+  startNewChat();
+  kept.started = undefined;
+  kept.open = false;
+  // A chat box already open on this page closes too (ScansArea listens).
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("zk:chat-forget"));
+}
+
 /** A message in the chat; a reply can carry a quick scan of the site. */
 type ChatItem = AssistantTurn & { scan?: { target: string; summary: PreviewSummary | null; note: string | null; checkId: string | null; already?: boolean } };
 

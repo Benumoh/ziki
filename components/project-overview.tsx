@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
+import { FeedbackPortalPopover } from "@/components/feedback-portal-popover";
 import { RichText } from "@/components/rich-text";
 import { ProjectOverviewJoinButton } from "@/components/project-overview-join-button";
 import { ProjectJoinRequestButton } from "@/components/project-join-request-button";
@@ -124,6 +125,13 @@ export function ProjectOverviewView({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {data.isMember ? (
+              <FeedbackPortalPopover
+                orgSlug={project.organisation.slug}
+                projectSlug={project.slug}
+                projectName={project.name}
+              />
+            ) : null}
             {project.acceptsGuestIdeas ? (
               <>
                 <Link

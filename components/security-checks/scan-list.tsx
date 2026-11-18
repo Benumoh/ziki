@@ -14,12 +14,13 @@ import { removeScan } from "@/app/actions/security-assistant";
 import { useRescan } from "./use-rescan";
 import { KindIcon } from "./entry-box";
 import "@/components/security-finding.css";
-import { SecurityChat, chatLeftOpen, keepChatOpen, startNewChat } from "./security-chat";
+import { SecurityChat, chatLeftOpen, forgetChatAfterRemove, keepChatOpen, startNewChat } from "./security-chat";
 
 /** Rows on each page. */
 const PAGE = 10;
 
 const STAGE: Record<ScanStage, { label: string; text: string; dot: string }> = {
+  quick_only: { label: "Quick scan done", text: "text-zk-text2", dot: "bg-zk-muted" },
   scanning: { label: "Scanning", text: "text-zk-accent", dot: "bg-electric-blue-strong" },
   report: { label: "Report ready", text: "text-zk-ok-fg", dot: "bg-zk-ok-fg" },
   in_app: { label: "In your app", text: "text-zk-text2", dot: "bg-zk-muted" },
@@ -30,9 +31,10 @@ const SEVERITIES = ["critical", "high", "medium", "low"] as const;
 type Severity = (typeof SEVERITIES)[number];
 
 /** Filter menu choices (?show=), in Ziki's own Filter menu, as on Issues. */
-type Filter = "all" | "scanning" | "report" | "in_app" | "severe" | "clear" | "website" | "server" | "repo";
+type Filter = "all" | "quick_only" | "scanning" | "report" | "in_app" | "severe" | "clear" | "website" | "server" | "repo";
 const STAGE_FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "quick_only", label: "Quick scan done" },
   { id: "scanning", label: "Scanning" },
   { id: "report", label: "Report ready" },
   { id: "in_app", label: "In your app" },
@@ -51,8 +53,9 @@ const ALL_FILTERS = [...STAGE_FILTERS, ...ATTENTION_FILTERS, ...KIND_FILTERS];
 type SortKey = "target" | "problems" | "added";
 
 /** Where a scan is: the same rule as scanStage in lib/security-checks/entry.ts, kept here so this client file needs no server code. */
-function stageOf(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved">): ScanStage {
+function stageOf(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved" | "paymentRequired">): ScanStage {
   if (check.status === "cancelled") return "cancelled";
+  if (check.paymentRequired) return "quick_only";
   if (check.moved > 0) return "in_app";
   return check.posted ? "report" : "scanning";
 }
@@ -75,7 +78,7 @@ function problemsOf(check: WorkspaceCheckRow) {
 
 function matchesFilter(check: WorkspaceCheckRow, filter: Filter): boolean {
   if (filter === "all") return true;
-  if (filter === "scanning" || filter === "report" || filter === "in_app") return stageOf(check) === filter;
+  if (filter === "quick_only" || filter === "scanning" || filter === "report" || filter === "in_app") return stageOf(check) === filter;
   if (filter === "website" || filter === "server" || filter === "repo") return check.kind === filter;
   const { found, nothing } = problemsOf(check);
   if (filter === "clear") return nothing;
@@ -210,6 +213,8 @@ export function ScanList({
         const answer = await removeScan(row.id);
         if (!answer.ok) failed += 1;
       }
+      // A removed scan's result never waits in the chat: it starts fresh and closed (18 Nov).
+      if (failed < rows.length) forgetChatAfterRemove();
       setPicked(new Set());
       router.refresh();
       toast(failed ? `${rows.length - failed} removed; ${failed} couldn't be.` : one ? "Scan removed." : `${rows.length} targets removed.`, failed ? "error" : undefined);
@@ -609,6 +614,15 @@ export function ScansArea({
   }, [adding]);
   // The scan whose result is in the chat: its row waits until "See progress", so it isn't shown twice.
   const [inChat, setInChat] = useState<string | null>(null);
+  // A scan was removed: close the chat box (its kept conversation is already cleared).
+  useEffect(() => {
+    const close = () => {
+      setAdding(false);
+      setInChat(null);
+    };
+    window.addEventListener("zk:chat-forget", close);
+    return () => window.removeEventListener("zk:chat-forget", close);
+  }, []);
 
   const chat = adding ? (
     <SecurityChat

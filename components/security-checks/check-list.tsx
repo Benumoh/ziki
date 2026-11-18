@@ -24,7 +24,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
   const [quick, checks] = tabs;
   // Every finding not already in the app can be sent from here, a rescan's earlier ones still there included (18 Nov, Tolu).
-  const fixable = (checks.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id));
+  // The quick scan's findings can be ticked and fixed too, from their own section (18 Nov).
+  const fixable = [...(quick.findings ?? []), ...(checks.findings ?? [])].filter(({ id, fix }) => !fix && picked.includes(id));
   const selected = fixable.map(({ id }) => id);
   const toggle = (id: string) => {
     const next = picked.includes(id) ? picked.filter((item) => item !== id) : [...picked, id];
@@ -48,16 +49,23 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   }, [initialFix.length]);
 
   return (
-    <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
+    // The id: with the quick scan merged into the list, "View quick scan results" lands here (#deeper-scan-gate).
+    <div id="check-results" className="scroll-mt-24 space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
       {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
       {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
-      <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <summary className={SECTION_HEADING}>
-          Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
-        </summary>
-        <TabRows tab={quick} selected={selected} onToggle={toggle} />
-      </details>
-      <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+      {/* Ziki's code checks (the quick scan) keep their own section at the top, before and after payment (18 Nov):
+          their findings can be ticked and fixed here, and the Deeper scan below lists only the agents' work. */}
+      {/* The id: the deeper scan's checkout jumps here from "View quick scan results" (#deeper-scan-gate). */}
+      {quick.merged ? null : (
+        <details id="quick-scan-results" open={!(checks.findings ?? []).length} className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+          <summary className={SECTION_HEADING}>
+            Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
+          </summary>
+          <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
+        </details>
+      )}
+      {/* The id: the Deeper scan step at the top of the page jumps here (18 Nov). */}
+      <details id="deeper-scan-results" open className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
@@ -95,7 +103,8 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
   const fixed = tab.fixed ?? [];
   const pending = tab.pending ?? [];
   const clear = tab.clear ?? [];
-  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length;
+  const notChecked = tab.notChecked ?? [];
+  const empty = !scanRows.length && !findings.length && !fixed.length && !pending.length && !clear.length && !notChecked.length;
   return (
     <ul className="m-0 mt-2 list-none divide-y divide-zk-border border-t border-zk-border p-0">
       {scanRows.map((row, i) => (
@@ -118,7 +127,7 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
             title={finding.title}
             sub={finding.line}
             lead={null}
-            right={<span className="whitespace-nowrap rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Fixed</span>}
+            right={<span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Fixed</span>}
           />
         </li>
       ))}
@@ -126,6 +135,19 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
       {pending.map((part) => (
         <li key={part.id}>
           <Row severity={null} title={part.title} right={<PartState state={part.state} />} lead={null} />
+        </li>
+      ))}
+      {/* Before the deeper scan is paid for (#deeper-scan-gate): what the 20 Ziks buys, each not checked yet. */}
+      {notChecked.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">What agents check that the quick scan can&apos;t · {notChecked.length}</li> : null}
+      {notChecked.map((item) => (
+        <li key={item.title}>
+          <Row
+            severity={null}
+            title={item.title}
+            sub={item.why}
+            lead={null}
+            right={<span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-bold text-zk-text2">Not checked</span>}
+          />
         </li>
       ))}
       {clear.length ? (
@@ -191,9 +213,12 @@ function FindingRow({ finding, checked, onToggle }: { finding: ListFinding; chec
   const right = (
     <span className="flex items-center gap-2">
       {finding.recheck === "checking" ? (
-        <span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Rechecking</span>
+        <span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Rechecking</span>
       ) : finding.recheck === "still_there" ? (
-        <span className="whitespace-nowrap rounded-full bg-zk-warn-bg px-2.5 py-0.5 text-xs font-semibold text-zk-warn-fg">Still there</span>
+        <span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-warn-bg px-2.5 py-0.5 text-xs font-semibold text-zk-warn-fg">Still there</span>
+      ) : finding.isNew ? (
+        // Found for the first time by this rescan (18 Nov): calm blue, in the same place as Still there.
+        <span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-info-bg px-2.5 py-0.5 text-xs font-semibold text-zk-info-fg">New</span>
       ) : null}
       {finding.fix ? (
         <Link href={finding.fix.issue?.href ?? finding.fix.findingHref} className="whitespace-nowrap text-xs font-semibold text-zk-accent hover:underline">

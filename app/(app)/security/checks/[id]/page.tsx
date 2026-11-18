@@ -24,7 +24,7 @@ export const metadata = { title: "Security check" };
  * The report never goes away; moved findings are marked. Only the person who
  * asked for the check sees it.
  */
-export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[] }> }) {
+export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[]; bought?: string }> }) {
   const [{ id }, query, user] = await Promise.all([params, searchParams, requireUser()]);
   // `?fix=id1,id2`: tick these and open the fix panel ("Fix the critical one", a finding's "Fix it for me").
   const initialFix = (Array.isArray(query.fix) ? query.fix.join(",") : query.fix ?? "").split(",").filter(Boolean).slice(0, 100);
@@ -34,7 +34,8 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
   if (!report) notFound();
 
   const linkClass = "font-semibold text-zk-accent hover:underline";
-  const working = !FINISHED_CHECK_STATUSES.has(report.status);
+  // Waiting for the deeper scan's payment (#deeper-scan-gate) nothing moves, so the page doesn't refresh itself.
+  const working = !FINISHED_CHECK_STATUSES.has(report.status) && !report.paymentRequired;
   const kind = TARGET_KIND_LABEL[report.target.kind].toLowerCase();
 
   return (
@@ -72,16 +73,12 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
       </div>
       </SiteChatHolder>
 
-      {/* Scanned again (#security-rescan): an older scan points to the newest, and a rescan to the scan it followed. */}
+      {/* Scanned again (#security-rescan): an older scan points to the newest. A rescan has no note of its own (18 Nov,
+          Tolu): its Still there and New labels say where each finding came from, with more on hover. */}
       {report.nextCheckId ? (
         <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
           This site was scanned again since.{" "}
           <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
-        </p>
-      ) : report.previousCheckId ? (
-        <p className="m-0 px-0.5 text-sm text-zk-text2">
-          A rescan: agents recheck what the last scan found and look for anything new.{" "}
-          <Link href={`/security/checks/${encodeURIComponent(report.previousCheckId)}`} className={linkClass}>See the earlier scan</Link>
         </p>
       ) : null}
 
@@ -101,7 +98,8 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
         <>
           {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
           <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
-            <CheckHeader report={report} />
+            {/* Back from buying Ziks (#deeper-scan-gate): the checkout opens again, to press Pay. */}
+            <CheckHeader report={report} backFromBuying={query.bought === "1"} />
             {/* Keyed by `?fix`, so "Fix the critical one" on this same page ticks its findings afresh. */}
             <CheckList key={initialFix.join(",")} checkId={report.checkId} tabs={checkListTabs(report)} initialFix={initialFix} />
           </section>

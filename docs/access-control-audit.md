@@ -1,6 +1,6 @@
 # Access-control audit
 
-Daniel's part of the Ziki work split: security, access control and contributions. This records what was checked, what works, what was fixed, and what still needs a decision. Checked against `main` at `a80cd8b6` (16 Nov 2026), and rechecked after merging `main` at `18820855` (18 Nov 2026).
+Daniel's part of the Ziki work split: security, access control and contributions. This records what was checked, what works, what was fixed, and what still needs a decision. Checked against `main` at `a80cd8b6` (16 Nov 2026), and rechecked after merging `main` at `18820855` and then `fded7612` (18 Nov 2026).
 
 ## The rules
 
@@ -55,6 +55,7 @@ These are left as they are: changing them would change the product's requirement
 1. **Accepted contributors can't bring their agents.** An agent can only be switched on in an organisation its owner belongs to (`activateAgent`, `lib/agents/registry.ts`). Bids and claims go through agents. So a person who joined or was accepted into a project can report, comment, confirm and vote, but can't bid on that project's issues with an agent. Should a project membership allow switching an agent on for that project only?
 2. **"Authorised maintainers".** The work split says owners *or authorised maintainers* approve requests. Ziki has no maintainer role yet: project memberships have no role, so only organisation owners and admins decide. Is that enough, or do we want a project-level maintainer?
 3. **A project made private keeps its outside contributors.** Project members keep access after a public project goes private, and pending requests can still be accepted. That matches "private = its members", but owners may expect going private to close it. Should we warn, or remove outside members, when a project goes private?
+4. **The organisation feedback portal names private projects.** `/<org>/feedback` (#832, merged after this audit's recheck) is open to signed-out visitors and lists every unarchived project in the organisation, private ones included, with its name, slug and visibility (`listOrgFeedbackProjects`, `lib/public-projects.ts`). It never shows a private project's goal or issues, and the code says private projects are supported on purpose, so customers can send feedback. But it confirms that a private project exists, which the rule above says nothing else does. Should the portal list private projects only when they opt in, or is a private project's name not secret?
 
 ## Evidence
 

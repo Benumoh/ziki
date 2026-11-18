@@ -3554,6 +3554,9 @@ enum SecurityCheckItemKind {
   check
   /// Once every part is in: an always-on agent writes the one report the client sees.
   collate
+  /// Ziki's own code checks (the quick scan, 18 Nov): its findings join the main list. Never given to an agent,
+  /// never counted as a part, saved already done.
+  automatic
 }
 
 /// Where one job is (#security-checks).
@@ -3627,13 +3630,12 @@ model SecurityCheck {
   requestedById  String
   requestedBy    User                  @relation("SecurityCheckRequester", fields: [requestedById], references: [id], onDelete: Cascade)
   status         SecurityCheckStatus   @default(awaiting_ownership)
-  /// The price in coins when the check was asked for. Replaced by per-finding
-  /// prices (SecurityCheckResult.priceCoins) and removed once the pay page uses them.
+  /// The scan admission price in Ziks: first deeper scan or follow-up rescan.
+  /// Separate from per-finding remediation prices.
   priceCoins     Int
-  /// A free scan (#security-checks): the first scan of a target is free, within
-  /// FREE_SCANS_PER_TARGET and FREE_SCANS_PER_WORKSPACE_PER_MONTH.
+  /// Historical free agent scans are grandfathered. New deeper scans are paid.
   free           Boolean               @default(false)
-  /// When the client paid; null while unpaid. Unlocks the full report and releases agent pay.
+  /// When scan admission was paid. New non-free checks cannot start agents until set.
   paidAt         DateTime?
   /// When the collate job was queued, after every part was in; null before. Guards against queuing it twice.
   collatingAt    DateTime?
@@ -3646,9 +3648,19 @@ model SecurityCheck {
   /// A rescan (#security-rescan, 17 Nov): the check it follows. Its agents recheck that check's open
   /// findings (still there or fixed) and look for new ones. Null for a first scan.
   previousCheckId String?              @unique
+  /// What the quick scan saw of the site, as short hashes per area (certificate, TLS, headers, cookies, files, email; a
+  /// repo's file lists), so a rescan can say whether the site changed since (18 Nov). Null before then, or when the
+  /// quick scan couldn't run.
+  siteFingerprint Json?
   previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
   /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
   nextCheck      SecurityCheck?        @relation("SecurityRescan")
+  /// A code scan (#security-code-scan, 18 Nov): the website scan whose Connect code started it, paid for
+  /// separately (CODE_SCAN_PRICE_ZIKS). Unique, so a website scan gets one code scan, and a double click pays once.
+  codeScanForId  String?               @unique
+  codeScanFor    SecurityCheck?        @relation("SecurityCodeScan", fields: [codeScanForId], references: [id], onDelete: SetNull)
+  /// The code scan started from this website scan's Code scan step, if any.
+  codeScan       SecurityCheck?        @relation("SecurityCodeScan")
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   items          SecurityCheckItem[]
