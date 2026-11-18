@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
+  auth: vi.fn(),
+  pay: vi.fn(),
+  quote: vi.fn(),
   addTargetAndCheck: vi.fn(),
   ask: vi.fn(),
   rate: vi.fn(),
@@ -13,12 +16,16 @@ const mocks = vi.hoisted(() => ({
   findOwnScan: vi.fn(),
   scansNote: vi.fn(),
   kick: vi.fn(),
+  saveCode: vi.fn(),
 }));
 
+vi.mock("@/auth", () => ({ auth: mocks.auth }));
+vi.mock("@/lib/security-checks/deeper-scan", () => ({ deeperScanQuote: mocks.quote, payAndStartDeeperScan: mocks.pay }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // `after` runs its job once the action answers; here, at once, so a test can see what it starts.
 vi.mock("next/server", () => ({ after: (job: () => unknown) => void job() }));
 vi.mock("@/lib/security-checks/engine", () => ({ kickCheck: mocks.kick }));
+vi.mock("@/lib/security-checks/code-findings", () => ({ saveCodeFindings: mocks.saveCode }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: vi.fn().mockResolvedValue({ id: "u1", role: "member" }) }));
 vi.mock("@/lib/organisation-access", () => ({ currentOrganisationAccess: mocks.access }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: mocks.rate, RATE_LIMIT_MESSAGE: "Slow down." }));
@@ -42,6 +49,7 @@ vi.mock("@/lib/security-checks/site-chat", async (importOriginal) => ({
 }));
 vi.mock("@/lib/security-checks/preview", () => ({ previewScan: mocks.preview }));
 
+import { deeperScanCost, startPaidDeeperScan } from "./security-deeper-scan";
 import { removeScan, replaceScan, talkToSecurityAssistant } from "./security-assistant";
 
 const say = (text: string) => [{ role: "user" as const, text }];
@@ -98,9 +106,10 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
     // No proof step: added straight away (14 Nov plan).
     expect(mocks.addTargetAndCheck).toHaveBeenCalledWith("org1", "u1", expect.objectContaining({ kind: "website", value: "settle.ng" }));
     expect(mocks.saveQuickScan).toHaveBeenCalledWith("t1", expect.objectContaining({ total: 2, risk: "high" }));
+    // Its findings join the scan's main list (18 Nov).
+    expect(mocks.saveCode).toHaveBeenCalledWith({}, "c1", expect.objectContaining({ ok: true, target: "settle.ng" }));
     // Started as soon as it is added, not left for the one-minute sweep (which kept a scan waiting for minutes, 15 Nov).
-    expect(mocks.kick).toHaveBeenCalledTimes(1);
-    expect(mocks.kick).toHaveBeenCalledWith(expect.anything(), "c1");
+    expect(mocks.kick).not.toHaveBeenCalled();
     expect(answer).toMatchObject({ kind: "scan", target: "settle.ng", checkId: "c1", summary: { total: 2, risk: "high" } });
     // What any browser sees is shown as titles; the detail never leaves the server.
     expect(JSON.stringify(answer)).toContain("No HSTS header");
@@ -215,5 +224,34 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
     expect(mocks.saveSiteMessage).toHaveBeenCalledWith("org1", "u1", "t1", "user", "https://www.settle.ng");
     expect(mocks.saveSiteMessage).toHaveBeenCalledWith("org1", "u1", "t1", "assistant", expect.stringContaining("When you added it, the quick scan found 2 problems (1 high, 1 medium)."));
     expect(JSON.stringify(mocks.saveSiteMessage.mock.calls)).not.toContain("SECRET");
+  });
+});
+
+
+describe("deeper scan payment action access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth.mockResolvedValue({ user: { id: "u1" } });
+    mocks.access.mockResolvedValue({ organisationId: "org1", admin: true });
+  });
+  it("requires sign-in and preserves a safe return to the check without charging", async () => {
+    mocks.auth.mockResolvedValue(null);
+    expect(await startPaidDeeperScan("check-1")).toMatchObject({ reason: "sign_in_required", signInUrl: "/login?callbackUrl=%2Fsecurity%2Fchecks%2Fcheck-1" });
+    expect(mocks.pay).not.toHaveBeenCalled();
+    expect(mocks.kick).not.toHaveBeenCalled();
+  });
+  it("rejects invalid IDs without constructing an external return URL", async () => {
+    expect(await deeperScanCost("https://evil.example")).toMatchObject({ reason: "not_found" });
+    expect(mocks.quote).not.toHaveBeenCalled();
+  });
+  it("refuses a workspace member who is not an owner or admin", async () => {
+    mocks.access.mockResolvedValue({ organisationId: "org1", admin: false });
+    expect(await startPaidDeeperScan("check-1")).toMatchObject({ reason: "not_found" });
+    expect(mocks.pay).not.toHaveBeenCalled();
+  });
+  it("never starts agents after a refused payment", async () => {
+    mocks.pay.mockResolvedValue({ ok: false, reason: "insufficient_ziks" });
+    expect(await startPaidDeeperScan("check-1")).toMatchObject({ reason: "insufficient_ziks" });
+    expect(mocks.kick).not.toHaveBeenCalled();
   });
 });

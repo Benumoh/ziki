@@ -24,7 +24,9 @@ import {
   cookieFindings,
   emailFindings,
   headerFindings,
+  internalNames,
   MAX_REDIRECTS,
+  publicFileFindings,
   previewScan,
   realPreviewNetwork,
   type CertificateAnswer,
@@ -43,6 +45,8 @@ const SAFE_HEADERS: PageAnswer["headers"] = {
   "content-security-policy": "default-src 'self'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "cross-origin-opener-policy": "same-origin",
   server: "cloudflare",
 };
 const GOOD_CERT: CertificateAnswer = { authorized: true, authorizationError: null, validTo: new Date(NOW + 60 * DAY), protocol: "TLSv1.3" };
@@ -101,9 +105,10 @@ describe("preview scan (#security-checks, 12 Nov plan D3)", () => {
     if (!result.ok) throw new Error(result.reason);
     expect(result.findings.map((f) => f.id)).toEqual([
       "no-https-redirect", "certificate-expiring", "missing-hsts", "missing-csp", "missing-frame-protection", "cookie-not-secure", "missing-spf",
-      "missing-nosniff", "missing-referrer-policy", "version-disclosure", "cookie-not-httponly", "cookie-no-samesite", "dmarc-not-enforced",
+      "missing-nosniff", "missing-referrer-policy", "missing-permissions-policy", "missing-cross-origin-isolation", "version-disclosure",
+      "cookie-not-httponly", "cookie-no-samesite", "dmarc-not-enforced",
     ]);
-    expect(result.counts).toEqual({ critical: 0, high: 0, medium: 7, low: 6 });
+    expect(result.counts).toEqual({ critical: 0, high: 0, medium: 7, low: 8 });
   });
 
   it("flags a site that only answers over plain HTTP", async () => {
@@ -419,5 +424,69 @@ describe("reading a public repo through Ziki's GitHub client (13 Nov)", () => {
   it("puts why GitHub couldn't be read into what the person is told", async () => {
     const net = network({ repo: { status: "unavailable", detail: "GitHub answered 403" } });
     expect(await scan("github.com/settle/busy", net)).toEqual({ ok: false, reason: expect.stringContaining("(GitHub answered 403)") });
+  });
+});
+
+describe("yes/no facts the quick scan checks for every scan (18 Nov: same answer every time)", () => {
+  it("flags old TLS still accepted, unless the site already agreed to it by default", () => {
+    expect(certificateFindings(GOOD_CERT, "website", "settle.ng", NOW, ["TLSv1", "TLSv1.1"]).map((f) => [f.id, f.detail.includes("TLS 1.0 and TLS 1.1")])).toEqual([["old-tls-accepted", true]]);
+    expect(certificateFindings(GOOD_CERT, "website", "settle.ng", NOW, [])).toEqual([]);
+    expect(certificateFindings(GOOD_CERT, "website", "settle.ng", NOW, null)).toEqual([]);
+    // Agreed to by default: one finding, not two.
+    expect(certificateFindings({ ...GOOD_CERT, protocol: "TLSv1" }, "website", "settle.ng", NOW, ["TLSv1"]).map((f) => f.id)).toEqual(["old-tls"]);
+  });
+
+  it("flags internal-looking names on the certificate, never the site's own or ordinary ones", () => {
+    expect(internalNames(["settle.ng", "www.settle.ng", "*.settle.ng", "api.settle.ng", "staging.settle.ng", "dev2.settle.ng", "qa-eu.settle.ng", "developer.settle.ng"], "settle.ng")).toEqual([
+      "staging.settle.ng", "dev2.settle.ng", "qa-eu.settle.ng",
+    ]);
+    const cert = certificateFindings({ ...GOOD_CERT, names: ["settle.ng", "internal.settle.ng"] }, "website", "settle.ng", NOW);
+    expect(cert.map((f) => [f.id, f.detail.includes("internal.settle.ng")])).toEqual([["certificate-internal-names", true]]);
+  });
+
+  it("reads robots.txt for private paths and security.txt for a contact that hasn't expired", () => {
+    const robots = { status: 200, body: ["User-agent: *", "Disallow: /admin/", "Disallow: /search", "Allow: /internal-tools", "Disallow: /admin/"].join("\n") };
+    const contact = { status: 200, body: ["Contact: mailto:security@settle.ng", "Expires: 2027-01-01T00:00:00Z"].join("\n") };
+    expect(publicFileFindings(robots, contact, "settle.ng", NOW).map((f) => [f.id, f.detail.includes("/admin/, /internal-tools")])).toEqual([["robots-private-paths", true]]);
+    expect(publicFileFindings({ status: 200, body: ["User-agent: *", "Disallow: /search"].join("\n") }, contact, "settle.ng", NOW)).toEqual([]);
+    expect(publicFileFindings(null, { status: 404, body: "" }, "settle.ng", NOW).map((f) => f.id)).toEqual(["missing-security-txt"]);
+    const expired = { status: 200, body: ["Contact: mailto:s@settle.ng", "Expires: 2026-01-01T00:00:00Z"].join("\n") };
+    expect(publicFileFindings(null, expired, "settle.ng", NOW).map((f) => f.id)).toEqual(["security-txt-expired"]);
+    // Neither answered: nothing is said about either.
+    expect(publicFileFindings(null, null, "settle.ng", NOW)).toEqual([]);
+  });
+
+  it("flags cookies shared with every subdomain", () => {
+    expect(cookieFindings({ "set-cookie": ["sid=1; Secure; HttpOnly; SameSite=Lax; Domain=.settle.ng"] }).map((f) => f.id)).toEqual(["cookie-domain-wide"]);
+  });
+
+  it("fingerprints the site so a rescan can tell a real change from per-visit noise", async () => {
+    const withPage = (headers: PageAnswer["headers"], certificate = GOOD_CERT) =>
+      network({ ...WELL_KEPT, pages: { ...WELL_KEPT.pages, "https://settle.ng/": { headers } }, certificate });
+    const base = { ...SAFE_HEADERS, "content-security-policy": "script-src 'nonce-abc123'", "set-cookie": ["sid=111; Secure; HttpOnly; Expires=Wed, 19 Nov 2026 10:00:00 GMT"] };
+    const first = await scan("settle.ng", withPage(base));
+    clearPreviewCache();
+    // Another visit: a new nonce, a new cookie value and expiry. Not a change.
+    const again = await scan("settle.ng", withPage({ ...base, "content-security-policy": "script-src 'nonce-zzz999'", "set-cookie": ["sid=222; Secure; HttpOnly; Expires=Thu, 20 Nov 2026 10:00:00 GMT"] }));
+    clearPreviewCache();
+    // A renewed certificate and a cookie that lost HttpOnly: both changes.
+    const changed = await scan("settle.ng", withPage({ ...base, "set-cookie": ["sid=333; Secure"] }, { ...GOOD_CERT, validTo: new Date(NOW + 90 * DAY) }));
+    if (!first.ok || !again.ok || !changed.ok) throw new Error("scan failed");
+    expect(again.fingerprint).toEqual(first.fingerprint);
+    expect(changed.fingerprint!.certificate).not.toBe(first.fingerprint!.certificate);
+    expect(changed.fingerprint!.cookies).not.toBe(first.fingerprint!.cookies);
+    expect(changed.fingerprint!.headers).toBe(first.fingerprint!.headers);
+  });
+
+  it("checks old TLS and the public files on a full website scan, and says it looked at them", async () => {
+    const text = vi.fn(async (url: string) =>
+      url.endsWith("/robots.txt") ? { status: 200, body: "Disallow: /staging/" } : { status: 404, body: "" },
+    );
+    const net = { ...network(WELL_KEPT), oldTls: vi.fn(async () => ["TLSv1.1"]), text };
+    const result = await scan("settle.ng", net);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.checked).toContain("files");
+    expect(result.findings.map((f) => f.id).sort()).toEqual(["missing-security-txt", "old-tls-accepted", "robots-private-paths"]);
+    expect(text.mock.calls.map(([url]) => url)).toEqual(["https://settle.ng/robots.txt", "https://settle.ng/.well-known/security.txt"]);
   });
 });

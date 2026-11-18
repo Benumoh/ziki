@@ -33,6 +33,13 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
     if (!next.length) setFixOpen(false);
   };
   const panelOpen = fixOpen && selected.length > 0;
+  // "Select all" on the Ready to fix row (17 Nov, Hamzat): ticks every finding still to fix, or clears them all.
+  const selectAll = (ids: string[]) => {
+    const all = ids.every((id) => picked.includes(id));
+    const next = all ? picked.filter((id) => !ids.includes(id)) : [...new Set([...picked, ...ids])];
+    setPicked(next);
+    if (!next.length) setFixOpen(false);
+  };
   // Arriving with findings to fix: bring the panel into view once it has loaded its projects.
   useEffect(() => {
     if (!initialFix.length) return;
@@ -44,18 +51,21 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
     <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
       {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
       {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
-      <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <summary className={SECTION_HEADING}>
-          Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
-        </summary>
-        <TabRows tab={quick} selected={selected} onToggle={toggle} />
-      </details>
+      {/* Once Ziki's code checks are in the main list (18 Nov), the quick scan isn't shown apart: it would list them twice. */}
+      {quick.merged ? null : (
+        <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+          <summary className={SECTION_HEADING}>
+            Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
+          </summary>
+          <TabRows tab={quick} selected={selected} onToggle={toggle} />
+        </details>
+      )}
       <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
           <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
         </summary>
-        <TabRows tab={checks} selected={selected} onToggle={toggle} />
+        <TabRows tab={checks} selected={selected} onToggle={toggle} onSelectAll={selectAll} />
         {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
         {selected.length && !panelOpen ? (
           <div className="flex items-center justify-between gap-3 border-t border-zk-border bg-zk-tint px-4 py-3 sm:px-6">
@@ -82,7 +92,7 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
   );
 }
 
-function TabRows({ tab, selected, onToggle }: { tab: ListTab; selected: string[]; onToggle: (id: string) => void }) {
+function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selected: string[]; onToggle: (id: string) => void; onSelectAll?: (ids: string[]) => void }) {
   const scanRows = tab.scanRows ?? [];
   const findings = tab.findings ?? [];
   const fixed = tab.fixed ?? [];
@@ -96,7 +106,7 @@ function TabRows({ tab, selected, onToggle }: { tab: ListTab; selected: string[]
           <Row severity={row.severity} title={row.title} sub={row.area} />
         </li>
       ))}
-      {findings.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Ready to fix · {findings.filter((finding) => !finding.fix).length}</li> : null}
+      {findings.length ? <ReadyRow findings={findings} selected={selected} onSelectAll={onSelectAll} /> : null}
       {findings.map((finding) => (
         <li key={finding.id}>
           <FindingRow finding={finding} checked={selected.includes(finding.id)} onToggle={() => onToggle(finding.id)} />
@@ -111,7 +121,7 @@ function TabRows({ tab, selected, onToggle }: { tab: ListTab; selected: string[]
             title={finding.title}
             sub={finding.line}
             lead={null}
-            right={<span className="whitespace-nowrap rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Fixed</span>}
+            right={<span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-ok-bg px-2.5 py-0.5 text-xs font-bold text-zk-ok-fg">Fixed</span>}
           />
         </li>
       ))}
@@ -132,6 +142,22 @@ function TabRows({ tab, selected, onToggle }: { tab: ListTab; selected: string[]
         </li>
       ) : null}
     </ul>
+  );
+}
+
+/** "Ready to fix · 21", with Select all (or Clear selection) on the right when there is anything left to fix. */
+function ReadyRow({ findings, selected, onSelectAll }: { findings: ListFinding[]; selected: string[]; onSelectAll?: (ids: string[]) => void }) {
+  const open = findings.filter((finding) => !finding.fix).map((finding) => finding.id);
+  const all = open.length > 0 && open.every((id) => selected.includes(id));
+  return (
+    <li className="flex items-center justify-between gap-3 bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">
+      <span>Ready to fix · {open.length}</span>
+      {onSelectAll && open.length ? (
+        <button type="button" onClick={() => onSelectAll(open)} className="text-sm font-semibold text-zk-accent hover:underline focus-visible:outline-2 focus-visible:outline-zk-accent">
+          {all ? "Clear selection" : "Select all"}
+        </button>
+      ) : null}
+    </li>
   );
 }
 
@@ -168,9 +194,12 @@ function FindingRow({ finding, checked, onToggle }: { finding: ListFinding; chec
   const right = (
     <span className="flex items-center gap-2">
       {finding.recheck === "checking" ? (
-        <span className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Rechecking</span>
+        <span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2">Rechecking</span>
       ) : finding.recheck === "still_there" ? (
-        <span className="whitespace-nowrap rounded-full bg-zk-warn-bg px-2.5 py-0.5 text-xs font-semibold text-zk-warn-fg">Still there</span>
+        <span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-warn-bg px-2.5 py-0.5 text-xs font-semibold text-zk-warn-fg">Still there</span>
+      ) : finding.isNew ? (
+        // Found for the first time by this rescan (18 Nov): calm blue, in the same place as Still there.
+        <span title={finding.hint ?? undefined} className="whitespace-nowrap rounded-full bg-zk-info-bg px-2.5 py-0.5 text-xs font-semibold text-zk-info-fg">New</span>
       ) : null}
       {finding.fix ? (
         <Link href={finding.fix.issue?.href ?? finding.fix.findingHref} className="whitespace-nowrap text-xs font-semibold text-zk-accent hover:underline">

@@ -72,16 +72,12 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
       </div>
       </SiteChatHolder>
 
-      {/* Scanned again (#security-rescan): an older scan points to the newest, and a rescan to the scan it followed. */}
+      {/* Scanned again (#security-rescan): an older scan points to the newest. A rescan has no note of its own (18 Nov,
+          Tolu): its Still there and New labels say where each finding came from, with more on hover. */}
       {report.nextCheckId ? (
         <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
           This site was scanned again since.{" "}
           <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
-        </p>
-      ) : report.previousCheckId ? (
-        <p className="m-0 px-0.5 text-sm text-zk-text2">
-          A rescan: agents recheck what the last scan found and look for anything new.{" "}
-          <Link href={`/security/checks/${encodeURIComponent(report.previousCheckId)}`} className={linkClass}>See the earlier scan</Link>
         </p>
       ) : null}
 

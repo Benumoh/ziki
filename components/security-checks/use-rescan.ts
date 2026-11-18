@@ -1,9 +1,10 @@
 "use client";
 
-import { useTransition } from "react";
+import { createElement, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rescanCost, rescanSite } from "@/app/actions/security-assistant";
 import { borrowZiks } from "@/app/actions/ziks-loan";
+import { SadZiks } from "@/components/coins/sad-ziks";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 
@@ -23,10 +24,15 @@ export function useRescan() {
     const outcome = await rescanSite(checkId);
     if (outcome.ok) return outcome.checkId;
     if (outcome.reason === "insufficient_ziks" && outcome.canBorrow && offerLoan) {
+      // A friendlier "oops" with a sad coin (17 Nov, Hamzat: the plain version felt cold).
       const borrow = await confirm({
-        title: "Borrow 20 Ziks to scan again?",
-        body: "One time only. Your wallet can go down to −20 Ziks for security, and your first top-up pays it back.",
-        confirmLabel: "Borrow and scan again",
+        art: createElement(SadZiks),
+        title: "Oops, not enough Ziks",
+        body:
+          `This scan costs ${outcome.needed} Ziks and you have ${Math.max(0, outcome.balance)}. Would you like to borrow 20 Ziks for it? ` +
+          "It's a one-time loan, and your first top-up pays it back.",
+        confirmLabel: "Borrow 20 Ziks and scan",
+        cancelLabel: "Not now",
       });
       if (!borrow) return null;
       const loan = await borrowZiks();
@@ -58,7 +64,7 @@ export function useRescan() {
       const confirmed = await confirm({
         title: one ? `Scan ${first.site} again?` : `Scan ${ready.length} targets again?`,
         body:
-          `Agents recheck the ${earlier} ${earlier === 1 ? "problem" : "problems"} found before, to see what's fixed, and look for anything new. ` +
+          `The same checks as last time: the ${earlier} ${earlier === 1 ? "problem" : "problems"} found before ${earlier === 1 ? "is" : "are"} rechecked to see what's fixed. ` +
           `It costs ${price} Ziks; you have ${first.balance}.`,
         confirmLabel: `Scan again for ${price} Ziks`,
       });

@@ -43,7 +43,7 @@ export function OutsideStart({ site }: { site: string }) {
   return (
     <div aria-live="polite" className="rounded-2xl border border-zk-border bg-zk-surface p-5 text-left">
       <p className="m-0 text-[15px] font-bold text-zk-text">Adding {site} to your scans…</p>
-      <p className="m-0 mt-1 text-sm text-zk-text2">Its page opens in a moment, with the agents already checking.</p>
+      <p className="m-0 mt-1 text-sm text-zk-text2">Your quick scan opens in a moment. The deeper scan starts only after payment.</p>
       <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zk-chip">
         <div className="h-full w-1/3 animate-pulse rounded-full bg-electric-blue-strong" />
       </div>

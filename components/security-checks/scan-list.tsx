@@ -14,7 +14,7 @@ import { removeScan } from "@/app/actions/security-assistant";
 import { useRescan } from "./use-rescan";
 import { KindIcon } from "./entry-box";
 import "@/components/security-finding.css";
-import { SecurityChat, chatLeftOpen, keepChatOpen, startNewChat } from "./security-chat";
+import { SecurityChat, chatLeftOpen, forgetChatAfterRemove, keepChatOpen, startNewChat } from "./security-chat";
 
 /** Rows on each page. */
 const PAGE = 10;
@@ -210,6 +210,8 @@ export function ScanList({
         const answer = await removeScan(row.id);
         if (!answer.ok) failed += 1;
       }
+      // A removed scan's result never waits in the chat: it starts fresh and closed (18 Nov).
+      if (failed < rows.length) forgetChatAfterRemove();
       setPicked(new Set());
       router.refresh();
       toast(failed ? `${rows.length - failed} removed; ${failed} couldn't be.` : one ? "Scan removed." : `${rows.length} targets removed.`, failed ? "error" : undefined);
@@ -609,6 +611,15 @@ export function ScansArea({
   }, [adding]);
   // The scan whose result is in the chat: its row waits until "See progress", so it isn't shown twice.
   const [inChat, setInChat] = useState<string | null>(null);
+  // A scan was removed: close the chat box (its kept conversation is already cleared).
+  useEffect(() => {
+    const close = () => {
+      setAdding(false);
+      setInChat(null);
+    };
+    window.addEventListener("zk:chat-forget", close);
+    return () => window.removeEventListener("zk:chat-forget", close);
+  }, []);
 
   const chat = adding ? (
     <SecurityChat
