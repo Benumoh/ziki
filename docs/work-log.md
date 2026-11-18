@@ -76,3 +76,12 @@
 - Checkpoint 7 - Authorized publication: final affected recheck passed again (lint, typecheck, 90 tests). Handoff is complete; proceeding with the authorized commit and fork push. Remote publication verification is reported in chat; Seyi UI/browser integration remains outstanding.
 
 - Checkpoint 8 - Documentation correction: removed the team-specific Seyi handoff from the feature guide at the owner's request. Kept only general feature documentation and server entry points; the agent prompt is supplied in chat instead. Documentation-only change; checked the diff and links, with no implementation changes.
+
+## 2026-11-18 — PR #827 upstream conflict resolution
+
+- Objective and starting point: PR #827 was open with a clean local working tree, but GitHub reported merge conflicts after main advanced to `18820855` (0.1.246).
+- Checkpoint 1 — Investigation and resolution: merged upstream main into the existing `feat/deeper-scan-payment-gate` branch without rewriting history. The only conflict was package.json's version; resolved to 0.1.247, the next patch after main. Preserved upstream's wallet banner, borrowing prompt, selection and scan summary changes. Backend payment behavior is unchanged.
+- Outcome: conflict resolved locally; verification is pending before the merge commit and any push.
+
+- Checkpoint 2 — Verification: full verification passed lint (32 warnings, no errors) and typecheck; 2,267/2,268 unit tests passed. The only failure was the existing PDF font test exceeding its 5-second timeout. The unchanged-state recheck declined to rerun it; the isolated `pnpm exec vitest run tests/security/security-checks.test.ts` then passed all 41 tests without changing code or timeouts. `git diff --check` passed and no unmerged paths remain.
+- Outcome: ready as a local merge commit at version 0.1.247. Push awaits the owner's approval under their earlier do-not-push-without-asking instruction; PR #827 has not yet received this conflict resolution.
