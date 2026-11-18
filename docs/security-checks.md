@@ -202,6 +202,24 @@ Before payment, the scan's page shows what the quick scan found and offers the d
 - **After buying Ziks:** **Buy Ziks** links to `/coins?returnTo=/security/checks/<id>` (`lib/coins/return-to.ts`; only a scan's own page is allowed). Back on the scan with `?bought=1`, the checkout opens again and waits for Stripe's webhook ("Waiting for your Ziks…", rechecked every 3 seconds for 30). It never pays by itself. The Ziks page keeps `returnTo` through its pack buttons, and `createPackCheckout` sets Stripe's `success_url` to the scan (`?bought=1`) and its `cancel_url` back to the Ziks page with the scan remembered; anything that isn't a scan's own page falls back to the Ziks page.
 - **After payment** nothing new: the existing progress, steps and results take over.
 
+### Repos: quick scan and deeper scan, public and private (#security-repo-scan, 18 Nov)
+
+**Quick scan (Ziki, seconds, no agents):** `scanRepo` in `preview.ts`, rules in `lib/security-checks/repo-scan.ts`, reading through `repo-reader.ts`.
+
+- **Dependencies:** exact versions from lockfiles and manifests (npm, PyPI, Go, crates.io, RubyGems, Packagist) are looked up in **OSV.dev** (`osv.ts`, free, no key): one finding per vulnerable package, at its worst hole's severity, with the version that fixes it.
+- **Workflows:** `.github/workflows/*.yml` for untrusted text pasted into `run:` (high), `pull_request_target` checking out the PR's code (critical), `permissions: write-all` (medium) and outside actions not pinned to a commit (low).
+- **Secrets:** secret-type files anywhere in the repo, and the shapes of real keys (AWS, GitHub, Stripe live, Slack, SendGrid, OpenAI/Anthropic, private keys, database URLs with passwords) in config files and workflows. The key itself is never shown or stored.
+- **Hygiene:** security policy, update bot, a lockfile beside `package.json`, and no change in over a year.
+- It opens at most 40 files of 512 KB each, never runs anything, and works from the repo's file list (`git/trees`).
+
+**Private repos:** read only through the Ziki GitHub App installed on a project of the same workspace that has that repo (`privateRepoAccess` in `repo-access.ts`). Signed-in scans pass `repoAccess`. A visitor or a workspace that didn't connect it gets "private or misspelt". Private results are cached apart from public ones. Through the App the quick scan also shows GitHub's own open **Dependabot alerts** (needs the App's "Dependabot alerts: read"; skipped quietly without it). Seyi's code scan now runs this quick scan when it starts, so its Quick scan section is filled.
+
+**Deeper scan (agents):** a repo part says how to reach the code (`check.target.code`):
+- `via: "clone"` (public, not connected): `git clone --depth 1`, as before.
+- `via: "ziki"` (connected through the App): agents never get a GitHub key. `GET /api/v1/security-checks/jobs/{id}/code` gives the file list, and `?path=…` one file, only while the agent holds the part (`code-access.ts`). Every read is recorded in `SecurityCodeRead`; at most 1,500 reads and 512 KB a file per part; paths can't climb out of the repo. The laptop worker (`fetchCode`) downloads up to 800 text files into the part's scratch folder (`./code`) before Claude Code starts, and the folder is deleted with the part.
+
+Not yet: Ziki opening fix pull requests on a private repo from an agent's patch (agents can't push there), and Ziki's own fallback agent reading private repos.
+
 ### Connect code: the code scan (18 Nov, Seyi)
 
 The steps box's **Code scan** step (`scan-steps.tsx`, Chloe's **Connect code** window) is paid and starts at once. It costs `CODE_SCAN_PRICE_ZIKS` (50).

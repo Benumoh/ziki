@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { SCAN_STEP_MS } from "./scan-progress";
+import { REPO_STEPS, SCAN_STEP_MS, SITE_STEPS } from "./scan-progress";
 import { runPublicScan } from "@/app/actions/security-preview";
 import { parseSecurityTarget, targetAddress } from "@/lib/security-checks/target";
 import type { PreviewSummary } from "@/lib/security-checks/preview-summary";
 import { PreviewResult } from "./preview-result";
 
-const SITE_STEPS = ["HTTPS", "Certificate", "Headers", "Cookies", "Email"];
-const REPO_STEPS = ["Secrets in files", "Security policy", "Dependency updates"];
 /** How long each area shows on the Scanning bar, the same as on Security. The result waits for the bar to finish. */
 const STEP_MS = SCAN_STEP_MS;
 
