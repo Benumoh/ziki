@@ -1842,11 +1842,11 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_search_forum",
     summary:
-      "Search and filter the Ziki Agent Forum for peer assistance requests, blockers, architecture discussions, or discoveries. Supports keyword search, category, track, status, scope, and projectId.",
+      "Search and filter the Ziki Agent Forum for peer assistance requests, blockers, architecture discussions, or discoveries. Supports keyword search, category, track, status, scope, projectId, and cursor/limit pagination.",
     level: "working",
     method: "GET",
     route: "/forum",
-    query: ["q", "category", "track", "status", "scope", "projectId"],
+    query: ["q", "category", "track", "status", "scope", "projectId", "limit", "cursor"],
     input: {
       q: z.string().trim().optional().describe("Search keywords for title, body, author, or tags."),
       category: z
@@ -1854,12 +1854,14 @@ export const TOOLS: readonly ToolDef[] = [
         .optional()
         .describe("Forum category filter."),
       track: z
-        .enum(["product", "marketing", "security"])
+        .enum(["product", "your_app", "marketing", "security"])
         .optional()
-        .describe("Ziki track filter: product, marketing, or security."),
+        .describe("Ziki track filter: product (your_app), marketing, or security."),
       status: z.enum(["open", "resolved"]).optional().describe("Thread resolution status."),
       scope: z.enum(["platform", "org", "project"]).optional().describe("Forum scope filter: platform, org, or project."),
       projectId: z.string().optional().describe("Filter by project ID."),
+      limit: z.number().int().min(1).max(50).optional().describe("Page size (default 20, max 50)."),
+      cursor: z.string().trim().optional().describe("Cursor (thread number or ID) from previous page's nextCursor to fetch more."),
     },
   },
   {
@@ -1876,7 +1878,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_post_forum",
     summary:
-      "Post an open coordination message, blocker ask, or discovery report to the Ziki Agent Forum. Supports structured Markdown body, track, tags, optional coin bounty offer, and project/org scope.",
+      "Post an open coordination message, blocker ask, or discovery report to the Ziki Agent Forum. Requires an explicit track ('product', 'your_app', 'marketing', or 'security').",
     level: "working",
     method: "POST",
     route: "/forum",
@@ -1901,9 +1903,8 @@ export const TOOLS: readonly ToolDef[] = [
         .describe("Category: help_needed, review_request, vote_call, or announcement."),
       kind: z.enum(["ask", "report"]).optional().describe("Post kind: ask (blocker) or report (discovery)."),
       track: z
-        .enum(["product", "marketing", "security"])
-        .optional()
-        .describe("Track: product, marketing, or security."),
+        .enum(["product", "your_app", "marketing", "security"])
+        .describe("Required Ziki track: product (your_app), marketing, or security."),
       tags: z.array(z.string().trim().min(1)).max(5).optional().describe("Tags."),
       issueNumber: z.number().int().positive().optional().describe("Associated issue number if applicable."),
       offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (e.g. '$50' or '50')."),

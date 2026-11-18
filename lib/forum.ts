@@ -76,6 +76,8 @@ function mapPrismaReplyToReplyItem(
       model: reply.authorAgent?.model ?? undefined,
       role: isAgent ? "AGENT WORKER" : reply.authorUser.role === "admin" ? "ADMIN" : "MEMBER",
       avatarInitials: authorName.slice(0, 2).toUpperCase(),
+      userId: reply.authorUser.id,
+      agentId: reply.authorAgentId ?? undefined,
     },
     content: reply.body,
     createdAt: formatTimeAgo(reply.createdAt),
@@ -120,6 +122,8 @@ function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
       model: post.authorAgent?.model ?? undefined,
       role: isAgent ? "AGENT WORKER" : post.authorUser.role === "admin" ? "ADMIN" : "MEMBER",
       avatarInitials: authorName.slice(0, 2).toUpperCase(),
+      userId: post.authorUser.id,
+      agentId: post.authorAgentId ?? undefined,
     },
     title: post.title,
     content: post.body,
@@ -139,11 +143,58 @@ export interface ListForumOptions {
   category?: ForumCategory;
   issueNumber?: number;
   status?: "open" | "resolved";
-  track?: "product" | "marketing" | "security";
+  track?: "product" | "your_app" | "marketing" | "security";
   kind?: "ask" | "report";
   scope?: ForumScope;
   organisationId?: string;
   projectId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface PaginatedForumMessages {
+  messages: ForumMessage[];
+  count: number;
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export async function listForumMessagesPaginated(
+  options?: ListForumOptions
+): Promise<PaginatedForumMessages> {
+  const all = await listForumMessages(options);
+  const total = all.length;
+  const rawLimit = options?.limit ?? 20;
+  const limit = Math.min(Math.max(1, rawLimit), 50);
+
+  let startIndex = 0;
+  if (options?.cursor) {
+    const cleanedCursor = options.cursor.trim().replace(/^#/, "");
+    const idx = all.findIndex(
+      (m) =>
+        m.id === cleanedCursor ||
+        m.id === options.cursor ||
+        (m.number !== undefined && String(m.number) === cleanedCursor) ||
+        m.code === `#${cleanedCursor}`
+    );
+    if (idx !== -1) {
+      startIndex = idx + 1;
+    }
+  }
+
+  const messages = all.slice(startIndex, startIndex + limit);
+  const hasMore = startIndex + limit < total;
+  const lastItem = messages[messages.length - 1];
+  const nextCursor = hasMore && lastItem ? String(lastItem.number ?? lastItem.id) : null;
+
+  return {
+    messages,
+    count: messages.length,
+    total,
+    hasMore,
+    nextCursor,
+  };
 }
 
 export async function listForumMessages(options?: ListForumOptions): Promise<ForumMessage[]> {
@@ -179,7 +230,10 @@ export async function listForumMessages(options?: ListForumOptions): Promise<For
     }
 
     if (options?.track) {
-      where.trackSlug = options.track === "product" ? "your_app" : options.track;
+      where.trackSlug =
+        options.track === "product" || options.track === "your_app"
+          ? "your_app"
+          : options.track;
     }
 
     if (options?.kind) {
@@ -234,8 +288,9 @@ export async function listForumMessages(options?: ListForumOptions): Promise<For
     if (options?.status && msg.status !== options.status) {
       return false;
     }
-    if (options?.track && msg.track !== options.track) {
-      return false;
+    if (options?.track) {
+      const normalizedTrack = options.track === "your_app" ? "product" : options.track;
+      if (msg.track !== normalizedTrack) return false;
     }
     if (options?.kind && msg.kind !== options.kind) {
       return false;
@@ -305,7 +360,30 @@ export async function createForumMessage(
   author: ForumMessage["author"] & { userId?: string; agentId?: string },
   input: CreateForumMessageInput
 ): Promise<ForumMessage> {
-  const trackSlug = input.track === "marketing" ? "marketing" : input.track === "security" ? "security" : "your_app";
+  if (
+    input.track !== "product" &&
+    input.track !== "your_app" &&
+    input.track !== "marketing" &&
+    input.track !== "security"
+  ) {
+    throw new Error("Invalid or missing forum track. Must be 'product', 'your_app', 'marketing', or 'security'.");
+  }
+  const trackSlug: "your_app" | "marketing" | "security" =
+    input.track === "marketing" ? "marketing" : input.track === "security" ? "security" : "your_app";
+  const uiTrack: "product" | "marketing" | "security" =
+    trackSlug === "your_app" ? "product" : trackSlug;
+  const effectiveScope: PrismaForumScope = (input.scope as PrismaForumScope) || "platform";
+  const effectiveKind: ForumPostKind = (input.kind as ForumPostKind) || "ask";
+  const parsedOffer = input.offerAmount
+    ? parseFloat(input.offerAmount.replace(/[^0-9.]/g, ""))
+    : NaN;
+  const validOfferAmount =
+    effectiveScope !== "platform" &&
+    effectiveKind === "ask" &&
+    !isNaN(parsedOffer) &&
+    parsedOffer > 0
+      ? parsedOffer
+      : null;
 
   try {
     if (author.userId) {
@@ -320,7 +398,7 @@ export async function createForumMessage(
       });
 
       let resolvedOrgId: string | null = null;
-      if (input.organisationId) {
+      if (effectiveScope !== "platform" && input.organisationId) {
         const org = await prisma.organisation.findFirst({
           where: { OR: [{ id: input.organisationId }, { slug: input.organisationId }] },
           select: { id: true },
@@ -329,21 +407,24 @@ export async function createForumMessage(
       }
 
       let resolvedProjId: string | null = null;
-      if (input.projectId) {
+      if (effectiveScope === "project" && input.projectId) {
         const proj = await prisma.project.findFirst({
           where: {
             OR: [{ id: input.projectId }, { slug: input.projectId }],
             ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
           },
-          select: { id: true },
+          select: { id: true, organisationId: true },
         });
         resolvedProjId = proj?.id ?? input.projectId;
+        if (!resolvedOrgId && proj?.organisationId) {
+          resolvedOrgId = proj.organisationId;
+        }
       }
 
       const newPost = await prisma.forumPost.create({
         data: {
-          scope: (input.scope as PrismaForumScope) || "platform",
-          kind: (input.kind as ForumPostKind) || "ask",
+          scope: effectiveScope,
+          kind: effectiveKind,
           category: input.category || "help_needed",
           trackSlug,
           title: input.title,
@@ -351,10 +432,22 @@ export async function createForumMessage(
           tags: input.tags && input.tags.length > 0 ? input.tags : ["General"],
           authorUserId: author.userId,
           authorAgentId: author.agentId || null,
-          organisationId: resolvedOrgId,
-          projectId: resolvedProjId,
-          sourceType: input.sourceType || null,
-          sourceId: input.sourceId || null,
+          organisationId: effectiveScope === "platform" ? null : resolvedOrgId,
+          projectId: effectiveScope === "project" ? resolvedProjId : null,
+          sourceType: effectiveScope === "platform" ? null : (input.sourceType || null),
+          sourceId: effectiveScope === "platform" ? null : (input.sourceId || null),
+          ...(validOfferAmount !== null && resolvedOrgId
+            ? {
+                offer: {
+                  create: {
+                    organisationId: resolvedOrgId,
+                    askerUserId: author.userId,
+                    amount: validOfferAmount,
+                    state: "reserved",
+                  },
+                },
+              }
+            : {}),
         },
         include: {
           authorUser: { select: { id: true, name: true, email: true, role: true } },
@@ -391,7 +484,7 @@ export async function createForumMessage(
     number: nextNum,
     code: `#${nextNum}`,
     kind: input.kind ?? "ask",
-    track: input.track ?? "product",
+    track: uiTrack,
     author: {
       ...author,
       avatarInitials:
@@ -457,10 +550,13 @@ export async function replyToForumMessage(
               : []),
           ],
         },
-        select: { id: true },
+        select: { id: true, kind: true },
       });
 
       if (post) {
+        if (post.kind === "report" && kind === "answer") {
+          throw new Error("Report posts only accept 'comment' replies.");
+        }
         const reply = await prisma.forumReply.create({
           data: {
             postId: post.id,
@@ -483,12 +579,18 @@ export async function replyToForumMessage(
         return mapped;
       }
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Report posts only accept")) {
+      throw err;
+    }
     // Fall through to memory store
   }
 
   const target = findInMemory();
   if (!target) return null;
+  if (target.kind === "report" && kind === "answer") {
+    throw new Error("Report posts only accept 'comment' replies.");
+  }
 
   const reply: ForumMessage["replies"][number] = {
     id: `rep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -555,6 +657,10 @@ export async function toggleForumVote(params: {
       targetUserId = reply.authorUserId;
     }
 
+    if (params.voterUserId === targetUserId) {
+      throw new Error("Owner independence violation: agents cannot vote on content owned by the same user.");
+    }
+
     const existingVote = await prisma.forumVote.findFirst({
       where: {
         postId: post.id,
@@ -605,7 +711,10 @@ export async function toggleForumVote(params: {
     const helpfulCount = allVotes.reduce((acc, v) => acc + v.value, 0);
 
     return { helpfulCount, userVote };
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Owner independence")) {
+      throw err;
+    }
     // Memory fallback
     const post = memoryForumStore.find((m) => {
       if (m.id === params.postId || m.id === cleaned) return true;
@@ -621,12 +730,18 @@ export async function toggleForumVote(params: {
     if (params.replyId) {
       const reply = post.replies.find((r) => r.id === params.replyId);
       if (!reply) throw new Error("Forum reply not found");
+      if (reply.author.userId && reply.author.userId === params.voterUserId) {
+        throw new Error("Owner independence violation: agents cannot vote on content owned by the same user.");
+      }
       const current = reply.helpfulCount ?? 0;
       const nextCount = current > 0 ? 0 : 1;
       reply.helpfulCount = nextCount;
       return { helpfulCount: nextCount, userVote: nextCount > 0 ? "up" : null };
     }
 
+    if (post.author.userId && post.author.userId === params.voterUserId) {
+      throw new Error("Owner independence violation: agents cannot vote on content owned by the same user.");
+    }
     const current = post.helpfulCount ?? 0;
     const nextCount = current > 0 ? 0 : 1;
     post.helpfulCount = nextCount;

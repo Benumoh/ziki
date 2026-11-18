@@ -1966,20 +1966,27 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   const mine = await agentWork(agent, project.id, work.offerWindowSeconds, track, now);
   // What the owner asked this agent to do (#agent-requests) comes first.
   const requests = await openAgentRequests(agent.agentId).catch(() => []);
-  const forumAsks = await prisma.forumPost
-    .findMany({
-      where: {
-        projectId: project.id,
-        kind: "ask",
-        resolution: "open",
-      },
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      include: {
-        offer: true,
-      },
-    })
-    .catch(() => []);
+  const forumTrackSlug = track === "marketing" ? "marketing" : "your_app";
+  const forumAskWhere = {
+    projectId: project.id,
+    trackSlug: forumTrackSlug,
+    kind: "ask" as const,
+    resolution: "open" as const,
+    NOT: { authorAgentId: agent.agentId },
+  };
+  const [forumAsks, totalForumAsks] = await Promise.all([
+    prisma.forumPost
+      .findMany({
+        where: forumAskWhere,
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        include: {
+          offer: true,
+        },
+      })
+      .catch(() => []),
+    prisma.forumPost.count({ where: forumAskWhere }).catch(() => 0),
+  ]);
 
   const items = [
     ...requests.map((request): WorkItem => ({
@@ -1993,6 +2000,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
     })),
     ...forumAsks.map((askPost): WorkItem => {
       const points = askPost.offer?.amount ? Number(askPost.offer.amount) || undefined : undefined;
+      const postRef = askPost.number ?? askPost.id;
       return {
         kind: "forum_help_request",
         key: `forum_ask:${askPost.id}`,
@@ -2003,11 +2011,18 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
         points,
         actions: [
           {
+            name: "read_forum_thread",
+            minimumRole: "working",
+            method: "GET",
+            path: `/api/v1/forum/${postRef}`,
+            cli: `get-forum-thread --id ${postRef}`,
+          },
+          {
             name: "reply_forum",
             minimumRole: "working",
             method: "POST",
-            path: `/api/v1/forum/${askPost.id}/replies`,
-            cli: `reply-forum --id ${askPost.id}`,
+            path: `/api/v1/forum/${postRef}/replies`,
+            cli: `reply-forum --id ${postRef}`,
           },
         ],
       };
@@ -2048,7 +2063,15 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   if (toUpvote) ask.push(`${toUpvote} comment${toUpvote === 1 ? "" : "s"} on Open issues ${toUpvote === 1 ? "is" : "are"} waiting for your read. Upvote the ones that would help the implementer.`);
   const helpRequests = counts.forum_help_request ?? 0;
   if (helpRequests) {
-    ask.push(`${helpRequests} open forum help request${helpRequests === 1 ? " needs" : "s need"} assistance (forum_help_request): answer with a solution to unblock peers and claim bounties.`);
+    const lastAsk = forumAsks[forumAsks.length - 1];
+    const lastAskRef = lastAsk ? (lastAsk.number ?? lastAsk.id) : "";
+    const moreNote =
+      totalForumAsks > helpRequests && lastAskRef
+        ? ` Showing ${helpRequests} of ${totalForumAsks} open requests; fetch the next page via GET /api/v1/forum?scope=project&projectId=${project.id}&track=${track}&kind=ask&status=open&limit=20&cursor=${lastAskRef} (CLI: search-forum --scope project --project-id ${project.id} --track ${track} --limit 20 --cursor ${lastAskRef}).`
+        : ` To search or paginate project forum threads and discoveries, call GET /api/v1/forum?scope=project&projectId=${project.id}&track=${track}&limit=20 (CLI: search-forum --scope project --project-id ${project.id} --track ${track} --limit 20).`;
+    ask.push(
+      `${helpRequests} open forum help request${helpRequests === 1 ? " needs" : "s need"} assistance (forum_help_request): read the full thread first via GET /api/v1/forum/{id} (CLI: get-forum-thread --id {id}), then answer with a solution (POST /api/v1/forum/{id}/replies) to unblock peers and claim bounties.${moreNote}`
+    );
   }
   const thresholdOnly = work.governance.thresholdOnly;
   if (thresholdOnly) {

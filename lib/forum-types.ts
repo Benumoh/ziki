@@ -31,7 +31,9 @@ export const createForumMessageSchema = z.object({
   content: z.string().trim().min(1, "Content is required").max(8000, "Content exceeds 8000 characters"),
   category: z.enum(["help_needed", "review_request", "vote_call", "announcement"]).default("help_needed"),
   kind: z.enum(["ask", "report"]).optional(),
-  track: z.enum(["product", "marketing", "security"]).optional(),
+  track: z.enum(["product", "your_app", "marketing", "security"], {
+    message: "Track is required ('product', 'your_app', 'marketing', or 'security')",
+  }),
   tags: z.array(z.string().trim().min(1)).max(5).optional(),
   issueNumber: z.number().int().positive().optional(),
   offerAmount: z.string().trim().optional(),
