@@ -369,10 +369,11 @@ describe("reporting a part", () => {
     const rescanPart = heldItem({ checkId: "rescan1", check: { status: "checking", target: verified, previousCheckId: "check0", organisationId: "org1", requestedById: "owner", targetId: "t1" } });
     const repeated = fakeDb();
     repeated.securityCheckItem.findUnique.mockResolvedValue(rescanPart);
-    repeated.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "r1", title: "No Content Security Policy", item: { title: "Security headers" }, finding: null }]);
+    // Asked in turn: the part's own rechecks, this scan's code findings, then the earlier open findings.
+    repeated.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "r1", title: "No Content Security Policy", item: { title: "Security headers" }, finding: null }]);
     const again = [{ severity: "medium" as const, title: "  no content  security policy. ", description: "Seen again.", howToFix: "Add one." }];
     await expect(submitReport(asDb(repeated), "agentA", "item1", again, now)).rejects.toMatchObject({ status: 400, code: "already_known" });
-    expect(repeated.securityCheckResult.findMany.mock.calls[1]![0].where).toMatchObject({ checkId: { not: "rescan1" }, check: { organisationId: "org1", requestedById: "owner", targetId: "t1" } });
+    expect(repeated.securityCheckResult.findMany.mock.calls[2]![0].where).toMatchObject({ checkId: { not: "rescan1" }, check: { organisationId: "org1", requestedById: "owner", targetId: "t1" } });
     expect(repeated.securityCheckResult.createMany).not.toHaveBeenCalled();
     expect(repeated.securityCheckItem.updateMany).not.toHaveBeenCalled();
 
@@ -380,9 +381,17 @@ describe("reporting a part", () => {
     fresh.securityCheckItem.findUnique.mockResolvedValue(rescanPart);
     fresh.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
     fresh.securityCheckItem.findMany.mockResolvedValue([]);
-    fresh.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "r1", title: "No Content Security Policy", item: { title: "Security headers" }, finding: null }]);
+    fresh.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "r1", title: "No Content Security Policy", item: { title: "Security headers" }, finding: null }]);
     const newer = [{ severity: "low" as const, title: "robots.txt lists internal pages", description: "New.", howToFix: "Trim it." }];
     await expect(submitReport(asDb(fresh), "agentA", "item1", newer, now)).resolves.toMatchObject({ checkId: "rescan1", results: 1 });
+
+    // On a first scan too, an agent can't file again what Ziki's own code checks already put in the list.
+    const firstScan = fakeDb();
+    firstScan.securityCheckItem.findUnique.mockResolvedValue(heldItem());
+    firstScan.securityCheckResult.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ title: "No Content Security Policy" }]);
+    await expect(submitReport(asDb(firstScan), "agentA", "item1", again, now)).rejects.toMatchObject({ status: 400, code: "already_known" });
+    expect(firstScan.securityCheckResult.findMany.mock.calls[1]![0].where).toEqual({ checkId: "check1", item: { kind: "automatic" } });
+    expect(firstScan.securityCheckResult.createMany).not.toHaveBeenCalled();
   });
 
   it("adds no parts when the part is no longer the agent's (a late report adds nothing)", async () => {

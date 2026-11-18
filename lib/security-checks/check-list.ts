@@ -47,6 +47,8 @@ export type ListTab = {
   clear?: string[];
   /** Shown when the tab has nothing else to show. */
   note: string;
+  /** The quick scan's findings are in the main list (18 Nov), so this tab isn't shown. */
+  merged?: boolean;
 };
 
 /**
@@ -60,6 +62,9 @@ export function checkListTabs(report: CheckReport): [ListTab, ListTab] {
 }
 
 function quickScanTab(report: CheckReport): ListTab {
+  if (report.codeInList) {
+    return { key: "quick", title: "Quick scan", count: 0, state: { label: "Done", tone: "done" }, merged: true, note: "The quick scan's findings are in the list below." };
+  }
   const scan = report.quickScan;
   if (!scan) return { key: "quick", title: "Quick scan", count: 0, state: { label: "Not run", tone: "waiting" }, note: "No quick scan was run when this was added." };
   const label = new Map(scan.areas.map((area) => [area.area, area.label]));

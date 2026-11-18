@@ -51,12 +51,15 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
     <div className="space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
       {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
       {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
-      <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <summary className={SECTION_HEADING}>
-          Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
-        </summary>
-        <TabRows tab={quick} selected={selected} onToggle={toggle} />
-      </details>
+      {/* Once Ziki's code checks are in the main list (18 Nov), the quick scan isn't shown apart: it would list them twice. */}
+      {quick.merged ? null : (
+        <details open={!(checks.findings ?? []).length} className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
+          <summary className={SECTION_HEADING}>
+            Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
+          </summary>
+          <TabRows tab={quick} selected={selected} onToggle={toggle} />
+        </details>
+      )}
       <details open className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>

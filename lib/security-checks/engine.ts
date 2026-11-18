@@ -173,7 +173,8 @@ export type EarlierFinding = { id: string; title: string; area: string };
 type EarlierRow = {
   id: string;
   title: string;
-  item: { title: string };
+  /** `kind` is absent in older test data; `automatic` marks Ziki's own code checks. */
+  item: { title: string; kind?: string };
   finding: FixSource | null;
 };
 
@@ -196,7 +197,7 @@ async function earlierOpenRows(
     select: {
       id: true,
       title: true,
-      item: { select: { title: true } },
+      item: { select: { title: true, kind: true } },
       finding: { select: { bug: { select: { status: true, isDeleted: true } }, idea: { select: { status: true, isDeleted: true } } } },
     },
   });
@@ -205,10 +206,12 @@ async function earlierOpenRows(
 /**
  * The open earlier findings a rescan rechecks. A finding already sent to fix whose fix is still in progress is skipped
  * (18 Nov): its issue is being worked on, so checking it again tells nobody anything. Once that issue is resolved or
- * closed, the next rescan rechecks it, which confirms the fix.
+ * closed, the next rescan rechecks it, which confirms the fix. Ziki's own code findings aren't given to agents:
+ * the rescan's quick scan rechecks them (`saveCodeFindings`).
  */
 function toRecheck(rows: ReadonlyArray<EarlierRow>): EarlierFinding[] {
   return rows
+    .filter((row) => row.item.kind !== "automatic")
     .filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing")
     .map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
 }
@@ -445,7 +448,7 @@ export type SecurityJob = {
   instructions: string | null;
   assignedAt: Date | null;
   reportBy: Date | null;
-  /** `quickScan`: what the quick browser scan already saw on this site (short titles only), so your report agrees with it where you look at the same thing. */
+  /** `quickScan`: what Ziki's quick code scan already found on this site (short titles only). Those are already in the report's list (18 Nov): don't report them again; a result repeating one is refused (`already_known`). */
   check: { id: string; target: { kind: string; value: string; quickScan: QuickScanLine[] } };
   /**
    * A rescan's recheck part (#security-rescan): the earlier findings to look at again. Answer each with
@@ -542,17 +545,20 @@ export async function submitReport(
         "This part only rechecks earlier findings: answer each one in `rechecks` (`still_there` or `fixed`) and send no `results`. The scan's other parts look for anything new.",
       );
     }
-    // On a rescan, a new result that repeats an earlier open finding's title is refused (18 Nov, Tolu): the earlier one
-    // is rechecked by its own part, so a copy would list the same problem twice. Each part's instructions list them;
-    // this holds even for an agent that ignores that. A finding a rescan called fixed may come back as new.
-    if (results.length > 0 && item.check.previousCheckId) {
-      const known = new Set((await earlierOpenRows(tx, item.check, item.checkId)).map((row) => sameTitle(row.title)));
+    // A new result that repeats a finding already in the list is refused (18 Nov, Tolu): an earlier open finding on a
+    // rescan (rechecked by its own part) or one of this scan's own code checks (the quick scan, in the job's
+    // `quickScan`). A copy would list the same problem twice. Each part's instructions list the earlier ones; this holds
+    // even for an agent that ignores them. A finding a rescan called fixed may come back as new.
+    if (results.length > 0) {
+      const code = await tx.securityCheckResult.findMany({ where: { checkId: item.checkId, item: { kind: "automatic" } }, select: { title: true } });
+      const earlier = item.check.previousCheckId ? await earlierOpenRows(tx, item.check, item.checkId) : [];
+      const known = new Set([...code, ...earlier].map((row) => sameTitle(row.title)));
       const repeat = results.find((result) => known.has(sameTitle(result.title)));
       if (repeat) {
         throw new SecurityJobError(
           400,
           "already_known",
-          `"${repeat.title.slice(0, 150)}" was already found on an earlier scan of this site and is rechecked separately. Leave it out and report only what's new.`,
+          `"${repeat.title.slice(0, 150)}" is already in this scan's list (found by Ziki's automatic checks or an earlier scan). Leave it out and report only what's new.`,
         );
       }
     }

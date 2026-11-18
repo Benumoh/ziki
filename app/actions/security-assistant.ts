@@ -9,6 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, fixPaidSinceQuickScan, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { rescanQuote, startRescan, type RescanOutcome, type RescanQuote } from "@/lib/security-checks/rescan";
 import { previewScan } from "@/lib/security-checks/preview";
+import { saveCodeFindings } from "@/lib/security-checks/code-findings";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
 import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
@@ -64,6 +65,8 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!result.ok) return { ok: false, error: result.reason };
   const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
+  // Its findings join the scan's main list; ones it already holds aren't added twice (18 Nov).
+  await saveCodeFindings(prisma, checkId, result);
   revalidatePath("/security");
   return { ok: true, summary };
 }
@@ -99,7 +102,11 @@ export async function rescanSite(checkId: string): Promise<RescanOutcome> {
       const scan = await findOwnScan(organisationId, user.id, next);
       if (scan) {
         const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh: await fixPaidSinceQuickScan(scan.target) });
-        if (result.ok) await saveQuickScan(scan.targetId, await withSiteAddress(summarisePreview(result)));
+        if (result.ok) {
+          await saveQuickScan(scan.targetId, await withSiteAddress(summarisePreview(result)));
+          // Code rechecks its own earlier findings and adds only new ones to the main list (18 Nov).
+          await saveCodeFindings(prisma, next, result);
+        }
       }
     } catch {
       // The report still shows the last quick scan.
@@ -250,6 +257,8 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
   // (the sweep can be busy for a long time), and once for ten (15 Nov test); kickCheck never throws, and the sweep still catches a miss.
   after(() => kickCheck(prisma, added.checkId));
   if (summary) await saveQuickScan(added.targetId, summary);
+  // The quick scan's findings are real findings in the scan's main list (18 Nov).
+  if (result.ok) await saveCodeFindings(prisma, added.checkId, result);
   // The conversation that led to this scan becomes the start of the site's saved chat,
   // so "See result" later carries on from it (14 Nov call).
   await keepConversation(organisationId, userId, added.targetId, conversation, reply, summary);

@@ -137,6 +137,8 @@ type ReportBase = {
 type ReportFindings = {
   /** The quick scan run when the asset was added (`SecurityTarget.previewSummary`): the list's first phase. */
   quickScan: PreviewSummary | null;
+  /** Ziki's code checks (the quick scan) saved their findings in the main list (18 Nov), so the quick scan isn't shown apart. */
+  codeInList: boolean;
   /** Every open finding: this scan's own, and on a rescan the earlier ones still there or still being rechecked. */
   findings: ReportFinding[];
   /** On a rescan, the earlier findings its agents found fixed. Not counted, priced or shown in the totals. */
@@ -217,6 +219,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       },
       previousCheckId: true,
       nextCheck: { select: { id: true } },
+      _count: { select: { items: { where: { kind: "automatic" } } } },
     },
   });
   if (!check) return null;
@@ -300,6 +303,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
   });
   const found: ReportFindings = {
     quickScan: readQuickScan(check.target.previewSummary),
+    codeInList: check._count.items > 0,
     counts: countBySeverity(rows),
     total: rows.length,
     clearParts: clearPartTitles(parts, all.map((row) => ({ itemId: partOf(row) }))),

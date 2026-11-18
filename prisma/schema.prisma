@@ -3554,6 +3554,9 @@ enum SecurityCheckItemKind {
   check
   /// Once every part is in: an always-on agent writes the one report the client sees.
   collate
+  /// Ziki's own code checks (the quick scan, 18 Nov): its findings join the main list. Never given to an agent,
+  /// never counted as a part, saved already done.
+  automatic
 }
 
 /// Where one job is (#security-checks).

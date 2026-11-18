@@ -49,7 +49,7 @@ export const CHECK_STATUS_LABEL: Record<SecurityCheckStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export const SECURITY_CHECK_ITEM_KINDS = ["split", "check", "collate"] as const satisfies readonly SecurityCheckItemKind[];
+export const SECURITY_CHECK_ITEM_KINDS = ["split", "check", "collate", "automatic"] as const satisfies readonly SecurityCheckItemKind[];
 
 export const SECURITY_CHECK_ITEM_STATUSES = ["waiting", "checking", "done", "skipped"] as const satisfies readonly SecurityCheckItemStatus[];
 

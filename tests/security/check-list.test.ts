@@ -82,6 +82,12 @@ describe("the check's list: Quick scan and Deeper scan tabs (16 Nov)", () => {
     expect(deep.state).toEqual({ label: "0 of 2 done", tone: "working" });
   });
 
+  it("doesn't show the quick scan apart once Ziki's code checks are in the main list (18 Nov)", () => {
+    const merged = { ...report([]), codeInList: true } as CheckReport;
+    expect(checkListTabs(merged)[0]).toMatchObject({ merged: true, count: 0 });
+    expect(checkListTabs(report([]))[0].merged).toBeUndefined();
+  });
+
   it("names severities as threats", () => {
     expect(THREAT_LABEL).toEqual({ critical: "Critical threat", high: "High threat", medium: "Medium threat", low: "Low threat" });
   });
