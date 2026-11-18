@@ -13,7 +13,7 @@ import type {
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
-import { isReportPosted, isTargetProven } from "@/lib/security-checks";
+import { isReportPosted, isTargetProven, isScanPaymentSatisfied } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { findingPrice } from "@/lib/security-checks/payment";
 import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
@@ -119,6 +119,8 @@ const FINDING_OF_RESULT = {
 } satisfies Prisma.SecurityCheckResultSelect;
 
 type ReportBase = {
+  /** New checks wait for payment. Seyi uses this to show checkout instead of progress. */
+  paymentRequired?: boolean;
   checkId: string;
   status: SecurityCheckStatus;
   createdAt: Date;
@@ -205,6 +207,8 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       id: true,
       status: true,
       postedAt: true,
+      free: true,
+      paidAt: true,
       summary: true,
       createdAt: true,
       startedAt: true,
@@ -224,6 +228,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
   const parts = check.items.map(({ id, title, status }) => ({ id, title, status }));
   const base: ReportBase = {
     checkId: check.id,
+    paymentRequired: !isScanPaymentSatisfied(check),
     // While ownership proof is off (14 Nov plan), a check still marked as waiting for it is simply waiting to start.
     status: check.status === "awaiting_ownership" && isTargetProven(check.target) ? "queued" : check.status,
     createdAt: check.createdAt,

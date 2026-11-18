@@ -3627,13 +3627,12 @@ model SecurityCheck {
   requestedById  String
   requestedBy    User                  @relation("SecurityCheckRequester", fields: [requestedById], references: [id], onDelete: Cascade)
   status         SecurityCheckStatus   @default(awaiting_ownership)
-  /// The price in coins when the check was asked for. Replaced by per-finding
-  /// prices (SecurityCheckResult.priceCoins) and removed once the pay page uses them.
+  /// The scan admission price in Ziks: first deeper scan or follow-up rescan.
+  /// Separate from per-finding remediation prices.
   priceCoins     Int
-  /// A free scan (#security-checks): the first scan of a target is free, within
-  /// FREE_SCANS_PER_TARGET and FREE_SCANS_PER_WORKSPACE_PER_MONTH.
+  /// Historical free agent scans are grandfathered. New deeper scans are paid.
   free           Boolean               @default(false)
-  /// When the client paid; null while unpaid. Unlocks the full report and releases agent pay.
+  /// When scan admission was paid. New non-free checks cannot start agents until set.
   paidAt         DateTime?
   /// When the collate job was queued, after every part was in; null before. Guards against queuing it twice.
   collatingAt    DateTime?

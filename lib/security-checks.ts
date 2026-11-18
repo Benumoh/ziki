@@ -21,6 +21,18 @@ import type {
  */
 export const SECURITY_CHECK_PRICE_COINS = 50;
 
+/** First deeper scan, paid before any agent or AI work starts. */
+export const DEEPER_SCAN_PRICE_ZIKS = 20;
+
+/** Historical free scans remain usable; every new paid scan needs a recorded payment. */
+export function scanPaymentWhere(): Prisma.SecurityCheckWhereInput {
+  return { AND: [{ OR: [{ free: true }, { paidAt: { not: null } }] }] };
+}
+
+export function isScanPaymentSatisfied(check: { free: boolean; paidAt: Date | null }): boolean {
+  return check.free === true || check.paidAt != null;
+}
+
 export const SECURITY_TARGET_KINDS = ["website", "server", "repo"] as const satisfies readonly SecurityTargetKind[];
 
 export const TARGET_KIND_LABEL: Record<SecurityTargetKind, string> = {
@@ -104,8 +116,8 @@ export function provenTargetWhere(required = ownershipProofRequired()): { target
 }
 
 /** Whether agents may touch this check's target: never before ownership is proven (when proof is required). */
-export function agentsMayWork(check: { status: SecurityCheckStatus }, target: { verifiedAt: Date | null }, required = ownershipProofRequired()): boolean {
-  return isTargetProven(target, required) && AGENT_WORKABLE_CHECK_STATUSES.has(check.status);
+export function agentsMayWork(check: { status: SecurityCheckStatus; free: boolean; paidAt: Date | null }, target: { verifiedAt: Date | null }, required = ownershipProofRequired()): boolean {
+  return isScanPaymentSatisfied(check) && isTargetProven(target, required) && AGENT_WORKABLE_CHECK_STATUSES.has(check.status);
 }
 
 /** Whether the client sees the full report (and agents get paid): only once paid. */

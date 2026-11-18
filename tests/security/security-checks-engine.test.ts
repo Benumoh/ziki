@@ -55,7 +55,7 @@ function fakeAi(answer: unknown) {
 }
 
 function heldItem(overrides: Record<string, unknown> = {}) {
-  return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", target: verified }, ...overrides };
+  return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", free: true, paidAt: null, target: verified }, ...overrides };
 }
 
 beforeEach(() => {
@@ -374,14 +374,14 @@ describe("reporting a part", () => {
   it("refuses work on a check whose target lost its ownership proof, when proof is required", async () => {
     vi.stubEnv("SECURITY_OWNERSHIP_PROOF_REQUIRED", "true");
     const db = fakeDb();
-    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", target: { verifiedAt: null } } }));
+    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", free: true, paidAt: null, target: { verifiedAt: null } } }));
     await expect(submitReport(asDb(db), "agentA", "item1", [], now)).rejects.toBeInstanceOf(SecurityJobError);
     vi.unstubAllEnvs();
   });
 
   it("takes the work of a target with no proof while proof is off", async () => {
     const db = fakeDb();
-    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", target: { verifiedAt: null } } }));
+    db.securityCheckItem.findUnique.mockResolvedValue(heldItem({ check: { status: "checking", free: true, paidAt: null, target: { verifiedAt: null } } }));
     db.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
     expect(await submitReport(asDb(db), "agentA", "item1", found, now)).toEqual({ checkId: "check1", results: 1, rechecked: 0, addedParts: 0 });
   });

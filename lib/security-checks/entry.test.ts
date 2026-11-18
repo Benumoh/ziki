@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe("addTargetAndCheck (#security-checks part 1)", () => {
-  it("stores a new target with a fresh token and queues its check at once, with the proof step off", async () => {
+  it("stores a new target and an unpaid check, with the proof step off", async () => {
     prismaMock.securityTarget.findUnique.mockResolvedValue(null);
     prismaMock.securityTarget.create.mockResolvedValue({ id: "t1", verifiedAt: null });
     prismaMock.securityCheck.findFirst.mockResolvedValue(null);
@@ -44,7 +44,7 @@ describe("addTargetAndCheck (#security-checks part 1)", () => {
     expect(created).toMatchObject({ organisationId: "org1", kind: "website", value: "settle.ng", input: "https://settle.ng", addedById: "u1" });
     expect(created.ownershipToken).toMatch(/^ziki-verify-[0-9a-f]{32}$/);
     expect(prismaMock.securityCheck.create.mock.calls[0][0].data).toEqual({
-      organisationId: "org1", targetId: "t1", requestedById: "u1", free: true, priceCoins: 50, status: "queued",
+      organisationId: "org1", targetId: "t1", requestedById: "u1", free: false, priceCoins: 20, status: "queued",
     });
   });
 
@@ -134,7 +134,7 @@ describe("free-scan limits (plan C1)", () => {
 
     expect(added).toMatchObject({ refused: "workspace_limit" });
     expect(prismaMock.securityCheck.count.mock.calls[1][0].where).toEqual({
-      organisationId: "org1", free: true, createdAt: { gte: new Date("2026-11-01T00:00:00Z") },
+      organisationId: "org1", previousCheckId: null, createdAt: { gte: new Date("2026-11-01T00:00:00Z") },
     });
     expect(refusedMessage("workspace_limit", "settle.ng", now)).toBe("You've used this month's 3 scans. More start on 1 December.");
   });
