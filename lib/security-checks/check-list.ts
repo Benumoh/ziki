@@ -52,6 +52,8 @@ export type ListTab = {
   pending?: ListPending[];
   /** Before the deeper scan is paid for (#deeper-scan-gate): what it will check, each not checked yet. */
   notChecked?: { title: string; why: string }[];
+  /** Waiting for its payment: the section heading offers Start, like the steps box at the top (18 Nov, Hamzat). */
+  startable?: boolean;
   clear?: string[];
   /** Shown when the tab has nothing else to show. */
   note: string;
@@ -122,7 +124,7 @@ function deeperScanTab(report: CheckReport): ListTab {
   // Waiting for its payment (#deeper-scan-gate): agents haven't started, and won't until it's paid for. The quick
   // scan's findings show in the Quick scan section above.
   if (report.paymentRequired) {
-    return { ...base, count: 0, state: { label: "Not started", tone: "waiting" }, notChecked: DEEPER_SCAN_COVERS[report.target.kind], note: "Agents start once you run the deeper scan." };
+    return { ...base, count: 0, startable: true, state: { label: "Not started", tone: "waiting" }, notChecked: DEEPER_SCAN_COVERS[report.target.kind], note: "Agents start once you run the deeper scan." };
   }
   // The agents' own findings: the quick scan's are in the Quick scan section above (18 Nov).
   const agents = (finding: ReportFinding) => !report.codeInList || !isQuickScanFinding(finding);

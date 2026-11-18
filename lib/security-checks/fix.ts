@@ -19,7 +19,11 @@ export const fixSelection = z.object({
 });
 
 export type FixProject = { id: string; name: string };
-export type FixOptions = { projects: FixProject[]; projectId: string | null };
+/**
+ * `site` is the scanned site, the new project's suggested name. `match` is a workspace project whose website is that
+ * site (ziki.dev into Web), picked by default instead of a new project.
+ */
+export type FixOptions = { projects: FixProject[]; projectId: string | null; site: string; match: string | null };
 export type FixOutcome =
   | { ok: true; created: number; reused: number; coins: number; issues: { resultId: string; number: number; href: string }[] }
   | { ok: false; error: string; canBorrow?: boolean };
@@ -45,6 +49,15 @@ function eligibleProjects(client: Client): Prisma.ProjectWhereInput {
   };
 }
 
+/** A site's host without "www.", for matching a scan to a project's website. */
+function hostOf(value: string): string | null {
+  try {
+    return new URL(/^[a-z]+:\/\//i.test(value) ? value : `https://${value}`).hostname.replace(/^www\./, "").toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listFixProjects(client: Client, checkId: string, db = prisma): Promise<FixOptions | null> {
   const check = await db.securityCheck.findFirst({
     where: {
@@ -53,16 +66,19 @@ export async function listFixProjects(client: Client, checkId: string, db = pris
       organisationId: client.organisationId,
 
     },
-    select: { postedAt: true, projectId: true },
+    select: { postedAt: true, projectId: true, target: { select: { value: true } } },
   });
   // A finding can be sent as soon as its part is done (16 Nov call); a result exists only once reported.
   if (!check) return null;
-  const projects = await db.project.findMany({
+  const rows = await db.project.findMany({
     where: { ...eligibleProjects(client), ...(check.projectId ? { id: check.projectId } : {}) },
     orderBy: [{ name: "asc" }, { id: "asc" }],
-    select: { id: true, name: true },
+    select: { id: true, name: true, siteUrl: true, stagingUrl: true },
   });
-  return { projects, projectId: check.projectId };
+  const site = check.target.value;
+  const host = hostOf(site);
+  const match = host ? rows.find((row) => [row.siteUrl, row.stagingUrl].some((url) => url && hostOf(url) === host))?.id ?? null : null;
+  return { projects: rows.map(({ id, name }) => ({ id, name })), projectId: check.projectId, site, match };
 }
 
 export async function sendCheckFindings(

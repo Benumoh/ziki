@@ -348,7 +348,7 @@ export function SecurityChat({
             // The same "Claude is working" lines as the Ideas chat, for this job.
             <li className="mr-auto w-full max-w-[90%]">
               {scanning && lastTarget?.ok ? (
-                <ScanProgress site={lastTarget.target.value} />
+                <ScanProgress site={lastTarget.target.value} kind={lastTarget.target.kind} />
               ) : (
                 <ClaudeWorking steps={WORKING_STEPS} statusText="Ziki is reading your message." />
               )}

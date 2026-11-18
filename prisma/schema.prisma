@@ -3655,6 +3655,12 @@ model SecurityCheck {
   previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
   /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
   nextCheck      SecurityCheck?        @relation("SecurityRescan")
+  /// A code scan (#security-code-scan, 18 Nov): the website scan whose Connect code started it, paid for
+  /// separately (CODE_SCAN_PRICE_ZIKS). Unique, so a website scan gets one code scan, and a double click pays once.
+  codeScanForId  String?               @unique
+  codeScanFor    SecurityCheck?        @relation("SecurityCodeScan", fields: [codeScanForId], references: [id], onDelete: SetNull)
+  /// The code scan started from this website scan's Code scan step, if any.
+  codeScan       SecurityCheck?        @relation("SecurityCodeScan")
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   items          SecurityCheckItem[]
@@ -3670,6 +3676,22 @@ model SecurityCheck {
 /// One job inside a security check (#security-checks): the split, or one part
 /// to check. Ziki gives it to an agent, which does it and reports back. No
 /// votes or bids.
+/// One file (or the file list) an agent read from a repo through Ziki while holding a part (#security-repo-scan, 18 Nov).
+/// A private repo's code reaches agents only this way, through the workspace's GitHub App; every read is kept here.
+model SecurityCodeRead {
+  id        String            @id @default(cuid())
+  itemId    String
+  item      SecurityCheckItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  agentId   String
+  /// The file's path in the repo; empty for the file list.
+  path      String
+  bytes     Int
+  createdAt DateTime          @default(now())
+
+  @@index([itemId])
+  @@index([agentId, createdAt])
+}
+
 model SecurityCheckItem {
   id               String                  @id @default(cuid())
   checkId          String
@@ -3691,6 +3713,7 @@ model SecurityCheckItem {
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
   results          SecurityCheckResult[]
+  codeReads        SecurityCodeRead[]
   /// A rescan's recheck part: the earlier findings its agent says are still there or fixed.
   recheckResults   SecurityCheckResult[]   @relation("SecurityRecheckItem")
 

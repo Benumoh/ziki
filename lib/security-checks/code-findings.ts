@@ -55,6 +55,44 @@ export function howToFixFor(finding: Pick<PreviewFinding, "id">): string {
   return HOW_TO_FIX[finding.id.split(":")[0]!] ?? "See what the finding says, then change the setting it names on the server, host or repo.";
 }
 
+/**
+ * How an agent would name the same problem a code check finds (18 Nov, Tolu: no repeats). A code finding isn't added
+ * when an open agent finding on the same site already matches its kind: agents check these areas too, in their own
+ * words ("No cross-origin isolation headers", "Old TLS 1.0 and 1.1 … are still accepted"). Matched on the title only.
+ */
+const SAME_AS_AGENT: Record<string, RegExp> = {
+  "missing-csp": /content.security.policy|\bcsp\b/,
+  "missing-hsts": /strict.transport|\bhsts\b/,
+  "missing-frame-protection": /x-frame-options|frame-ancestors|clickjack|in(side)? a (hidden )?frame/,
+  "missing-nosniff": /nosniff|content-type-options/,
+  "missing-referrer-policy": /referrer.policy/,
+  "missing-permissions-policy": /permissions.policy/,
+  "missing-cross-origin-isolation": /cross.origin/,
+  "version-disclosure": /x-powered-by|server (header|software|details)|internal server details/,
+  "old-tls": /tls 1\.[01]|tlsv1(\.1)?\b|old (versions? of )?tls/,
+  "old-tls-accepted": /tls 1\.[01]|tlsv1(\.1)?\b|old (versions? of )?tls/,
+  "certificate-internal-names": /certificate.*(internal|staging)|(internal|staging).*certificate/,
+  "certificate-expired": /certificate.*expire/,
+  "certificate-expiring": /certificate.*expire/,
+  "certificate-untrusted": /certificate.*(trust|invalid)/,
+  "cookie-not-secure": /cookie.*(plain http|without https|\bsecure\b)/,
+  "cookie-not-httponly": /cookie.*(httponly|read by (page )?scripts)/,
+  "cookie-no-samesite": /samesite/,
+  "cookie-domain-wide": /cookie.*subdomain|subdomain.*cookie/,
+  "robots-private-paths": /robots\.txt/,
+  "missing-security-txt": /security\.txt/,
+  "security-txt-expired": /security\.txt/,
+  "missing-spf": /\bspf\b/,
+  "missing-dmarc": /dmarc/,
+  "dmarc-not-enforced": /dmarc/,
+};
+
+/** Whether an open agent finding already names the problem this code finding is about. */
+export function agentAlreadyFound(finding: Pick<PreviewFinding, "id">, agentTitles: readonly string[]): boolean {
+  const pattern = SAME_AS_AGENT[finding.id.split(":")[0]!];
+  return pattern ? agentTitles.some((title) => pattern.test(title.toLowerCase())) : false;
+}
+
 /** Code findings are matched across scans by title: case, extra spaces and a trailing full stop don't count. */
 function sameTitle(title: string): string {
   return title.trim().replace(/\s+/g, " ").replace(/\.$/, "").toLowerCase();
@@ -146,9 +184,21 @@ export async function saveCodeFindings(
       }
     }
 
+    // What agents already found on this site, still open: a code finding naming the same problem isn't added twice.
+    const agentTitles = (
+      await tx.securityCheckResult.findMany({
+        where: {
+          check: { organisationId: check.organisationId, requestedById: check.requestedById, targetId: check.targetId, status: { not: "cancelled" } },
+          item: { kind: "check" },
+          OR: [{ recheckState: null }, { recheckState: "still_there" }],
+        },
+        select: { title: true },
+      })
+    ).map((row) => row.title);
+
     for (const finding of result.findings) {
       const key = sameTitle(finding.title);
-      if (taken.has(key)) continue;
+      if (taken.has(key) || agentAlreadyFound(finding, agentTitles)) continue;
       taken.add(key);
       await tx.securityCheckResult.create({
         data: {
@@ -165,4 +215,21 @@ export async function saveCodeFindings(
     }
     return outcome;
   });
+}
+
+/**
+ * Before a rescan compares its quick scan (18 Nov, Tolu): an earlier scan with no saved quick-scan findings (made
+ * before they were saved, and not opened since, which does the same: make-fixable.tsx) gets this quick scan saved as
+ * its own first. The rescan then finds each problem that was already there Still there, never New. True when it did.
+ */
+export async function ensureCodeBaseline(
+  db: PrismaClient,
+  checkId: string,
+  result: Extract<PreviewResult, { ok: true }>,
+  now = new Date(),
+): Promise<boolean> {
+  const saved = await db.securityCheckItem.count({ where: { checkId, kind: "automatic" } });
+  if (saved > 0) return false;
+  await saveCodeFindings(db, checkId, result, now);
+  return true;
 }
