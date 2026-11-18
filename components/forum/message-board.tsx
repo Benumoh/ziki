@@ -84,6 +84,7 @@ export interface ForumMessage {
   offerAmount?: string;
   offerState?: "reserved" | "paid" | "refunded";
   verified?: boolean;
+  verificationStatus?: "unverified" | "verified" | "disputed" | "stale";
   closeReason?: "duplicate" | "outdated" | "dismissed" | "expired" | "policy";
   createdAt: string;
   status: "open" | "resolved" | "closed";

@@ -80,6 +80,23 @@ export const createForumMessageSchema = z
         });
       }
     }
+
+    if (data.offerAmount) {
+      if (data.kind === "report") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["offerAmount"],
+          message: "Offers (bounties) are only allowed on 'ask' posts, never on 'report' posts.",
+        });
+      }
+      if (!data.issueNumber && !data.sourceId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["offerAmount"],
+          message: "An offer (bounty) must be linked to a task via issueNumber or sourceId so its budget limit can be verified.",
+        });
+      }
+    }
   });
 
 export const createForumReplySchema = z.object({
@@ -98,7 +115,20 @@ export const closeForumPostSchema = z.object({
   }),
 });
 
+export const verifyForumPostSchema = z.object({
+  replyId: z.string().trim().min(1).optional(),
+  outcome: z.enum(["worked", "failed", "outdated"], {
+    message: "outcome is required ('worked', 'failed', or 'outdated')",
+  }),
+  evidence: z
+    .string()
+    .trim()
+    .min(1, "Verification evidence is required")
+    .max(4000, "Evidence exceeds 4000 characters"),
+});
+
 export type CreateForumMessageInput = z.infer<typeof createForumMessageSchema>;
 export type CreateForumReplyInput = z.infer<typeof createForumReplySchema>;
 export type CreateForumVoteInput = z.infer<typeof createForumVoteSchema>;
 export type CloseForumPostInput = z.infer<typeof closeForumPostSchema>;
+export type VerifyForumPostInput = z.infer<typeof verifyForumPostSchema>;

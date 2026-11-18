@@ -6,6 +6,8 @@ import type {
   ForumResolution,
   ForumReplyKind,
   ForumCloseReason,
+  ForumVerificationOutcome,
+  ForumVerificationStatus,
 } from "@prisma/client";
 import {
   type ForumCategory,
@@ -136,6 +138,7 @@ function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
     offerAmount: post.offer ? `$${Number(post.offer.amount).toFixed(2)}` : undefined,
     offerState: post.offer ? (post.offer.state as "reserved" | "paid" | "refunded") : undefined,
     verified,
+    verificationStatus: (post.verification as ForumMessage["verificationStatus"]) ?? "unverified",
     closeReason: (post.closeReason as ForumMessage["closeReason"]) ?? undefined,
     createdAt: formatTimeAgo(post.createdAt),
     status:
@@ -497,6 +500,71 @@ export async function createForumMessage(
         }
       }
 
+      if (input.offerAmount && effectiveKind === "report") {
+        throw new Error("Validation error: Offers (bounties) are only allowed on 'ask' posts.");
+      }
+
+      if (validOfferAmount !== null) {
+        if (!input.issueNumber && !input.sourceId) {
+          throw new Error(
+            "Validation error: An offer (bounty) must be linked to a task via issueNumber or sourceId."
+          );
+        }
+
+        const taskSourceId = input.sourceId || (input.issueNumber ? String(input.issueNumber) : null);
+        if (prisma.bug?.findFirst && taskSourceId) {
+          const numericTask = input.issueNumber ?? parseInt(taskSourceId.replace(/^#/, ""), 10);
+          const hasNumericTask = !isNaN(numericTask) && numericTask > 0;
+          const linkedBug = await prisma.bug.findFirst({
+            where: {
+              ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
+              ...(resolvedProjId ? { projectId: resolvedProjId } : {}),
+              OR: [
+                { id: taskSourceId },
+                ...(hasNumericTask ? [{ number: numericTask }] : []),
+              ],
+            },
+            select: { id: true, number: true, reward: true },
+          });
+
+          if (!linkedBug) {
+            throw new Error(
+              "Validation error: Linked task not found in this scope; cannot reserve bounty."
+            );
+          }
+
+          const taskRewardLimit = Number(linkedBug.reward);
+          let alreadyReservedOrPaid = 0;
+
+          if (prisma.forumOffer?.findMany) {
+            const existingOffers = await prisma.forumOffer.findMany({
+              where: {
+                ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
+                state: { in: ["reserved", "paid"] },
+                post: {
+                  OR: [
+                    { sourceId: linkedBug.id },
+                    { sourceId: String(linkedBug.number) },
+                  ],
+                },
+              },
+              select: { amount: true },
+            });
+            alreadyReservedOrPaid = existingOffers.reduce(
+              (acc, o) => acc + Number(o.amount),
+              0
+            );
+          }
+
+          const remainingTaskBudget = Math.max(0, taskRewardLimit - alreadyReservedOrPaid);
+          if (validOfferAmount > remainingTaskBudget) {
+            throw new Error(
+              `Validation error: Offer amount ($${validOfferAmount.toFixed(2)}) exceeds the linked task's remaining reward limit ($${remainingTaskBudget.toFixed(2)} of $${taskRewardLimit.toFixed(2)}).`
+            );
+          }
+        }
+      }
+
       // Ensure default track exists
       await prisma.forumTrack.upsert({
         where: { slug: trackSlug },
@@ -520,8 +588,14 @@ export async function createForumMessage(
           authorAgentId: author.agentId || null,
           organisationId: effectiveScope === "platform" ? null : resolvedOrgId,
           projectId: effectiveScope === "project" ? resolvedProjId : null,
-          sourceType: effectiveScope === "platform" ? null : (input.sourceType || null),
-          sourceId: effectiveScope === "platform" ? null : (input.sourceId || null),
+          sourceType:
+            effectiveScope === "platform"
+              ? null
+              : input.sourceType || (input.issueNumber ? "issue" : null),
+          sourceId:
+            effectiveScope === "platform"
+              ? null
+              : input.sourceId || (input.issueNumber ? String(input.issueNumber) : null),
           ...(validOfferAmount !== null && resolvedOrgId
             ? {
                 offer: {
@@ -974,8 +1048,50 @@ export async function acceptForumReply(params: {
         if (post.kind !== "ask") {
           throw new Error("Validation error: Only 'ask' posts can have an accepted solution.");
         }
-        if (post.authorUserId !== params.actorUserId && !isManagerOrMerger) {
-          throw new Error("Forbidden: Only the asking agent's owner or a manager/merger agent may accept a solution.");
+        if (post.resolution === "closed") {
+          throw new Error("Validation error: Cannot accept an answer on a closed forum post.");
+        }
+        if (post.offer && post.offer.state === "paid") {
+          throw new Error(
+            "Validation error: An answer has already been accepted and the offer paid on this post."
+          );
+        }
+        if (post.authorUserId !== params.actorUserId) {
+          if (!isManagerOrMerger) {
+            throw new Error(
+              "Forbidden: Only the asking agent's owner or a manager/merger agent may accept a solution."
+            );
+          }
+          // Verify manager/merger belongs to the post's org or project
+          if (post.organisationId && prisma.membership?.findUnique) {
+            const [orgMem, projMem] = await Promise.all([
+              prisma.membership.findUnique({
+                where: {
+                  organisationId_userId: {
+                    organisationId: post.organisationId,
+                    userId: params.actorUserId,
+                  },
+                },
+                select: { id: true },
+              }),
+              post.projectId && prisma.projectMembership?.findUnique
+                ? prisma.projectMembership.findUnique({
+                    where: {
+                      projectId_userId: {
+                        projectId: post.projectId,
+                        userId: params.actorUserId,
+                      },
+                    },
+                    select: { id: true },
+                  })
+                : Promise.resolve(null),
+            ]);
+            if (!orgMem && !projMem) {
+              throw new Error(
+                "Forbidden: Manager/merger agent does not belong to this post's organisation or project."
+              );
+            }
+          }
         }
         const reply = post.replies.find((r) => r.id === params.replyId);
         if (!reply) {
@@ -1011,6 +1127,7 @@ export async function acceptForumReply(params: {
             data: {
               state: "paid",
               paidReplyId: reply.id,
+              ledgerRef: `forum_offer:${post.offer.id}:reply:${reply.id}`,
             },
           });
           offerState = "paid";
@@ -1071,6 +1188,14 @@ export async function acceptForumReply(params: {
   }
   if (target.kind !== "ask") {
     throw new Error("Validation error: Only 'ask' posts can have an accepted solution.");
+  }
+  if (target.status === "closed") {
+    throw new Error("Validation error: Cannot accept an answer on a closed forum post.");
+  }
+  if (target.offerState === "paid") {
+    throw new Error(
+      "Validation error: An answer has already been accepted and the offer paid on this post."
+    );
   }
   if (target.author.userId && target.author.userId !== params.actorUserId && !isManagerOrMerger) {
     throw new Error("Forbidden: Only the asking agent's owner or a manager/merger agent may accept a solution.");
@@ -1211,5 +1336,203 @@ export async function closeForumMessage(params: {
   }
 
   return target;
+}
+
+export interface VerifyForumResult {
+  verification: {
+    postId: string;
+    replyId?: string;
+    outcome: "worked" | "failed" | "outdated";
+    evidence: string;
+  };
+  verificationStatus: "unverified" | "verified" | "disputed" | "stale";
+  verified: boolean;
+}
+
+export async function verifyForumMessage(params: {
+  postId: string;
+  replyId?: string;
+  verifierUserId: string;
+  verifierAgentId: string;
+  outcome: "worked" | "failed" | "outdated";
+  evidence: string;
+}): Promise<VerifyForumResult> {
+  const cleaned = params.postId.trim().replace(/^#/, "");
+  const numeric = parseInt(cleaned, 10);
+  const isNumeric = !isNaN(numeric) && String(numeric) === cleaned && numeric > 0;
+  const mappedStatus: "verified" | "disputed" | "stale" =
+    params.outcome === "worked"
+      ? "verified"
+      : params.outcome === "failed"
+        ? "disputed"
+        : "stale";
+
+  try {
+    if (prisma.forumPost?.findFirst) {
+      const post = await prisma.forumPost.findFirst({
+        where: {
+          OR: [
+            { id: params.postId },
+            ...(isNumeric ? [{ number: numeric }] : []),
+            ...(params.postId.startsWith("fm-") && !isNaN(parseInt(params.postId.slice(3), 10))
+              ? [{ number: parseInt(params.postId.slice(3), 10) }]
+              : []),
+            ...(params.postId.includes("-") && !isNaN(parseInt(params.postId.split("-")[1], 10))
+              ? [{ number: parseInt(params.postId.split("-")[1], 10) }]
+              : []),
+          ],
+        },
+        include: { replies: true },
+      });
+
+      if (post) {
+        if (post.kind === "ask" && !params.replyId) {
+          throw new Error(
+            "Validation error: Ask posts cannot be verified directly; provide the answer replyId to verify."
+          );
+        }
+
+        let targetUserId = post.authorUserId;
+        if (params.replyId) {
+          const reply = post.replies.find((r) => r.id === params.replyId);
+          if (!reply) {
+            throw new Error("Forum reply not found.");
+          }
+          if (reply.kind !== "answer") {
+            throw new Error(
+              "Validation error: Only 'answer' replies can be verified (comments cannot)."
+            );
+          }
+          targetUserId = reply.authorUserId;
+        }
+
+        if (params.verifierUserId === targetUserId) {
+          throw new Error(
+            "Owner independence violation: agents cannot verify content owned by the same user."
+          );
+        }
+
+        if (prisma.forumVerification?.findFirst) {
+          const existing = await prisma.forumVerification.findFirst({
+            where: {
+              postId: post.id,
+              replyId: params.replyId ?? null,
+              verifierUserId: params.verifierUserId,
+            },
+          });
+
+          if (existing) {
+            await prisma.forumVerification.update({
+              where: { id: existing.id },
+              data: {
+                outcome: params.outcome as ForumVerificationOutcome,
+                evidence: params.evidence,
+                verifierAgentId: params.verifierAgentId,
+              },
+            });
+          } else {
+            await prisma.forumVerification.create({
+              data: {
+                postId: post.id,
+                replyId: params.replyId ?? null,
+                targetUserId,
+                verifierUserId: params.verifierUserId,
+                verifierAgentId: params.verifierAgentId,
+                outcome: params.outcome as ForumVerificationOutcome,
+                evidence: params.evidence,
+              },
+            });
+          }
+        }
+
+        if (post.kind === "report" && prisma.forumPost?.update) {
+          await prisma.forumPost.update({
+            where: { id: post.id },
+            data: { verification: mappedStatus as ForumVerificationStatus },
+          });
+        }
+
+        return {
+          verification: {
+            postId: String(post.number),
+            replyId: params.replyId,
+            outcome: params.outcome,
+            evidence: params.evidence,
+          },
+          verificationStatus: mappedStatus,
+          verified: mappedStatus === "verified",
+        };
+      }
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message.includes("Owner independence") ||
+        err.message.startsWith("Validation error:") ||
+        err.message.includes("not found"))
+    ) {
+      throw err;
+    }
+    // Fall through to in-memory store
+  }
+
+  const target = memoryForumStore.find((m) => {
+    if (m.id === params.postId || m.id === cleaned) return true;
+    if (isNumeric && (m.number === numeric || m.id === String(numeric))) return true;
+    if (m.code.toLowerCase() === params.postId.toLowerCase() || (isNumeric && m.code === `#${numeric}`)) return true;
+    if (params.postId.startsWith("fm-") && (m.id === params.postId.slice(3) || (m.number !== undefined && String(m.number) === params.postId.slice(3)))) return true;
+    return false;
+  });
+
+  if (!target) {
+    throw new Error("Forum post not found.");
+  }
+
+  if (target.kind === "ask" && !params.replyId) {
+    throw new Error(
+      "Validation error: Ask posts cannot be verified directly; provide the answer replyId to verify."
+    );
+  }
+
+  if (params.replyId) {
+    const reply = target.replies.find((r) => r.id === params.replyId);
+    if (!reply) {
+      throw new Error("Forum reply not found.");
+    }
+    if (reply.kind !== "answer") {
+      throw new Error(
+        "Validation error: Only 'answer' replies can be verified (comments cannot)."
+      );
+    }
+    if (!reply.author.userId || reply.author.userId === params.verifierUserId) {
+      throw new Error(
+        "Owner independence violation: agents cannot verify content owned by the same user."
+      );
+    }
+    reply.validationNote = `${params.outcome}: ${params.evidence}`;
+    if (reply.accepted) {
+      target.verified = mappedStatus === "verified";
+      target.verificationStatus = mappedStatus;
+    }
+  } else {
+    if (!target.author.userId || target.author.userId === params.verifierUserId) {
+      throw new Error(
+        "Owner independence violation: agents cannot verify content owned by the same user."
+      );
+    }
+    target.verified = mappedStatus === "verified";
+    target.verificationStatus = mappedStatus;
+  }
+
+  return {
+    verification: {
+      postId: target.id,
+      replyId: params.replyId,
+      outcome: params.outcome,
+      evidence: params.evidence,
+    },
+    verificationStatus: mappedStatus,
+    verified: mappedStatus === "verified",
+  };
 }
 

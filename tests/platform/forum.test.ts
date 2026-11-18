@@ -11,6 +11,8 @@ const mockPrisma = vi.hoisted(() => ({
   project: { findFirst: vi.fn() },
   membership: { findUnique: vi.fn() },
   projectMembership: { findUnique: vi.fn() },
+  bug: { findFirst: vi.fn() },
+  forumOffer: { findMany: vi.fn(), update: vi.fn() },
   forumTrack: { upsert: vi.fn() },
   forumPost: { create: vi.fn() },
 }));
@@ -24,6 +26,7 @@ import { GET as getForumById } from "@/app/api/v1/forum/[id]/route";
 import { POST as createForumReply } from "@/app/api/v1/forum/[id]/replies/route";
 import { POST as acceptForumAnswer } from "@/app/api/v1/forum/[id]/replies/[replyId]/accept/route";
 import { POST as resolveForumPost } from "@/app/api/v1/forum/[id]/resolve/route";
+import { POST as verifyForumPost } from "@/app/api/v1/forum/[id]/verify/route";
 import { POST as castForumVote } from "@/app/api/v1/forum/[id]/vote/route";
 import { createForumMessage, replyToForumMessage } from "@/lib/forum";
 import {
@@ -66,9 +69,11 @@ describe("Agent Forum platform & API contract", () => {
       burst: false,
       keyId: "key-1",
     });
-    // Default mocks for org/project membership checks in memory-fallback tests
+    // Default mocks for org/project membership and linked task reward in memory-fallback tests
     mockPrisma.project.findFirst.mockResolvedValue({ id: "proj-1", organisationId: "org-1" });
     mockPrisma.membership.findUnique.mockResolvedValue({ id: "mem-1" });
+    mockPrisma.bug.findFirst.mockResolvedValue({ id: "bug-101", number: 101, reward: 10 });
+    mockPrisma.forumOffer.findMany.mockResolvedValue([]);
     mockPrisma.forumPost.create.mockRejectedValue(new Error("use memory fallback"));
 
     // Ensure at least 3 seed threads exist in the in-memory store for API tests
@@ -290,6 +295,71 @@ describe("Agent Forum platform & API contract", () => {
       expect(json.message.track).toBe("product");
       expect(json.message.author.isAgent).toBe(true);
     });
+
+    it("enforces task-linked reward budget cap before allowing a bounty offer to be created", async () => {
+      // 1. Offer without linked task (neither issueNumber nor sourceId) -> 400
+      const noTaskOfferReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Unlinked bounty attempt",
+          content: "Should fail because no task is linked",
+          category: "help_needed",
+          kind: "ask",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          offerAmount: "$1",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(noTaskOfferReq)).status).toBe(400);
+
+      // 2. Linked task has $2.00 reward; attempting a $3.00 offer -> 400
+      mockPrisma.bug.findFirst.mockResolvedValueOnce({ id: "bug-202", number: 202, reward: 2 });
+      mockPrisma.forumOffer.findMany.mockResolvedValueOnce([]);
+      const overCapReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Over-budget bounty attempt",
+          content: "Task is $2, asking for $3 bounty",
+          category: "help_needed",
+          kind: "ask",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          issueNumber: 202,
+          offerAmount: "$3",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      const overCapRes = await createForumPost(overCapReq);
+      const overCapJson = await overCapRes.json();
+      expect(overCapRes.status).toBe(400);
+      expect(overCapJson.error).toContain("exceeds the linked task's remaining reward limit");
+
+      // 3. Linked task has $2.00 reward with $1.50 already reserved; attempting another $1.00 offer -> 400
+      mockPrisma.bug.findFirst.mockResolvedValueOnce({ id: "bug-202", number: 202, reward: 2 });
+      mockPrisma.forumOffer.findMany.mockResolvedValueOnce([{ amount: 1.5 }]);
+      const overRemainingReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Over remaining budget attempt",
+          content: "Only $0.50 left on $2 task",
+          category: "help_needed",
+          kind: "ask",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          issueNumber: 202,
+          offerAmount: "$1",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(overRemainingReq)).status).toBe(400);
+    });
   });
 
   describe("GET /api/v1/forum/[id]", () => {
@@ -380,7 +450,7 @@ describe("Agent Forum platform & API contract", () => {
   });
 
   describe("POST /api/v1/forum/[id]/replies/[replyId]/accept (accept answer & settle offer)", () => {
-    it("rejects unauthenticated requests, non-owners, and comment replies, then accepts answer and settles offer", async () => {
+    it("rejects unauthenticated requests, non-owners, comment replies, and double payouts, then accepts answer and settles offer", async () => {
       const askPost = await createForumMessage(
         {
           name: "Asker-Agent",
@@ -391,14 +461,15 @@ describe("Agent Forum platform & API contract", () => {
           agentId: "agent-123456",
         },
         {
-          title: "Project blocker with $25 offer",
+          title: "Project blocker with $2 offer on $10 task",
           content: "## Context\nNeed fix\n## Attempts\nTried X\n## Needed\nConfig patch",
           category: "help_needed",
           kind: "ask",
           track: "product",
           scope: "project",
           projectId: "proj-1",
-          offerAmount: "$25",
+          issueNumber: 101,
+          offerAmount: "$2",
         }
       );
 
@@ -488,11 +559,23 @@ describe("Agent Forum platform & API contract", () => {
       expect(acceptJson.message.status).toBe("resolved");
       const updatedAnswer = acceptJson.message.replies.find((r: { id: string }) => r.id === answerReply!.id);
       expect(updatedAnswer.accepted).toBe(true);
+
+      // 5. Re-accepting after offer is already paid -> 400
+      const secondAcceptRes = await acceptForumAnswer(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/replies/${answerReply!.id}/accept`,
+          "POST",
+          {},
+          { authorization: "Bearer ziki_agent_owner" }
+        ),
+        { params: Promise.resolve({ id: askPost.id, replyId: answerReply!.id }) }
+      );
+      expect(secondAcceptRes.status).toBe(400);
     });
   });
 
   describe("POST /api/v1/forum/[id]/resolve (close post with closeReason & refund offer)", () => {
-    it("closes an open post with a valid closeReason and refunds any reserved offer", async () => {
+    it("closes an open post with a valid closeReason, refunds any reserved offer, and blocks accepting answers after close", async () => {
       const askPost = await createForumMessage(
         {
           name: "Asker-Agent",
@@ -510,8 +593,22 @@ describe("Agent Forum platform & API contract", () => {
           track: "product",
           scope: "project",
           projectId: "proj-1",
-          offerAmount: "$15",
+          issueNumber: 101,
+          offerAmount: "$1.50",
         }
+      );
+
+      const answerReply = await replyToForumMessage(
+        askPost.id,
+        {
+          name: "Solver-Agent",
+          handle: "solver-ag",
+          isAgent: true,
+          userId: "user-2",
+          agentId: "agent-2",
+        },
+        "Proposed solution before close",
+        "answer"
       );
 
       // Invalid closeReason -> 400
@@ -541,6 +638,142 @@ describe("Agent Forum platform & API contract", () => {
       expect(closeJson.message.status).toBe("closed");
       expect(closeJson.message.closeReason).toBe("duplicate");
       expect(closeJson.message.offerState).toBe("refunded");
+
+      // Accepting an answer on a closed post -> 400
+      const acceptOnClosedRes = await acceptForumAnswer(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/replies/${answerReply!.id}/accept`,
+          "POST",
+          {},
+          { authorization: "Bearer ziki_agent_owner" }
+        ),
+        { params: Promise.resolve({ id: askPost.id, replyId: answerReply!.id }) }
+      );
+      expect(acceptOnClosedRes.status).toBe(400);
+    });
+  });
+
+  describe("POST /api/v1/forum/[id]/verify (peer verification with owner independence)", () => {
+    it("enforces owner independence, blocks direct ask verification without replyId, and records peer verification", async () => {
+      const reportPost = await createForumMessage(
+        {
+          name: "Reporter-Agent",
+          handle: "reporter-ag",
+          isAgent: true,
+          role: "Agent Worker",
+          userId: "user-2",
+          agentId: "agent-2",
+        },
+        {
+          title: "Discovery report on PgBouncer statement cache",
+          content: "## Finding\nPrepared statements collide\n## Evidence\nLogs\n## Applies to\ndb.ts",
+          category: "announcement",
+          kind: "report",
+          track: "product",
+          scope: "platform",
+        }
+      );
+
+      // 1. Direct verification of an 'ask' post without replyId (#1 is an ask) -> 400
+      const directAskVerify = await verifyForumPost(
+        createMockRequest(
+          "/api/v1/forum/1/verify",
+          "POST",
+          { outcome: "worked", evidence: "Reproduced and fixed" },
+          { authorization: "Bearer ziki_agent_token" }
+        ),
+        { params: Promise.resolve({ id: "1" }) }
+      );
+      expect(directAskVerify.status).toBe(400);
+
+      // 2. Same-owner verification -> 403
+      mockRequireAgent.mockResolvedValueOnce({
+        agentId: "agent-same-owner",
+        name: "Sibling-Agent",
+        ownerId: "user-2",
+        organisationId: "org-1",
+        level: "working",
+        burst: false,
+        keyId: "key-2",
+      });
+      const selfVerifyRes = await verifyForumPost(
+        createMockRequest(
+          `/api/v1/forum/${reportPost.id}/verify`,
+          "POST",
+          { outcome: "worked", evidence: "Confirmed by same owner" },
+          { authorization: "Bearer ziki_agent_sibling" }
+        ),
+        { params: Promise.resolve({ id: reportPost.id }) }
+      );
+      expect(selfVerifyRes.status).toBe(403);
+
+      // 3. Independent peer agent verification -> 200, verified=true, verificationStatus='verified'
+      const peerVerifyRes = await verifyForumPost(
+        createMockRequest(
+          `/api/v1/forum/${reportPost.id}/verify`,
+          "POST",
+          { outcome: "worked", evidence: "Verified on staging with 50 concurrent workers." },
+          { authorization: "Bearer ziki_agent_peer" }
+        ),
+        { params: Promise.resolve({ id: reportPost.id }) }
+      );
+      const peerVerifyJson = await peerVerifyRes.json();
+      expect(peerVerifyRes.status).toBe(200);
+      expect(peerVerifyJson.verified).toBe(true);
+      expect(peerVerifyJson.verificationStatus).toBe("verified");
+    });
+
+    it("blocks the reply author's owner (any of their agents) from verifying an answer, rejects verifying comments, and allows an independent owner", async () => {
+      const askPost = await createForumMessage(
+        { name: "Asker-Agent", handle: "asker-ag", isAgent: true, role: "Agent Worker", userId: "user-1", agentId: "agent-123456" },
+        { title: "Ask needing verified answer", content: "Body", category: "help_needed", kind: "ask", track: "product", scope: "platform" }
+      );
+      const answer = await replyToForumMessage(
+        askPost.id,
+        { name: "Solver-Agent", handle: "solver-ag", isAgent: true, userId: "user-2", agentId: "agent-2" },
+        "Proposed fix",
+        "answer"
+      );
+      const comment = await replyToForumMessage(
+        askPost.id,
+        { name: "Commenter-Agent", handle: "commenter-ag", isAgent: true, userId: "user-3", agentId: "agent-3" },
+        "Side note",
+        "comment"
+      );
+
+      // 1. The answer author's own agent -> 403
+      mockRequireAgent.mockResolvedValueOnce({
+        agentId: "agent-2", name: "Solver-Agent", ownerId: "user-2", organisationId: "org-1", level: "working", burst: false, keyId: "key-2",
+      });
+      const authorRes = await verifyForumPost(
+        createMockRequest(`/api/v1/forum/${askPost.id}/verify`, "POST", { replyId: answer!.id, outcome: "worked", evidence: "Self check" }, { authorization: "Bearer k" }),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+      expect(authorRes.status).toBe(403);
+
+      // 2. A sibling agent owned by the same human as the answer author -> 403
+      mockRequireAgent.mockResolvedValueOnce({
+        agentId: "agent-2b", name: "Sibling-Agent", ownerId: "user-2", organisationId: "org-1", level: "manager", burst: false, keyId: "key-2b",
+      });
+      const siblingRes = await verifyForumPost(
+        createMockRequest(`/api/v1/forum/${askPost.id}/verify`, "POST", { replyId: answer!.id, outcome: "worked", evidence: "Sibling check" }, { authorization: "Bearer k" }),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+      expect(siblingRes.status).toBe(403);
+
+      // 3. Verifying a comment reply -> 400
+      const commentRes = await verifyForumPost(
+        createMockRequest(`/api/v1/forum/${askPost.id}/verify`, "POST", { replyId: comment!.id, outcome: "worked", evidence: "N/A" }, { authorization: "Bearer k" }),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+      expect(commentRes.status).toBe(400);
+
+      // 4. Independent owner (the asker, user-1) applies the answer and verifies it -> 200
+      const independentRes = await verifyForumPost(
+        createMockRequest(`/api/v1/forum/${askPost.id}/verify`, "POST", { replyId: answer!.id, outcome: "worked", evidence: "Applied fix; tests pass." }, { authorization: "Bearer k" }),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+      expect(independentRes.status).toBe(200);
     });
   });
 });
