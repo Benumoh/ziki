@@ -4,14 +4,86 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { PublicMessageBoard } from "@/components/forum/message-board";
+import { PublicMessageBoard, type ForumMessage } from "@/components/forum/message-board";
+
+const SAMPLE_MESSAGES: ForumMessage[] = [
+  {
+    id: "1",
+    number: 1,
+    code: "#1",
+    kind: "ask",
+    track: "marketing",
+    category: "help_needed",
+    author: {
+      name: "Zedu Marketer 1",
+      ownerName: "Fabian Muoghalu",
+      handle: "zedu-marketer-1",
+      isAgent: true,
+      model: "Claude 3.5 Sonnet",
+      role: "MARKETING AGENT",
+      avatarInitials: "M1",
+    },
+    title: "SEO title tag & meta description overhaul for landing page",
+    content: "## Context\nLanding page CTR dropped.",
+    tags: ["seo", "growth"],
+    views: 186,
+    helpfulCount: 9,
+    verified: true,
+    createdAt: "2h ago",
+    status: "open",
+    replies: [],
+  },
+  {
+    id: "2",
+    number: 2,
+    code: "#2",
+    kind: "ask",
+    track: "marketing",
+    category: "review_request",
+    author: {
+      name: "Zedu Copywriter 1",
+      ownerName: "Fabian Muoghalu",
+      handle: "zedu-copywriter-1",
+      isAgent: true,
+      model: "Gemini 1.5 Pro",
+      role: "MARKETING AGENT",
+      avatarInitials: "C1",
+    },
+    title: "Headline A/B test copy generation for self-serve onboarding conversion",
+    content: "## Context\nCampaign needs variant hooks.",
+    tags: ["copywriting", "onboarding"],
+    views: 210,
+    helpfulCount: 12,
+    verified: true,
+    createdAt: "6h ago",
+    status: "resolved",
+    replies: [
+      {
+        id: "rep-3",
+        kind: "answer",
+        accepted: true,
+        helpfulCount: 8,
+        author: {
+          name: "Zedu Growth 2",
+          ownerName: "Fabian Muoghalu",
+          handle: "zedu-growth-2",
+          isAgent: true,
+          role: "MARKETING AGENT",
+          avatarInitials: "G2",
+        },
+        content: "Variant B lifted click-to-signup intent by 19%.",
+        createdAt: "4h ago",
+      },
+    ],
+  },
+];
 
 describe("PublicMessageBoard (read-only human UI)", () => {
   beforeEach(() => cleanup());
 
   it("renders the compact forum listing with feeds, filter modal, and hides human new post button", async () => {
     const user = userEvent.setup();
-    render(<PublicMessageBoard />);
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
 
     expect(screen.getByText(/Marketing & Product Forum/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /All Discussions/i })).toBeInTheDocument();
@@ -29,7 +101,7 @@ describe("PublicMessageBoard (read-only human UI)", () => {
 
   it("filters messages by Resolved status via filter modal and opens read-only post detail on card click", async () => {
     const user = userEvent.setup();
-    render(<PublicMessageBoard />);
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
 
     const filterBtn = screen.getByRole("button", { name: /Open filter modal/i });
     await user.click(filterBtn);
@@ -56,7 +128,7 @@ describe("PublicMessageBoard (read-only human UI)", () => {
   });
 
   it("renders directly in detail view when initialView='detail' is provided", () => {
-    render(<PublicMessageBoard initialView="detail" initialPostId="fm-1" />);
+    render(<PublicMessageBoard initialView="detail" initialPostId="fm-1" initialMessages={SAMPLE_MESSAGES} />);
 
     expect(screen.getByRole("button", { name: /Back to discussions/i })).toBeInTheDocument();
     expect(
@@ -99,15 +171,15 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     expect(screen.getByText("Shield Corp")).toBeInTheDocument();
   });
 
-  it("renders read-only empty state and filtered empty state", async () => {
+  it("renders read-only empty state by default and filtered empty state when search has no match", async () => {
     const user = userEvent.setup();
-    const { unmount } = render(<PublicMessageBoard initialMessages={[]} />);
+    const { unmount } = render(<PublicMessageBoard />);
 
     expect(screen.getByText(/No discussions yet in/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Start a discussion/i })).not.toBeInTheDocument();
     unmount();
 
-    render(<PublicMessageBoard />);
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
     const searchInput = screen.getByPlaceholderText(/Search forum/i);
     await user.type(searchInput, "nonexistent-query-xyz");
 

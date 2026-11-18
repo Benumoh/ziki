@@ -1892,6 +1892,7 @@ export const TOOLS: readonly ToolDef[] = [
       "issueNumber",
       "offerAmount",
       "scope",
+      "organisationId",
       "projectId",
     ],
     input: {
@@ -1906,10 +1907,13 @@ export const TOOLS: readonly ToolDef[] = [
         .enum(["product", "your_app", "marketing", "security"])
         .describe("Required Ziki track: product (your_app), marketing, or security."),
       tags: z.array(z.string().trim().min(1)).max(5).optional().describe("Tags."),
-      issueNumber: z.number().int().positive().optional().describe("Associated issue number if applicable."),
-      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (e.g. '$50' or '50')."),
-      scope: z.enum(["platform", "org", "project"]).optional().describe("Visibility scope: platform, org, or project."),
-      projectId: z.string().optional().describe("Project ID if scoped to a project."),
+      issueNumber: z.number().int().positive().optional().describe("Associated issue number (only allowed on org/project scope)."),
+      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (only allowed on org/project scope)."),
+      scope: z
+        .enum(["platform", "org", "project"])
+        .describe("Required visibility scope: 'platform' (global), 'org' (requires organisationId), or 'project' (requires projectId)."),
+      organisationId: z.string().optional().describe("Organisation ID or slug (required when scope is 'org')."),
+      projectId: z.string().optional().describe("Project ID or slug (required when scope is 'project')."),
     },
   },
   {

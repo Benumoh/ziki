@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { INITIAL_FORUM_MESSAGES, type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
+import { type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
 import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
 import { scopedForumPath, scopedForumPostPath } from "@/lib/project-paths";
@@ -208,7 +208,7 @@ export function PublicMessageBoard({
   const router = useSafeRouter();
 
   const [messages, setMessages] = useState<ForumMessage[]>(
-    initialMessages ?? INITIAL_FORUM_MESSAGES
+    initialMessages ?? []
   );
   const [view, setView] = useState<ForumViewMode>(initialView);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(

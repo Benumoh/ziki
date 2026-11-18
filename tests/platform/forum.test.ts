@@ -6,8 +6,17 @@ vi.mock("@/lib/agents/require-agent", () => ({
   requireAgent: mockRequireAgent,
 }));
 
+const mockPrisma = vi.hoisted(() => ({
+  organisation: { findFirst: vi.fn() },
+  project: { findFirst: vi.fn() },
+  membership: { findUnique: vi.fn() },
+  projectMembership: { findUnique: vi.fn() },
+  forumTrack: { upsert: vi.fn() },
+  forumPost: { create: vi.fn() },
+}));
+
 vi.mock("@/lib/prisma", () => ({
-  prisma: {},
+  prisma: mockPrisma,
 }));
 
 import { GET as listForumGet, POST as createForumPost } from "@/app/api/v1/forum/route";
@@ -44,7 +53,7 @@ function createMockRequest(
 }
 
 describe("Agent Forum platform & API contract", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockRequireAgent.mockResolvedValue({
       agentId: "agent-123456",
@@ -55,6 +64,23 @@ describe("Agent Forum platform & API contract", () => {
       burst: false,
       keyId: "key-1",
     });
+
+    // Ensure at least 3 seed threads exist in the in-memory store for API tests
+    const existing = await (await listForumGet(createMockRequest("/api/v1/forum"))).json();
+    if (existing.total === 0) {
+      await createForumMessage(
+        { name: "Seed-Agent-1", handle: "seed-1", isAgent: true, role: "Agent Worker", userId: "seed-user-1", agentId: "seed-ag-1" },
+        { title: "Seed Ask 1", content: "Ask body 1", category: "help_needed", kind: "ask", track: "product", scope: "platform" }
+      );
+      await createForumMessage(
+        { name: "Seed-Agent-2", handle: "seed-2", isAgent: true, role: "Agent Worker", userId: "seed-user-2", agentId: "seed-ag-2" },
+        { title: "Seed Ask 2", content: "Ask body 2", category: "help_needed", kind: "ask", track: "marketing", scope: "platform" }
+      );
+      await createForumMessage(
+        { name: "Seed-Agent-3", handle: "seed-3", isAgent: true, role: "Agent Worker", userId: "seed-user-3", agentId: "seed-ag-3" },
+        { title: "Seed Report 3", content: "Report body 3", category: "announcement", kind: "report", track: "security", scope: "platform" }
+      );
+    }
   });
 
   describe("project-paths forum routing", () => {
@@ -116,20 +142,21 @@ describe("Agent Forum platform & API contract", () => {
     });
   });
 
-  describe("POST /api/v1/forum (strictly agent-only & strict track check)", () => {
+  describe("POST /api/v1/forum (strictly agent-only, strict track & scope checks, and dual membership)", () => {
     it("rejects non-agent requests without Authorization header", async () => {
       const req = createMockRequest("/api/v1/forum", "POST", {
         title: "Test",
         content: "Test message",
         category: "announcement",
         track: "product",
+        scope: "platform",
       });
 
       const res = await createForumPost(req);
       expect(res.status).toBe(401);
     });
 
-    it("rejects post creation when track is missing or invalid", async () => {
+    it("rejects post creation when track or scope is missing", async () => {
       const reqMissingTrack = createMockRequest(
         "/api/v1/forum",
         "POST",
@@ -137,21 +164,109 @@ describe("Agent Forum platform & API contract", () => {
           title: "Missing track post",
           content: "Should fail validation because track is omitted.",
           category: "help_needed",
+          scope: "platform",
         },
         { authorization: "Bearer ziki_agent_token" }
       );
+      expect((await createForumPost(reqMissingTrack)).status).toBe(400);
 
-      const res = await createForumPost(reqMissingTrack);
-      expect(res.status).toBe(400);
+      const reqMissingScope = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Missing scope post",
+          content: "Should fail validation because scope is omitted.",
+          category: "help_needed",
+          track: "product",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(reqMissingScope)).status).toBe(400);
     });
 
-    it("creates a forum message when authenticated as an agent with a valid track", async () => {
+    it("prevents accidental leaks by rejecting platform-scope posts that carry org/project/issue/offer fields", async () => {
+      const reqLeak = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Internal blocker accidentally marked platform",
+          content: "Contains internal ticket reference",
+          category: "help_needed",
+          track: "product",
+          scope: "platform",
+          issueNumber: 1042,
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(reqLeak)).status).toBe(400);
+
+      const reqOrgWithoutId = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Org post missing organisationId",
+          content: "Should fail because organisationId is required for org scope.",
+          category: "help_needed",
+          track: "product",
+          scope: "org",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(reqOrgWithoutId)).status).toBe(400);
+    });
+
+    it("enforces dual project membership (allows org member OR direct project member, rejects outsiders with 403)", async () => {
+      mockPrisma.project.findFirst.mockResolvedValue({ id: "proj-1", organisationId: "org-1" });
+      // Case 1: Neither org member nor direct project member -> 403
+      mockPrisma.membership.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.projectMembership.findUnique.mockResolvedValueOnce(null);
+
+      const outsiderReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Project ask from outsider",
+          content: "Should be blocked with 403",
+          category: "help_needed",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      expect((await createForumPost(outsiderReq)).status).toBe(403);
+
+      // Case 2: Direct project collaborator (not in org, but in projectMembership) -> 201
+      mockPrisma.membership.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.projectMembership.findUnique.mockResolvedValueOnce({ id: "pm-1" });
+      mockPrisma.forumPost.create.mockRejectedValueOnce(new Error("use memory fallback"));
+
+      const collabReq = createMockRequest(
+        "/api/v1/forum",
+        "POST",
+        {
+          title: "Project ask from direct project collaborator",
+          content: "Allowed via ProjectMembership",
+          category: "help_needed",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          issueNumber: 1042,
+        },
+        { authorization: "Bearer ziki_agent_token" }
+      );
+      const collabRes = await createForumPost(collabReq);
+      expect(collabRes.status).toBe(201);
+    });
+
+    it("creates a platform forum message when authenticated as an agent with valid track and scope", async () => {
+      mockPrisma.forumPost.create.mockRejectedValueOnce(new Error("use memory fallback"));
       const payload = {
         title: "Architecture question on state machine",
-        content: "Reviewing race condition on #419",
+        content: "Reviewing general state machine pattern",
         category: "review_request",
         track: "product",
-        issueNumber: 1042,
+        scope: "platform",
       };
 
       const req = createMockRequest(
@@ -167,7 +282,6 @@ describe("Agent Forum platform & API contract", () => {
       expect(res.status).toBe(201);
       expect(json.message.title).toBe(payload.title);
       expect(json.message.track).toBe("product");
-      expect(json.message.issueNumber).toBe(1042);
       expect(json.message.author.isAgent).toBe(true);
     });
   });
@@ -244,6 +358,7 @@ describe("Agent Forum platform & API contract", () => {
           content: "Testing owner independence on forum votes.",
           category: "help_needed",
           track: "product",
+          scope: "platform",
         }
       );
 

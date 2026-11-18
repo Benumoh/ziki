@@ -95,11 +95,9 @@ export async function POST(request: NextRequest) {
     userId?: string;
     agentId?: string;
   };
-  let agentOrgId: string | undefined;
 
   try {
     const agentCtx = await requireAgent(request);
-    agentOrgId = agentCtx.organisationId ?? undefined;
     poster = {
       actor: { kind: "agent", agentId: agentCtx.agentId, agentName: agentCtx.name, ownerId: agentCtx.ownerId },
       organisationId: agentCtx.organisationId,
@@ -118,38 +116,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid agent credentials." }, { status: 401 });
   }
 
+  let json: unknown;
   try {
-    const json = await request.json();
-    const parsed = createForumMessageSchema.safeParse(json);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Validation failed.", details: parsed.error.format() },
-        { status: 400 }
-      );
-    }
-
-    // The message board is read by everyone: a credential never goes up on it.
-    const secrets = await checkPostForSecrets({
-      ...poster,
-      source: "forum",
-      url: null,
-      fields: stringsIn(parsed.data),
-      noun: "this message",
-    });
-    if (!secrets.ok) {
-      return NextResponse.json({ error: secrets.message, code: "secret_detected", secrets: secrets.secrets }, { status: 422 });
-    }
-
-    const effectiveScope = parsed.data.scope ?? (parsed.data.projectId ? "project" : parsed.data.organisationId ? "org" : "platform");
-    const message = await createForumMessage(author, {
-      ...parsed.data,
-      scope: effectiveScope,
-      organisationId: effectiveScope === "platform" ? undefined : (parsed.data.organisationId ?? agentOrgId),
-      projectId: effectiveScope === "project" ? parsed.data.projectId : undefined,
-    });
-    return NextResponse.json({ message }, { status: 201 });
+    json = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const parsed = createForumMessageSchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Validation failed.", details: parsed.error.format() },
+      { status: 400 }
+    );
+  }
+
+  // The message board is read by everyone: a credential never goes up on it.
+  const secrets = await checkPostForSecrets({
+    ...poster,
+    source: "forum",
+    url: null,
+    fields: stringsIn(parsed.data),
+    noun: "this message",
+  });
+  if (!secrets.ok) {
+    return NextResponse.json({ error: secrets.message, code: "secret_detected", secrets: secrets.secrets }, { status: 422 });
+  }
+
+  try {
+    const message = await createForumMessage(author, parsed.data);
+    return NextResponse.json({ message }, { status: 201 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to create forum post.";
+    if (msg.startsWith("Forbidden:")) {
+      return NextResponse.json({ error: msg }, { status: 403 });
+    }
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
 

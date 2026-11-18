@@ -8,16 +8,12 @@ import {
   type CreateForumMessageInput,
   type AccessibleOrganisation,
   type ExternalProject,
-  INITIAL_FORUM_MESSAGES,
 } from "./forum-types";
 
 export * from "./forum-types";
 
-// In-memory fallback store for offline tests and local state
-const memoryForumStore: ForumMessage[] = INITIAL_FORUM_MESSAGES.map((m) => ({
-  ...m,
-  replies: [...m.replies],
-}));
+// In-memory store for offline tests
+const memoryForumStore: ForumMessage[] = [];
 
 function formatTimeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -372,7 +368,10 @@ export async function createForumMessage(
     input.track === "marketing" ? "marketing" : input.track === "security" ? "security" : "your_app";
   const uiTrack: "product" | "marketing" | "security" =
     trackSlug === "your_app" ? "product" : trackSlug;
-  const effectiveScope: PrismaForumScope = (input.scope as PrismaForumScope) || "platform";
+  if (input.scope !== "platform" && input.scope !== "org" && input.scope !== "project") {
+    throw new Error("Scope is required ('platform', 'org', or 'project').");
+  }
+  const effectiveScope: PrismaForumScope = input.scope;
   const effectiveKind: ForumPostKind = (input.kind as ForumPostKind) || "ask";
   const parsedOffer = input.offerAmount
     ? parseFloat(input.offerAmount.replace(/[^0-9.]/g, ""))
@@ -387,6 +386,103 @@ export async function createForumMessage(
 
   try {
     if (author.userId) {
+      let resolvedOrgId: string | null = null;
+      let resolvedProjId: string | null = null;
+
+      if (effectiveScope === "org") {
+        if (!input.organisationId) {
+          throw new Error("Validation error: organisationId is required when scope is 'org'.");
+        }
+        if (prisma.organisation?.findFirst) {
+          const org = await prisma.organisation.findFirst({
+            where: {
+              OR: [{ id: input.organisationId }, { slug: input.organisationId }],
+              archivedAt: null,
+            },
+            select: { id: true },
+          });
+          if (!org) {
+            throw new Error("Forbidden: target organisation not found or inaccessible.");
+          }
+          if (prisma.membership?.findUnique) {
+            const member = await prisma.membership.findUnique({
+              where: {
+                organisationId_userId: {
+                  organisationId: org.id,
+                  userId: author.userId,
+                },
+              },
+              select: { id: true },
+            });
+            if (!member) {
+              throw new Error("Forbidden: agent owner is not a member of this organisation.");
+            }
+          }
+          resolvedOrgId = org.id;
+        } else {
+          resolvedOrgId = input.organisationId;
+        }
+      } else if (effectiveScope === "project") {
+        if (!input.projectId) {
+          throw new Error("Validation error: projectId is required when scope is 'project'.");
+        }
+        if (prisma.project?.findFirst) {
+          const proj = await prisma.project.findFirst({
+            where: {
+              OR: [{ id: input.projectId }, { slug: input.projectId }],
+              archivedAt: null,
+              organisation: {
+                archivedAt: null,
+                ...(input.organisationId
+                  ? { OR: [{ id: input.organisationId }, { slug: input.organisationId }] }
+                  : {}),
+              },
+            },
+            select: { id: true, organisationId: true },
+          });
+          if (!proj) {
+            throw new Error("Forbidden: target project not found or inaccessible.");
+          }
+          // Access to a project is granted by either (1) org membership OR (2) direct project membership
+          if (prisma.membership?.findUnique || prisma.projectMembership?.findUnique) {
+            const [orgMember, projMember] = await Promise.all([
+              prisma.membership?.findUnique
+                ? prisma.membership.findUnique({
+                    where: {
+                      organisationId_userId: {
+                        organisationId: proj.organisationId,
+                        userId: author.userId,
+                      },
+                    },
+                    select: { id: true },
+                  })
+                : Promise.resolve(null),
+              prisma.projectMembership?.findUnique
+                ? prisma.projectMembership.findUnique({
+                    where: {
+                      projectId_userId: {
+                        projectId: proj.id,
+                        userId: author.userId,
+                      },
+                    },
+                    select: { id: true },
+                  })
+                : Promise.resolve(null),
+            ]);
+            if (!orgMember && !projMember) {
+              throw new Error(
+                "Forbidden: agent owner does not have organisation or project membership for this project."
+              );
+            }
+          }
+          resolvedOrgId = proj.organisationId;
+          resolvedProjId = proj.id;
+        } else {
+          resolvedOrgId = input.organisationId ?? null;
+          resolvedProjId = input.projectId;
+        }
+      }
+
       // Ensure default track exists
       await prisma.forumTrack.upsert({
         where: { slug: trackSlug },
@@ -396,30 +492,6 @@ export async function createForumMessage(
           label: trackSlug === "your_app" ? "Your App" : trackSlug === "marketing" ? "Marketing" : "Security",
         },
       });
-
-      let resolvedOrgId: string | null = null;
-      if (effectiveScope !== "platform" && input.organisationId) {
-        const org = await prisma.organisation.findFirst({
-          where: { OR: [{ id: input.organisationId }, { slug: input.organisationId }] },
-          select: { id: true },
-        });
-        resolvedOrgId = org?.id ?? input.organisationId;
-      }
-
-      let resolvedProjId: string | null = null;
-      if (effectiveScope === "project" && input.projectId) {
-        const proj = await prisma.project.findFirst({
-          where: {
-            OR: [{ id: input.projectId }, { slug: input.projectId }],
-            ...(resolvedOrgId ? { organisationId: resolvedOrgId } : {}),
-          },
-          select: { id: true, organisationId: true },
-        });
-        resolvedProjId = proj?.id ?? input.projectId;
-        if (!resolvedOrgId && proj?.organisationId) {
-          resolvedOrgId = proj.organisationId;
-        }
-      }
 
       const newPost = await prisma.forumPost.create({
         data: {
@@ -472,7 +544,13 @@ export async function createForumMessage(
       memoryForumStore.unshift(mapped);
       return mapped;
     }
-  } catch {
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Forbidden:") || err.message.startsWith("Validation error:"))
+    ) {
+      throw err;
+    }
     // If DB fails, proceed with memory fallback
   }
 
