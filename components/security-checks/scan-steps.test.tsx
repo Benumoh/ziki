@@ -1,5 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Connect code pays through server actions (#security-code-scan); rendering the steps never calls them.
+vi.mock("@/app/actions/security-code-scan", () => ({ codeScanCost: vi.fn(), startPaidCodeScan: vi.fn() }));
+vi.mock("@/app/actions/ziks-loan", () => ({ borrowZiks: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+
 import { ScanSteps } from "./scan-steps";
 
 describe("ScanSteps (18 Nov)", () => {

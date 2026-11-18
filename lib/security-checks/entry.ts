@@ -241,10 +241,12 @@ export function agentReportOf(
 }
 
 /** A scan's place, on its card: being checked, its report ready, or findings moved to the app (14 Nov plan, C1). */
-export type ScanStage = "scanning" | "report" | "in_app" | "cancelled";
+export type ScanStage = "quick_only" | "scanning" | "report" | "in_app" | "cancelled";
 
-export function scanStage(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved">): ScanStage {
+export function scanStage(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved" | "paymentRequired">): ScanStage {
   if (check.status === "cancelled") return "cancelled";
+  // The quick scan is in; the deeper scan waits for its payment (#deeper-scan-gate).
+  if (check.paymentRequired) return "quick_only";
   if (check.moved > 0) return "in_app";
   return check.posted ? "report" : "scanning";
 }
