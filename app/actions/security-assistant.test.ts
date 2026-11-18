@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   scansNote: vi.fn(),
   kick: vi.fn(),
   saveCode: vi.fn(),
+  baseline: vi.fn(),
 }));
 
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
@@ -25,7 +26,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // `after` runs its job once the action answers; here, at once, so a test can see what it starts.
 vi.mock("next/server", () => ({ after: (job: () => unknown) => void job() }));
 vi.mock("@/lib/security-checks/engine", () => ({ kickCheck: mocks.kick }));
-vi.mock("@/lib/security-checks/code-findings", () => ({ saveCodeFindings: mocks.saveCode }));
+vi.mock("@/lib/security-checks/code-findings", () => ({ saveCodeFindings: mocks.saveCode, ensureCodeBaseline: mocks.baseline }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: vi.fn().mockResolvedValue({ id: "u1", role: "member" }) }));
 vi.mock("@/lib/organisation-access", () => ({ currentOrganisationAccess: mocks.access }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: mocks.rate, RATE_LIMIT_MESSAGE: "Slow down." }));
