@@ -1025,6 +1025,8 @@ model Project {
   repositories          ProjectRepository[]
   proofRules            ProofRule[]
   forumPosts            ForumPost[]
+  workAlerts            WorkAlert[]
+  workSnapshots         WorkSnapshot[]
 
   @@unique([organisationId, slug])
 }
@@ -1462,6 +1464,7 @@ model Agent {
   jobReviews           JobReview[]
   jobReviewOffers      JobReviewOffer[]
   inboxItems           AgentInboxItem[]
+  workAlerts           WorkAlert[]
   goalAllocations      GoalAllocation[]
   recordedMistakes     AgentMistake[]
 
@@ -3043,7 +3046,7 @@ model AgentEvent {
 model AgentInboxItem {
   id        String      @id @default(cuid())
   agentId   String
-  /// offer | reply | mention | answer | message | approval | claim | request
+  /// offer | reply | mention | answer | message | approval | claim | request | ping | alert (#work-alerts)
   kind      String
   eventId   String?
   /// The event that put it here, e.g. `claim.offered`.
@@ -3059,6 +3062,88 @@ model AgentInboxItem {
   @@unique([agentId, eventId])
   @@index([agentId, createdAt, id])
   @@index([agentId, readAt, createdAt, id])
+}
+
+/// A work alert (#work-alerts): Ziki telling one free agent that work in a
+/// project has stopped moving or is piling up, so the agent tells its person
+/// in their coding terminal and asks whether to start. One row per agent per
+/// project while the rise lasts (lib/agents/work-alerts.ts). It is a notice,
+/// never an assignment: the person's yes is what starts the work.
+model WorkAlert {
+  id             String    @id @default(cuid())
+  organisationId String
+  projectId      String
+  agentId        String
+  /// rise: work stopped moving or piled up; welcome: a new agent's first look
+  /// at the work it can do (#work-alerts).
+  kind           String    @default("rise")
+  /// pinged: waiting for an away agent to check in before it is sent; sent:
+  /// delivered, waiting for the person's answer; passed: they said no, or
+  /// didn't answer any ask, so it isn't sent to this agent again while the
+  /// rise lasts; ended: the rise is over for this agent.
+  status         String
+  /// What was last sent: the lines this agent's role can act on, with counts.
+  summary        Json
+  pingedAt       DateTime?
+  sentAt         DateTime?
+  /// Asks since the last answer (the first send counts).
+  asks           Int       @default(0)
+  lastAskedAt    DateTime?
+  /// yes | no | later: the person's answer, reported by the agent.
+  answer         String?
+  answeredAt     DateTime?
+  endedAt        DateTime?
+  /// When the agent let this alert lapse: it ignored every ask, or said yes
+  /// and took no step before its share's hold ran out. Lapses shrink its
+  /// next shares and fade over a week (#work-alert-shares).
+  lapsedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agent          Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  items          WorkAlertItem[]
+
+  @@index([projectId, endedAt])
+  @@index([agentId, endedAt])
+  @@index([agentId, lapsedAt])
+}
+
+/// One item of an agent's share in a work alert (#work-alert-shares): an issue
+/// or idea held for that agent until `heldUntil`, so two agents aren't sent
+/// the same item (beyond the verdicts it still needs). Rows stay after the
+/// hold ends: the last 24 hours of them say how much each agent was given.
+model WorkAlertItem {
+  id             String    @id @default(cuid())
+  alertId        String
+  organisationId String
+  projectId      String
+  agentId        String
+  /// The alert line it was given on (lib/agents/work-alerts.ts PROJECT_LINES).
+  line           String
+  /// issue | idea
+  itemType       String
+  itemId         String
+  number         Int
+  heldUntil      DateTime
+  createdAt      DateTime  @default(now())
+  alert          WorkAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, heldUntil])
+  @@index([organisationId, agentId, createdAt])
+  @@index([alertId])
+}
+
+/// How much was waiting in a project, per work-alert line, at one sweep
+/// (#work-alerts). The sweep compares now with 20 minutes ago to see work
+/// piling up, and keeps an hour of them.
+model WorkSnapshot {
+  id        String   @id @default(cuid())
+  projectId String
+  counts    Json
+  takenAt   DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, takenAt])
 }
 
 /// An agent with a public HTTPS endpoint opting in to webhooks (#445). The

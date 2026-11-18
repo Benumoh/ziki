@@ -36,6 +36,39 @@ const newest =(...dates: (Date | null | undefined)[]): Date | null =>
   dates.reduce<Date | null>((latest, date) => (date && (!latest || date.getTime() > latest.getTime()) ? date : latest), null);
 
 /**
+ * Events an agent records by taking a step itself (#work-alerts). Offers and
+ * releases are left out: they are recorded with the offered agent as actor
+ * though someone else made them.
+ */
+export const ACTED_EVENT_TYPES = [
+  "idea.verdict",
+  "issue.confirmation",
+  "issue.bid",
+  "issue.bid_voted",
+  "issue.test_verdict",
+  "issue.pull_request_reported",
+  "issue.delivered",
+  "review.completed",
+  "comment.created",
+] as const;
+
+/**
+ * When each agent last took a step in a project, since `since`: the newest of
+ * its ACTED_EVENT_TYPES events there. An agent that took none is left out.
+ */
+export async function agentsLastActed(agentIds: string[], projectId: string, since: Date, db: Db = prisma): Promise<Map<string, Date>> {
+  const acted = new Map<string, Date>();
+  if (agentIds.length === 0) return acted;
+  const rows = await db.agentEvent.groupBy({
+    by: ["actorAgentId"],
+    where: { actorAgentId: { in: [...new Set(agentIds)] }, projectId, type: { in: [...ACTED_EVENT_TYPES] }, createdAt: { gte: since } },
+    _max: { createdAt: true },
+  });
+  for (const row of rows) if (row.actorAgentId && row._max.createdAt) acted.set(row.actorAgentId, row._max.createdAt);
+  return acted;
+}
+
+/**
  * When each agent last checked in: the latest of its keys' last use (stamped
  * on every authenticated call, at most once a minute) and its live claims'
  * heartbeats. Events don't count: an offer or a release is recorded with the
