@@ -3,10 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { INITIAL_FORUM_MESSAGES, type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
+import { type AccessibleOrganisation, type ExternalProject } from "@/lib/forum-types";
 import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import { scopedForumPath, scopedForumPostPath } from "@/lib/project-paths";
 
 function useSafeRouter() {
@@ -39,6 +38,8 @@ export interface ForumReplyItem {
     role?: string;
     avatarColor?: string;
     avatarInitials?: string;
+    userId?: string;
+    agentId?: string;
   };
   content: string;
   codeDiff?: {
@@ -68,6 +69,8 @@ export interface ForumMessage {
     role: string;
     avatarColor?: string;
     avatarInitials?: string;
+    userId?: string;
+    agentId?: string;
   };
   category: "help_needed" | "review_request" | "vote_call" | "announcement";
   issueNumber?: number;
@@ -79,16 +82,55 @@ export interface ForumMessage {
   views: number;
   helpfulCount: number;
   offerAmount?: string;
+  offerState?: "reserved" | "paid" | "refunded";
   verified?: boolean;
+  verificationStatus?: "unverified" | "verified" | "disputed" | "stale";
+  closeReason?: "duplicate" | "outdated" | "dismissed" | "expired" | "policy";
+  sourceType?:
+    | "issue"
+    | "idea"
+    | "marketing_task"
+    | "marketing_idea"
+    | "security_finding"
+    | "security_check";
+  sourceId?: string;
   createdAt: string;
-  status: "open" | "resolved";
+  status: "open" | "resolved" | "closed";
   replies: ForumReplyItem[];
 }
 
-type StatusFilter = "all" | "open" | "resolved" | "verified";
+type StatusFilter = "all" | "open" | "resolved" | "verified" | "closed";
 type FeedFilter = "all" | "ask" | "report" | "archived";
 type TrackFilter = "all" | "product" | "marketing" | "security";
-type ForumViewMode = "list" | "detail" | "new";
+type ForumViewMode = "list" | "detail";
+
+export function forumSourceLabel(msg: {
+  sourceType?: string;
+  sourceId?: string;
+  issueNumber?: number;
+}): string | null {
+  const type = msg.sourceType ?? (msg.issueNumber ? "issue" : undefined);
+  const id = msg.sourceId ?? (msg.issueNumber ? String(msg.issueNumber) : undefined);
+  if (!type || !id) return null;
+
+  const formattedId = id.startsWith("#") ? id : `#${id}`;
+  switch (type) {
+    case "issue":
+      return `Issue ${formattedId}`;
+    case "idea":
+      return `Idea ${formattedId}`;
+    case "marketing_task":
+      return `Marketing Task ${formattedId}`;
+    case "marketing_idea":
+      return `Marketing Idea ${formattedId}`;
+    case "security_finding":
+      return `Security Finding ${formattedId}`;
+    case "security_check":
+      return `Security Check ${formattedId}`;
+    default:
+      return `${type} ${formattedId}`;
+  }
+}
 
 /* Ziki design-system stroke SVG icon primitive (matches NavIcon / UpArrow across the app) */
 function Icon({
@@ -177,25 +219,6 @@ function ZCoinIcon({ size = 10, className = "" }: { size?: number; className?: s
   );
 }
 
-const ASK_TEMPLATE = `## Context
-Briefly state the blocker and environment...
-
-## Attempts
-- Attempt 1: ...
-- Failure reason: ...
-
-## Needed
-Specify the exact verification, fix, or unblock needed...`;
-
-const REPORT_TEMPLATE = `## Finding
-Summarize the non-trivial discovery or anomaly...
-
-## Evidence
-Paste reproduction command, HTTP response, or benchmark...
-
-## Applies to
-Specify affected routes, campaigns, or services...`;
-
 export interface PublicMessageBoardProps {
   initialView?: ForumViewMode;
   initialPostId?: string;
@@ -224,7 +247,7 @@ export function PublicMessageBoard({
   const router = useSafeRouter();
 
   const [messages, setMessages] = useState<ForumMessage[]>(
-    initialMessages ?? INITIAL_FORUM_MESSAGES
+    initialMessages ?? []
   );
   const [view, setView] = useState<ForumViewMode>(initialView);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(
@@ -377,22 +400,8 @@ export function PublicMessageBoard({
     "stripe",
   ];
 
-  // New Post Form State (no Why Context field)
-  const [newKind, setNewKind] = useState<"ask" | "report">("ask");
-  const [newTrack, setNewTrack] = useState<"product" | "marketing" | "security">("marketing");
-  const [newScope, setNewScope] = useState<"project" | "org" | "global">(
-    scope === "platform" ? "global" : (scope ?? "project")
-  );
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState(ASK_TEMPLATE);
-  const [newTagsInput, setNewTagsInput] = useState("Marketing, SEO & Meta");
-  const [newIssueNumber, setNewIssueNumber] = useState("");
-  const [newOfferAmount, setNewOfferAmount] = useState("");
-
-  // Reply Expansion & Post Submission State
+  // Reply Expansion State
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
-  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
-  const [postError, setPostError] = useState<string | null>(null);
 
   const toggleReplyExpanded = (replyId: string) => {
     setExpandedReplies((prev) => ({
@@ -420,6 +429,7 @@ export function PublicMessageBoard({
     .filter((msg) => {
       if (statusFilter === "open" && msg.status !== "open") return false;
       if (statusFilter === "resolved" && msg.status !== "resolved") return false;
+      if (statusFilter === "closed" && msg.status !== "closed") return false;
       if (statusFilter === "verified" && !msg.verified) return false;
       if (feedFilter === "ask" && msg.kind !== "ask") return false;
       if (feedFilter === "report" && msg.kind !== "report") return false;
@@ -475,124 +485,6 @@ export function PublicMessageBoard({
     }
   };
 
-  const handleKindChange = (kind: "ask" | "report") => {
-    setNewKind(kind);
-    if (
-      !newContent.trim() ||
-      newContent === ASK_TEMPLATE ||
-      newContent === REPORT_TEMPLATE
-    ) {
-      setNewContent(kind === "ask" ? ASK_TEMPLATE : REPORT_TEMPLATE);
-    }
-  };
-
-  const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim() || !newContent.trim()) return;
-
-    setIsSubmittingPost(true);
-    setPostError(null);
-
-    const parsedTags = newTagsInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .slice(0, 5);
-
-    const payload = {
-      title: newTitle.trim(),
-      content: newContent.trim(),
-      category: newKind === "ask" ? "help_needed" : "review_request",
-      kind: newKind,
-      track: newTrack,
-      tags: parsedTags.length > 0 ? parsedTags : ["General"],
-      issueNumber: newIssueNumber ? parseInt(newIssueNumber, 10) : undefined,
-      offerAmount:
-        newScope !== "global" && newOfferAmount.trim()
-          ? newOfferAmount.trim().startsWith("$")
-            ? newOfferAmount.trim()
-            : `$${newOfferAmount.trim()}`
-          : undefined,
-      scope: newScope === "global" ? "platform" : newScope,
-      organisationId: orgSlug,
-      projectId: projectSlug,
-    };
-
-    try {
-      const res = await fetch("/api/v1/forum", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Failed to create post (${res.status})`);
-      }
-
-      const data = await res.json();
-      const created = data.message as ForumMessage;
-
-      setMessages((prev) => [created, ...prev]);
-      setSelectedPostId(created.id);
-      setNewTitle("");
-      setNewIssueNumber("");
-      setNewOfferAmount("");
-      setView("detail");
-      if (router) {
-        router.push(scopedForumPostPath(scope, created.id, orgSlug, projectSlug));
-      }
-    } catch {
-      // If offline / test environment fallback, create in memory
-      const nextNum = messages.length > 0
-        ? Math.max(...messages.map((m) => m.number || parseInt(m.id, 10) || 0)) + 1
-        : 1;
-      const created: ForumMessage = {
-        id: String(nextNum),
-        number: nextNum,
-        code: `#${nextNum}`,
-        kind: newKind,
-        track: newTrack,
-        category: newKind === "ask" ? "help_needed" : "review_request",
-        author: {
-          name: "Fabian Muoghalu",
-          handle: "fabian",
-          isAgent: false,
-          role: "SUPERVISOR",
-          avatarInitials: "FM",
-        },
-        issueNumber: newIssueNumber ? parseInt(newIssueNumber, 10) : undefined,
-        title: newTitle.trim(),
-        content: newContent.trim(),
-        tags: parsedTags.length > 0 ? parsedTags : ["General"],
-        views: 1,
-        helpfulCount: 0,
-        offerAmount:
-          newScope !== "global" && newOfferAmount.trim()
-            ? newOfferAmount.trim().startsWith("$")
-              ? newOfferAmount.trim()
-              : `$${newOfferAmount.trim()}`
-            : undefined,
-        verified: false,
-        createdAt: "Just now",
-        status: "open",
-        replies: [],
-      };
-
-      setMessages((prev) => [created, ...prev]);
-      setSelectedPostId(created.id);
-      setNewTitle("");
-      setNewIssueNumber("");
-      setNewOfferAmount("");
-      setView("detail");
-      if (router) {
-        router.push(scopedForumPostPath(scope, created.id, orgSlug, projectSlug));
-      }
-    } finally {
-      setIsSubmittingPost(false);
-    }
-  };
-
   const [userVotes] = useState<Record<string, "up" | "down">>({});
 
 
@@ -641,19 +533,39 @@ export function PublicMessageBoard({
                 {activePost.status}
               </span>
             </div>
-            {activePost.issueNumber && (
+            {activePost.status === "closed" && activePost.closeReason && (
               <div className="flex items-center justify-between">
-                <span className="text-zk-muted">Linked Issue</span>
-                <span className="font-mono text-zk-accent font-semibold">
-                  #{activePost.issueNumber}
+                <span className="text-zk-muted">Close Reason</span>
+                <span className="capitalize font-medium text-zk-text">
+                  {activePost.closeReason}
                 </span>
               </div>
             )}
+            {activePost.verificationStatus && activePost.verificationStatus !== "unverified" && (
+              <div className="flex items-center justify-between">
+                <span className="text-zk-muted">Verification</span>
+                <span className="capitalize font-medium text-zk-text">
+                  {activePost.verificationStatus}
+                </span>
+              </div>
+            )}
+            {(() => {
+              const src = forumSourceLabel(activePost);
+              return src ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-zk-muted">Linked Source</span>
+                  <span className="font-mono text-zk-accent font-semibold">
+                    {src}
+                  </span>
+                </div>
+              ) : null;
+            })()}
             {activePost.offerAmount && (
               <div className="flex items-center justify-between">
                 <span className="text-zk-muted">Reward</span>
                 <span className="font-mono font-bold text-zk-ok-fg">
                   {activePost.offerAmount.replace(/^\$/, "")} Coins
+                  {activePost.offerState ? ` (${activePost.offerState})` : ""}
                 </span>
               </div>
             )}
@@ -1116,6 +1028,7 @@ export function PublicMessageBoard({
                         { id: "open", label: "Open Only" },
                         { id: "resolved", label: "Resolved" },
                         { id: "verified", label: "Verified Only" },
+                        { id: "closed", label: "Closed" },
                       ] as const
                     ).map((item) => (
                       <button
@@ -1366,7 +1279,31 @@ export function PublicMessageBoard({
                               <span>{msg.offerAmount.replace(/^\$/, "")}</span>
                             </Badge>
                           )}
-                          {isResolved ? (
+                          {msg.status === "closed" ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zk-muted" />
+                              <span>Closed{msg.closeReason ? ` · ${msg.closeReason}` : ""}</span>
+                            </Badge>
+                          ) : msg.verificationStatus === "verified" || msg.verified ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <Icon size={11} className="text-zk-ok-fg">
+                                <polyline points="20 6 9 17 4 12" />
+                              </Icon>
+                              <span>Verified</span>
+                            </Badge>
+                          ) : msg.verificationStatus === "disputed" ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-bad-fg text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <Icon size={11} className="text-zk-bad-fg">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </Icon>
+                              <span>Disputed</span>
+                            </Badge>
+                          ) : msg.verificationStatus === "stale" ? (
+                            <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                              <span>Outdated</span>
+                            </Badge>
+                          ) : isResolved ? (
                             <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
                               <Icon size={11} className="text-zk-ok-fg">
                                 <circle cx="12" cy="12" r="9" />
@@ -1383,24 +1320,26 @@ export function PublicMessageBoard({
                         </div>
                       </div>
 
-                      {/* Compact Row 2: Title Only (No Description) */}
-                      <h3 className="text-[15px] text-zk-text hover:text-zk-accent transition-colors leading-snug font-semibold">
-                        {msg.title}
-                      </h3>
-
-                      {/* Compact Row 3: Tags on left; Replies, Views, Helpful on right */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {msg.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-1.5 py-0.5 rounded bg-zk-surface border border-zk-border text-zk-text2 text-[10px]"
-                            >
-                              {tag.replace(/^#/, "")}
-                            </span>
-                          ))}
+                      {/* Lean Row 2: Source Pill + Truncated Title on left; Replies & Votes on right */}
+                      <div className="flex items-center justify-between gap-3 min-w-0 pt-0.5">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {(() => {
+                            const src = forumSourceLabel(msg);
+                            return src ? (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-zk-tint border border-zk-accent/30 text-zk-accent text-[10px] font-mono font-medium">
+                                {src}
+                              </span>
+                            ) : null;
+                          })()}
+                          <h3
+                            title={msg.title}
+                            className="text-[14px] text-zk-text hover:text-zk-accent transition-colors leading-snug font-semibold truncate"
+                          >
+                            {msg.title}
+                          </h3>
                         </div>
-                        <div className="flex items-center gap-3 text-[11px] text-zk-muted">
+
+                        <div className="flex items-center gap-3 shrink-0 text-[11px] text-zk-muted">
                           <span
                             title={`${msg.replies.length} replies`}
                             className="flex items-center gap-1 text-zk-text font-medium"
@@ -1410,16 +1349,7 @@ export function PublicMessageBoard({
                             </Icon>
                             <span>{msg.replies.length}</span>
                           </span>
-                          <span
-                            title={`${msg.views} views`}
-                            className="flex items-center gap-1 text-zk-text2"
-                          >
-                            <Icon size={12} className="text-zk-muted">
-                              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </Icon>
-                            <span>{msg.views}</span>
-                          </span>
+
                           {/* Single Vote Indicator (Read-only for humans): Upward & green icon when positive, downward & red icon when negative */}
                           <span
                             aria-label={`Helpful votes: ${msg.helpfulCount}`}
@@ -1506,7 +1436,31 @@ export function PublicMessageBoard({
                     </span>
 
                     {/* Status badge placed after Published at */}
-                    {activePost.status === "resolved" ? (
+                    {activePost.status === "closed" ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zk-muted" />
+                        <span>Closed{activePost.closeReason ? ` · ${activePost.closeReason}` : ""}</span>
+                      </Badge>
+                    ) : activePost.verificationStatus === "verified" || activePost.verified ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <Icon size={12} className="text-zk-ok-fg">
+                          <polyline points="20 6 9 17 4 12" />
+                        </Icon>
+                        <span>Verified</span>
+                      </Badge>
+                    ) : activePost.verificationStatus === "disputed" ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-bad-fg text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <Icon size={12} className="text-zk-bad-fg">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </Icon>
+                        <span>Disputed</span>
+                      </Badge>
+                    ) : activePost.verificationStatus === "stale" ? (
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[11px] font-medium px-2 py-0.5 gap-1">
+                        <span>Outdated</span>
+                      </Badge>
+                    ) : activePost.status === "resolved" ? (
                       <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-2 py-0.5 gap-1">
                         <Icon size={12} className="text-zk-ok-fg">
                           <circle cx="12" cy="12" r="9" />
@@ -1815,257 +1769,6 @@ export function PublicMessageBoard({
             >
               Return to discussions list
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW 3: NEW FORUM POST VIEW (NO WHY CONTEXT FIELD) */}
-      {view === "new" && (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleBackToList}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zk-surface hover:bg-zk-chip border border-zk-border text-zk-text2 hover:text-zk-text text-[13px] font-medium transition-colors cursor-pointer"
-            >
-              <Icon size={14}>
-                <path d="m12 19-7-7 7-7M19 12H5" />
-              </Icon>
-              <span>Back to Forum</span>
-            </button>
-          </div>
-
-          <div className="max-w-3xl w-full mx-auto">
-            {/* Form */}
-            <form
-              onSubmit={handleCreatePost}
-              className="bg-zk-surface border border-zk-border rounded-xl p-5 flex flex-col gap-4 shadow-xs"
-            >
-              <div>
-                <h1 className="text-[20px] font-semibold text-zk-text">
-                  Create New Forum Post
-                </h1>
-                <p className="text-[13px] text-zk-muted mt-0.5">
-                  Share an Ask (blocker) or Report (discovery) with structured Markdown in the body.
-                </p>
-              </div>
-
-              {postError && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-[13px] flex items-center justify-between">
-                  <span>{postError}</span>
-                  <button
-                    type="button"
-                    onClick={() => setPostError(null)}
-                    className="text-red-400 hover:text-red-300 font-bold ml-2 cursor-pointer"
-                  >
-                    &times;
-                  </button>
-                </div>
-              )}
-
-              {/* Post Type, Track & Scope */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label
-                    htmlFor="forum-type"
-                    className="block text-[12px] font-medium text-zk-text2 mb-1"
-                  >
-                    Post Type
-                  </label>
-                  <select
-                    id="forum-type"
-                    value={newKind}
-                    onChange={(e) =>
-                      handleKindChange(e.target.value as "ask" | "report")
-                    }
-                    className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-2.5 text-[13px] text-zk-text focus:outline-none focus:border-zk-accent"
-                  >
-                    <option value="ask">Ask (Blocker / Help Needed)</option>
-                    <option value="report">Report (Discovery / Finding)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="forum-track"
-                    className="block text-[12px] font-medium text-zk-text2 mb-1"
-                  >
-                    Ziki Track
-                  </label>
-                  <select
-                    id="forum-track"
-                    value={newTrack}
-                    onChange={(e) =>
-                      setNewTrack(
-                        e.target.value as "product" | "marketing" | "security"
-                      )
-                    }
-                    className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-2.5 text-[13px] text-zk-text focus:outline-none focus:border-zk-accent"
-                  >
-                    <option value="product">Your App (Product)</option>
-                    <option value="marketing">Marketing</option>
-                    <option value="security">Security</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="forum-scope"
-                    className="block text-[12px] font-medium text-zk-text2 mb-1"
-                  >
-                    Visibility Scope
-                  </label>
-                  <select
-                    id="forum-scope"
-                    value={newScope}
-                    onChange={(e) =>
-                      setNewScope(
-                        e.target.value as "project" | "org" | "global"
-                      )
-                    }
-                    className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-2.5 text-[13px] text-zk-text focus:outline-none focus:border-zk-accent"
-                  >
-                    <option value="project">Project (Web)</option>
-                    <option value="org">Organisation (Zedu)</option>
-                    <option value="global">Global Ziki Forum</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Title */}
-              <div>
-                <label
-                  htmlFor="forum-title"
-                  className="block text-[12px] font-medium text-zk-text2 mb-1"
-                >
-                  Title
-                </label>
-                <input
-                  id="forum-title"
-                  type="text"
-                  required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Brief summary of request or announcement..."
-                  className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-3 text-[13px] text-zk-text placeholder-zk-muted focus:outline-none focus:border-zk-accent"
-                />
-              </div>
-
-              {/* Structured Markdown Body */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="forum-content"
-                    className="block text-[12px] font-medium text-zk-text2"
-                  >
-                    Body (Markdown)
-                  </label>
-                  <span className="text-[11px] text-zk-muted font-mono">
-                    {newKind === "ask"
-                      ? "## Context · ## Attempts · ## Needed"
-                      : "## Finding · ## Evidence · ## Applies to"}
-                  </span>
-                </div>
-                <MarkdownEditor
-                  id="forum-content"
-                  labelId="forum-content-label"
-                  rows={8}
-                  required
-                  allowUploads={false}
-                  value={newContent}
-                  onChange={setNewContent}
-                  placeholder="Describe your issue or finding using structured Markdown..."
-                  footer={
-                    <span className="text-[11px] text-zk-muted">
-                      Supports Markdown formatting, code snippets, lists, and previews.
-                    </span>
-                  }
-                />
-              </div>
-
-              {/* Tags, Linked Issue, Optional Offer */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label
-                    htmlFor="forum-tags"
-                    className="block text-[12px] font-medium text-zk-text2 mb-1"
-                  >
-                    Tags (comma-separated)
-                  </label>
-                  <input
-                    id="forum-tags"
-                    type="text"
-                    value={newTagsInput}
-                    onChange={(e) => setNewTagsInput(e.target.value)}
-                    placeholder="seo, debugging, api-latency"
-                    className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-3 text-[13px] text-zk-text placeholder-zk-muted focus:outline-none focus:border-zk-accent"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="forum-issue-number"
-                    className="block text-[12px] font-medium text-zk-text2 mb-1"
-                  >
-                    Linked Ticket # (Optional)
-                  </label>
-                  <input
-                    id="forum-issue-number"
-                    type="number"
-                    value={newIssueNumber}
-                    onChange={(e) => setNewIssueNumber(e.target.value)}
-                    placeholder="e.g. 382"
-                    className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-3 text-[13px] text-zk-text placeholder-zk-muted focus:outline-none focus:border-zk-accent"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="forum-offer"
-                    className="block text-[12px] font-medium text-zk-text2 mb-1"
-                  >
-                    Bounty in Coins (Project/Org only)
-                  </label>
-                  <input
-                    id="forum-offer"
-                    type="text"
-                    disabled={newScope === "global"}
-                    value={newOfferAmount}
-                    onChange={(e) => setNewOfferAmount(e.target.value)}
-                    placeholder={
-                      newScope === "global"
-                        ? "Disabled on Global Forum"
-                        : "e.g. 50"
-                    }
-                    className="w-full h-9 rounded-lg border border-zk-border bg-zk-bg px-3 text-[13px] text-zk-text placeholder-zk-muted focus:outline-none focus:border-zk-accent disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zk-border">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-4 py-1.5 rounded-full bg-zk-chip hover:bg-zk-seg text-zk-text2 text-[13px] font-medium transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingPost || !newTitle.trim() || !newContent.trim()}
-                  className="px-5 py-1.5 rounded-full bg-electric-blue-strong hover:bg-electric-blue disabled:opacity-50 text-white text-[13px] font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  {isSubmittingPost ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Publishing...</span>
-                    </>
-                  ) : (
-                    <span>Publish Post</span>
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

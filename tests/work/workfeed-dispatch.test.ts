@@ -26,6 +26,28 @@ import { parseEventFilters } from "@/lib/agent-api/events";
 import { webhookBody } from "@/lib/webhooks/deliver";
 import { prGate } from "@/lib/agent-api/pr-gate";
 import type { StoredPullRequestReport } from "@/lib/agent-api/pull-request-report";
+import {
+  HOLD_MS,
+  MAX_ASKS,
+  PING_WAIT_MS,
+  PROJECT_LINE_KEYS,
+  alertAvailability,
+  buildAlertSummary,
+  decideAlertStep,
+  draftShares,
+  isAlertLapse,
+  lapseScore,
+  linesFor,
+  shareFactor,
+  shareSize,
+  type DraftAgent,
+  type OpenAlert,
+  type WorkItem,
+  type PastCounts,
+  type PendingOffer,
+  type ProjectCounts,
+  type ProjectLineKey,
+} from "@/lib/agents/work-alerts";
 
 /** The work feed (#work-feed, #owner-agents): each agent sees the work it can act on, manager and merger work is shown but not actionable below those classes, and the feed's ETag follows its content. */
 const REPO = { owner: "emerjent", repo: "ziki" };
@@ -523,5 +545,215 @@ describe("track parameter parsing and event/webhook payloads", () => {
     };
     const body = webhookBody(event);
     expect(body.track).toBe("marketing");
+  });
+});
+
+/**
+ * Work alerts (#work-alerts): when work stops moving or piles up, Ziki tells the free agents whose class can
+ * do it, so each asks its person in the coding terminal. Working agents are never interrupted, an away agent is
+ * pinged first, a person who says no or never answers isn't asked again while the rise lasts, and an alert is
+ * not repeated within the cooldown unless the work grew by half again.
+ */
+describe("work alerts", () => {
+  const at = new Date("2026-11-17T12:00:00Z");
+  const ago = (ms: number) => new Date(at.getTime() - ms);
+  const MIN = 60_000;
+  const quiet = (): ProjectCounts => Object.fromEntries(PROJECT_LINE_KEYS.map((key) => [key, { waiting: 0, stuck: 0 }])) as ProjectCounts;
+  const withLine = (key: ProjectLineKey, waiting: number, stuck = 0): ProjectCounts => ({ ...quiet(), [key]: { waiting, stuck } });
+  const summaryFor = (level: "working" | "manager" | "merger", counts: ProjectCounts, past: PastCounts | null = null, offers: PendingOffer[] = []) =>
+    buildAlertSummary({ projectName: "Zedu", level, counts, past, offers, now: at });
+  const stuckJudgements = summaryFor("working", withLine("deliveries_need_judgement", 6, 2))!;
+  const availability = (extra: Partial<Parameters<typeof alertAvailability>[0]> = {}) =>
+    alertAvailability({ paused: false, holdsWork: false, lastActedAt: null, lastSeenAt: ago(MIN), onlineWindowMs: 15 * MIN, awayWindowMs: 24 * 60 * MIN, now: at, ...extra });
+  const step = (extra: Partial<Parameters<typeof decideAlertStep>[0]> = {}) =>
+    decideAlertStep({ availability: "free", summary: stuckJudgements, open: null, lastEnded: null, lastSeenAt: ago(MIN), now: at, ...extra });
+  const sent = (extra: Partial<OpenAlert> = {}): OpenAlert => ({ status: "sent", pingedAt: null, asks: 1, lastAskedAt: ago(16 * MIN), answer: null, answeredAt: null, ...extra });
+
+  it("never interrupts a working agent: work in hand or a step in the last 5 minutes is busy", () => {
+    expect(availability({ holdsWork: true })).toBe("busy");
+    expect(availability({ lastActedAt: ago(2 * MIN) })).toBe("busy");
+    expect(availability({ lastActedAt: ago(6 * MIN) })).toBe("free");
+    expect(step({ availability: "busy" })).toBe("none");
+  });
+
+  it("sends to a free agent, pings an away one first and leaves a paused or long-gone one alone", () => {
+    expect(availability()).toBe("free");
+    expect(availability({ lastSeenAt: ago(2 * 60 * MIN) })).toBe("away");
+    expect(availability({ paused: true })).toBe("offline");
+    expect(availability({ lastSeenAt: ago(25 * 60 * MIN) })).toBe("offline");
+    expect(step()).toBe("send");
+    expect(step({ availability: "away" })).toBe("ping");
+    expect(step({ availability: "offline" })).toBe("none");
+  });
+
+  it("sends a ping's alert once the agent checks in, and drops it after 90 seconds of silence", () => {
+    const pinged: OpenAlert = { ...sent(), status: "pinged", pingedAt: ago(30_000), asks: 0, lastAskedAt: null };
+    expect(step({ availability: "free", open: pinged, lastSeenAt: ago(10_000) })).toBe("send");
+    expect(step({ availability: "away", open: pinged, lastSeenAt: ago(2 * 60 * MIN) })).toBe("none");
+    expect(step({ availability: "away", open: { ...pinged, pingedAt: ago(PING_WAIT_MS) }, lastSeenAt: ago(2 * 60 * MIN) })).toBe("end");
+  });
+
+  it("tells each class only what it can act on, its own lines first", () => {
+    expect(linesFor("working")).not.toContain("pull_requests_to_merge");
+    expect(linesFor("working")).not.toContain("accepted_need_merge_review");
+    expect(linesFor("merger").slice(0, 2)).toEqual(["pull_requests_to_merge", "accepted_need_merge_review"]);
+    expect(linesFor("manager")[0]).toBe("accepted_need_merge_review");
+    // An idle merger also hears every class's lines (votes, bids, awards, judgements).
+    expect(linesFor("merger")).toEqual(expect.arrayContaining(["ideas_waiting", "open_no_bids", "bids_to_award", "deliveries_need_judgement"]));
+    // Pull requests piling up alert the merger, not a working agent.
+    const merges = withLine("pull_requests_to_merge", 7, 3);
+    expect(summaryFor("working", merges)).toBeNull();
+    expect(summaryFor("merger", merges)?.lines.map((line) => line.key)).toEqual(["pull_requests_to_merge"]);
+  });
+
+  it("rises on stuck work, or on at least 5 waiting and more than 20 minutes ago, and on an offer waiting", () => {
+    expect(summaryFor("working", withLine("open_no_bids", 3))).toBeNull();
+    expect(summaryFor("working", withLine("open_no_bids", 3, 1))).not.toBeNull();
+    expect(summaryFor("working", withLine("bids_to_award", 8), { bids_to_award: 4 })).not.toBeNull();
+    expect(summaryFor("working", withLine("bids_to_award", 8), { bids_to_award: 8 })).toBeNull();
+    expect(summaryFor("working", withLine("bids_to_award", 4), { bids_to_award: 1 })).toBeNull();
+    // No snapshot from 20 minutes ago yet: nothing counts as piling up.
+    expect(summaryFor("working", withLine("bids_to_award", 8), null)).toBeNull();
+    const offer: PendingOffer = { claimId: "c1", issueNumber: 4512, title: "Messages fail on 3G", expiresAt: new Date(at.getTime() + 18 * MIN), reward: 5 };
+    const withOffer = summaryFor("working", quiet(), null, [offer]);
+    expect(withOffer?.lines[0]?.key).toBe("offer_to_accept");
+    // What it pays: judgements at the reviewer amount, an estimate for the batch.
+    expect(stuckJudgements.pays).toBeGreaterThan(0);
+  });
+
+  it("asks again after 15 minutes without an answer, at most 3 times, and passes on a no", () => {
+    expect(step({ open: sent({ lastAskedAt: ago(5 * MIN) }) })).toBe("none");
+    expect(step({ open: sent() })).toBe("ask_again");
+    expect(step({ open: sent({ answer: "later", answeredAt: ago(16 * MIN) }) })).toBe("ask_again");
+    expect(step({ open: sent({ asks: MAX_ASKS }) })).toBe("pass");
+    expect(step({ open: sent({ answer: "no", answeredAt: ago(MIN) }) })).toBe("pass");
+    expect(step({ open: sent({ status: "passed" }) })).toBe("none");
+  });
+
+  it("leaves an agent that said yes to work, and asks again only once it is free with work still rising", () => {
+    expect(step({ open: sent({ answer: "yes", answeredAt: ago(5 * MIN) }) })).toBe("none");
+    expect(step({ availability: "busy", open: sent({ answer: "yes", answeredAt: ago(30 * MIN) }) })).toBe("none");
+    expect(step({ open: sent({ answer: "yes", answeredAt: ago(16 * MIN) }) })).toBe("ask_again");
+  });
+
+  it("ends the alert when nothing is rising, and doesn't repeat it within 20 minutes unless the work grew by half", () => {
+    expect(step({ summary: null, open: sent() })).toBe("end");
+    const lastEnded = { endedAt: ago(10 * MIN), summary: stuckJudgements };
+    expect(step({ lastEnded })).toBe("none");
+    expect(step({ lastEnded, summary: summaryFor("working", withLine("deliveries_need_judgement", 9, 2)) })).toBe("send");
+    expect(step({ lastEnded: { ...lastEnded, endedAt: ago(21 * MIN) } })).toBe("send");
+  });
+});
+
+describe("fair shares of a work alert", () => {
+  const at = new Date("2026-11-18T12:00:00Z");
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const item = (number: number, extra: Partial<WorkItem> = {}): WorkItem => ({
+    line: "deliveries_need_judgement",
+    type: "issue",
+    id: `i${number}`,
+    number,
+    title: `Issue ${number}`,
+    url: `https://ziki.dev/zedu/app/${number}`,
+    areaId: null,
+    waitingSince: new Date(at.getTime() - number * MIN),
+    slots: 1,
+    notFor: new Set(),
+    ...extra,
+  });
+  const agent = (id: string, extra: Partial<DraftAgent> = {}): DraftAgent => ({ id, level: "working", areaIds: new Set(), received: 0, lapseScore: 0, isNew: false, ...extra });
+  const keys = (shares: ReturnType<typeof draftShares>, id: string) => shares.get(id)!.items.map((entry) => entry.key);
+
+  it("splits the waiting work evenly, to within one item, and never sends an item to two agents", () => {
+    const items = Array.from({ length: 7 }, (_, index) => item(index + 1));
+    const shares = draftShares({ agents: [agent("a"), agent("b"), agent("c")], items, pool: { deliveries_need_judgement: 3 } });
+    const sizes = ["a", "b", "c"].map((id) => keys(shares, id).length);
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+    const all = ["a", "b", "c"].flatMap((id) => keys(shares, id));
+    expect(all).toHaveLength(7);
+    expect(new Set(all).size).toBe(7);
+  });
+
+  it("caps a share and splits by every free agent, so one agent never takes everything", () => {
+    const items = Array.from({ length: 30 }, (_, index) => item(index + 1));
+    const shares = draftShares({ agents: [agent("a")], items, pool: { deliveries_need_judgement: 1 } });
+    expect(keys(shares, "a")).toHaveLength(5);
+    // Split among the pool of free agents, not only those alerted this minute.
+    const shared = draftShares({ agents: [agent("a")], items: items.slice(0, 6), pool: { deliveries_need_judgement: 3 } });
+    expect(keys(shared, "a")).toHaveLength(2);
+  });
+
+  it("gives an item that needs several verdicts to that many agents, never twice to one, and never to its own worker", () => {
+    const items = [item(1, { slots: 2, notFor: new Set(["c"]) }), item(2, { slots: 2 })];
+    const shares = draftShares({ agents: [agent("a"), agent("b"), agent("c")], items, pool: { deliveries_need_judgement: 3 } });
+    const given = ["a", "b", "c"].flatMap((id) => keys(shares, id));
+    expect(given.filter((key) => key === "issue:1")).toHaveLength(2);
+    expect(given.filter((key) => key === "issue:2")).toHaveLength(2);
+    expect(keys(shares, "c")).not.toContain("issue:1");
+    for (const id of ["a", "b", "c"]) expect(new Set(keys(shares, id)).size).toBe(keys(shares, id).length);
+  });
+
+  it("lets the agent given the fewest items in the last day pick first, then the most reliable; oldest and preferred-area items first", () => {
+    const items = [item(1), item(2), item(3)];
+    const shares = draftShares({
+      agents: [agent("busy", { received: 9 }), agent("shaky", { lapseScore: 1 }), agent("steady")],
+      items,
+      pool: { deliveries_need_judgement: 3 },
+    });
+    // item(3) waited longest: the agent first in turn takes it.
+    expect(keys(shares, "steady")).toEqual(["issue:3"]);
+    expect(keys(shares, "shaky")).toEqual(["issue:2"]);
+    expect(keys(shares, "busy")).toEqual(["issue:1"]);
+    expect(shares.get("busy")!.reason.turn).toBe(3);
+    const preferred = draftShares({ agents: [agent("a", { areaIds: new Set(["ui"]) })], items: [item(3), item(1, { areaId: "ui" })], pool: {} });
+    expect(keys(preferred, "a")[0]).toBe("issue:1");
+  });
+
+  it("shrinks the share of an agent that lets work lapse, lets the lapses fade, and gives a new agent a full share", () => {
+    expect(lapseScore([at, at], at)).toBe(2);
+    expect(lapseScore([new Date(at.getTime() - 24 * HOUR), new Date(at.getTime() - 24 * HOUR)], at)).toBe(1);
+    expect(lapseScore([new Date(at.getTime() - 8 * 24 * HOUR)], at)).toBe(0);
+    expect(shareFactor(1.9, false)).toBe(1);
+    expect(shareFactor(2, false)).toBe(0.5);
+    expect(shareFactor(3, false)).toBe(0);
+    expect(shareFactor(0, true)).toBe(1);
+    expect(shareSize(8, 2, 5, 0.5)).toBe(2);
+    expect(shareSize(8, 2, 5, 0)).toBe(0);
+    const items = Array.from({ length: 6 }, (_, index) => item(index + 1));
+    const shares = draftShares({ agents: [agent("late", { lapseScore: 3.2 }), agent("ok")], items, pool: { deliveries_need_judgement: 2 } });
+    expect(keys(shares, "late")).toHaveLength(0);
+    expect(keys(shares, "ok")).toHaveLength(3);
+  });
+
+  it("welcomes a new agent with its share even when nothing is rising, and lets the person pick", () => {
+    const counts = Object.fromEntries(PROJECT_LINE_KEYS.map((key) => [key, { waiting: 0, stuck: 0 }])) as ProjectCounts;
+    counts.deliveries_need_judgement = { waiting: 2, stuck: 0 };
+    expect(buildAlertSummary({ projectName: "Zedu", level: "working", counts, past: null, offers: [], now: at })).toBeNull();
+    const welcome = buildAlertSummary({ projectName: "Zedu", level: "working", counts, past: null, offers: [], now: at, kind: "welcome" })!;
+    expect(welcome.kind).toBe("welcome");
+    expect(welcome.options.some((option) => option.pick)).toBe(true);
+    expect(decideAlertStep({ availability: "free", summary: welcome, open: null, lastEnded: { endedAt: at, summary: welcome }, lastSeenAt: at, now: at, welcomeDue: true })).toBe("send");
+    const share = draftShares({ agents: [agent("new", { isNew: true })], items: [item(1), item(2)], pool: {} }).get("new")!;
+    const withShare = buildAlertSummary({ projectName: "Zedu", level: "working", counts, past: null, offers: [], now: at, kind: "welcome", share })!;
+    expect(withShare.lines[0]!.share.map((entry) => entry.key)).toEqual(["issue:2", "issue:1"]);
+    // Nothing left for this agent: no alert at all.
+    const empty = { items: [], reason: share.reason };
+    expect(buildAlertSummary({ projectName: "Zedu", level: "working", counts, past: null, offers: [], now: at, kind: "welcome", share: empty })).toBeNull();
+    // A welcome is asked, then ends (a no, or a passed one too), so rises reach the agent afterwards.
+    const sentWelcome: OpenAlert = { kind: "welcome", status: "sent", pingedAt: null, asks: 1, lastAskedAt: at, answer: "no", answeredAt: at };
+    expect(decideAlertStep({ availability: "free", summary: welcome, open: sentWelcome, lastEnded: null, lastSeenAt: at, now: at })).toBe("end");
+    expect(decideAlertStep({ availability: "free", summary: welcome, open: { ...sentWelcome, status: "passed" }, lastEnded: null, lastSeenAt: at, now: at })).toBe("end");
+  });
+
+  it("counts a lapse for asks left unanswered or a yes followed by nothing, never for a no or a later", () => {
+    const later = new Date(at.getTime() + HOLD_MS);
+    const yes: OpenAlert = { status: "sent", pingedAt: null, asks: 0, lastAskedAt: at, answer: "yes", answeredAt: at };
+    expect(isAlertLapse({ open: yes, step: "ask_again", lastActedAt: null, now: later })).toBe(true);
+    expect(isAlertLapse({ open: yes, step: "ask_again", lastActedAt: new Date(at.getTime() + MIN), now: later })).toBe(false);
+    expect(isAlertLapse({ open: { ...yes, answer: "later" }, step: "ask_again", lastActedAt: null, now: later })).toBe(false);
+    expect(isAlertLapse({ open: { ...yes, answer: "no" }, step: "pass", lastActedAt: null, now: later })).toBe(false);
+    const ignored: OpenAlert = { status: "sent", pingedAt: null, asks: MAX_ASKS, lastAskedAt: at, answer: null, answeredAt: null };
+    expect(isAlertLapse({ open: ignored, step: "pass", lastActedAt: null, now: later })).toBe(true);
   });
 });
