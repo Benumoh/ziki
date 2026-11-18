@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Status, Substatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findPublicProject } from "@/lib/public-projects";
 import type { PublicProjectRef } from "@/lib/public-project-paths";
@@ -11,11 +11,13 @@ export type PublicIssueSummary = {
   number: number;
   title: string;
   summary: string | null;
-  status: string;
-  substatus: string;
+  status: Status;
+  substatus: Substatus;
   createdAt: Date;
   updatedAt: Date;
   area: { name: string } | null;
+  type: { name: string } | null;
+  _count: { publicFeedbackVotes: number };
 };
 
 export type PublicIssueDetail = PublicIssueSummary & {
@@ -32,6 +34,8 @@ const PUBLIC_ISSUE_SELECT = {
   createdAt: true,
   updatedAt: true,
   area: { select: { name: true } },
+  type: { select: { name: true } },
+  _count: { select: { publicFeedbackVotes: true } },
 } satisfies Prisma.BugSelect;
 
 /** The statuses a guest's public issue list shows; closed issues are left out. */
@@ -46,7 +50,7 @@ export function parsePublicIssueStatus(value?: string | null): PublicIssueStatus
 
 export async function listPublicIssues(
   ref: PublicProjectRef,
-  options: { query?: string; status?: PublicIssueStatusFilter } = {},
+  options: { query?: string; status?: PublicIssueStatusFilter; sort?: "votes" | "recent"; kind?: "problem" | "improvement" } = {},
 ) {
   const project = await findPublicProject(ref);
   if (!project) return null;
@@ -58,11 +62,17 @@ export async function listPublicIssues(
     projectId: project.id,
     isDeleted: false,
     securityFinding: { is: null },
+    track: "product",
     status:
       status === "all"
         ? { in: [...PUBLIC_ISSUE_STATUSES] }
         : status,
   };
+
+  if (options.kind) {
+    const suggestions: Prisma.BugWhereInput = { type: { is: { OR: ["feature", "suggestion", "improvement", "enhancement"].map(name => ({ name: { contains: name, mode: "insensitive" as const } })) } } };
+    where.AND = options.kind === "improvement" ? [suggestions] : [{ NOT: suggestions }];
+  }
 
   if (query) {
     const parsedNumber = /^#?(\d+)$/.exec(query);
@@ -81,7 +91,9 @@ export async function listPublicIssues(
 
   const issues = await prisma.bug.findMany({
     where,
-    orderBy: [{ updatedAt: "desc" }, { number: "desc" }],
+    orderBy: options.sort === "votes"
+      ? [{ publicFeedbackVotes: { _count: "desc" } }, { updatedAt: "desc" }, { number: "desc" }]
+      : [{ updatedAt: "desc" }, { number: "desc" }],
     take: 50,
     select: PUBLIC_ISSUE_SELECT,
   });
@@ -100,6 +112,7 @@ export async function findPublicIssue(ref: PublicProjectRef, issueNumber: number
       number: issueNumber,
       isDeleted: false,
       securityFinding: { is: null },
+      track: "product",
     },
     select: {
       ...PUBLIC_ISSUE_SELECT,

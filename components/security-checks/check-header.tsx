@@ -117,10 +117,6 @@ function FindingsSummary({ report }: { report: CheckReport }) {
     ? (finished ? "No problems found" : "Nothing found yet")
     : `${all} ${all === 1 ? "problem" : "problems"} ${finished ? "found" : "found so far"}`;
   const breakdown = SECURITY_SEVERITIES.filter((severity) => counts[severity] > 0).map((severity) => `${counts[severity]} ${severity}`).join(", ");
-  const areas = report.quickScan?.areas ?? [];
-  const httpsArea = areas.find((area) => area.area === "https");
-  const certificate = areas.find((area) => area.area === "certificate");
-  const secure = httpsArea || certificate ? (httpsArea?.problems ?? 0) + (certificate?.problems ?? 0) === 0 : null;
   const sources = [quickTotal ? `${quickTotal} from the quick scan` : null, agentTotal || finished ? `${agentTotal} from the agents${finished ? "" : " so far"}` : null].filter(Boolean).join(" · ");
   const at = RISK_AT[risk];
 
@@ -137,11 +133,7 @@ function FindingsSummary({ report }: { report: CheckReport }) {
             />
             <span className={`font-semibold ${warn ? "text-red-800" : "text-zk-text"}`}>{title}</span>
             {breakdown ? <span className={warn ? "text-red-900/80" : "text-zk-muted"}>· {breakdown}</span> : null}
-            {secure === null ? null : (
-              <span className={`ml-auto inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${secure ? "bg-zk-ok-bg text-zk-ok-fg" : "security-severity security-severity--high"}`}>
-                {secure ? "✓ HTTPS set up" : "! HTTPS needs work"}
-              </span>
-            )}
+            {/* No HTTPS pill here (18 Nov, Hamzat): only Fix remaining findings sits on the right. */}
           </h2>
           {/* A rescan keeps the box to one line under the title (18 Nov, Tolu: "too clustered"): new, still there and
               fixed. Where they came from and the summary sentence show on a first scan only. */}

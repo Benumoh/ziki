@@ -52,12 +52,67 @@ If one of them belongs to YOUR part, check it yourself: report it, with your own
 `;
 }
 
+/** Where a repo's code is for this part (#security-repo-scan). Empty for websites and servers. */
+export function codeNote(job) {
+  const code = job.check.target.code;
+  if (job.check.target.kind !== "repo" || !code) return "";
+  if (code.via === "ziki") {
+    return `The repo's code is already in the ./code folder (read through Ziki; it is private: never copy it anywhere or quote long pieces of it). Read and search it there. Name the file and line for each problem.
+`;
+  }
+  return `Read the code with: git clone --depth 1 https://github.com/${job.check.target.value} code, then read and search ./code. Name the file and line for each problem.
+`;
+}
+
+/** Text files worth reading: not vendored, not built, not huge, not binary by name. */
+const SKIP_PATH = /(^|\/)(node_modules|vendor|dist|build|out|\.next|coverage|\.git)\//i;
+const BINARY = /\.(png|jpe?g|gif|webp|ico|svgz|pdf|zip|gz|tgz|jar|war|exe|dll|so|dylib|woff2?|ttf|otf|eot|mp[34]|mov|avi|wasm|lockb)$/i;
+export const MAX_CODE_FILES = 800;
+export const MAX_CODE_FILE_BYTES = 256 * 1024;
+
+/** The files a part downloads through Ziki: smallest paths first is not the point; the closest to the top are. */
+export function codeFilesToFetch(files) {
+  return (files || [])
+    .filter((file) => typeof file.path === "string" && !SKIP_PATH.test(file.path) && !BINARY.test(file.path) && file.size <= MAX_CODE_FILE_BYTES)
+    .sort((a, b) => a.path.split("/").length - b.path.split("/").length || a.path.localeCompare(b.path))
+    .slice(0, MAX_CODE_FILES);
+}
+
+/**
+ * A private repo's code, read through Ziki's /code API into the part's scratch folder (#security-repo-scan). The
+ * agent never holds a GitHub key; Ziki records every read, and the folder is deleted with the part.
+ */
+export async function fetchCode(ctx, config, job, dir, deps = {}) {
+  const call = deps.api ?? api;
+  const list = await call(ctx, config.url, job.check.target.code.url, { key: config.apiKey, retries: 3 });
+  const wanted = codeFilesToFetch(list.data?.files);
+  const root = path.join(dir, "code");
+  let fetched = 0;
+  for (const file of wanted) {
+    // Never write outside ./code, whatever a path says.
+    const target = path.resolve(root, ...file.path.split("/"));
+    if (!target.startsWith(path.resolve(root) + path.sep)) continue;
+    try {
+      const res = await call(ctx, config.url, `${job.check.target.code.url}?path=${encodeURIComponent(file.path)}`, { key: config.apiKey, retries: 2 });
+      if (typeof res.data?.text !== "string") continue;
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, res.data.text, "utf8");
+      fetched += 1;
+    } catch (error) {
+      // Ziki's per-part read limit, or a file it won't serve: stop or skip, never fail the part over it.
+      if (/too_many_reads|429/.test(String(/** @type {Error} */ (error).message))) break;
+    }
+  }
+  ctx.log(`part ${job.id}: read ${fetched} of ${wanted.length} files through Ziki`);
+  return fetched;
+}
+
 /** What the agent is asked for one part. */
 export function checkPrompt(job) {
   return `${RULES}
 
 Target (${job.check.target.kind}): ${job.check.target.value}
-Part to check: ${job.title}
+${codeNote(job)}Part to check: ${job.title}
 ${job.instructions || ""}
 ${quickScanNote(job)}
 Check only this part. Report real problems you can see evidence for. If you find nothing, return an empty list.
@@ -186,9 +241,11 @@ export function spawnClaude(args, { command = process.env.ZIKI_WORKER_CLAUDE || 
 }
 
 /** Runs Claude Code headless in a scratch folder (the prompt on stdin) and returns its final text. */
-export async function runClaude(prompt, { command = process.env.ZIKI_WORKER_CLAUDE || "claude", model = process.env.ZIKI_WORKER_MODEL || "sonnet", maxTurns = "25", timeoutMs = JOB_TIMEOUT_MS } = {}) {
+export async function runClaude(prompt, { command = process.env.ZIKI_WORKER_CLAUDE || "claude", model = process.env.ZIKI_WORKER_MODEL || "sonnet", maxTurns = "25", timeoutMs = JOB_TIMEOUT_MS, prepare } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ziki-job-"));
   try {
+    // A private repo's code is put in the folder first (fetchCode); it goes when the folder does.
+    if (prepare) await prepare(dir);
     return await new Promise((resolve, reject) => {
       const args = ["-p", "--output-format", "json", "--model", model, "--max-turns", maxTurns, "--allowedTools", ALLOWED_TOOLS];
       const child = spawnClaude(args, { command, cwd: dir });
@@ -229,7 +286,8 @@ export async function runClaude(prompt, { command = process.env.ZIKI_WORKER_CLAU
 export async function doJob(ctx, config, job, deps = {}) {
   const run = deps.runClaude ?? runClaude;
   try {
-    const { text, cost } = await run(checkPrompt(job));
+    const viaZiki = job.check.target.kind === "repo" && job.check.target.code?.via === "ziki";
+    const { text, cost } = await run(checkPrompt(job), viaZiki ? { prepare: (dir) => (deps.fetchCode ?? fetchCode)(ctx, config, job, dir) } : {});
     const reply = extractJson(text);
     const results = cleanResults(reply);
     const moreParts = cleanMoreParts(reply);

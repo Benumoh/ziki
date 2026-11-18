@@ -9,7 +9,7 @@ import { parseSecurityTarget, PRIVATE_TARGET_ERROR, targetAddress } from "@/lib/
 import { addTargetAndCheck, findOwnScan, findScannedCheck, fixPaidSinceQuickScan, refusedMessage, removeOwnScan, saveQuickScan } from "@/lib/security-checks/entry";
 import { rescanQuote, startRescan, type RescanOutcome, type RescanQuote } from "@/lib/security-checks/rescan";
 import { previewScan } from "@/lib/security-checks/preview";
-import { saveCodeFindings } from "@/lib/security-checks/code-findings";
+import { ensureCodeBaseline, saveCodeFindings } from "@/lib/security-checks/code-findings";
 import { summarisePreview, type PreviewSummary } from "@/lib/security-checks/preview-summary";
 import { withSiteAddress } from "@/lib/security-checks/site-address";
 import type { ParsedTarget } from "@/lib/security-checks/target";
@@ -24,6 +24,7 @@ import { loadSiteChat, saveSiteMessage, scansContextNote, SITE_CHAT_MESSAGE_MAX,
 import { after } from "next/server";
 import { kickCheck } from "@/lib/security-checks/engine";
 import { prisma } from "@/lib/prisma";
+import { repoAccessFor } from "@/lib/security-checks/repo-reader";
 
 /**
  * Ziki's security chat, signed in (#security-checks, plan part C3). A plain
@@ -61,7 +62,7 @@ export async function replaceScan(checkId: string): Promise<{ ok: true; summary:
   if (!scan) return { ok: false, error: "That scan isn't in your scans." };
   // A quick scan from the last 10 minutes is reused, unless a fix was paid for since (#security-rescan).
   const fresh = await fixPaidSinceQuickScan(scan.target);
-  const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh });
+  const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh, repoAccess: await repoAccessFor(access.organisationId, scan.target) });
   if (!result.ok) return { ok: false, error: result.reason };
   const summary = await withSiteAddress(summarisePreview(result));
   await saveQuickScan(scan.targetId, summary);
@@ -101,10 +102,12 @@ export async function rescanSite(checkId: string): Promise<RescanOutcome> {
     try {
       const scan = await findOwnScan(organisationId, user.id, next);
       if (scan) {
-        const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh: await fixPaidSinceQuickScan(scan.target) });
+        const result = await previewScan(targetAddress(scan.target), { visitor: `user:${user.id}`, fresh: await fixPaidSinceQuickScan(scan.target), repoAccess: await repoAccessFor(organisationId, scan.target) });
         if (result.ok) {
           await saveQuickScan(scan.targetId, await withSiteAddress(summarisePreview(result)));
-          // Code rechecks its own earlier findings and adds only new ones to the main list (18 Nov).
+          // Compared with the earlier scan's quick scan like the agents' findings (18 Nov, Tolu): an earlier scan with
+          // none saved gets this one first, so what was already there reads Still there, not New.
+          await ensureCodeBaseline(prisma, checkId, result);
           await saveCodeFindings(prisma, next, result);
         }
       }
@@ -246,7 +249,8 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
       finished: scanned.finished,
     };
   }
-  const result = await previewScan(address, { visitor: `user:${userId}` });
+  // A private repo the workspace connected through the GitHub App is read through it (#security-repo-scan).
+  const result = await previewScan(address, { visitor: `user:${userId}`, repoAccess: await repoAccessFor(organisationId, target) });
   const summary = result.ok ? await withSiteAddress(summarisePreview(result)) : null;
   const addable = result.ok || target.kind === "repo" || result.retryAfterSeconds !== undefined;
   // Couldn't reach it: say so plainly, with no "here's a quick look" before it.

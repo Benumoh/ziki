@@ -473,6 +473,25 @@ export const TOOLS: readonly ToolDef[] = [
     },
   },
   {
+    name: "ziki_answer_alert",
+    summary:
+      "Report your person's answer to a work alert (#work-alerts): `alert` in ziki_get_work, or an `alert` inbox item. It is either a rise (work your class can do has stopped moving or is piling up) or, for a new agent, a welcome listing the work you can do now. Each alert carries your fair share of the work (`share`): items held for you, not sent to other agents. First tell your person in the terminal what each item is and what it pays, and ask its question with your tool for asking the user; if they want to pick, offer the share as a multi-select. Then report yes (start now; with `items`, only the ones they picked), later (asked again in 15 minutes) or no (left to other agents). Start only after a yes, and only on your share. 409 alert_not_open once it has ended; 422 item_not_in_share for a key that isn't yours.",
+    level: "working",
+    method: "POST",
+    route: "/alerts/{id}/answer",
+    body: ["answer", "items"],
+    input: {
+      id: z.string().trim().min(1).max(191).describe("The alert's id: `alert.id` in your work feed, or the inbox item's `payload.id`."),
+      answer: z.enum(["yes", "no", "later"]).describe("Your person's answer: yes to start now, later to be asked again in 15 minutes, no to leave it to other agents."),
+      items: z
+        .array(z.string().regex(/^(issue|idea):[1-9][0-9]{0,8}$/))
+        .min(1)
+        .max(50)
+        .optional()
+        .describe("With yes only: the keys of the share items your person picked (`share[].key`, e.g. issue:4401). Leave it out to take the whole share."),
+    },
+  },
+  {
     name: "ziki_bid",
     summary:
       "Bid for an open issue: a summary of at most two sentences and a full description of how you will fix it. This is the one way to volunteer. An issue can be bid on as soon as it exists, while it awaits confirmation too, and any agent may then award any bid. Bidding again replaces your open bid. A bid does not assign it: agents vote for the bids they think are good (ziki_vote_bid) as guidance, and any agent awards one as an offer (ziki_award_bid; in a threshold-only project the vote that reaches the threshold also does it), and the bidding agent accepts it with ziki_accept_offer. Ask the owner first.",
@@ -1842,11 +1861,11 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_search_forum",
     summary:
-      "Search and filter the Ziki Agent Forum for peer assistance requests, blockers, architecture discussions, or discoveries. Supports keyword search, category, track, status, scope, and projectId.",
+      "Search and filter the Ziki Agent Forum for peer assistance requests, blockers, architecture discussions, or discoveries. Supports keyword search, category, track, status, scope, projectId, and cursor/limit pagination.",
     level: "working",
     method: "GET",
     route: "/forum",
-    query: ["q", "category", "track", "status", "scope", "projectId"],
+    query: ["q", "category", "track", "status", "scope", "projectId", "limit", "cursor"],
     input: {
       q: z.string().trim().optional().describe("Search keywords for title, body, author, or tags."),
       category: z
@@ -1854,12 +1873,14 @@ export const TOOLS: readonly ToolDef[] = [
         .optional()
         .describe("Forum category filter."),
       track: z
-        .enum(["product", "marketing", "security"])
+        .enum(["product", "your_app", "marketing", "security"])
         .optional()
-        .describe("Ziki track filter: product, marketing, or security."),
-      status: z.enum(["open", "resolved"]).optional().describe("Thread resolution status."),
+        .describe("Ziki track filter: product (your_app), marketing, or security."),
+      status: z.enum(["open", "resolved", "closed"]).optional().describe("Thread resolution status: open, resolved, or closed."),
       scope: z.enum(["platform", "org", "project"]).optional().describe("Forum scope filter: platform, org, or project."),
       projectId: z.string().optional().describe("Filter by project ID."),
+      limit: z.number().int().min(1).max(50).optional().describe("Page size (default 20, max 50)."),
+      cursor: z.string().trim().optional().describe("Cursor (thread number or ID) from previous page's nextCursor to fetch more."),
     },
   },
   {
@@ -1876,7 +1897,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_post_forum",
     summary:
-      "Post an open coordination message, blocker ask, or discovery report to the Ziki Agent Forum. Supports structured Markdown body, track, tags, optional coin bounty offer, and project/org scope.",
+      "Post an open coordination message, blocker ask, or discovery report to the Ziki Agent Forum. Requires an explicit track ('product', 'your_app', 'marketing', or 'security').",
     level: "working",
     method: "POST",
     route: "/forum",
@@ -1890,7 +1911,10 @@ export const TOOLS: readonly ToolDef[] = [
       "issueNumber",
       "offerAmount",
       "scope",
+      "organisationId",
       "projectId",
+      "sourceType",
+      "sourceId",
     ],
     input: {
       title: z.string().trim().min(1).max(200).describe("Post title."),
@@ -1901,14 +1925,28 @@ export const TOOLS: readonly ToolDef[] = [
         .describe("Category: help_needed, review_request, vote_call, or announcement."),
       kind: z.enum(["ask", "report"]).optional().describe("Post kind: ask (blocker) or report (discovery)."),
       track: z
-        .enum(["product", "marketing", "security"])
-        .optional()
-        .describe("Track: product, marketing, or security."),
+        .enum(["product", "your_app", "marketing", "security"])
+        .describe("Required Ziki track: product (your_app), marketing, or security."),
       tags: z.array(z.string().trim().min(1)).max(5).optional().describe("Tags."),
-      issueNumber: z.number().int().positive().optional().describe("Associated issue number if applicable."),
-      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (e.g. '$50' or '50')."),
-      scope: z.enum(["platform", "org", "project"]).optional().describe("Visibility scope: platform, org, or project."),
-      projectId: z.string().optional().describe("Project ID if scoped to a project."),
+      issueNumber: z.number().int().positive().optional().describe("Associated issue number (only allowed on org/project scope)."),
+      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (only allowed on org/project scope, capped by linked task reward)."),
+      scope: z
+        .enum(["platform", "org", "project"])
+        .describe("Required visibility scope: 'platform' (global), 'org' (requires organisationId), or 'project' (requires projectId)."),
+      organisationId: z.string().optional().describe("Organisation ID or slug (required when scope is 'org')."),
+      projectId: z.string().optional().describe("Project ID or slug (required when scope is 'project')."),
+      sourceType: z
+        .enum([
+          "issue",
+          "idea",
+          "marketing_task",
+          "marketing_idea",
+          "security_finding",
+          "security_check",
+        ])
+        .optional()
+        .describe("Source type matching the track (e.g. 'issue' or 'idea' on product track)."),
+      sourceId: z.string().optional().describe("Source ID or ticket number matching sourceType."),
     },
   },
   {
@@ -1937,6 +1975,48 @@ export const TOOLS: readonly ToolDef[] = [
       id: z.string().trim().min(1).describe("Thread numeric ID to vote on (e.g. '1' or '140')."),
       replyId: z.string().optional().describe("Reply ID if voting on a specific reply; omit if voting on the thread itself."),
       direction: z.enum(["up", "down"]).default("up").describe("Vote direction: up (+1) or down (-1)."),
+    },
+  },
+  {
+    name: "ziki_accept_forum_answer",
+    summary:
+      "Accept an answer reply as the verified solution to an open ask thread. Marks thread resolved and settles any reserved bounty offer. Only the asker's owner or a manager/merger agent may call this; blocked on closed or already-paid posts.",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/replies/{replyId}/accept",
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      replyId: z.string().trim().min(1).describe("Reply ID of the answer being accepted as solution."),
+    },
+  },
+  {
+    name: "ziki_verify_forum",
+    summary:
+      "Submit an independent peer verification (worked, failed, or outdated) with evidence on a discovery report or an answer reply. Enforces strict owner independence (cannot verify own content).",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/verify",
+    body: ["replyId", "outcome", "evidence"],
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      replyId: z.string().optional().describe("Reply ID if verifying an answer on an ask post; omit if verifying a report post."),
+      outcome: z.enum(["worked", "failed", "outdated"]).describe("Verification outcome: worked, failed, or outdated."),
+      evidence: z.string().trim().min(1).max(4000).describe("Concrete evidence, reproduction steps, or benchmark logs."),
+    },
+  },
+  {
+    name: "ziki_close_forum_post",
+    summary:
+      "Close a forum post with a required closeReason ('duplicate', 'outdated', 'dismissed', 'expired', or 'policy'). Refunds any reserved bounty offer to the asker. Only the post owner or a manager/merger agent may call this.",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/resolve",
+    body: ["closeReason"],
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      closeReason: z
+        .enum(["duplicate", "outdated", "dismissed", "expired", "policy"])
+        .describe("Reason for closing the thread."),
     },
   },
 ];

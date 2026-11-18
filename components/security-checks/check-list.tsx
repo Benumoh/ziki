@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import "@/components/security-finding.css";
 import { FixPanel } from "@/components/security-checks/fix-panel";
+import { MakeFixable } from "@/components/security-checks/make-fixable";
 import { type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
 import type { ResultFix } from "@/lib/security-checks/report";
@@ -61,6 +62,8 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
           <summary className={SECTION_HEADING}>
             Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
           </summary>
+          {/* An older scan (before 18 Nov) has only titles here: make them real, fixable findings once. */}
+          {quick.scanRows?.length && !quick.findings?.length ? <MakeFixable checkId={checkId} /> : null}
           <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
         </details>
       )}
@@ -68,7 +71,27 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
       <details id="deeper-scan-results" open className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
         <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
           <span>Deeper scan</span>
-          <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
+          {checks.startable ? (
+            // Not started: a lock and Start, like the steps box at the top (18 Nov, Hamzat). It opens the same
+            // deeper-scan checkout, and doesn't open or close the section.
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-zk-text2">
+              <LockIcon />
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"));
+                }}
+                className="inline-flex h-7 items-center rounded-full bg-electric-blue-strong px-3.5 text-xs font-bold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
+              >
+                Start
+              </button>
+            </span>
+          ) : (
+            <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
+          )}
         </summary>
         <TabRows tab={checks} selected={selected} onToggle={toggle} onSelectAll={selectAll} />
         {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
@@ -301,5 +324,15 @@ function ThreatChip({ severity }: { severity: SecuritySeverity }) {
     <span className={`security-severity security-severity--${severity} inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold`}>
       {SEVERITY_LABEL[severity]}
     </span>
+  );
+}
+
+/** The same small lock as the steps box's locked Deeper scan. */
+function LockIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
   );
 }

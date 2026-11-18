@@ -5,6 +5,7 @@ const db = vi.hoisted(() => ({
   idea: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
   attachment: { create: vi.fn() },
   user: { upsert: vi.fn() },
+  publicSubmission: { create: vi.fn() },
   $queryRaw: vi.fn(),
   $transaction: vi.fn(),
 }));
@@ -58,6 +59,16 @@ describe("contributor form intake (#989)", () => {
   });
 
   describe("one-box drafting & validation", () => {
+    it("attributes signed-in feedback to the submitting account", async () => {
+      const result = await createPublicIdea(ref, {
+        description: "Notification preferences disappear after restarting the application.",
+        trackingToken: "s".repeat(32),
+      }, publicHeaders, { db: db as never, consume: rateLimit.consume, emit, submittedById: "account_123" });
+      expect(result.status).toBe(201);
+      expect(db.user.upsert).not.toHaveBeenCalled();
+      expect(db.idea.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reporterId: "account_123", beneficiaryUserId: "account_123" }) }));
+      expect(db.publicSubmission.create).toHaveBeenCalledWith({ data: { ideaId: "idea_abc", userId: "account_123" } });
+    });
     it("drafts title and summary from description when only description is provided", () => {
       const desc = "The Save button does not respond when clicking on mobile.";
       const title = draftTitle(desc);

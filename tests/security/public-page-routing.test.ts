@@ -1,4 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+
+const feedbackVotes = vi.hoisted(() => ({ state: vi.fn(), set: vi.fn() }));
+vi.mock("@/lib/public-feedback-votes", () => ({
+  FEEDBACK_VISITOR_COOKIE: "ziki-feedback-visitor",
+  publicFeedbackVoteState: feedbackVotes.state,
+  setPublicFeedbackVote: feedbackVotes.set,
+}));
+vi.mock("@/lib/rate-limit", () => ({ clientRateLimitKey: () => "test-client", consumeRateLimits: async () => ({ allowed: true, retryAfterMs: 0 }) }));
+import { PUT as putFeedbackVote, GET as getFeedbackVote } from "@/app/api/public/projects/[org]/[project]/issues/[number]/votes/route";
 
 vi.mock("next-auth", () => ({ default: () => ({ auth: (handler: unknown) => handler }) }));
 vi.mock("@/auth.config", () => ({ default: {} }));
@@ -135,5 +145,45 @@ describe("Public contributor directory & issue browsing (#985)", () => {
       projectSlug: "desktop",
       kind: "feedback",
     });
+  });
+});
+
+describe("Customer feedback voting boundaries (#1046)", () => {
+  const context = { params: Promise.resolve({ org: "acme", project: "desktop", number: "42" }) };
+  function request(body: unknown, origin = "https://ziki.test") {
+    return new NextRequest("https://ziki.test/api/public/projects/acme/desktop/issues/42/votes", {
+      method: "PUT", headers: { origin, host: "ziki.test", "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+  }
+  it("does not allow another site to place customer votes", async () => {
+    feedbackVotes.set.mockClear();
+    expect((await putFeedbackVote(request({ voted: true }, "https://other.test"), context)).status).toBe(403);
+    expect(feedbackVotes.set).not.toHaveBeenCalled();
+  });
+  it("refuses injected agent scores and verdicts instead of treating them as customer interest", async () => {
+    feedbackVotes.set.mockClear();
+    expect((await putFeedbackVote(request({ voted: true, score: 99, verdict: "good" }), context)).status).toBe(400);
+    expect(feedbackVotes.set).not.toHaveBeenCalled();
+  });
+  it("keeps unavailable projects/issues hidden from anonymous voters", async () => {
+    feedbackVotes.state.mockResolvedValueOnce(null);
+    feedbackVotes.set.mockClear();
+    expect((await putFeedbackVote(request({ voted: true }), context)).status).toBe(404);
+    expect(feedbackVotes.set).not.toHaveBeenCalled();
+  });
+  it("lets a signed-out visitor vote without acquiring a login session or receiving an internal issue id", async () => {
+    feedbackVotes.state.mockResolvedValueOnce({ bugId: "internal-id", count: 1, voted: false });
+    feedbackVotes.set.mockResolvedValueOnce({ count: 2, voted: true });
+    const response = await putFeedbackVote(request({ voted: true }), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ count: 2, voted: true });
+    expect(response.cookies.get("ziki-feedback-visitor")?.httpOnly).toBe(true);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.cookies.get("authjs.session-token")).toBeUndefined();
+  });
+  it("returns only customer vote state when a visitor checks an existing report", async () => {
+    feedbackVotes.state.mockResolvedValueOnce({ bugId: "private-internal-id", count: 2, voted: false });
+    const response = await getFeedbackVote(new NextRequest("https://ziki.test/api/public/projects/acme/desktop/issues/42/votes"), context);
+    expect(await response.json()).toEqual({ count: 2, voted: false });
   });
 });

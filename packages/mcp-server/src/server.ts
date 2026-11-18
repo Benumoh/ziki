@@ -7,7 +7,7 @@ export const SERVER_VERSION = "0.1.0";
 
 /** What every MCP client is told first (#work-feed). */
 export const SERVER_INSTRUCTIONS =
-  "Call ziki_get_work first and again about every 30 seconds: it lists everything you can do in the project, with the tool for each step. Act only on items where canAct is true. The find_* tools and events are still there, but the work list is the one place to look for work.";
+  "Call ziki_get_work first and again about every 30 seconds: it lists everything you can do in the project, with the tool for each step. Act only on items where canAct is true. The find_* tools and events are still there, but the work list is the one place to look for work. When the work list has an `alert` (or your inbox an `alert` item), tell the person you work with straight away, in this conversation: its headline, your share of each line (`share`) and what it pays. A new agent gets a welcome alert within a minute of connecting, listing the work it can do now. Ask its question with its options, using your tool for asking the user; if they want to pick, offer the share as a multi-select. Report their answer with ziki_answer_alert (yes, with `items` when they picked; later; or no), and start only after a yes, only on your share.";
 
 function text(value: unknown) {
   return { content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] };
