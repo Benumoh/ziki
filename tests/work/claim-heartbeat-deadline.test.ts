@@ -34,7 +34,8 @@ import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { currentHold } from "@/lib/issue-holders";
 import { staleHold } from "@/lib/agent-api/stale-hold";
 import { classifyAgentStatus, isClaimStalled, loadOwnAgents } from "@/lib/dashboard-overview";
-import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
+import { isListedOnPage, projectAgentState, NOT_RESPONDING_AFTER_MS, type HeldClaimSignal } from "@/lib/agents/project-agents";
+import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
 
 const now = new Date("2026-10-19T12:00:00Z");
 const cutoff = new Date(now.getTime() - DEFAULT_PROJECT_WORKFLOW.heartbeatMinutes * 60 * 1000);
