@@ -1,11 +1,11 @@
-import type { Prisma, PrismaClient, SecurityCheckStatus, SecuritySeverity } from "@prisma/client";
+import type { Prisma, PrismaClient, SecurityCheckStatus, SecuritySeverity, SecurityTargetKind } from "@prisma/client";
 import { award } from "@/lib/points/award";
 import { logger } from "@/lib/logger";
 import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, agentsMayWork, fallbackWindowMs, ownershipProofRequired, provenTargetWhere } from "@/lib/security-checks";
-import { cleanParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
+import { cleanParts, coreParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
 import { pickAgentFor, type CandidateAgent } from "./assign";
 import { quickScanForAgents, type QuickScanLine } from "./preview-summary";
-import { fixBucketOf } from "./fix-bucket";
+import { fixBucketOf, type FixSource } from "./fix-bucket";
 import { realNetwork } from "./ownership";
 
 /**
@@ -131,14 +131,13 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
       select: { previousCheckId: true, organisationId: true, requestedById: true, targetId: true, target: { select: { kind: true, value: true } } },
     });
     if (!check) return false;
-    // A rescan (#security-rescan) starts from what was found before: those findings are rechecked, and the new parts look past them.
-    const earlier = check.previousCheckId ? await openEarlierFindings(db, check, checkId) : [];
-    const { parts } = await planParts(check.target, {
-      ai: deps.ai,
-      readPage: deps.readPage === undefined ? readPublicPage : deps.readPage,
-      earlier: earlier.map((finding) => finding.title),
-    });
-    const rechecks = recheckParts(earlier);
+    // A rescan (#security-rescan) rechecks what was found before and repeats the earlier scan's parts (18 Nov: the same
+    // checklist every time, so a new finding means the site changed, not that a different area was picked).
+    const earlierRows = check.previousCheckId ? await earlierOpenRows(db, check, checkId) : [];
+    const parts = check.previousCheckId
+      ? await rescanParts(db, check.previousCheckId, check.target, earlierRows.map((row) => row.title))
+      : (await planParts(check.target, { ai: deps.ai, readPage: deps.readPage === undefined ? readPublicPage : deps.readPage })).parts;
+    const rechecks = recheckParts(toRecheck(earlierRows));
 
     saved = await db.$transaction(async (tx) => {
       const { count: still } = await tx.securityCheck.updateMany({
@@ -171,18 +170,23 @@ export async function startCheck(db: EngineDb, checkId: string, now = new Date()
 /** An earlier finding a rescan looks at again, with the area (part title) that found it. */
 export type EarlierFinding = { id: string; title: string; area: string };
 
+type EarlierRow = {
+  id: string;
+  title: string;
+  item: { title: string };
+  finding: FixSource | null;
+};
+
 /**
- * The findings a rescan rechecks (#security-rescan): every finding on this person's earlier scans of the same site,
- * in the same workspace, that no rescan has called fixed. Removed scans don't count. A finding already sent to fix
- * whose fix is still in progress is skipped (18 Nov): its issue is being worked on, so checking it again tells
- * nobody anything. Once that issue is resolved or closed, the next rescan rechecks it, which confirms the fix.
+ * Every finding on this person's earlier scans of the same site, in the same workspace, that no rescan has called
+ * fixed. Removed scans don't count.
  */
-export async function openEarlierFindings(
+async function earlierOpenRows(
   db: Db,
   check: { organisationId: string; requestedById: string; targetId: string },
   excludeCheckId: string,
-): Promise<EarlierFinding[]> {
-  const rows = await db.securityCheckResult.findMany({
+): Promise<EarlierRow[]> {
+  return db.securityCheckResult.findMany({
     where: {
       checkId: { not: excludeCheckId },
       check: { organisationId: check.organisationId, requestedById: check.requestedById, targetId: check.targetId, status: { not: "cancelled" } },
@@ -196,9 +200,87 @@ export async function openEarlierFindings(
       finding: { select: { bug: { select: { status: true, isDeleted: true } }, idea: { select: { status: true, isDeleted: true } } } },
     },
   });
+}
+
+/**
+ * The open earlier findings a rescan rechecks. A finding already sent to fix whose fix is still in progress is skipped
+ * (18 Nov): its issue is being worked on, so checking it again tells nobody anything. Once that issue is resolved or
+ * closed, the next rescan rechecks it, which confirms the fix.
+ */
+function toRecheck(rows: ReadonlyArray<EarlierRow>): EarlierFinding[] {
   return rows
     .filter((row) => !row.finding || fixBucketOf(row.finding) !== "fixing")
     .map((row) => ({ id: row.id, title: row.title, area: row.item.title }));
+}
+
+/** The findings a rescan rechecks (#security-rescan): `earlierOpenRows` less the ones still being fixed. */
+export async function openEarlierFindings(
+  db: Db,
+  check: { organisationId: string; requestedById: string; targetId: string },
+  excludeCheckId: string,
+): Promise<EarlierFinding[]> {
+  return toRecheck(await earlierOpenRows(db, check, excludeCheckId));
+}
+
+/** Recheck parts are named this way, so a later rescan can tell them apart from the parts it repeats. */
+export const RECHECK_TITLE_PREFIX = "Recheck: ";
+/** At most this many parts a rescan repeats: an old scan's own parts plus the core checklist. */
+export const MAX_RESCAN_PARTS = 40;
+/** Starts the list of earlier findings added to a rescan's parts; a later rescan cuts it off before repeating the part. */
+export const KNOWN_FINDINGS_HEADING = "\n\nAlready found on earlier scans of this site";
+const KNOWN_FINDINGS_MAX_CHARS = 1500;
+
+/**
+ * The parts a rescan repeats (18 Nov, Tolu: the same checklist every time). The core checklist for the target's kind
+ * comes first, then every other part the earlier scan ran (the AI's extras and any an agent added), with the same
+ * instructions. Its recheck parts aren't repeated: this rescan makes its own. No AI is asked, so nothing new is
+ * planned. Each part is told the earlier findings, so a known problem isn't filed again under another name.
+ * A scan made before the core checklist existed gets the core added to its own parts once.
+ */
+export async function rescanParts(
+  db: Db,
+  previousCheckId: string,
+  target: { kind: SecurityTargetKind; value: string },
+  knownTitles: ReadonlyArray<string>,
+): Promise<PlannedPart[]> {
+  const earlier = await db.securityCheckItem.findMany({
+    where: { checkId: previousCheckId, kind: "check" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { title: true, instructions: true },
+  });
+  const repeated = earlier
+    .filter((part) => !part.title.startsWith(RECHECK_TITLE_PREFIX))
+    .map((part) => ({ title: part.title, instructions: (part.instructions ?? "").split(KNOWN_FINDINGS_HEADING)[0]! }));
+  const seen = new Set<string>();
+  const parts: PlannedPart[] = [];
+  for (const part of [...coreParts(target.kind, target.value), ...repeated]) {
+    const title = part.title.trim().slice(0, 200);
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    parts.push({ title, instructions: withKnownFindings(part.instructions.trim() || title, knownTitles) });
+    if (parts.length === MAX_RESCAN_PARTS) break;
+  }
+  return parts;
+}
+
+/** A title as compared for repeats: case, extra spaces and a trailing full stop don't count. */
+function sameTitle(title: string): string {
+  return title.trim().replace(/\s+/g, " ").replace(/\.$/, "").toLowerCase();
+}
+
+/** Adds the earlier findings' titles to a part's instructions, so the agent doesn't report them as new. */
+function withKnownFindings(instructions: string, knownTitles: ReadonlyArray<string>): string {
+  const lines: string[] = [];
+  let length = 0;
+  for (const title of new Set(knownTitles)) {
+    const line = `- ${title.slice(0, 150)}`;
+    if (length + line.length > KNOWN_FINDINGS_MAX_CHARS) break;
+    lines.push(line);
+    length += line.length + 1;
+  }
+  if (lines.length === 0) return instructions;
+  const note = `${KNOWN_FINDINGS_HEADING} (they are rechecked separately; don't report them, or the same problem under another name, as new):\n${lines.join("\n")}`;
+  return `${instructions.slice(0, 4000 - note.length)}${note}`;
 }
 
 /** One recheck part per area of the earlier report, split so no part holds more than MAX_RECHECKS_PER_PART. */
@@ -209,7 +291,7 @@ export function recheckParts(earlier: ReadonlyArray<EarlierFinding>): { title: s
   for (const [area, ids] of byArea) {
     for (let at = 0; at < ids.length; at += MAX_RECHECKS_PER_PART) {
       parts.push({
-        title: `Recheck: ${area}`.slice(0, 200),
+        title: `${RECHECK_TITLE_PREFIX}${area}`.slice(0, 200),
         instructions:
           "Look again at each earlier finding this part lists (`recheck`) and answer each one in `rechecks`: `still_there` if you can still see it, `fixed` only if you checked and it's gone, with a short note of what you saw. Send no `results` here: this part only rechecks, and the scan's other parts look for anything new. Look only.",
         resultIds: ids.slice(at, at + MAX_RECHECKS_PER_PART),
@@ -406,7 +488,9 @@ async function heldJob(tx: Tx, agentId: string, itemId: string) {
       status: true,
       agentId: true,
       checkId: true,
-      check: { select: { status: true, target: { select: { verifiedAt: true } } } },
+      check: {
+        select: { status: true, previousCheckId: true, organisationId: true, requestedById: true, targetId: true, target: { select: { verifiedAt: true } } },
+      },
     },
   });
   if (!item || item.agentId !== agentId || item.kind !== "check") throw new SecurityJobError(404, "not_found", "No such job is held by this agent.");
@@ -457,6 +541,20 @@ export async function submitReport(
         "recheck_only",
         "This part only rechecks earlier findings: answer each one in `rechecks` (`still_there` or `fixed`) and send no `results`. The scan's other parts look for anything new.",
       );
+    }
+    // On a rescan, a new result that repeats an earlier open finding's title is refused (18 Nov, Tolu): the earlier one
+    // is rechecked by its own part, so a copy would list the same problem twice. Each part's instructions list them;
+    // this holds even for an agent that ignores that. A finding a rescan called fixed may come back as new.
+    if (results.length > 0 && item.check.previousCheckId) {
+      const known = new Set((await earlierOpenRows(tx, item.check, item.checkId)).map((row) => sameTitle(row.title)));
+      const repeat = results.find((result) => known.has(sameTitle(result.title)));
+      if (repeat) {
+        throw new SecurityJobError(
+          400,
+          "already_known",
+          `"${repeat.title.slice(0, 150)}" was already found on an earlier scan of this site and is rechecked separately. Leave it out and report only what's new.`,
+        );
+      }
     }
     const { count } = await tx.securityCheckItem.updateMany({
       where: { id: itemId, agentId, status: "checking" },
