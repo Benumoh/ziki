@@ -82,6 +82,25 @@ describe("the check's list: Quick scan and Deeper scan tabs (16 Nov)", () => {
     expect(deep.state).toEqual({ label: "0 of 2 done", tone: "working" });
   });
 
+  it("marks a rescan's own findings New, never an earlier one or a first scan's (18 Nov)", () => {
+    const rescan = { ...report([{ id: "p1", title: "Login", status: "done" }], [{}, { checkId: "c0", recheck: "still_there" }]), previousCheckId: "c0" } as CheckReport;
+    expect(checkListTabs(rescan)[1].findings!.map((f) => f.isNew)).toEqual([true, false]);
+    // Each label explains itself on hover instead of a note at the top (18 Nov, Tolu).
+    const changed = { ...rescan, siteChange: { changed: ["a new certificate"] } } as CheckReport;
+    expect(checkListTabs(changed)[1].findings!.map((f) => f.hint)).toEqual([
+      "Found for the first time on this scan. This site changed since the last scan (a new certificate).",
+      "Found on the earlier scan and found again on this one.",
+    ]);
+    expect(checkListTabs(report([{ id: "p1", title: "Login", status: "done" }], [{}]))[1].findings![0]!.hint).toBeNull();
+    expect(checkListTabs(report([{ id: "p1", title: "Login", status: "done" }], [{}]))[1].findings!.map((f) => f.isNew)).toEqual([false]);
+  });
+
+  it("doesn't show the quick scan apart once Ziki's code checks are in the main list (18 Nov)", () => {
+    const merged = { ...report([]), codeInList: true } as CheckReport;
+    expect(checkListTabs(merged)[0]).toMatchObject({ merged: true, count: 0 });
+    expect(checkListTabs(report([]))[0].merged).toBeUndefined();
+  });
+
   it("names severities as threats", () => {
     expect(THREAT_LABEL).toEqual({ critical: "Critical threat", high: "High threat", medium: "Medium threat", low: "Low threat" });
   });

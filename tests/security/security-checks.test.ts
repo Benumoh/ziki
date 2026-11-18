@@ -194,6 +194,8 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
         { id: "i4", title: "CORS", status: postedAt ? "done" : "waiting", agentId: null },
         { id: "i5", title: "Cookies", status: "done", agentId: "a2" },
       ],
+      // No automatic parts: the quick scan shows apart, as on a scan made before 18 Nov.
+      _count: { items: 0 },
     };
   }
   const PART_TITLE: Record<string, string> = { i1: "Login", i3: "Headers", i4: "CORS" };

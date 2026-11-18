@@ -50,8 +50,9 @@ export function CheckHeader({ report }: { report: CheckReport }) {
       {/* The three steps (18 Nov): quick scan, the agents' deeper scan, and the code scan, locked until paid for. */}
       <ScanSteps
         site={report.target.value}
-        quickFound={report.quickScan ? report.quickScan.total : null}
-        deepFound={report.total}
+        quickFound={report.codeInList ? report.codeFound : report.quickScan ? report.quickScan.total : null}
+        // Once the quick scan's findings are in the list (18 Nov), the agents' count leaves them out.
+        deepFound={report.total - report.codeFound}
         phase={phase}
         done={done}
         total={total}
@@ -79,13 +80,19 @@ const RISK_GRADIENT = "linear-gradient(90deg, #16a34a 0%, #84cc16 22%, #facc15 4
  */
 function FindingsSummary({ report }: { report: CheckReport }) {
   const quick = report.quickScan?.counts ?? { critical: 0, high: 0, medium: 0, low: 0 };
-  const quickTotal = report.quickScan?.total ?? 0;
-  const counts = Object.fromEntries(SECURITY_SEVERITIES.map((severity) => [severity, quick[severity] + report.counts[severity]])) as typeof quick;
-  const all = quickTotal + report.total;
+  // Once the quick scan's findings are saved in the list (18 Nov, codeInList), report.total and report.counts already
+  // hold them: counting the quick scan on top would count every one of them twice.
+  const quickTotal = report.codeInList ? report.codeFound : report.quickScan?.total ?? 0;
+  const agentTotal = report.total - report.codeFound;
+  const counts = report.codeInList
+    ? report.counts
+    : (Object.fromEntries(SECURITY_SEVERITIES.map((severity) => [severity, quick[severity] + report.counts[severity]])) as typeof quick);
+  const all = quickTotal + agentTotal;
   const risk = previewRisk(counts);
   const worst = SECURITY_SEVERITIES.find((severity) => counts[severity] > 0) ?? null;
   const finished = report.posted;
   const warn = finished && all > 0;
+  const rescan = report.previousCheckId !== null;
   // Every finding not already in the app, a rescan's earlier ones still there included (18 Nov, Tolu).
   const remaining = report.findings.filter((finding) => !finding.fix);
   const criticalRemaining = remaining.filter((finding) => finding.severity === "critical");
@@ -97,7 +104,7 @@ function FindingsSummary({ report }: { report: CheckReport }) {
   const title = all === 0
     ? (finished ? "No problems found" : "Nothing found yet")
     : `${all} ${all === 1 ? "problem" : "problems"} ${finished ? "found" : "found so far"}${worst && (worst === "critical" || worst === "high") ? ` · ${counts[worst]} ${worst}` : ""}`;
-  const sources = [quickTotal ? `${quickTotal} from the quick scan` : null, report.total || finished ? `${report.total} from the agents${finished ? "" : " so far"}` : null].filter(Boolean).join(" · ");
+  const sources = [quickTotal ? `${quickTotal} from the quick scan` : null, agentTotal || finished ? `${agentTotal} from the agents${finished ? "" : " so far"}` : null].filter(Boolean).join(" · ");
   const at = RISK_AT[risk];
 
   return (
@@ -105,13 +112,12 @@ function FindingsSummary({ report }: { report: CheckReport }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h2 className={`text-lg font-bold sm:text-xl ${warn ? "text-red-800" : "text-zk-text"}`}>{title}</h2>
-          {sources ? <p className={`m-0 text-sm ${warn ? "text-red-900" : "text-zk-text2"}`}>{sources}</p> : null}
-          {report.fixed.length ? (
-            <p className="m-0 text-sm font-semibold text-zk-ok-fg">
-              {report.fixed.length} {report.fixed.length === 1 ? "problem" : "problems"} from the last scan fixed
-            </p>
-          ) : null}
-          {finished && report.summary ? <p className={`m-0 break-words text-sm ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
+          {/* A rescan keeps the box to one line under the title (18 Nov, Tolu: "too clustered"): new, still there and
+              fixed. Where they came from and the summary sentence show on a first scan only. */}
+          {sources && !rescan ? <p className={`m-0 text-sm ${warn ? "text-red-900" : "text-zk-text2"}`}>{sources}</p> : null}
+          {/* A rescan says what's new, still there and fixed in one line (18 Nov); New ones carry a blue label below. */}
+          {report.previousCheckId ? <RescanCounts report={report} /> : null}
+          {finished && report.summary && !rescan ? <p className={`m-0 break-words text-sm ${warn ? "text-red-950" : "text-zk-text2"}`}>{firstSentence(report.summary)}</p> : null}
         </div>
         {finished && selection.length ? (
           <Link href={fixHref} className="hidden min-h-11 shrink-0 items-center justify-center self-start rounded-full bg-electric-blue-strong px-5 py-2 text-sm font-bold text-white hover:brightness-105 sm:inline-flex">
@@ -149,5 +155,31 @@ function FindingsSummary({ report }: { report: CheckReport }) {
         </Link>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * On a rescan (18 Nov): how many findings are new since the last scan, still there, and fixed, in one line.
+ * New ones carry the blue New label in the list; parts left out when there are none.
+ */
+function RescanCounts({ report }: { report: CheckReport }) {
+  const fresh = report.findings.filter((finding) => finding.recheck === null).length;
+  const still = report.findings.filter((finding) => finding.recheck === "still_there").length;
+  const fixed = report.fixed.length;
+  if (!fresh && !still && !fixed) return null;
+  const parts = [
+    fresh ? <span key="new" className="text-zk-info-fg">{fresh} new since the last scan</span> : null,
+    still ? <span key="still">{still} still there</span> : null,
+    fixed ? <span key="fixed" className="text-zk-ok-fg">{fixed} fixed</span> : null,
+  ].filter(Boolean);
+  return (
+    <p className="m-0 text-sm font-semibold text-zk-text2">
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i ? " · " : null}
+          {part}
+        </span>
+      ))}
+    </p>
   );
 }
