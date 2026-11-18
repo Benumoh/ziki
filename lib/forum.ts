@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma, ForumScope as PrismaForumScope, ForumPostKind, ForumResolution, ForumReplyKind } from "@prisma/client";
+import type {
+  Prisma,
+  ForumScope as PrismaForumScope,
+  ForumPostKind,
+  ForumResolution,
+  ForumReplyKind,
+  ForumCloseReason,
+} from "@prisma/client";
 import {
   type ForumCategory,
   type ForumMessage,
@@ -127,9 +134,16 @@ function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
     views: 1,
     helpfulCount,
     offerAmount: post.offer ? `$${Number(post.offer.amount).toFixed(2)}` : undefined,
+    offerState: post.offer ? (post.offer.state as "reserved" | "paid" | "refunded") : undefined,
     verified,
+    closeReason: (post.closeReason as ForumMessage["closeReason"]) ?? undefined,
     createdAt: formatTimeAgo(post.createdAt),
-    status: post.resolution === "resolved" ? "resolved" : "open",
+    status:
+      post.resolution === "resolved"
+        ? "resolved"
+        : post.resolution === "closed"
+          ? "closed"
+          : "open",
     replies: (post.replies || []).map(mapPrismaReplyToReplyItem),
   };
 }
@@ -582,6 +596,7 @@ export async function createForumMessage(
     views: 1,
     helpfulCount: 0,
     offerAmount: input.offerAmount || undefined,
+    offerState: input.offerAmount ? "reserved" : undefined,
     verified: false,
     createdAt: "Just now",
     status: "open",
@@ -914,5 +929,287 @@ export async function getUserAccessibleScopes(userId?: string | null): Promise<U
 export async function getUserAccessibleOrgsAndProjects(userId?: string | null): Promise<AccessibleOrganisation[]> {
   const { organisations } = await getUserAccessibleScopes(userId);
   return organisations;
+}
+
+export interface AcceptForumReplyResult {
+  message: ForumMessage;
+  acceptedReplyId: string;
+  offerState?: "reserved" | "paid" | "refunded";
+}
+
+export async function acceptForumReply(params: {
+  postId: string;
+  replyId: string;
+  actorUserId: string;
+  actorAgentId: string;
+  actorLevel?: string;
+}): Promise<AcceptForumReplyResult> {
+  const cleaned = params.postId.trim().replace(/^#/, "");
+  const numeric = parseInt(cleaned, 10);
+  const isNumeric = !isNaN(numeric) && String(numeric) === cleaned && numeric > 0;
+  const isManagerOrMerger = params.actorLevel === "manager" || params.actorLevel === "merger";
+
+  try {
+    if (prisma.forumPost?.findFirst) {
+      const post = await prisma.forumPost.findFirst({
+        where: {
+          OR: [
+            { id: params.postId },
+            ...(isNumeric ? [{ number: numeric }] : []),
+            ...(params.postId.startsWith("fm-") && !isNaN(parseInt(params.postId.slice(3), 10))
+              ? [{ number: parseInt(params.postId.slice(3), 10) }]
+              : []),
+            ...(params.postId.includes("-") && !isNaN(parseInt(params.postId.split("-")[1], 10))
+              ? [{ number: parseInt(params.postId.split("-")[1], 10) }]
+              : []),
+          ],
+        },
+        include: {
+          replies: true,
+          offer: true,
+        },
+      });
+
+      if (post) {
+        if (post.kind !== "ask") {
+          throw new Error("Validation error: Only 'ask' posts can have an accepted solution.");
+        }
+        if (post.authorUserId !== params.actorUserId && !isManagerOrMerger) {
+          throw new Error("Forbidden: Only the asking agent's owner or a manager/merger agent may accept a solution.");
+        }
+        const reply = post.replies.find((r) => r.id === params.replyId);
+        if (!reply) {
+          throw new Error("Forum reply not found.");
+        }
+        if (reply.kind !== "answer") {
+          throw new Error("Validation error: Only 'answer' replies can be accepted as a solution (comments cannot).");
+        }
+
+        await prisma.forumReply.updateMany({
+          where: { postId: post.id, isSolution: true },
+          data: { isSolution: false },
+        });
+        await prisma.forumReply.update({
+          where: { id: reply.id },
+          data: { isSolution: true },
+        });
+
+        let offerState: "reserved" | "paid" | "refunded" | undefined = post.offer?.state as
+          | "reserved"
+          | "paid"
+          | "refunded"
+          | undefined;
+
+        if (
+          post.offer &&
+          post.offer.state === "reserved" &&
+          reply.authorUserId !== post.authorUserId &&
+          prisma.forumOffer?.update
+        ) {
+          await prisma.forumOffer.update({
+            where: { id: post.offer.id },
+            data: {
+              state: "paid",
+              paidReplyId: reply.id,
+            },
+          });
+          offerState = "paid";
+        }
+
+        const updatedPost = await prisma.forumPost.update({
+          where: { id: post.id },
+          data: {
+            resolution: "resolved",
+            closeReason: null,
+          },
+          include: {
+            authorUser: { select: { id: true, name: true, email: true, role: true } },
+            authorAgent: { select: { id: true, name: true, username: true, model: true } },
+            organisation: { select: { id: true, name: true, slug: true } },
+            project: { select: { id: true, name: true, slug: true, organisation: { select: { slug: true } } } },
+            replies: {
+              include: {
+                authorUser: { select: { id: true, name: true, email: true, role: true } },
+                authorAgent: { select: { id: true, name: true, username: true, model: true } },
+                votes: true,
+                verifications: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            votes: true,
+            verifications: true,
+            offer: true,
+          },
+        });
+
+        const mapped = mapPrismaPostToMessage(updatedPost);
+        return { message: mapped, acceptedReplyId: reply.id, offerState };
+      }
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Forbidden:") ||
+        err.message.startsWith("Validation error:") ||
+        err.message.includes("not found"))
+    ) {
+      throw err;
+    }
+    // Fall through to in-memory store
+  }
+
+  const target = memoryForumStore.find((m) => {
+    if (m.id === params.postId || m.id === cleaned) return true;
+    if (isNumeric && (m.number === numeric || m.id === String(numeric))) return true;
+    if (m.code.toLowerCase() === params.postId.toLowerCase() || (isNumeric && m.code === `#${numeric}`)) return true;
+    if (params.postId.startsWith("fm-") && (m.id === params.postId.slice(3) || (m.number !== undefined && String(m.number) === params.postId.slice(3)))) return true;
+    return false;
+  });
+
+  if (!target) {
+    throw new Error("Forum post not found.");
+  }
+  if (target.kind !== "ask") {
+    throw new Error("Validation error: Only 'ask' posts can have an accepted solution.");
+  }
+  if (target.author.userId && target.author.userId !== params.actorUserId && !isManagerOrMerger) {
+    throw new Error("Forbidden: Only the asking agent's owner or a manager/merger agent may accept a solution.");
+  }
+
+  const reply = target.replies.find((r) => r.id === params.replyId);
+  if (!reply) {
+    throw new Error("Forum reply not found.");
+  }
+  if (reply.kind !== "answer") {
+    throw new Error("Validation error: Only 'answer' replies can be accepted as a solution (comments cannot).");
+  }
+
+  for (const r of target.replies) {
+    r.accepted = r.id === reply.id;
+  }
+  target.status = "resolved";
+  target.closeReason = undefined;
+
+  if (target.offerAmount) {
+    const currentState = target.offerState ?? "reserved";
+    if (currentState === "reserved" && reply.author.userId !== target.author.userId) {
+      target.offerState = "paid";
+    } else {
+      target.offerState = currentState;
+    }
+  }
+
+  return {
+    message: target,
+    acceptedReplyId: reply.id,
+    offerState: target.offerState,
+  };
+}
+
+export async function closeForumMessage(params: {
+  postId: string;
+  actorUserId: string;
+  actorAgentId: string;
+  actorLevel?: string;
+  closeReason: "duplicate" | "outdated" | "dismissed" | "expired" | "policy";
+}): Promise<ForumMessage> {
+  const cleaned = params.postId.trim().replace(/^#/, "");
+  const numeric = parseInt(cleaned, 10);
+  const isNumeric = !isNaN(numeric) && String(numeric) === cleaned && numeric > 0;
+  const isManagerOrMerger = params.actorLevel === "manager" || params.actorLevel === "merger";
+
+  try {
+    if (prisma.forumPost?.findFirst) {
+      const post = await prisma.forumPost.findFirst({
+        where: {
+          OR: [
+            { id: params.postId },
+            ...(isNumeric ? [{ number: numeric }] : []),
+            ...(params.postId.startsWith("fm-") && !isNaN(parseInt(params.postId.slice(3), 10))
+              ? [{ number: parseInt(params.postId.slice(3), 10) }]
+              : []),
+            ...(params.postId.includes("-") && !isNaN(parseInt(params.postId.split("-")[1], 10))
+              ? [{ number: parseInt(params.postId.split("-")[1], 10) }]
+              : []),
+          ],
+        },
+        include: { offer: true },
+      });
+
+      if (post) {
+        if (post.authorUserId !== params.actorUserId && !isManagerOrMerger) {
+          throw new Error("Forbidden: Only the post owner's agent or a manager/merger agent may close this post.");
+        }
+
+        if (post.offer && post.offer.state === "reserved" && prisma.forumOffer?.update) {
+          await prisma.forumOffer.update({
+            where: { id: post.offer.id },
+            data: { state: "refunded" },
+          });
+        }
+
+        const updatedPost = await prisma.forumPost.update({
+          where: { id: post.id },
+          data: {
+            resolution: "closed",
+            closeReason: params.closeReason as ForumCloseReason,
+          },
+          include: {
+            authorUser: { select: { id: true, name: true, email: true, role: true } },
+            authorAgent: { select: { id: true, name: true, username: true, model: true } },
+            organisation: { select: { id: true, name: true, slug: true } },
+            project: { select: { id: true, name: true, slug: true, organisation: { select: { slug: true } } } },
+            replies: {
+              include: {
+                authorUser: { select: { id: true, name: true, email: true, role: true } },
+                authorAgent: { select: { id: true, name: true, username: true, model: true } },
+                votes: true,
+                verifications: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            votes: true,
+            verifications: true,
+            offer: true,
+          },
+        });
+
+        return mapPrismaPostToMessage(updatedPost);
+      }
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Forbidden:") ||
+        err.message.startsWith("Validation error:") ||
+        err.message.includes("not found"))
+    ) {
+      throw err;
+    }
+    // Fall through to in-memory store
+  }
+
+  const target = memoryForumStore.find((m) => {
+    if (m.id === params.postId || m.id === cleaned) return true;
+    if (isNumeric && (m.number === numeric || m.id === String(numeric))) return true;
+    if (m.code.toLowerCase() === params.postId.toLowerCase() || (isNumeric && m.code === `#${numeric}`)) return true;
+    if (params.postId.startsWith("fm-") && (m.id === params.postId.slice(3) || (m.number !== undefined && String(m.number) === params.postId.slice(3)))) return true;
+    return false;
+  });
+
+  if (!target) {
+    throw new Error("Forum post not found.");
+  }
+  if (target.author.userId && target.author.userId !== params.actorUserId && !isManagerOrMerger) {
+    throw new Error("Forbidden: Only the post owner's agent or a manager/merger agent may close this post.");
+  }
+
+  target.status = "closed";
+  target.closeReason = params.closeReason;
+  if (target.offerAmount && (target.offerState ?? "reserved") === "reserved") {
+    target.offerState = "refunded";
+  }
+
+  return target;
 }
 

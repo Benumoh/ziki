@@ -22,8 +22,10 @@ vi.mock("@/lib/prisma", () => ({
 import { GET as listForumGet, POST as createForumPost } from "@/app/api/v1/forum/route";
 import { GET as getForumById } from "@/app/api/v1/forum/[id]/route";
 import { POST as createForumReply } from "@/app/api/v1/forum/[id]/replies/route";
+import { POST as acceptForumAnswer } from "@/app/api/v1/forum/[id]/replies/[replyId]/accept/route";
+import { POST as resolveForumPost } from "@/app/api/v1/forum/[id]/resolve/route";
 import { POST as castForumVote } from "@/app/api/v1/forum/[id]/vote/route";
-import { createForumMessage } from "@/lib/forum";
+import { createForumMessage, replyToForumMessage } from "@/lib/forum";
 import {
   isProjectFirstPath,
   orgForumPath,
@@ -54,7 +56,7 @@ function createMockRequest(
 
 describe("Agent Forum platform & API contract", () => {
   beforeEach(async () => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockRequireAgent.mockResolvedValue({
       agentId: "agent-123456",
       name: "Atlas-Agent",
@@ -64,6 +66,10 @@ describe("Agent Forum platform & API contract", () => {
       burst: false,
       keyId: "key-1",
     });
+    // Default mocks for org/project membership checks in memory-fallback tests
+    mockPrisma.project.findFirst.mockResolvedValue({ id: "proj-1", organisationId: "org-1" });
+    mockPrisma.membership.findUnique.mockResolvedValue({ id: "mem-1" });
+    mockPrisma.forumPost.create.mockRejectedValue(new Error("use memory fallback"));
 
     // Ensure at least 3 seed threads exist in the in-memory store for API tests
     const existing = await (await listForumGet(createMockRequest("/api/v1/forum"))).json();
@@ -370,6 +376,171 @@ describe("Agent Forum platform & API contract", () => {
       );
       const selfVoteRes = await castForumVote(selfVoteReq, { params: Promise.resolve({ id: created.id }) });
       expect(selfVoteRes.status).toBe(403);
+    });
+  });
+
+  describe("POST /api/v1/forum/[id]/replies/[replyId]/accept (accept answer & settle offer)", () => {
+    it("rejects unauthenticated requests, non-owners, and comment replies, then accepts answer and settles offer", async () => {
+      const askPost = await createForumMessage(
+        {
+          name: "Asker-Agent",
+          handle: "asker-ag",
+          isAgent: true,
+          role: "Agent Worker",
+          userId: "user-1",
+          agentId: "agent-123456",
+        },
+        {
+          title: "Project blocker with $25 offer",
+          content: "## Context\nNeed fix\n## Attempts\nTried X\n## Needed\nConfig patch",
+          category: "help_needed",
+          kind: "ask",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          offerAmount: "$25",
+        }
+      );
+
+      const commentReply = await replyToForumMessage(
+        askPost.id,
+        {
+          name: "Commenter-Agent",
+          handle: "commenter-ag",
+          isAgent: true,
+          userId: "user-2",
+          agentId: "agent-2",
+        },
+        "Just a clarifying comment",
+        "comment"
+      );
+
+      const answerReply = await replyToForumMessage(
+        askPost.id,
+        {
+          name: "Solver-Agent",
+          handle: "solver-ag",
+          isAgent: true,
+          userId: "user-2",
+          agentId: "agent-2",
+        },
+        "Set pool_mode = transaction in pgbouncer.ini",
+        "answer"
+      );
+
+      expect(commentReply).not.toBeNull();
+      expect(answerReply).not.toBeNull();
+
+      // 1. Unauthenticated -> 401
+      const unauthRes = await acceptForumAnswer(
+        createMockRequest(`/api/v1/forum/${askPost.id}/replies/${answerReply!.id}/accept`, "POST"),
+        { params: Promise.resolve({ id: askPost.id, replyId: answerReply!.id }) }
+      );
+      expect(unauthRes.status).toBe(401);
+
+      // 2. Different non-manager owner -> 403
+      mockRequireAgent.mockResolvedValueOnce({
+        agentId: "agent-outsider",
+        name: "Outsider-Agent",
+        ownerId: "user-outsider",
+        organisationId: "org-1",
+        level: "working",
+        burst: false,
+        keyId: "key-outsider",
+      });
+      const outsiderRes = await acceptForumAnswer(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/replies/${answerReply!.id}/accept`,
+          "POST",
+          {},
+          { authorization: "Bearer ziki_agent_outsider" }
+        ),
+        { params: Promise.resolve({ id: askPost.id, replyId: answerReply!.id }) }
+      );
+      expect(outsiderRes.status).toBe(403);
+
+      // 3. Accepting a 'comment' reply -> 400
+      const commentAcceptRes = await acceptForumAnswer(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/replies/${commentReply!.id}/accept`,
+          "POST",
+          {},
+          { authorization: "Bearer ziki_agent_owner" }
+        ),
+        { params: Promise.resolve({ id: askPost.id, replyId: commentReply!.id }) }
+      );
+      expect(commentAcceptRes.status).toBe(400);
+
+      // 4. Accepting the 'answer' reply as the asker's agent -> 200, status='resolved', offerState='paid'
+      const acceptRes = await acceptForumAnswer(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/replies/${answerReply!.id}/accept`,
+          "POST",
+          {},
+          { authorization: "Bearer ziki_agent_owner" }
+        ),
+        { params: Promise.resolve({ id: askPost.id, replyId: answerReply!.id }) }
+      );
+      const acceptJson = await acceptRes.json();
+      expect(acceptRes.status).toBe(200);
+      expect(acceptJson.acceptedReplyId).toBe(answerReply!.id);
+      expect(acceptJson.offerState).toBe("paid");
+      expect(acceptJson.message.status).toBe("resolved");
+      const updatedAnswer = acceptJson.message.replies.find((r: { id: string }) => r.id === answerReply!.id);
+      expect(updatedAnswer.accepted).toBe(true);
+    });
+  });
+
+  describe("POST /api/v1/forum/[id]/resolve (close post with closeReason & refund offer)", () => {
+    it("closes an open post with a valid closeReason and refunds any reserved offer", async () => {
+      const askPost = await createForumMessage(
+        {
+          name: "Asker-Agent",
+          handle: "asker-ag",
+          isAgent: true,
+          role: "Agent Worker",
+          userId: "user-1",
+          agentId: "agent-123456",
+        },
+        {
+          title: "Duplicate ask with reserved offer",
+          content: "Body",
+          category: "help_needed",
+          kind: "ask",
+          track: "product",
+          scope: "project",
+          projectId: "proj-1",
+          offerAmount: "$15",
+        }
+      );
+
+      // Invalid closeReason -> 400
+      const badRes = await resolveForumPost(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/resolve`,
+          "POST",
+          { closeReason: "invalid_reason" },
+          { authorization: "Bearer ziki_agent_owner" }
+        ),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+      expect(badRes.status).toBe(400);
+
+      // Valid closeReason -> 200, status='closed', closeReason='duplicate', offerState='refunded'
+      const closeRes = await resolveForumPost(
+        createMockRequest(
+          `/api/v1/forum/${askPost.id}/resolve`,
+          "POST",
+          { closeReason: "duplicate" },
+          { authorization: "Bearer ziki_agent_owner" }
+        ),
+        { params: Promise.resolve({ id: askPost.id }) }
+      );
+      const closeJson = await closeRes.json();
+      expect(closeRes.status).toBe(200);
+      expect(closeJson.message.status).toBe("closed");
+      expect(closeJson.message.closeReason).toBe("duplicate");
+      expect(closeJson.message.offerState).toBe("refunded");
     });
   });
 });

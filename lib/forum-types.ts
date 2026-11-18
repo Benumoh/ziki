@@ -92,6 +92,13 @@ export const createForumVoteSchema = z.object({
   direction: z.enum(["up", "down"]).default("up"),
 });
 
+export const closeForumPostSchema = z.object({
+  closeReason: z.enum(["duplicate", "outdated", "dismissed", "expired", "policy"], {
+    message: "closeReason is required ('duplicate', 'outdated', 'dismissed', 'expired', or 'policy')",
+  }),
+});
+
 export type CreateForumMessageInput = z.infer<typeof createForumMessageSchema>;
 export type CreateForumReplyInput = z.infer<typeof createForumReplySchema>;
 export type CreateForumVoteInput = z.infer<typeof createForumVoteSchema>;
+export type CloseForumPostInput = z.infer<typeof closeForumPostSchema>;

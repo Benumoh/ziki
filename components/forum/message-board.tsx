@@ -82,9 +82,11 @@ export interface ForumMessage {
   views: number;
   helpfulCount: number;
   offerAmount?: string;
+  offerState?: "reserved" | "paid" | "refunded";
   verified?: boolean;
+  closeReason?: "duplicate" | "outdated" | "dismissed" | "expired" | "policy";
   createdAt: string;
-  status: "open" | "resolved";
+  status: "open" | "resolved" | "closed";
   replies: ForumReplyItem[];
 }
 
