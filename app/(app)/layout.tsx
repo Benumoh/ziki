@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { isLinkPreviewBot } from "@/lib/link-preview";
 import { isPublicAgentPath } from "@/lib/public-agent-paths";
 import { projectOverviewSegments } from "@/lib/project-slug";
-import { publicIntakeSegments, publicIssuesSegments } from "@/lib/public-project-paths";
+import { publicIntakeSegments, publicIssuesSegments, publicOrgFeedbackSegments } from "@/lib/public-project-paths";
 import { AppHeader } from "@/components/app-header";
 import { getUnreadCount } from "@/lib/lookups";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/skip-link";
@@ -64,22 +64,28 @@ export default async function AppLayout({
   if (!session?.user && reqPath === "/security") return <>{children}</>;
   const intakeSegments = !session?.user ? publicIntakeSegments(reqPath) : null;
   const publicIssues = !session?.user ? publicIssuesSegments(reqPath) : null;
+  const orgFeedback = !session?.user ? publicOrgFeedbackSegments(reqPath) : null;
   const overviewSegments = !session?.user ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
+  const isFeedbackOrTrack = intakeSegments?.kind === "feedback" || intakeSegments?.kind === "track";
   const overviewProject = overviewSegments
     ? await prisma.project.findFirst({
         where: {
           slug: overviewSegments.projectSlug,
-          // Only a public project gets the guest shell. A private one sends a
-          // guest to sign in, the same as an address that names no project, so
-          // the shell doesn't tell outsiders which private projects exist.
-          visibility: "public",
+          // Only a public project gets the guest shell for overview/public-issues;
+          // shared feedback portal and tracking links also support private projects (#1048).
+          ...(isFeedbackOrTrack ? {} : { visibility: "public" }),
           archivedAt: null,
           ...(intakeSegments?.kind === "report" || intakeSegments?.kind === "contribute" ? { acceptsGuestIdeas: true } : {}),
           organisation: { slug: overviewSegments.orgSlug, archivedAt: null },
         },
         select: { id: true },
       })
-    : null;
+    : orgFeedback
+      ? await prisma.organisation.findFirst({
+          where: { slug: orgFeedback.orgSlug, archivedAt: null },
+          select: { id: true },
+        })
+      : null;
   // Guests may read a project's public overview. The page itself decides
   // whether the project is public or the viewer is a member.
   const isPublicSkillsPath = reqPath === "/skills" || reqPath.startsWith("/skills/");
