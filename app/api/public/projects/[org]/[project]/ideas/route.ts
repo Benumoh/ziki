@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { optionalUser } from "@/lib/auth-helpers";
 import {
   createPublicIdea,
   findPublicIdeaMatches,
@@ -67,9 +68,11 @@ export async function POST(request: NextRequest, context: Context) {
     return response({ status: 400, error: "invalid_request", message: "Send a valid JSON report." });
   }
   const { org, project } = await context.params;
+  const user = await optionalUser();
   return response(await createPublicIdea(
     { orgSlug: org, projectSlug: project },
     body,
     request.headers,
+    { submittedById: user?.id },
   ));
 }

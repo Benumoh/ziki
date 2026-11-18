@@ -353,6 +353,7 @@ model User {
   sessionVersion            Int                     @default(0)
   createdAt                 DateTime                @default(now())
   reportedBugs              Bug[]                   @relation("BugReporter")
+  publicSubmissions         PublicSubmission[]
   assignedBugs              Bug[]                   @relation("BugAssignee")
   attachments               Attachment[]
   comments                  Comment[]
@@ -559,6 +560,7 @@ model Bug {
   comments                  Comment[]
   votes                     Vote[]
   watches                   IssueWatch[]
+  publicFeedbackVotes       PublicFeedbackVote[]
   notifications             Notification[]
   activities                BugActivity[]
   revisions                 BugRevision[]
@@ -1949,6 +1951,7 @@ model Idea {
   source             String           @default("internal")
   /// SHA-256 of the unguessable token in a guest's tracking URL. The token itself is never stored.
   publicTrackingTokenHash String?      @unique
+  publicSubmission   PublicSubmission?
   /// Why it is worth doing. Required on marketing ideas, by validation.
   rationale          String?
   /// Product or marketing work (`WorkTrack`). Converting copies it to the issue.
@@ -2014,6 +2017,28 @@ model Idea {
   @@index([projectId, track, status])
   @@index([reporterId])
   @@index([createdByAgentId])
+}
+
+/// Customer interest, never an agent verdict, importance vote or workflow input (#1046).
+model PublicFeedbackVote {
+  id          String   @id @default(cuid())
+  bugId       String
+  bug         Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  visitorHash String
+  createdAt   DateTime @default(now())
+
+  @@unique([bugId, visitorHash])
+}
+
+/// Ownership of a public report, separate from its non-login system reporter (#1046).
+model PublicSubmission {
+  ideaId    String   @id
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// A member's feature request and reviewed breakdown. Drafts remain private to their creator.
