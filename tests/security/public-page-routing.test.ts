@@ -8,9 +8,13 @@ import { isPublicPath } from "@/middleware";
 import { isReservedProjectSlug } from "@/lib/project-slug";
 import { addAssetPath } from "@/components/security-checks/public-scan";
 import {
+  publicFeedbackPath,
+  publicIntakeSegments,
   publicIssueDetailPath,
   publicIssuesPath,
   publicIssuesSegments,
+  publicOrgFeedbackPath,
+  publicOrgFeedbackSegments,
   publicReportPath,
 } from "@/lib/public-project-paths";
 import {
@@ -113,5 +117,23 @@ describe("Public contributor directory & issue browsing (#985)", () => {
     expect(filterDirectoryProjects(projects, { area: "desktop" }).map((p) => p.id)).toEqual(["p1"]);
     expect(filterDirectoryProjects(projects, { area: "sync", query: "native" }).map((p) => p.id)).toEqual(["p1"]);
     expect(filterDirectoryProjects(projects, { area: "web", openOnly: true })).toEqual([]);
+  });
+
+  it("opens organization and project feedback portal links to external visitors (#1048)", () => {
+    expect(isPublicPath("/ziki/feedback")).toBe(true);
+    expect(isPublicPath("/ziki/desktop/feedback")).toBe(true);
+    expect(isPublicPath("/ziki/mobile/feedback")).toBe(true);
+    expect(isPublicPath("/ziki/web/feedback")).toBe(true);
+    expect(publicOrgFeedbackPath("ziki")).toBe("/ziki/feedback");
+    expect(publicFeedbackPath({ orgSlug: "ziki", projectSlug: "desktop" })).toBe("/ziki/desktop/feedback");
+    expect(publicOrgFeedbackSegments("/ziki/feedback")).toEqual({
+      orgSlug: "ziki",
+      kind: "org-feedback",
+    });
+    expect(publicIntakeSegments("/ziki/desktop/feedback")).toEqual({
+      orgSlug: "ziki",
+      projectSlug: "desktop",
+      kind: "feedback",
+    });
   });
 });

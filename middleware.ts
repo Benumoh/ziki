@@ -6,7 +6,7 @@ import { BASE_PATH, toAppPath } from "@/lib/base-path";
 import { isProjectIssuePath, isReservedProjectSlug, projectOverviewSegments } from "@/lib/project-slug";
 import { isProjectFirstPath } from "@/lib/project-paths";
 import { isPublicAgentPath } from "@/lib/public-agent-paths";
-import { publicIntakeSegments, publicIssuesSegments } from "@/lib/public-project-paths";
+import { publicIntakeSegments, publicIssuesSegments, publicOrgFeedbackSegments } from "@/lib/public-project-paths";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
 
 /**
@@ -74,6 +74,7 @@ export function isPublicPath(
     // below the existing public project overview.
     publicIntakeSegments(pathWithoutBase) !== null ||
     publicIssuesSegments(pathWithoutBase) !== null ||
+    publicOrgFeedbackSegments(pathWithoutBase) !== null ||
     pathWithoutBase.startsWith("/api/public/") ||
     pathWithoutBase.startsWith("/api/auth") ||
     pathWithoutBase.startsWith("/api/health") ||

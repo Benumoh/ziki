@@ -7,8 +7,8 @@ import { LocalTime } from "@/components/local-time";
 import { ReportSummary } from "@/components/report-summary";
 import { stateLabel, statusLabel } from "@/lib/labels";
 import { prisma } from "@/lib/prisma";
-import { findPublicProject, publicTrackingTokenHash } from "@/lib/public-projects";
-import { publicProjectPath } from "@/lib/public-project-paths";
+import { findFeedbackProject, publicTrackingTokenHash } from "@/lib/public-projects";
+import { publicFeedbackPath, publicProjectPath } from "@/lib/public-project-paths";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Track a public report", robots: { index: false, follow: false } };
@@ -24,8 +24,9 @@ export default async function PublicTrackingPage({ params }: { params: Promise<{
   const { org, project: projectSlug, token } = await params;
   if (!/^[A-Za-z0-9_-]{32,200}$/.test(token)) notFound();
   const ref = { orgSlug: org, projectSlug };
-  const project = await findPublicProject(ref);
+  const project = await findFeedbackProject(ref);
   if (!project) notFound();
+  const backHref = project.visibility === "public" ? publicProjectPath(ref) : publicFeedbackPath(ref);
   const idea = await prisma.idea.findFirst({
     where: { projectId: project.id, publicTrackingTokenHash: publicTrackingTokenHash(token), source: "public", isDeleted: false },
     select: {
@@ -55,7 +56,7 @@ export default async function PublicTrackingPage({ params }: { params: Promise<{
     <div className="flex flex-col gap-5 pb-10">
       <div className="flex flex-col gap-3">
         <div className="flex items-start gap-2">
-          <Link href={publicProjectPath(ref)} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded text-sm font-semibold text-zk-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zk-accent">
+          <Link href={backHref} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded text-sm font-semibold text-zk-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zk-accent">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
