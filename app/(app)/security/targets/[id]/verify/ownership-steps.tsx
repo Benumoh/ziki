@@ -101,7 +101,7 @@ export function OwnershipSteps({
       </ul>
 
       {state.error ? (
-        <p role="alert" className="mx-4 mb-0 mt-4 rounded-[14px] border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg sm:mx-6">
+        <p role="alert" className="mx-4 mb-0 mt-4 rounded-xl border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg sm:mx-6">
           {state.error}
         </p>
       ) : null}

@@ -64,7 +64,7 @@ export function InviteForm({ organisationId }: { organisationId: string }) {
 
   if (sent) {
     return (
-      <div role="status" className="mt-4 space-y-3 rounded-[14px] border border-zk-warn-bd bg-zk-warn-bg p-4">
+      <div role="status" className="mt-4 space-y-3 rounded-xl border border-zk-warn-bd bg-zk-warn-bg p-4">
         <p className="text-sm font-medium text-zk-text">
           Invite ready for {sent.email}. Copy the link now: it won&apos;t be shown again.
         </p>

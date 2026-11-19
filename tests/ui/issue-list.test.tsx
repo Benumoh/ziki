@@ -110,10 +110,7 @@ import { answerFrom, topShare, urgencyOf, yardsticksFor, type UrgencySignals } f
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { addCommentAction } from "@/app/actions/issues";
 import { answerYourCallAction } from "@/app/actions/your-call";
-import { TasksBoard } from "@/components/marketing/tasks/tasks-board";
-import { taskTab, type TaskRow, type TasksBoardData } from "@/components/marketing/tasks/model";
 import { projectRef } from "@/lib/project-paths";
-import { PROJECT_ALL, PROJECT_ALL_PARAM } from "@/lib/issue-list-filters";
 
 const BUG = {
   id: "bug-1",
@@ -162,9 +159,8 @@ async function renderList({ status = "ideas", ...query }: Record<string, string>
 }
 
 const clean = (html: string) => html.replace(/<!-- -->/g, "");
-/** The stage bar above the panel, and the status list down its left. */
+/** The stage bar above the panel. */
 const stages = (html: string) => clean(html).match(/<nav aria-label="Stages"[\s\S]*?<\/nav>/)?.[0] ?? "";
-const statusList = (html: string) => clean(html).match(/<nav aria-label="Status"[\s\S]*?<\/nav>/)?.[0] ?? "";
 const links = (nav: string) => [...nav.matchAll(/<a [^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]).filter((link) => !/^<a [^>]*aria-hidden="true"/.test(link));
 const labelOf = (link: string) => link.match(/>([A-Za-z][A-Za-z ]*?)(?:<span|<\/a>)/)?.[1] ?? "";
 const current = (nav: string) => links(nav).filter((link) => link.includes('aria-current="page"')).map(labelOf);
@@ -216,9 +212,10 @@ describe("issue list layout", () => {
 
   it("keeps search and scope when switching status, and resets paging and intake", async () => {
     const html = await renderList({ q: "login", mine: "assigned", stage: "reported", page: "2", status: "open" });
-    const list = statusList(html);
+    // #simple-lists: the stage bar switches status (the status filter is a menu in the toolbar).
+    const list = stages(html);
     // #project-urls: the status is the path, the rest stays in the query.
-    expect(list).toContain('href="/zedu/acme/issues/in-progress?q=login&amp;mine=assigned"');
+    expect(list).toContain('href="/zedu/acme/issues/delivered?q=login&amp;mine=assigned"');
     expect(list).not.toContain("page=");
     expect(list).not.toContain("stage=");
     const statusCount = groupBy.mock.calls.find(([args]) => args?.by?.[0] === "status");
@@ -323,11 +320,9 @@ describe("issue list layout", () => {
           { status: "closed", _count: { _all: 3 } },
         ]) as never);
     const html = await renderList({ status: "open" });
-    // Project Overview: the project's goals, then the issues assigned to you. Ideas: new ideas + rejected ideas. In Progress: Open, In progress,
-    // Closed. Delivered: Done, Merge. Live: its own stage. Possibly delivered is a list inside Open, so In
-    // Progress's total doesn't count it again.
-    expect(counted(stages(html))).toEqual({ Overview: 1, New: 8, "In Progress": 18, Delivered: 8, Live: 7 });
-    expect(counted(statusList(html))).toEqual({ Open: 13, "In progress": 2, Closed: 3, "Possibly delivered": 1 });
+    // #simple-lists: In Progress is Open, In progress and Closed; Delivered is Done, Merge and Live together.
+    // Possibly delivered is a list inside Open, so In Progress's total doesn't count it again.
+    expect(counted(stages(html))).toEqual({ Overview: 1, New: 8, "In Progress": 18, Delivered: 15 });
   });
 
   it("shows Overview to anyone who can contribute, and Live only once something went live", async () => {
@@ -371,14 +366,19 @@ describe("a signed-in stranger on another organisation's public project", () => 
     vi.mocked(organisationAccessFor).mockImplementation(memberRole);
   });
 
-  it("can't reach the organisation's private projects with ?project=all, which a member can", async () => {
-    await renderList({ status: "all", [PROJECT_ALL_PARAM]: PROJECT_ALL });
+  it("sees only the project in the address, while a member sees one project at its address and every project at the organisation's (#project-filter)", async () => {
+    await renderList({ status: "all" });
     expect(listQuery().projectId).toBe("project-acme");
     for (const [args] of ideaCount.mock.calls) expect((args as { where: { projectId?: string } }).where.projectId).toBe("project-acme");
 
     findMany.mockClear();
     vi.mocked(requireProject).mockImplementation(asMember);
-    await renderList({ status: "all", [PROJECT_ALL_PARAM]: PROJECT_ALL });
+    await renderList({ status: "all" });
+    expect(listQuery().projectId).toBe("project-acme");
+
+    findMany.mockClear();
+    const page = (await IssuesList({ org: "zedu", slug: "acme", status: "all", returnTo: "/zedu/issues/all", everyProject: true, searchParams: Promise.resolve({}) })) as ReactElement;
+    renderToStaticMarkup(page);
     expect(listQuery().projectId).toBeUndefined();
   });
 
@@ -591,75 +591,6 @@ describe("Your call list", () => {
     expect(early!.answer).toBeNull();
     const [answered] = await load([issue({ comments: [decision("dave", 20)] })]);
     expect(answered!.answer).toBe("yes");
-  });
-});
-
-describe("the marketing tasks board", () => {
-  const ROW = {
-    id: "task-1", number: 41, title: "Write the launch post", href: "/acme/41", status: "open", substatus: "open", closeReason: null,
-    importance: 0, reward: 4, rewardEstimates: 2, rewardFixed: false, typeName: "Blog post", agentName: null, work: null, offeredTo: null,
-    revision: null, bids: 2, comments: 0, updatedAt: new Date("2026-11-01T10:00:00Z"),
-  } satisfies TaskRow;
-  
-  function renderBoard(board: Partial<TasksBoardData> = {}) {
-    return clean(renderToStaticMarkup(
-      <TasksBoard slug={projectRef("acme", "acme")} board={{
-        tab: taskTab("open"),
-        counts: { ideas: 2, open: 1, "in-progress": 4, closed: 1, done: 3, live: 2 },
-        sortParam: null,
-        list: { kind: "tasks", rows: [ROW], sort: "importance" },
-        pagination: { page: 1, totalPages: 1, totalCount: 1, from: 1, to: 1 },
-        ...board,
-      }} />,
-    ));
-  }
-
-  it("opens each task on the shared issue route, ready for bids with no confirmation step", () => {
-    const html = renderBoard();
-    expect(html).toContain('href="/acme/41"');
-    expect(html).toContain("2 bids");
-    expect(html).not.toContain("Awaiting Confirmation");
-  });
-
-  it("shows the three stages across the top, each counting its own steps, with Merge left out", () => {
-    const nav = stages(renderBoard());
-    expect(counted(nav)).toEqual({ Ideas: 2, "In Progress": 6, Delivered: 5 });
-    expect(current(nav)).toEqual(["In Progress"]);
-  });
-
-  it("lists a stage's lifecycle steps down the left", () => {
-    const inProgress = statusList(renderBoard());
-    expect(links(inProgress).map(labelOf)).toEqual(["Open", "In progress", "Closed"]);
-    expect(current(inProgress)).toEqual(["Open"]);
-    const delivered = statusList(renderBoard({ tab: taskTab("live") }));
-    expect(links(delivered).map(labelOf)).toEqual(["Done", "Live"]);
-    expect(current(delivered)).toEqual(["Live"]);
-  });
-
-  it("has no lifecycle steps under Ideas", () => {
-    const html = renderBoard({ tab: taskTab("ideas"), list: { kind: "proposals", sort: "score", ideas: [] } });
-    expect(statusList(html)).toBe("");
-    expect(current(stages(html))).toEqual(["Ideas"]);
-  });
-
-  it("lists proposals as ideas, each opening its idea page", () => {
-    const html = renderBoard({
-      tab: taskTab("ideas"),
-      list: { kind: "proposals", sort: "score", ideas: [{
-        id: "idea-1", number: 12, title: "A launch post", score: 2, threshold: 3, createdAt: new Date("2026-11-01T10:00:00Z"),
-        reporterName: "Rita", verdicts: 2, good: 3, badVotes: 1,
-      }] },
-    });
-    expect(html).toContain('href="/acme/acme/ideas/12"');
-  });
-
-  it("says why a tab is empty instead of showing an empty list", () => {
-    expect(renderBoard({ list: { kind: "tasks", rows: [], sort: "importance" }, pagination: { page: 1, totalPages: 1, totalCount: 0, from: 0, to: 0 } })).toContain("No open tasks.");
-  });
-
-  it("keeps the tab and sort when paging", () => {
-    const html = renderBoard({ sortParam: "reward", pagination: { page: 1, totalPages: 2, totalCount: 30, from: 1, to: 25 } }).replaceAll("&amp;", "&");
-    expect(html).toContain("/acme/acme/marketing/tasks?status=open&sort=reward&page=2");
   });
 });
 

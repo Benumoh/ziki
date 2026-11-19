@@ -247,7 +247,7 @@ type Row = Record<string, unknown>;
 const rows: Record<string, Row[]> = {
   users: [], memberships: [], agents: [], areas: [], ideas: [], ideaVerdicts: [], bugs: [], confirmations: [],
   bids: [], bidVotes: [], claims: [], plans: [], deliveries: [], testVerdicts: [], mergeReviews: [], pullRequestReports: [],
-  comments: [], votes: [], activities: [], issueTypes: [],
+  comments: [], votes: [], activities: [], issueTypes: [], marketingAssets: [],
 };
 
 for (const p of PEOPLE) {
@@ -603,16 +603,21 @@ for (const [status, count] of IDEA_PLAN) {
 // no random numbers and comes last, so the rows above stay as they are.
 // ---------------------------------------------------------------------------
 
+// The defaults a new organisation gets (lib/marketing/default-task-types.ts), in the tabs' order.
 const MARKETING_TYPES = [
-  { key: "blog", name: "Blog post", description: "A post on the project's blog." },
-  { key: "social", name: "Social post", description: "A post or thread on a social network." },
-  { key: "page", name: "Landing page", description: "Copy for a page on the website." },
+  { key: "page", name: "Landing Pages", description: "Pages and copy on the website." },
+  { key: "blog", name: "Content Marketing", description: "Blog posts, guides, case studies and newsletters." },
+  { key: "social", name: "Social Media", description: "Posts and threads on social networks." },
   { key: "outreach", name: "Outreach", description: "Reaching out to a person, community or publication." },
+  { key: "seo", name: "SEO", description: "How the site is found in search." },
+  { key: "video", name: "Videos", description: "Videos and short clips, each made in the video studio." },
 ] as const;
 type MarketingType = (typeof MARKETING_TYPES)[number]["key"];
-for (const t of MARKETING_TYPES) {
-  rows.issueTypes.push({ id: id("issuetype", t.key), name: t.name, description: t.description, track: "marketing" });
-}
+MARKETING_TYPES.forEach((t, index) => {
+  // The Marketing tabs list types oldest first: a second apart keeps them in this order.
+  const createdAt = new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString();
+  rows.issueTypes.push({ id: id("issuetype", t.key), name: t.name, description: t.description, track: "marketing", createdAt });
+});
 
 type MarketingIssue = {
   substatus: "open" | "in_progress" | "requires_review" | "accepted" | "published" | "closed";
@@ -964,6 +969,41 @@ for (const [index, m] of MARKETING_IDEAS.entries()) {
     ...(m.status === "archived" ? { archiveReason: "duplicate", archiveEvidence: "The launch post for the issue list is already published.", archivedAt: born - 600, archivedByAgentId: agentId("amara-m") } : {}),
   });
 }
+
+// Marketing assets (#marketing-assets): the pages, posts and channels the marketing work is on. Work goes on an
+// asset by its title, so the rows above stay as they are; About Us and the SEO one have no work yet.
+const MARKETING_ASSETS: { key: string; type: MarketingType; name: string; match?: RegExp; url?: string; score?: [number, string] }[] = [
+  { key: "pricing", type: "page", name: "Pricing", match: /pricing/i, url: "https://ziki.dev/pricing", score: [82, "Clear plans and prices; the intro was rewritten last month."] },
+  { key: "security", type: "page", name: "Security", match: /security page/i, score: [55, "Covers the basics, but doesn't explain two-factor sign-in."] },
+  { key: "points", type: "page", name: "How points work", match: /points/i, score: [30, "No page yet: points are explained only in the docs."] },
+  { key: "home", type: "page", name: "Home page", match: /homepage/i, url: "https://ziki.dev", score: [68, "Strong headline; no customer quotes or proof yet."] },
+  { key: "about", type: "page", name: "About Us", url: "https://ziki.dev/about", score: [41, "Says what Ziki is, not who is behind it."] },
+  { key: "launch", type: "blog", name: "Issue list launch post", match: /launch post/i, score: [88, "Published, read widely and linked from the changelog."] },
+  { key: "bug-guide", type: "blog", name: "Bug reporting guide", match: /reporting a good bug/i },
+  { key: "review", type: "blog", name: "How we review work", match: /review delivered/i },
+  { key: "compare", type: "blog", name: "Spreadsheet comparison", match: /spreadsheet/i },
+  { key: "mistakes", type: "blog", name: "What agents get wrong", match: /get wrong/i },
+  { key: "weekly", type: "social", name: "Weekly highlights", match: /each week/i },
+  { key: "threads", type: "social", name: "Release threads", match: /thread/i },
+  { key: "clips", type: "social", name: "Short clips", match: /clip/i },
+  { key: "newsletters", type: "outreach", name: "Newsletters", match: /newsletter/i, score: [47, "Two pitches out, no replies yet."] },
+  { key: "open-source", type: "outreach", name: "Open source projects", match: /open source|starred the repository/i },
+  { key: "keywords", type: "seo", name: "Search keywords" },
+  { key: "tour", type: "video", name: "Product tour" },
+];
+MARKETING_ASSETS.forEach((asset, index) => {
+  const assetId = id("asset", asset.key);
+  const typeId = id("issuetype", asset.type);
+  rows.marketingAssets.push({
+    id: assetId, typeId, name: asset.name, ...(asset.url ? { url: asset.url } : {}),
+    ...(asset.score ? { score: asset.score[0], scoreNote: asset.score[1], scoredAt: new Date(Date.UTC(2026, 0, 3)).toISOString() } : {}),
+    createdAt: new Date(Date.UTC(2026, 0, 2, 0, 0, index)).toISOString(),
+  });
+  if (!asset.match) return;
+  for (const row of [...rows.bugs, ...rows.ideas]) {
+    if (row.track === "marketing" && row.typeId === typeId && !row.assetId && asset.match.test(String(row.title))) row.assetId = assetId;
+  }
+});
 
 // The agents' audit log: one row per action above, so each agent's page has
 // Activity. Derived from the rows already made, with no more random draws, so

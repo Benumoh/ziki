@@ -1110,6 +1110,16 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const organisationRoles: Record<string, OrganisationRole> = Object.fromEntries(
     organisationRoleRows.map((row) => [row.userId, row.role]),
   );
+  // Two views of one issue: the simple one people read by default, and the work view with everything agents use
+  // (?view=work), which the Work queue opens.
+  const workView = (Array.isArray(query.view) ? query.view[0] : query.view) === "work";
+  const viewHref = (work: boolean) => {
+    const next = new URLSearchParams(pageQuery);
+    if (work) next.set("view", "work");
+    else next.delete("view");
+    const queryString = next.toString();
+    return `${issueHref(bug)}${queryString ? `?${queryString}` : ""}`;
+  };
   const pageQuery = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (typeof value === "string") pageQuery.set(key, value);
@@ -2041,7 +2051,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         </section>
       ) : null}
 
-      {redesignProposals.length ? (
+      {workView && redesignProposals.length ? (
         <section aria-label="Redesign proposals" className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-zk-text">Compare redesign proposals</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -2110,17 +2120,26 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             ) : null}
 
             {/* Taxonomy (#687). Status, stage and the opened date are in the Status box. */}
-            {bug.type ? (
+            {workView && bug.type ? (
               <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-zk-muted">
                 <span className={`${issueChipBaseClass} bg-zk-chip text-zk-text2`}>{bug.type.name}</span>
               </p>
             ) : null}
-            <div className="flex flex-wrap items-center gap-2">
-              <IssuePrioritySelect bugId={bug.id} priority={bug.priority} />
-            </div>
+            {workView ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <IssuePrioritySelect bugId={bug.id} priority={bug.priority} />
+              </div>
+            ) : null}
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start print:hidden">
+          {/* Wraps on a narrow screen, so the actions menu stays on it. */}
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 self-start print:hidden">
+            <Link
+              href={viewHref(!workView)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip"
+            >
+              {workView ? "Simple view" : "Work view"}
+            </Link>
             <VoteButton
               bugId={bug.id}
               voteCount={bug.voteCount}
@@ -2131,7 +2150,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               showAvatars={false}
               readOnly={bug.isDeleted || !canContribute}
             />
-            {!bug.isDeleted ? (
+            {workView && !bug.isDeleted ? (
               <SpeedButton
                 bugId={bug.id}
                 issueNumber={bug.number}
@@ -2139,7 +2158,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 isExpedited={bug.isBoosted}
               />
             ) : null}
-            {!bug.isDeleted ? (
+            {workView && !bug.isDeleted ? (
               <IssueActionsMenu>
                 <CopyIssueSummaryButton
                   issue={{
@@ -2173,7 +2192,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       <div className="flex flex-wrap items-start gap-5">
         {/* MAIN COLUMN */}
         <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-5">
-          {bug.status === "open" && bug.voteCount < WORK_READINESS_VOTE_THRESHOLD ? (
+          {workView && bug.status === "open" && bug.voteCount < WORK_READINESS_VOTE_THRESHOLD ? (
             <InsufficientVotesAuditBanner
               issueId={bug.id}
               voteCount={bug.voteCount}
@@ -2184,7 +2203,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
 
           {/* #1446: the progress report's stage filters the Conversation (#186). */}
           <IssueStageProvider initialStage={currentStage}>
-          {securityView ? <SecurityFindingPanel view={securityView} canDisclose={access.admin} kind="issue" /> : null}
+          {workView && securityView ? <SecurityFindingPanel view={securityView} canDisclose={access.admin} kind="issue" /> : null}
           <EditableIssueDescription
             bugId={bug.id}
             initialTitle={bug.title}
@@ -2228,6 +2247,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             </section>
           ) : null}
 
+          {workView ? (
+          <>
           {/* Progress report (#1446), where the summary strip was; its stage drives the Conversation card. */}
           <IssueProgressReport
             decisions={agentDecisions}
@@ -2380,6 +2401,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               ) : null}
 
               {closeSuggestions ? <CloseSuggestionsPanel data={closeSuggestions} /> : null}
+          </>
+          ) : null}
 
 
               {bug.status === "resolved" && !bug.isDeleted ? (
@@ -2397,7 +2420,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   aria-label="Comments"
                   className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
                 >
-                  {steeringAgent ? (
+                  {workView && steeringAgent ? (
                     <AgentSteerPanel
                       agentId={steeringAgent.id}
                       issueId={bug.id}
@@ -2455,7 +2478,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               ) : null}
 
 
-          <IssueEscalations escalations={escalations} />
+          {workView ? <IssueEscalations escalations={escalations} /> : null}
 
 
           </IssueStageProvider>
@@ -2471,7 +2494,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 <span className={`${issueChipBaseClass} bg-zk-bad-bg text-zk-bad-fg`}>Deleted</span>
               ) : null}
               {/* #owner-control: the owner's chip opens the moves they can make by hand; everyone else sees the plain chip. */}
-              {canTriage && !bug.isDeleted ? (
+              {workView && canTriage && !bug.isDeleted ? (
                 <OwnerStatusMenu
                   bugId={bug.id}
                   substatus={bug.substatus}
@@ -2485,17 +2508,19 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 </Badge>
               )}
               {/* #plan-review: the one new label, the issue's difficulty; complex issues go through plan review. */}
-              <span className={`${issueChipBaseClass} ${bug.difficulty === "complex" ? "bg-zk-warn-bg text-zk-warn-fg" : "bg-zk-chip text-zk-text2"}`} data-testid="difficulty-chip" title="Set when the idea was converted; fixed once the issue has a bid.">
-                {difficultyLabel[bug.difficulty]}
-              </span>
-              {bug.isBoosted && !bug.isDeleted ? (
+              {workView ? (
+                <span className={`${issueChipBaseClass} ${bug.difficulty === "complex" ? "bg-zk-warn-bg text-zk-warn-fg" : "bg-zk-chip text-zk-text2"}`} data-testid="difficulty-chip" title="Set when the idea was converted; fixed once the issue has a bid.">
+                  {difficultyLabel[bug.difficulty]}
+                </span>
+              ) : null}
+              {workView && bug.isBoosted && !bug.isDeleted ? (
                 <span className={`${issueChipBaseClass} border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg`}>Boosted</span>
               ) : null}
             </div>
-            {liveFix ? (
+            {workView && liveFix ? (
               <LiveFlow substatus={bug.substatus} reachedAt={liveFix.reachedAt} confirmed={liveFix.check.confirmedBy.length} needed={PROD_CONFIRMATIONS_NEEDED} />
             ) : null}
-            {statusFlags.length > 0 ? (
+            {workView && statusFlags.length > 0 ? (
               <ul data-testid="status-flags" className="m-0 flex list-none flex-col gap-1 p-0">
                 {statusFlags.map((flag) => (
                   <li key={flag.label} className="flex items-center gap-1.5 text-xs text-zk-text2" title={flag.title}>
@@ -2540,9 +2565,9 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               </form>
             ) : null}
           </section>
-          {checklist ? <MergeChecklistCard checklist={checklist} testCard={Boolean(testCard)} /> : null}
+          {workView && checklist ? <MergeChecklistCard checklist={checklist} testCard={Boolean(testCard)} /> : null}
           {/* #rewards: the reward, your estimate, and everyone's. */}
-          {rewardRow ? (
+          {workView && rewardRow ? (
             <IssueRewardPanel
               bugId={bug.id}
               reward={dollarsToZiks(Number(rewardRow.reward))}
@@ -2604,6 +2629,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             </div>
           </section>
 
+          {workView ? (
+          <>
           {/* Links, under People: the GitHub PR (the linked one too) and the idea it came from. */}
           <IssueLinks
             links={proofLinks}
@@ -2634,6 +2661,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             activities={[...shownActivities].reverse()}
             totalCount={activityCount + stepActivities.length}
           />
+          </>
+          ) : null}
         </aside>
       </div>
     </div>

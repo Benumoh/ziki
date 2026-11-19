@@ -9,7 +9,7 @@ import { joinOpenProjectAction } from "@/app/actions/project-join-requests";
 import { ProjectJoinRequestButton } from "@/components/project-join-request-button";
 import { formatZ, REPORTER_POINTS, REVIEWER_POINTS } from "@/lib/points/rules";
 import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
-import { projectPath, projectRef } from "@/lib/project-paths";
+import { issuesPath, projectRef } from "@/lib/project-paths";
 
 export type DiscoverableProject = {
   id: string;
@@ -62,7 +62,7 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
               </span>
               <h3 className="text-lg font-bold text-zk-text">
                 <Link
-                  href={projectPath(projectRef(project.organisation.slug, project.slug))}
+                  href={issuesPath(projectRef(project.organisation.slug, project.slug), "your_work")}
                   className="hover:text-zk-accent hover:underline"
                 >
                   {project.name}
@@ -191,7 +191,7 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
           <div className="flex flex-wrap items-center justify-end gap-2">
             {currentStatus === "guest" ? (
               project.isOpenForContributors ? (
-                <Link href={`/login?callbackUrl=${encodeURIComponent(projectPath(projectRef(project.organisation.slug, project.slug)))}`}>
+                <Link href={`/login?callbackUrl=${encodeURIComponent(issuesPath(projectRef(project.organisation.slug, project.slug), "your_work"))}`}>
                   <Button
                     variant="primary"
                     className="text-xs font-semibold"
@@ -200,14 +200,14 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
                   </Button>
                 </Link>
               ) : (
-                <Link href={`/login?callbackUrl=${encodeURIComponent(projectPath(projectRef(project.organisation.slug, project.slug)))}`}>
+                <Link href={`/login?callbackUrl=${encodeURIComponent(issuesPath(projectRef(project.organisation.slug, project.slug), "your_work"))}`}>
                   <Button variant="secondary" className="text-xs font-semibold">
                     Sign in to ask to join
                   </Button>
                 </Link>
               )
             ) : currentStatus === "member" ? (
-              <Link href={projectPath(projectRef(project.organisation.slug, project.slug))}>
+              <Link href={issuesPath(projectRef(project.organisation.slug, project.slug), "your_work")}>
                 <Button variant="secondary" className="text-xs font-medium">
                   Open Project →
                 </Button>

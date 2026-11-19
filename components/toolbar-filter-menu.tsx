@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { TOOL_BUTTON, TOOL_BUTTON_ON } from "@/lib/ui-style";
 
 export type ToolbarFilterOption = { label: string; count: number; href: string; selected: boolean };
 export type ToolbarFilterGroup = { label?: string; options: ToolbarFilterOption[] };
@@ -58,9 +59,7 @@ export function ToolbarFilterMenu({ groups, summary }: {
           if (rect) setPosition({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
           setOpen(!open);
         }}
-        className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${
-          summary ? "border-zk-accent bg-zk-tint text-zk-accent" : "border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text"
-        }`}
+        className={`${TOOL_BUTTON} ${summary ? TOOL_BUTTON_ON : ""} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue`}
       >
         <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" /></svg>
         {summary ? `Filter: ${summary}` : "Filter"}

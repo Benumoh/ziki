@@ -28,9 +28,9 @@
 
 /* The Electric Blue ramp. Anchor: #3978F6 (500, identical in both themes). */
 :root {
-  /* Light canvas from the redesign handoff. */
-  --background: #f5f7fc;
-  --foreground: #15121f;
+  /* Light canvas: a neutral #f5f5f5 page (see globals.css). */
+  --background: #f5f5f5;
+  --foreground: #15171c;
 
   --color-teal-50: #edf3fe;
   --color-teal-100: #dbe7fd;

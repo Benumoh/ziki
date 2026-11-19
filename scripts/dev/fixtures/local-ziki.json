@@ -4679,7 +4679,8 @@
    "convertedAt": 43080,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-230",
-   "ago": 43200
+   "ago": 43200,
+   "assetId": "fx-asset-launch"
   },
   {
    "id": "fx-idea-261",
@@ -4698,7 +4699,8 @@
    "convertedAt": 41640,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-231",
-   "ago": 41760
+   "ago": 41760,
+   "assetId": "fx-asset-threads"
   },
   {
    "id": "fx-idea-262",
@@ -4717,7 +4719,8 @@
    "convertedAt": 40200,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-232",
-   "ago": 40320
+   "ago": 40320,
+   "assetId": "fx-asset-pricing"
   },
   {
    "id": "fx-idea-263",
@@ -4736,7 +4739,8 @@
    "convertedAt": 38760,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-233",
-   "ago": 38880
+   "ago": 38880,
+   "assetId": "fx-asset-bug-guide"
   },
   {
    "id": "fx-idea-264",
@@ -4755,7 +4759,8 @@
    "convertedAt": 37320,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-234",
-   "ago": 37440
+   "ago": 37440,
+   "assetId": "fx-asset-newsletters"
   },
   {
    "id": "fx-idea-265",
@@ -4774,7 +4779,8 @@
    "convertedAt": 35880,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-235",
-   "ago": 36000
+   "ago": 36000,
+   "assetId": "fx-asset-clips"
   },
   {
    "id": "fx-idea-266",
@@ -4793,7 +4799,8 @@
    "convertedAt": 34440,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-236",
-   "ago": 34560
+   "ago": 34560,
+   "assetId": "fx-asset-security"
   },
   {
    "id": "fx-idea-267",
@@ -4812,7 +4819,8 @@
    "convertedAt": 33000,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-237",
-   "ago": 33120
+   "ago": 33120,
+   "assetId": "fx-asset-review"
   },
   {
    "id": "fx-idea-268",
@@ -4831,7 +4839,8 @@
    "convertedAt": 31560,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-238",
-   "ago": 31680
+   "ago": 31680,
+   "assetId": "fx-asset-threads"
   },
   {
    "id": "fx-idea-269",
@@ -4850,7 +4859,8 @@
    "convertedAt": 30120,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-239",
-   "ago": 30240
+   "ago": 30240,
+   "assetId": "fx-asset-open-source"
   },
   {
    "id": "fx-idea-270",
@@ -4869,7 +4879,8 @@
    "convertedAt": 28680,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-240",
-   "ago": 28800
+   "ago": 28800,
+   "assetId": "fx-asset-compare"
   },
   {
    "id": "fx-idea-271",
@@ -4888,7 +4899,8 @@
    "convertedAt": 27240,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-241",
-   "ago": 27360
+   "ago": 27360,
+   "assetId": "fx-asset-points"
   },
   {
    "id": "fx-idea-272",
@@ -4907,7 +4919,8 @@
    "convertedAt": 25800,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-242",
-   "ago": 25920
+   "ago": 25920,
+   "assetId": "fx-asset-weekly"
   },
   {
    "id": "fx-idea-273",
@@ -4926,7 +4939,8 @@
    "convertedAt": 24360,
    "convertedByAgentId": "fx-agent-amara-m",
    "issueId": "fx-bug-243",
-   "ago": 24480
+   "ago": 24480,
+   "assetId": "fx-asset-newsletters"
   },
   {
    "id": "fx-idea-274",
@@ -4942,7 +4956,8 @@
    "reporterId": "fx-user-bayo",
    "beneficiaryUserId": "fx-user-bayo",
    "createdByAgentId": "fx-agent-bayo-w",
-   "ago": 14400
+   "ago": 14400,
+   "assetId": "fx-asset-mistakes"
   },
   {
    "id": "fx-idea-275",
@@ -4958,7 +4973,8 @@
    "reporterId": "fx-user-chen",
    "beneficiaryUserId": "fx-user-chen",
    "createdByAgentId": "fx-agent-chen-w",
-   "ago": 12960
+   "ago": 12960,
+   "assetId": "fx-asset-weekly"
   },
   {
    "id": "fx-idea-276",
@@ -4974,7 +4990,8 @@
    "reporterId": "fx-user-dara",
    "beneficiaryUserId": "fx-user-dara",
    "createdByAgentId": "fx-agent-dara-w",
-   "ago": 11520
+   "ago": 11520,
+   "assetId": "fx-asset-home"
   },
   {
    "id": "fx-idea-277",
@@ -4990,7 +5007,8 @@
    "reporterId": "fx-user-efe",
    "beneficiaryUserId": "fx-user-efe",
    "createdByAgentId": "fx-agent-efe-w",
-   "ago": 10080
+   "ago": 10080,
+   "assetId": "fx-asset-open-source"
   },
   {
    "id": "fx-idea-278",
@@ -5046,7 +5064,8 @@
    "archiveReason": "duplicate",
    "archiveEvidence": "The launch post for the issue list is already published.",
    "archivedAt": 5160,
-   "archivedByAgentId": "fx-agent-amara-m"
+   "archivedByAgentId": "fx-agent-amara-m",
+   "assetId": "fx-asset-launch"
   }
  ],
  "ideaVerdicts": [
@@ -12838,7 +12857,8 @@
    "voteCount": 0,
    "ago": 42840,
    "linkedIssueId": "fx-bug-165",
-   "assigneeId": "fx-user-demo"
+   "assigneeId": "fx-user-demo",
+   "assetId": "fx-asset-launch"
   },
   {
    "id": "fx-bug-231",
@@ -12856,7 +12876,8 @@
    "createdByAgentId": "fx-agent-demo-m",
    "voteCount": 0,
    "ago": 41400,
-   "assigneeId": "fx-user-bayo"
+   "assigneeId": "fx-user-bayo",
+   "assetId": "fx-asset-threads"
   },
   {
    "id": "fx-bug-232",
@@ -12874,7 +12895,8 @@
    "createdByAgentId": "fx-agent-amara-m",
    "voteCount": 0,
    "ago": 39960,
-   "assigneeId": "fx-user-chen"
+   "assigneeId": "fx-user-chen",
+   "assetId": "fx-asset-pricing"
   },
   {
    "id": "fx-bug-233",
@@ -12892,7 +12914,8 @@
    "createdByAgentId": "fx-agent-demo-m",
    "voteCount": 0,
    "ago": 38520,
-   "assigneeId": "fx-user-dara"
+   "assigneeId": "fx-user-dara",
+   "assetId": "fx-asset-bug-guide"
   },
   {
    "id": "fx-bug-234",
@@ -12910,7 +12933,8 @@
    "createdByAgentId": "fx-agent-amara-m",
    "voteCount": 0,
    "ago": 37080,
-   "assigneeId": "fx-user-efe"
+   "assigneeId": "fx-user-efe",
+   "assetId": "fx-asset-newsletters"
   },
   {
    "id": "fx-bug-235",
@@ -12928,7 +12952,8 @@
    "createdByAgentId": "fx-agent-demo-m",
    "voteCount": 0,
    "ago": 35640,
-   "assigneeId": "fx-user-farah"
+   "assigneeId": "fx-user-farah",
+   "assetId": "fx-asset-clips"
   },
   {
    "id": "fx-bug-236",
@@ -12947,7 +12972,8 @@
    "voteCount": 0,
    "ago": 34200,
    "linkedIssueId": "fx-bug-171",
-   "assigneeId": "fx-user-goke"
+   "assigneeId": "fx-user-goke",
+   "assetId": "fx-asset-security"
   },
   {
    "id": "fx-bug-237",
@@ -12965,7 +12991,8 @@
    "createdByAgentId": "fx-agent-demo-m",
    "voteCount": 0,
    "ago": 32760,
-   "assigneeId": "fx-user-hana"
+   "assigneeId": "fx-user-hana",
+   "assetId": "fx-asset-review"
   },
   {
    "id": "fx-bug-238",
@@ -12983,7 +13010,8 @@
    "createdByAgentId": "fx-agent-amara-m",
    "voteCount": 0,
    "ago": 31320,
-   "assigneeId": "fx-user-ike"
+   "assigneeId": "fx-user-ike",
+   "assetId": "fx-asset-threads"
   },
   {
    "id": "fx-bug-239",
@@ -13001,7 +13029,8 @@
    "createdByAgentId": "fx-agent-demo-m",
    "voteCount": 0,
    "ago": 29880,
-   "assigneeId": "fx-user-jade"
+   "assigneeId": "fx-user-jade",
+   "assetId": "fx-asset-open-source"
   },
   {
    "id": "fx-bug-240",
@@ -13018,7 +13047,8 @@
    "beneficiaryUserId": "fx-user-amara",
    "createdByAgentId": "fx-agent-amara-m",
    "voteCount": 0,
-   "ago": 28440
+   "ago": 28440,
+   "assetId": "fx-asset-compare"
   },
   {
    "id": "fx-bug-241",
@@ -13036,7 +13066,8 @@
    "createdByAgentId": "fx-agent-demo-m",
    "voteCount": 0,
    "ago": 27000,
-   "linkedIssueId": "fx-bug-176"
+   "linkedIssueId": "fx-bug-176",
+   "assetId": "fx-asset-points"
   },
   {
    "id": "fx-bug-242",
@@ -13053,7 +13084,8 @@
    "beneficiaryUserId": "fx-user-amara",
    "createdByAgentId": "fx-agent-amara-m",
    "voteCount": 0,
-   "ago": 25560
+   "ago": 25560,
+   "assetId": "fx-asset-weekly"
   },
   {
    "id": "fx-bug-243",
@@ -13073,7 +13105,8 @@
    "ago": 24120,
    "closeReason": "not_planned",
    "closeEvidence": "The slot costs more than the quarter's budget, and the audience overlaps with channels we already use.",
-   "closedAt": 23760
+   "closedAt": 23760,
+   "assetId": "fx-asset-newsletters"
   }
  ],
  "confirmations": [
@@ -58304,28 +58337,174 @@
  ],
  "issueTypes": [
   {
+   "id": "fx-issuetype-page",
+   "name": "Landing Pages",
+   "description": "Pages and copy on the website.",
+   "track": "marketing",
+   "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
    "id": "fx-issuetype-blog",
-   "name": "Blog post",
-   "description": "A post on the project's blog.",
-   "track": "marketing"
+   "name": "Content Marketing",
+   "description": "Blog posts, guides, case studies and newsletters.",
+   "track": "marketing",
+   "createdAt": "2026-01-01T00:00:01.000Z"
   },
   {
    "id": "fx-issuetype-social",
-   "name": "Social post",
-   "description": "A post or thread on a social network.",
-   "track": "marketing"
-  },
-  {
-   "id": "fx-issuetype-page",
-   "name": "Landing page",
-   "description": "Copy for a page on the website.",
-   "track": "marketing"
+   "name": "Social Media",
+   "description": "Posts and threads on social networks.",
+   "track": "marketing",
+   "createdAt": "2026-01-01T00:00:02.000Z"
   },
   {
    "id": "fx-issuetype-outreach",
    "name": "Outreach",
    "description": "Reaching out to a person, community or publication.",
-   "track": "marketing"
+   "track": "marketing",
+   "createdAt": "2026-01-01T00:00:03.000Z"
+  },
+  {
+   "id": "fx-issuetype-seo",
+   "name": "SEO",
+   "description": "How the site is found in search.",
+   "track": "marketing",
+   "createdAt": "2026-01-01T00:00:04.000Z"
+  },
+  {
+   "id": "fx-issuetype-video",
+   "name": "Videos",
+   "description": "Videos and short clips, each made in the video studio.",
+   "track": "marketing",
+   "createdAt": "2026-01-01T00:00:05.000Z"
+  }
+ ],
+ "marketingAssets": [
+  {
+   "id": "fx-asset-pricing",
+   "typeId": "fx-issuetype-page",
+   "name": "Pricing",
+   "url": "https://ziki.dev/pricing",
+   "score": 82,
+   "scoreNote": "Clear plans and prices; the intro was rewritten last month.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:00.000Z"
+  },
+  {
+   "id": "fx-asset-security",
+   "typeId": "fx-issuetype-page",
+   "name": "Security",
+   "score": 55,
+   "scoreNote": "Covers the basics, but doesn't explain two-factor sign-in.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:01.000Z"
+  },
+  {
+   "id": "fx-asset-points",
+   "typeId": "fx-issuetype-page",
+   "name": "How points work",
+   "score": 30,
+   "scoreNote": "No page yet: points are explained only in the docs.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:02.000Z"
+  },
+  {
+   "id": "fx-asset-home",
+   "typeId": "fx-issuetype-page",
+   "name": "Home page",
+   "url": "https://ziki.dev",
+   "score": 68,
+   "scoreNote": "Strong headline; no customer quotes or proof yet.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:03.000Z"
+  },
+  {
+   "id": "fx-asset-about",
+   "typeId": "fx-issuetype-page",
+   "name": "About Us",
+   "url": "https://ziki.dev/about",
+   "score": 41,
+   "scoreNote": "Says what Ziki is, not who is behind it.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:04.000Z"
+  },
+  {
+   "id": "fx-asset-launch",
+   "typeId": "fx-issuetype-blog",
+   "name": "Issue list launch post",
+   "score": 88,
+   "scoreNote": "Published, read widely and linked from the changelog.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:05.000Z"
+  },
+  {
+   "id": "fx-asset-bug-guide",
+   "typeId": "fx-issuetype-blog",
+   "name": "Bug reporting guide",
+   "createdAt": "2026-01-02T00:00:06.000Z"
+  },
+  {
+   "id": "fx-asset-review",
+   "typeId": "fx-issuetype-blog",
+   "name": "How we review work",
+   "createdAt": "2026-01-02T00:00:07.000Z"
+  },
+  {
+   "id": "fx-asset-compare",
+   "typeId": "fx-issuetype-blog",
+   "name": "Spreadsheet comparison",
+   "createdAt": "2026-01-02T00:00:08.000Z"
+  },
+  {
+   "id": "fx-asset-mistakes",
+   "typeId": "fx-issuetype-blog",
+   "name": "What agents get wrong",
+   "createdAt": "2026-01-02T00:00:09.000Z"
+  },
+  {
+   "id": "fx-asset-weekly",
+   "typeId": "fx-issuetype-social",
+   "name": "Weekly highlights",
+   "createdAt": "2026-01-02T00:00:10.000Z"
+  },
+  {
+   "id": "fx-asset-threads",
+   "typeId": "fx-issuetype-social",
+   "name": "Release threads",
+   "createdAt": "2026-01-02T00:00:11.000Z"
+  },
+  {
+   "id": "fx-asset-clips",
+   "typeId": "fx-issuetype-social",
+   "name": "Short clips",
+   "createdAt": "2026-01-02T00:00:12.000Z"
+  },
+  {
+   "id": "fx-asset-newsletters",
+   "typeId": "fx-issuetype-outreach",
+   "name": "Newsletters",
+   "score": 47,
+   "scoreNote": "Two pitches out, no replies yet.",
+   "scoredAt": "2026-01-03T00:00:00.000Z",
+   "createdAt": "2026-01-02T00:00:13.000Z"
+  },
+  {
+   "id": "fx-asset-open-source",
+   "typeId": "fx-issuetype-outreach",
+   "name": "Open source projects",
+   "createdAt": "2026-01-02T00:00:14.000Z"
+  },
+  {
+   "id": "fx-asset-keywords",
+   "typeId": "fx-issuetype-seo",
+   "name": "Search keywords",
+   "createdAt": "2026-01-02T00:00:15.000Z"
+  },
+  {
+   "id": "fx-asset-tour",
+   "typeId": "fx-issuetype-video",
+   "name": "Product tour",
+   "createdAt": "2026-01-02T00:00:16.000Z"
   }
  ],
  "auditEvents": [

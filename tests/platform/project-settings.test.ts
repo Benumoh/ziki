@@ -83,8 +83,8 @@ import {
   createMarketingIssueTypeAction,
   deleteMarketingIssueTypeAction,
   updateMarketingRevisionLimitAction,
-} from "@/app/(app)/[org]/[project]/marketing/settings/actions";
-import { askMarketingAssistantAction, saveMarketingSiteAction } from "@/app/(app)/[org]/[project]/marketing/actions";
+} from "@/app/(app)/[org]/marketing/settings/actions";
+import { askMarketingAssistantAction, saveMarketingSiteAction } from "@/app/(app)/[org]/marketing/actions";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import {
   DEFAULT_PROJECT_WORKFLOW,
@@ -499,7 +499,7 @@ describe("the marketing settings actions (M-UI-7)", () => {
     updateMarketingSettings.mockResolvedValue({ projectId: "project-1", slug: "web", name: "Web", revisionLimit: 3 });
     await expect(updateMarketingRevisionLimitAction(WEB, revisionForm(3))).resolves.toEqual({ ok: true });
     expect(updateMarketingSettings).toHaveBeenCalledWith("organisation-1", "project-1", "admin", { revisionLimit: 3 });
-    expect(revalidatePath).toHaveBeenCalledWith("/acme/web/marketing/settings");
+    expect(revalidatePath).toHaveBeenCalledWith("/acme/marketing/settings");
   });
 
   it("refuses a limit outside 1 to 10 without saving", async () => {

@@ -63,9 +63,9 @@ export function MarketingTaskHeader({
         <div className="min-w-0 flex-[1_1_600px] space-y-2.5">
           <div className="flex items-start gap-2">
             <Link
-              href={marketingPath(projectSlug, "tasks")}
-              aria-label="Back to marketing tasks"
-              title="Back to marketing tasks"
+              href={marketingPath(projectSlug)}
+              aria-label="Back to Marketing"
+              title="Back to Marketing"
               className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zk-accent hover:bg-zk-chip print:hidden"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -82,17 +82,28 @@ export function MarketingTaskHeader({
 
           {/* Badges & Meta Row */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
-            <Link
-              href={marketingPath(projectSlug)}
-              className="inline-flex cursor-pointer items-center rounded-full border border-zk-border bg-zk-tint px-2.5 py-0.5 text-xs font-bold text-zk-accent transition-colors hover:bg-zk-chip"
-            >
-              Marketing
-            </Link>
-            {showTaskType ? (
-              <span className="inline-flex items-center rounded-full border border-zk-divider bg-zk-surface px-2.5 py-0.5 font-medium text-zk-text2">
-                {taskType.name}
-              </span>
-            ) : null}
+            {/* Where it belongs: Marketing, then its category (the type), which opens that tab of the Marketing page. */}
+            <nav aria-label="Category" className="inline-flex items-center gap-1">
+              <Link
+                href={marketingPath(projectSlug)}
+                className="inline-flex cursor-pointer items-center rounded-full border border-zk-border bg-zk-tint px-2.5 py-0.5 text-xs font-bold text-zk-accent transition-colors hover:bg-zk-chip"
+              >
+                Marketing
+              </Link>
+              {showTaskType ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-zk-muted"><path d="m9 6 6 6-6 6" /></svg>
+                  <Link
+                    href={`${marketingPath(projectSlug)}?type=${encodeURIComponent(taskType.id)}`}
+                    title={`Category: ${taskType.name}`}
+                    className="inline-flex items-center rounded-full bg-zk-text px-2.5 py-0.5 text-xs font-bold text-zk-surface transition hover:opacity-85"
+                  >
+                    <span className="sr-only">Category: </span>
+                    {taskType.name}
+                  </Link>
+                </>
+              ) : null}
+            </nav>
             <span
               className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-semibold ${
                 isLive

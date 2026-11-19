@@ -55,7 +55,7 @@ export function AccountDataSettings() {
 
       <section className="flex flex-col gap-3.5 rounded-[20px] border border-zk-bad-bd bg-zk-bad-soft p-6">
         <div className="flex items-start gap-3.5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-zk-bad-bg text-zk-bad-fg">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zk-bad-bg text-zk-bad-fg">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
             </svg>
@@ -73,7 +73,7 @@ export function AccountDataSettings() {
         {error ? (
           <div
             role="alert"
-            className="rounded-[14px] border border-zk-bad-bd bg-zk-surface p-3 text-sm text-zk-bad-fg"
+            className="rounded-xl border border-zk-bad-bd bg-zk-surface p-3 text-sm text-zk-bad-fg"
           >
             {error}
           </div>
@@ -93,7 +93,7 @@ export function AccountDataSettings() {
             Delete account…
           </button>
         ) : (
-          <div className="flex flex-col gap-2.5 rounded-[14px] border border-zk-bad-bd bg-zk-surface p-4">
+          <div className="flex flex-col gap-2.5 rounded-xl border border-zk-bad-bd bg-zk-surface p-4">
             <label className="flex flex-col gap-1.5 text-[13px] font-bold text-zk-text">
               Type DELETE to confirm
               <input

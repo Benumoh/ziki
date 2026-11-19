@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMarketingArea } from "@/components/marketing/marketing-area";
-import { ideasPath, orgPath, type ProjectRef } from "@/lib/project-paths";
+import { issuesPath, orgPath, orgRefOf, type ProjectRef } from "@/lib/project-paths";
 import { useProjectRef } from "@/lib/use-project-ref";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ZikSymbol } from "@/components/zik-symbol";
@@ -83,20 +83,27 @@ function TopNavLink({
   href,
   active,
   label,
+  colour,
   children,
 }: {
   href: string;
   active: boolean;
   label: string;
+  /** The tab's own colour (Airtable's palette): its label and bar when current, its label on hover. */
+  colour: string;
   children: React.ReactNode;
 }) {
-  // Below lg this is a tab in the bottom strip: icon over a short label.
-  const className = `relative inline-flex shrink-0 items-center whitespace-nowrap font-medium ${linkFocus} max-lg:min-w-16 max-lg:flex-1 max-lg:flex-col max-lg:gap-0.5 max-lg:rounded-xl max-lg:py-1.5 max-lg:text-[11px] lg:h-9 lg:gap-2 lg:rounded-full lg:px-2.5 lg:text-[13px] ${
-    active ? "text-zk-accent lg:bg-zk-tint" : "text-zk-text2 hover:text-zk-text lg:hover:bg-zk-chip"
+  // Below lg this is a tab in the bottom strip: icon over a short label. From lg it is a plain text tab, the
+  // current one darker and bolder with a short bar under its label (like Airtable's top bar).
+  const className = `relative inline-flex shrink-0 items-center whitespace-nowrap ${linkFocus} max-lg:min-w-16 max-lg:flex-1 max-lg:flex-col max-lg:gap-0.5 max-lg:rounded-xl max-lg:py-1.5 max-lg:text-[11px] max-lg:font-medium lg:h-9 lg:rounded-md lg:text-[14px] ${
+    active
+      ? "text-[var(--tab)] lg:font-semibold lg:after:absolute lg:after:inset-x-0 lg:after:-bottom-px lg:after:h-[2px] lg:after:rounded-full lg:after:bg-[var(--tab)]"
+      : "font-medium text-zk-text2 hover:text-[var(--tab)]"
   }`;
+  const style = { "--tab": colour } as React.CSSProperties;
   const inner = (
     <>
-      <span className={`relative flex items-center justify-center max-lg:h-7 max-lg:w-12 max-lg:rounded-full ${active ? "max-lg:bg-zk-tint" : ""}`}>
+      <span className={`relative flex items-center justify-center max-lg:h-7 max-lg:w-12 max-lg:rounded-full lg:hidden ${active ? "max-lg:bg-[color-mix(in_srgb,var(--tab)_14%,transparent)]" : ""}`}>
         {children}
       </span>
       {label}
@@ -104,7 +111,7 @@ function TopNavLink({
   );
   if (href.startsWith("http")) {
     return (
-      <a href={href} className={className}>
+      <a href={href} className={className} style={style}>
         {inner}
       </a>
     );
@@ -114,6 +121,7 @@ function TopNavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={className}
+      style={style}
     >
       {inner}
     </Link>
@@ -126,7 +134,8 @@ function TopNavLink({
  */
 function TopNav({ pathname, projectSlug }: { pathname: string | null; projectSlug: ProjectRef | null }) {
   // Product opens the project the page is in, or the first one (#project-urls).
-  const productHref = projectSlug ? ideasPath(projectSlug) : "/organisations";
+  // Your App opens the Overview of the organisation-wide lists (#project-filter) and is current anywhere in the organisation.
+  const productHref = projectSlug ? issuesPath(orgRefOf(projectSlug), "your_work") : "/organisations";
   const marketingHref = marketingTabHref(projectSlug);
   // The section's address starts with the project's slug, but it isn't Your App.
   const onMarketingWork = useMarketingArea();
@@ -136,30 +145,24 @@ function TopNav({ pathname, projectSlug }: { pathname: string | null; projectSlu
       aria-label="Organisation"
       // Phones and tablets: a tab strip fixed to the bottom of the screen,
       // clear of the home indicator. From lg it sits inline in the top bar.
-      className="flex items-center max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:justify-around max-lg:border-t max-lg:border-zk-border max-lg:bg-zk-surface max-lg:px-2 max-lg:pt-1.5 max-lg:pb-[max(0.375rem,env(safe-area-inset-bottom))] max-lg:shadow-[0_-1px_3px_rgba(0,0,0,0.04)] lg:ml-6 lg:gap-1"
+      className="flex items-center max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:justify-around max-lg:border-t max-lg:border-zk-border max-lg:bg-zk-surface max-lg:px-2 max-lg:pt-1.5 max-lg:pb-[max(0.375rem,env(safe-area-inset-bottom))] max-lg:shadow-[0_-1px_3px_rgba(0,0,0,0.04)] lg:ml-8 lg:gap-7"
     >
-      <TopNavLink href={productHref} active={Boolean(projectSlug && pathname?.startsWith(`/${projectSlug}`) && !inMarketing)} label="Your App">
+      <TopNavLink href={productHref} active={Boolean(projectSlug && pathname?.startsWith(`/${orgRefOf(projectSlug)}/`) && !inMarketing)} label="Your App" colour="#1a6ad8">
         <NavIcon>
           <circle cx="12" cy="12" r="9" />
           <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
         </NavIcon>
       </TopNavLink>
-      <TopNavLink href={marketingHref} active={inMarketing} label="Marketing">
+      <TopNavLink href={marketingHref} active={inMarketing} label="Marketing" colour="#d61a4c">
         <NavIcon>
           <path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Z" />
           <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
         </NavIcon>
       </TopNavLink>
-      <TopNavLink href="/security" active={isNavItemActive(pathname, "/security")} label="Security">
+      <TopNavLink href="/security" active={isNavItemActive(pathname, "/security")} label="Security" colour="#0e7a64">
         <NavIcon>
           <path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z" />
           <path d="m9 12 2 2 4-4" />
-        </NavIcon>
-      </TopNavLink>
-      <TopNavLink href="/discover" active={isNavItemActive(pathname, "/discover")} label="Discover">
-        <NavIcon>
-          <circle cx="12" cy="12" r="9" />
-          <path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" />
         </NavIcon>
       </TopNavLink>
     </nav>
@@ -261,12 +264,12 @@ export function AppHeader({
   return (
     // Sticky only from lg: on phones and tablets the toolbar wraps onto rows,
     // and a header that tall pinned to the top covers the page under it.
-    <header className="relative z-40 border-b border-zk-border bg-zk-surface shadow-[0_1px_3px_rgba(0,0,0,0.04)] lg:sticky lg:top-0">
-      <div className={`${PAGE_CONTAINER_CLASS} flex flex-wrap items-center gap-x-3 gap-y-2 py-3 max-sm:flex-nowrap max-sm:gap-x-2 max-sm:py-2 sm:px-6`}>
+    <header className="relative z-40 border-b border-zk-border bg-zk-surface lg:sticky lg:top-0">
+      <div className={`${PAGE_CONTAINER_CLASS} flex flex-wrap items-center gap-x-3 gap-y-2 py-3 lg:py-1.5 max-sm:flex-nowrap max-sm:gap-x-2 max-sm:py-2 sm:px-6`}>
         {/* Below lg the nav lives in the bottom strip, leaving one row here.
             The logo (the mark alone) is the way to the Dashboard. */}
         <div className="flex min-w-0 items-center gap-2">
-          <Link href={projectSlug ? ideasPath(projectSlug) : "/home"} aria-label="Ziki" className={`flex shrink-0 items-center gap-2 rounded-full ${linkFocus}`}>
+          <Link href={projectSlug ? issuesPath(orgRefOf(projectSlug), "your_work") : "/home"} aria-label="Ziki" className={`flex shrink-0 items-center gap-2 rounded-full ${linkFocus}`}>
             {/* The mark alone; the link's name says Ziki. */}
             <ZikiMark className="h-8 w-auto text-zk-text max-sm:h-7" />
           </Link>
@@ -289,7 +292,7 @@ export function AppHeader({
         <div className={`ml-auto flex min-w-0 items-center justify-end gap-2 max-sm:shrink-0 max-sm:flex-nowrap max-sm:gap-1.5 lg:shrink-0 flex-wrap`}>
           {earned !== null ? (
             // Earnings (#earnings), on every page: the amount opens Your earnings; Withdraw opens a window over the page.
-            <div className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-zk-border bg-zk-surface p-1">
+            <div className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-zk-border bg-zk-surface p-1 lg:h-9 lg:p-0.5">
               <Link
                 href={projectSlug ? `/earnings?in=${projectSlug}` : "/earnings"}
                 aria-current={isNavItemActive(pathname, "/earnings") ? "page" : undefined}
@@ -319,7 +322,7 @@ export function AppHeader({
               aria-expanded={accountOpen}
               aria-controls="account-menu"
               onClick={() => setAccountOpen((open) => !open)}
-              className={`inline-flex h-11 max-w-full items-center gap-2 rounded-full border border-zk-border bg-zk-surface py-[5px] pl-[5px] pr-3 text-zk-text hover:bg-zk-chip max-sm:h-auto max-sm:border-0 max-sm:p-0 ${linkFocus}`}
+              className={`inline-flex h-11 max-w-full items-center gap-2 rounded-full border border-zk-border bg-zk-surface py-[5px] pl-[5px] pr-3 lg:h-9 lg:py-[2px] lg:pl-[2px] text-zk-text hover:bg-zk-chip max-sm:h-auto max-sm:border-0 max-sm:p-0 ${linkFocus}`}
             >
               <span className="sr-only">Account menu for </span>
               <Avatar name={userName} image={userImage} size="md" variant="solid" />
@@ -438,7 +441,7 @@ function AccountSummary({
   const roleLabel = realRole === "user" ? "Member" : roleViewLabels[realRole];
   return (
     // Relative: the role tooltip is positioned against this row, so it is as wide as the menu.
-    <div className="relative flex items-center gap-3 rounded-[14px] bg-zk-tint p-3">
+    <div className="relative flex items-center gap-3 rounded-xl bg-zk-tint p-3">
       <Avatar name={userName} image={userImage} size="lg" variant="solid" />
       <div className="min-w-0">
         <p className="truncate text-base font-extrabold text-zk-text">{userName}</p>

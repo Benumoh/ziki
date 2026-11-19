@@ -1,10 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProjectOverviewView } from "@/components/project-overview";
 import { optionalUser } from "@/lib/auth-helpers";
 import { requireProject } from "@/lib/project-route";
 import { loadProjectOverview } from "@/lib/project-overview";
-import { projectHomePath } from "@/lib/marketing/project-home";
-import { designPath, projectPath, projectRef } from "@/lib/project-paths";
+import { designPath, issuesPath, orgRefOf, projectPath, projectRef } from "@/lib/project-paths";
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
 import { NOINDEX, pageMetadata } from "@/lib/seo/site";
@@ -33,10 +32,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /**
- * `/<org>/<project>`: the project's home (#project-urls): its Ideas list, or its
- * Marketing tab when the project is all marketing (#marketing-home). The
- * address picks the project and lib/project-route.ts checks access: a project
- * you can't see is a 404, like any unknown address.
+ * `/<org>/<project>`, the project's address (#project-urls). An organisation member goes straight to the Overview.
+ * Anyone else who may see the project (a visitor to a public one, signed in or not, a member of this project only,
+ * a site admin) gets its page: what it is, how to join it or ask to, or a way into its work. lib/project-route.ts checks access: a project you can't see is a 404, like any unknown address.
  */
 export default async function ProjectOverviewPage({ params }: Props) {
   const { org, project: slug } = await params;
@@ -44,11 +42,17 @@ export default async function ProjectOverviewPage({ params }: Props) {
   const access = user ? await requireProject(org, slug) : null;
   const data = await loadProjectOverview(org, slug, user);
   if (!data) notFound();
-
-  // A member's way into the work is where the project used to open: its
-  // Marketing tab when it is all marketing, else its Ideas (#marketing-home).
   const ref = projectRef(data.project.organisation.slug, data.project.slug);
-  const workHref = data.isMember ? await projectHomePath(prisma, data.project.id, ref) : null;
+  // Organisation members go straight to the Overview. Anyone else who may see the project, a member of this project
+  // only or a site admin, gets its page, with a way into the project's own work.
+  // A real membership: a site admin counts as in every organisation for access, but the organisation-wide
+  // Overview only takes members, so sending one there would bounce straight back here.
+  const memberOfOrganisation = user && access?.isOrgMember
+    ? Boolean(await prisma.membership.findFirst({ where: { organisationId: access.organisationId, userId: user.id }, select: { userId: true } }))
+    : false;
+  if (memberOfOrganisation) redirect(issuesPath(orgRefOf(ref), "your_work"));
+  const workHref = data.isMember ? issuesPath(ref, "your_work") : null;
+
   // The Design area (#9) is the organisation's: project-only members and visitors don't get it.
   const designHref = access?.isOrgMember ? designPath(ref) : null;
 

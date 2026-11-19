@@ -17,17 +17,17 @@ function dbWith({ ideas = [], issues = [] }: { ideas?: string[]; issues?: string
 describe("project home (#marketing-home)", () => {
   const ref = projectRef("ziki", "ziki-marketing");
 
-  it("opens an all-marketing project on its Marketing tab, even while its tasks are all still ideas", async () => {
+  it("opens an all-marketing project on its organisation's Marketing (#org-marketing), even while its tasks are all still ideas", async () => {
     for (const work of [{ ideas: ["marketing"] }, { issues: ["marketing"] }, { ideas: ["marketing"], issues: ["marketing"] }]) {
       expect(await isMarketingProject(dbWith(work), "p")).toBe(true);
-      expect(await projectHomePath(dbWith(work), "p", ref)).toBe("/ziki/ziki-marketing/marketing");
+      expect(await projectHomePath(dbWith(work), "p", ref)).toBe("/ziki/marketing");
     }
   });
 
   it("keeps product projects, mixed ones and empty ones on Ideas", async () => {
     for (const work of [{ issues: ["product"] }, { ideas: ["product"] }, { ideas: ["marketing"], issues: ["product"] }, { ideas: ["product", "marketing"] }, {}]) {
       expect(await isMarketingProject(dbWith(work), "p")).toBe(false);
-      expect(await projectHomePath(dbWith(work), "p", ref)).toBe("/ziki/ziki-marketing/ideas");
+      expect(await projectHomePath(dbWith(work), "p", ref)).toBe("/ziki/ziki-marketing/new");
     }
   });
 });

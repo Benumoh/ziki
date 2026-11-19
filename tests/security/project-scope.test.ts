@@ -56,7 +56,6 @@ vi.mock("@/lib/prisma", () => ({
       run({ projectMembership: { upsert: projectMembershipUpsert }, membership: { upsert: membershipUpsert, findFirst: txMembershipFindFirst }, projectJoinRequest: { updateMany: projectJoinRequestUpdateMany } }),
   },
 }));
-vi.mock("@/components/marketing/tasks/tasks-board", () => ({ TasksBoard: () => null }));
 vi.mock("@/lib/points/signup-bonus", () => ({ awardSignupBonus }));
 vi.mock("@/lib/organisation-next-step-load", () => ({ loadOrganisationNextStep: vi.fn(async () => null) }));
 vi.mock("@/lib/workflow", async (importOriginal) => ({
@@ -73,13 +72,14 @@ const section = vi.hoisted(() => ({
   loadProjectAgents: vi.fn(async () => ({ agents: [], hidden: 0, offerWindowSeconds: 1800 })),
   redirect: vi.fn((to: string) => { throw new Error(`REDIRECT ${to}`); }),
   requireProject: vi.fn(),
+  requireOrgMarketing: vi.fn(),
   firstProjectRefFor: vi.fn(),
   requireUser: vi.fn(async () => ({ id: "ada" })),
   requireSuperAdmin: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ notFound: section.notFound, forbidden: section.forbidden, redirect: section.redirect, permanentRedirect: section.redirect }));
 vi.mock("@/lib/agents/project-agents", () => ({ loadProjectAgents: section.loadProjectAgents }));
-vi.mock("@/lib/project-route", () => ({ requireProject: section.requireProject, firstProjectRefFor: section.firstProjectRefFor }));
+vi.mock("@/lib/project-route", () => ({ requireProject: section.requireProject, requireOrgMarketing: section.requireOrgMarketing, firstProjectRefFor: section.firstProjectRefFor }));
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: section.requireUser, requireSuperAdmin: section.requireSuperAdmin }));
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "viewer" } })) }));
 vi.mock("@/lib/project-issue", async (importOriginal) => ({
@@ -94,14 +94,10 @@ vi.mock("@/lib/organisation-access", async (importOriginal) => ({
     organisationId === "org-they-admin" ? { membershipRole: "admin", admin: true } : { membershipRole: null, admin: false }),
 }));
 
-import MarketingHomePage from "@/app/(app)/[org]/[project]/marketing/tasks/page";
 import MarketingPage from "@/app/(app)/marketing/page";
-import LibraryPage from "@/app/(app)/[org]/[project]/marketing/output-box/page";
-import { readLibrary } from "@/app/(app)/[org]/[project]/marketing/output-box/data";
-import { readTasksBoard } from "@/app/(app)/[org]/[project]/marketing/data";
-import RejectedIdeasPage from "@/app/(app)/[org]/[project]/marketing/ideas/rejected/page";
-import { readRejectedIdeas } from "@/app/(app)/[org]/[project]/marketing/ideas/rejected/data";
-import { parseTaskView } from "@/components/marketing/tasks/model";
+import RejectedIdeasPage from "@/app/(app)/[org]/marketing/ideas/rejected/page";
+import { readRejectedIdeas } from "@/app/(app)/[org]/marketing/ideas/rejected/data";
+import OrgMarketingPage from "@/app/(app)/[org]/marketing/page";
 import { marketingTabHref } from "@/lib/header-nav";
 import { issueProject } from "@/lib/agent-api/issues";
 import { getAgentRedesign, listAgentRedesigns } from "@/lib/redesign-read";
@@ -111,7 +107,6 @@ import { canManageProject } from "@/lib/project-permissions";
 import { joinOpenProjectAction } from "@/app/actions/project-join-requests";
 import { requireUser } from "@/lib/auth-helpers";
 import { reviewSkillSubmissionAction } from "@/app/actions/skill-submissions";
-import { generateMetadata as projectOverviewMetadata } from "@/app/(app)/[org]/[project]/page";
 import { sitemapSectionXml } from "@/lib/seo/sitemap";
 import IssueHistoryPage from "@/app/(app)/[org]/[project]/[number]/history/page";
 import ProjectIssueLayout from "@/app/(app)/[org]/[project]/[number]/layout";
@@ -187,122 +182,6 @@ describe("redesign proposals stay in the agent's organisation (#9)", () => {
   });
 });
 
-describe("Library project isolation", () => {
-  it("refuses access before reading published deliverables", async () => {
-    section.requireProject.mockRejectedValue(new Error("NOT_FOUND"));
-    publishedTasks.mockClear();
-    await expect(LibraryPage({ params: Promise.resolve({ org: "acme", project: "private" }) })).rejects.toThrow("NOT_FOUND");
-    expect(publishedTasks).not.toHaveBeenCalled();
-  });
-
-  it("returns only published marketing work in the authorized organisation and project, with the latest delivery", async () => {
-    const approved = {
-      id: "approved", number: 42, title: "Launch campaign", projectId: "project_web", organisationId: "organisation_zedu",
-      track: "marketing", status: "resolved", substatus: "published", isDeleted: false,
-      deliveries: [
-        { id: "new", updatedAt: new Date("2026-11-03"), summary: "Approved version", deliverableUrls: ["https://example.com/final.png"], agent: { name: "Studio" } },
-        { id: "old", updatedAt: new Date("2026-11-01"), summary: "Earlier version", deliverableUrls: ["https://example.com/draft.png"], agent: { name: "Earlier agent" } },
-      ],
-      mergeReviews: [{ updatedAt: new Date("2026-11-04") }],
-      attachments: [{ id: "evidence", filename: "unrelated-evidence.png", contentType: "image/png", size: 20 }],
-    };
-    const records = [approved,
-      { ...approved, id: "other-project", projectId: "project_other" },
-      { ...approved, id: "other-organisation", organisationId: "organisation_other" },
-      { ...approved, id: "product", track: "product" },
-      { ...approved, id: "unpublished", status: "done", substatus: "accepted" },
-      { ...approved, id: "deleted", isDeleted: true },
-    ];
-    publishedTasks.mockImplementation(async ({ where, select }) => records
-      .filter((row) => Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value))
-      .map((row) => ({ ...row, deliveries: select.deliveries.orderBy[0].updatedAt === "desc" ? [...row.deliveries].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, select.deliveries.take) : row.deliveries })));
-    const result = await readLibrary({ organisationId: "organisation_zedu", project: { id: "project_web" } } as Parameters<typeof readLibrary>[0]);
-    expect(result).toEqual([expect.objectContaining({
-      id: "approved", agent: "Studio", publishedAt: "2026-11-04T00:00:00.000Z",
-      files: [expect.objectContaining({ url: "https://example.com/final.png" })],
-    })]);
-  });
-});
-
-describe("the marketing tasks board", () => {
-  const context = { organisationId: "organisation_zedu", user: { id: "ada" }, project: { id: "project_web", slug: "web" } } as Parameters<typeof readTasksBoard>[0];
-  const scope = { organisationId: "organisation_zedu", projectId: "project_web", track: "marketing", isDeleted: false };
-  const rowsOf = (board: Awaited<ReturnType<typeof readTasksBoard>>) => (board.list.kind === "tasks" ? board.list.rows : []);
-
-  beforeEach(() => {
-    publishedTasks.mockReset();
-    publishedTasks.mockResolvedValue([]);
-    taskCounts.mockReset();
-    taskCounts.mockResolvedValue([{ status: "open", _count: { _all: 3 } }, { status: "resolved", _count: { _all: 2 } }]);
-    proposalCount.mockReset();
-    proposalCount.mockResolvedValue(0);
-    proposals.mockReset();
-    proposals.mockResolvedValue([]);
-    proposalVotes.mockReset();
-    proposalVotes.mockResolvedValue([]);
-    myVerdicts.mockReset();
-    myVerdicts.mockResolvedValue([]);
-  });
-
-  it("refuses access before reading any task", async () => {
-    section.requireProject.mockRejectedValue(new Error("NOT_FOUND"));
-    await expect(MarketingHomePage({ params: Promise.resolve({ org: "acme", project: "private" }), searchParams: Promise.resolve({}) })).rejects.toThrow("NOT_FOUND");
-    expect(publishedTasks).not.toHaveBeenCalled();
-    expect(proposals).not.toHaveBeenCalled();
-    expect(taskCounts).not.toHaveBeenCalled();
-  });
-
-  it("reads this project's marketing issues for the tab, and counts every tab", async () => {
-    const board = await readTasksBoard(context, parseTaskView({ status: "live" }));
-    expect(publishedTasks.mock.calls[0][0].where).toMatchObject({ ...scope, status: "resolved" });
-    expect(taskCounts.mock.calls[0][0].where).toMatchObject(scope);
-    expect(taskCounts.mock.calls[0][0].where.status).toBeUndefined();
-    expect(board.counts).toEqual({ ideas: 0, open: 3, "in-progress": 0, closed: 0, done: 0, live: 2 });
-  });
-
-  it("lists open marketing ideas under Ideas with their votes, and marks the ones you voted on", async () => {
-    proposalCount.mockResolvedValue(1);
-    proposals.mockResolvedValue([{
-      id: "idea_1", number: 12, title: "A launch post", score: 2, createdAt: new Date("2026-11-01"), updatedAt: new Date("2026-11-01"),
-      verdicts: [{ updatedAt: new Date("2026-11-02") }], reporter: { name: "Ada" }, category: null, _count: { verdicts: 2 },
-    }]);
-    proposalVotes.mockResolvedValue([{ ideaId: "idea_1", opinion: "good", _sum: { votes: 3 } }, { ideaId: "idea_1", opinion: "bad", _sum: { votes: 1 } }]);
-    myVerdicts.mockResolvedValue([{ ideaId: "idea_1" }]);
-    const board = await readTasksBoard(context, parseTaskView({ status: "ideas" }));
-    expect(proposals.mock.calls[0][0].where).toMatchObject({ ...scope, status: "open" });
-    expect(publishedTasks).not.toHaveBeenCalled();
-    expect(board.list).toMatchObject({ kind: "proposals", ideas: [{
-      number: 12, threshold: 3, good: 3, badVotes: 1, approvedByMe: true, lastUpdateAt: new Date("2026-11-02"),
-    }] });
-  });
-
-  it("opens Ideas when the address names no list or an unknown one", async () => {
-    expect((await readTasksBoard(context, parseTaskView({}))).tab.param).toBe("ideas");
-    expect((await readTasksBoard(context, parseTaskView({ status: "merge" }))).tab.param).toBe("ideas");
-  });
-
-  it("names who delivered finished work, but not the last worker of work reopened for bids", async () => {
-    const task = {
-      id: "t1", number: 41, title: "A launch post", closeReason: null, voteCount: 0, revisionCount: 0, updatedAt: new Date("2026-11-03"), reward: 4,
-      rewardEstimateCount: 0, rewardFixedAt: null, project: { slug: "web", organisation: { slug: "acme" } }, type: null, assignee: null, claims: [],
-      deliveries: [{ agent: { name: "Studio" } }], _count: { comments: 0, bids: 0 },
-    };
-    publishedTasks.mockResolvedValue([{ ...task, status: "resolved", substatus: "published" }]);
-    expect(rowsOf(await readTasksBoard(context, parseTaskView({ status: "live" })))[0].agentName).toBe("Studio");
-    publishedTasks.mockResolvedValue([{ ...task, status: "open", substatus: "open" }]);
-    expect(rowsOf(await readTasksBoard(context, parseTaskView({ status: "open" })))[0].agentName).toBeNull();
-  });
-
-  it("shows the revision round while work is back with its worker", async () => {
-    publishedTasks.mockResolvedValue([{
-      id: "t1", number: 41, title: "A launch post", status: "in_progress", substatus: "in_progress", closeReason: null, voteCount: 0, revisionCount: 1,
-      updatedAt: new Date("2026-11-03"), reward: 4, rewardEstimateCount: 0, rewardFixedAt: null, project: { slug: "web", organisation: { slug: "acme" } }, type: null, assignee: null,
-      claims: [], deliveries: [], _count: { comments: 0, bids: 0 },
-    }]);
-    expect(rowsOf(await readTasksBoard(context, parseTaskView({ status: "in-progress" })))[0].revision).toBe("Revision 1 of 2");
-  });
-});
-
 describe("Rejected marketing ideas project isolation", () => {
   const context = {
     organisationId: "organisation_zedu",
@@ -321,9 +200,11 @@ describe("Rejected marketing ideas project isolation", () => {
   });
 
   it("refuses access before reading marketing ideas", async () => {
+    // Marketing belongs to the organisation (#org-marketing): its pages act through its main project.
+    section.requireOrgMarketing.mockResolvedValue({ org: "acme", project: "private" });
     section.requireProject.mockRejectedValue(new Error("NOT_FOUND"));
     await expect(
-      RejectedIdeasPage({ params: Promise.resolve({ org: "acme", project: "private" }), searchParams: Promise.resolve({}) }),
+      RejectedIdeasPage({ params: Promise.resolve({ org: "acme" }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow("NOT_FOUND");
     expect(proposals).not.toHaveBeenCalled();
   });
@@ -345,17 +226,18 @@ describe("the marketing section", () => {
     section.requireUser.mockResolvedValue({ id: "ada" });
   });
 
-  it("is refused to someone who can't open the project", async () => {
+  it("is refused to someone who can't open the organisation's Marketing (#org-marketing)", async () => {
+    section.requireOrgMarketing.mockResolvedValue({ org: "acme", project: "web" });
     section.requireProject.mockRejectedValue(new Error("NOT_FOUND"));
-    await expect(MarketingHomePage({ params: Promise.resolve({ org: "acme", project: "web" }), searchParams: Promise.resolve({}) })).rejects.toThrow("NOT_FOUND");
+    await expect(OrgMarketingPage({ params: Promise.resolve({ org: "acme" }), searchParams: Promise.resolve({}) })).rejects.toThrow("NOT_FOUND");
     expect(section.requireProject).toHaveBeenCalledWith("acme", "web");
   });
 
-  it("sends the Marketing tab and /marketing to the project's section, not Amp", async () => {
-    expect(marketingTabHref(projectRef("acme", "web"))).toBe("/acme/web/marketing");
+  it("sends the Marketing tab and /marketing to the organisation's Marketing, not Amp", async () => {
+    expect(marketingTabHref(projectRef("acme", "web"))).toBe("/acme/marketing");
     expect(marketingTabHref(null)).toBe("/marketing");
     section.firstProjectRefFor.mockResolvedValue(projectRef("acme", "web"));
-    await expect(MarketingPage()).rejects.toThrow("REDIRECT /acme/web/marketing");
+    await expect(MarketingPage()).rejects.toThrow("REDIRECT /acme/marketing");
   });
 
   it("sends someone with no project to their organisations", async () => {
@@ -428,7 +310,7 @@ describe("joinOpenProjectAction (#earnings)", () => {
     findFirst.mockResolvedValue(open);
     bugCount.mockResolvedValue(3);
     const res = await joinOpenProjectAction("p-1");
-    expect(res).toEqual({ ok: true, href: "/ziki/ziki-marketing/marketing" });
+    expect(res).toEqual({ ok: true, href: "/ziki/marketing" });
     expect(projectMembershipUpsert).toHaveBeenCalledWith(expect.objectContaining({ create: { projectId: "p-1", userId: "user-1" } }));
     // Joining puts you in that project only, never in its whole organisation.
     expect(membershipUpsert).not.toHaveBeenCalled();
@@ -441,7 +323,7 @@ describe("joinOpenProjectAction (#earnings)", () => {
     // Product work in it: an ordinary project.
     bugFindFirst.mockImplementation(async ({ where }: { where: { track: string } }) => (where.track === "product" ? { id: "b" } : null));
     ideaFindFirst.mockResolvedValue(null);
-    expect(await joinOpenProjectAction("p-1")).toEqual({ ok: true, href: "/ziki/ziki-marketing/ideas" });
+    expect(await joinOpenProjectAction("p-1")).toEqual({ ok: true, href: "/ziki/ziki-marketing/new" });
   });
 
   it("opens an all-marketing project's Marketing tab while its tasks are all still ideas (#marketing-home)", async () => {
@@ -449,7 +331,7 @@ describe("joinOpenProjectAction (#earnings)", () => {
     bugCount.mockResolvedValue(0);
     bugFindFirst.mockResolvedValue(null);
     ideaFindFirst.mockImplementation(async ({ where }: { where: { track: string } }) => (where.track === "marketing" ? { id: "i" } : null));
-    expect(await joinOpenProjectAction("p-1")).toEqual({ ok: true, href: "/ziki/ziki-marketing/marketing" });
+    expect(await joinOpenProjectAction("p-1")).toEqual({ ok: true, href: "/ziki/marketing" });
   });
 
   it("pays the signup bonus to a brand-new person (in no organisation), and not to someone already in one", async () => {
@@ -575,28 +457,6 @@ describe("skills library public scope and review authorization", () => {
 });
 
 describe("search engines see only public projects (#seo-pages)", () => {
-  const params = Promise.resolve({ org: "acme", project: "secret" });
-
-  it("describes and indexes a public project", async () => {
-    findFirst.mockResolvedValueOnce({ name: "Web", slug: "web", goal: "Ship the **site**.", organisation: { name: "Acme", slug: "acme" } });
-    const metadata = await projectOverviewMetadata({ params: Promise.resolve({ org: "acme", project: "web" }) });
-    expect(findFirst.mock.calls.at(-1)?.[0].where).toMatchObject({ slug: "web", visibility: "public", organisation: { slug: "acme" } });
-    expect(metadata.robots).toEqual({ index: true, follow: true });
-    expect(String(metadata.title)).toContain("Web");
-  });
-
-  it("says nothing about a private project, not even its name, and keeps it out of search", async () => {
-    findFirst.mockResolvedValueOnce(null);
-    const metadata = await projectOverviewMetadata({ params });
-    expect(metadata).toEqual({ robots: { index: false, follow: true } });
-  });
-
-  it("lists only public projects in the sitemap", async () => {
-    projectFindMany.mockResolvedValueOnce([{ slug: "web", updatedAt: new Date("2026-11-01"), organisation: { slug: "acme" } }]);
-    const xml = await sitemapSectionXml("projects.xml");
-    expect(projectFindMany.mock.calls[0][0].where).toMatchObject({ visibility: "public", archivedAt: null });
-    expect(xml).toContain("/acme/web</loc>");
-  });
 
   it("lists only the issues a guest's public list shows, at their public address", async () => {
     publishedTasks.mockReset();

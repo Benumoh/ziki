@@ -339,7 +339,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/ideas",
     projectScoped: true,
-    body: ["title", "summary", "description", "track", "rationale", "typeId", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote", "difficulty", "requiresHumanApproval", "humanApprovalReason", "security"],
+    body: ["title", "summary", "description", "track", "rationale", "typeId", "assetId", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote", "difficulty", "requiresHumanApproval", "humanApprovalReason", "security"],
     headers: { "Idempotency-Key": "idempotencyKey" },
     input: {
       idempotencyKey,
@@ -377,6 +377,13 @@ export const TOOLS: readonly ToolDef[] = [
         .max(191)
         .optional()
         .describe("Optional issue type id. On a marketing idea it must be an active marketing task type from ziki_list_marketing_task_types (422 wrong_track otherwise)."),
+      assetId: z
+        .string()
+        .trim()
+        .min(1)
+        .max(191)
+        .optional()
+        .describe("Marketing ideas only: the asset it is about (the About Us page, a launch video), from ziki_list_marketing_assets, under the idea's typeId (422 invalid_asset otherwise). Converting carries it to the issue."),
       areaId: z.string().optional().describe("Project area id (for example front end or back end)."),
       proofLinks: z
         .string()
@@ -1779,6 +1786,51 @@ export const TOOLS: readonly ToolDef[] = [
     input: {
       id: z.string().trim().min(1).describe("Project id or slug."),
       typeId: z.string().trim().min(1).max(191).describe("Marketing task type id."),
+    },
+  },
+  {
+    name: "ziki_list_marketing_assets",
+    summary:
+      "List the organisation's marketing assets, A-Z: the things marketing work is about, such as the About Us page under Landing Pages. typeId keeps one type's. A marketing idea's assetId (ziki_create_idea) must be one of these, under its typeId. Any agent may read them.",
+    level: "working",
+    method: "GET",
+    route: "/projects/{id}/marketing/assets",
+    query: ["typeId"],
+    input: {
+      id: z.string().trim().min(1).describe("Project id or slug."),
+      typeId: z.string().trim().min(1).max(191).optional().describe("Only this marketing task type's assets."),
+    },
+  },
+  {
+    name: "ziki_create_marketing_asset",
+    summary:
+      "Add a marketing asset under a marketing task type, such as a new landing page (About Us) or a video. Any agent may. Names are 2-80 characters and unique within the type (409 duplicate_name); the type must be an active marketing task type (422 invalid_type).",
+    level: "working",
+    method: "POST",
+    route: "/projects/{id}/marketing/assets",
+    body: ["name", "typeId", "url"],
+    input: {
+      id: z.string().trim().min(1).describe("Project id or slug."),
+      name: z.string().trim().min(2).max(80).describe("The asset's name, 2-80 characters, e.g. About Us."),
+      typeId: z.string().trim().min(1).max(191).describe("The marketing task type it is under, from ziki_list_marketing_task_types."),
+      url: z.string().trim().max(500).optional().describe("Where it lives: the page's address or a video's link, a full http(s) URL."),
+    },
+  },
+  {
+    name: "ziki_update_marketing_asset",
+    summary:
+      "Rename a marketing asset, set its address (url; an empty string clears it), or rate how good it is now (score 0-100 with a scoreNote saying why; rate it after reviewing it, and again when work on it lands). Send at least one. Any agent may. 409 duplicate_name for a name its type already has; 404 for another organisation's asset.",
+    level: "working",
+    method: "PATCH",
+    route: "/projects/{id}/marketing/assets/{assetId}",
+    body: ["name", "url", "score", "scoreNote"],
+    input: {
+      id: z.string().trim().min(1).describe("Project id or slug."),
+      assetId: z.string().trim().min(1).max(191).describe("The asset's id, from ziki_list_marketing_assets."),
+      score: z.number().int().min(0).max(100).optional().describe("How good it is now, 0-100."),
+      scoreNote: z.string().trim().max(300).optional().describe("Why it got that score, at most 300 characters. Only with a score."),
+      name: z.string().trim().min(2).max(80).optional().describe("A new name, 2-80 characters."),
+      url: z.string().trim().max(500).optional().describe("Its address, a full http(s) URL; empty clears it."),
     },
   },
   {

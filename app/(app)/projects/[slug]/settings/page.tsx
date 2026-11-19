@@ -192,7 +192,7 @@ export default async function ProjectSettingsPage({
                 key={item.id}
                 href={`${base}?section=${item.id}`}
                 aria-current={on ? "page" : undefined}
-                className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-zk-text transition ${
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-zk-text transition ${
                   on ? "bg-zk-tint" : "bg-transparent hover:bg-zk-chip"
                 }`}
               >
@@ -228,11 +228,11 @@ export default async function ProjectSettingsPage({
           {section === "github" ? (
             <div className="flex flex-col gap-4">
               <Link href="/projects/readiness" className="self-start text-sm font-semibold text-zk-accent underline">Check repository readiness for this organisation</Link>
-              {github === "error" ? <p role="alert" className="rounded-[14px] bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">GitHub setup could not be completed. Start the connection again from this page.</p> : null}
-              {github === "connected" ? <p role="status" className="rounded-[14px] bg-zk-ok-bg p-3 text-sm text-zk-ok-fg">GitHub App installation connected.</p> : null}
-              {github === "unavailable" ? <p role="alert" className="rounded-[14px] bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">The GitHub App is not configured. Set GITHUB_APP_SLUG before connecting it.</p> : null}
-              {github === "requested" ? <p role="status" className="rounded-[14px] bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">GitHub App installation was requested and is waiting for organisation admin approval.</p> : null}
-              {github === "cancelled" ? <p role="status" className="rounded-[14px] bg-zk-surface p-3 text-sm text-zk-text2">GitHub App connection was cancelled.</p> : null}
+              {github === "error" ? <p role="alert" className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">GitHub setup could not be completed. Start the connection again from this page.</p> : null}
+              {github === "connected" ? <p role="status" className="rounded-xl bg-zk-ok-bg p-3 text-sm text-zk-ok-fg">GitHub App installation connected.</p> : null}
+              {github === "unavailable" ? <p role="alert" className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">The GitHub App is not configured. Set GITHUB_APP_SLUG before connecting it.</p> : null}
+              {github === "requested" ? <p role="status" className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">GitHub App installation was requested and is waiting for organisation admin approval.</p> : null}
+              {github === "cancelled" ? <p role="status" className="rounded-xl border border-zk-border bg-zk-surface p-3 text-sm text-zk-text2">GitHub App connection was cancelled.</p> : null}
               <section className={card}>
                 <div className="flex flex-col gap-1">
                   <h2 className="m-0 text-lg font-bold text-zk-text">GitHub App</h2>
@@ -266,7 +266,7 @@ export default async function ProjectSettingsPage({
                 </span>
               </div>
               {!project.githubInstallationId ? (
-                <p role="status" className="rounded-[14px] bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">
+                <p role="status" className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg">
                   Private repositories need the GitHub App, so Ziki can fetch their code.{" "}
                   <Link href={`${base}?section=github`} className="font-semibold underline">
                     Connect it in GitHub

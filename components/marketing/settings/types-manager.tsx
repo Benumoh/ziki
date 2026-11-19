@@ -8,7 +8,7 @@ import {
   deleteMarketingIssueTypeAction,
   toggleMarketingIssueTypeActiveAction,
   updateMarketingIssueTypeAction,
-} from "@/app/(app)/[org]/[project]/marketing/settings/actions";
+} from "@/app/(app)/[org]/marketing/settings/actions";
 import { getIssueTypeBadgeClass } from "@/lib/issue-type-styles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

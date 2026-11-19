@@ -2,7 +2,7 @@
 import type { ProjectRef } from "@/lib/project-paths";
 
 import { useState, useTransition } from "react";
-import { updateMarketingBriefAction } from "@/app/(app)/[org]/[project]/marketing/settings/actions";
+import { updateMarketingBriefAction } from "@/app/(app)/[org]/marketing/settings/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

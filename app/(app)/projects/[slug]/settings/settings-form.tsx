@@ -49,7 +49,7 @@ export function ProjectSettingsForm({
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="slug" value={project.slug} />
-      {result?.error ? <p role="alert" className="rounded-[14px] bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">{result.error}</p> : null}
+      {result?.error ? <p role="alert" className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">{result.error}</p> : null}
       <label htmlFor="project-name" className="block space-y-1 text-sm font-medium text-zk-text">Project name
         <Input id="project-name" name="name" defaultValue={project.name} minLength={2} maxLength={60} required />
         {result?.field === "name" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.name ?? result.error}</span> : null}
