@@ -203,8 +203,9 @@ describe("issue list layout", () => {
     }));
     expect(html).toContain('href="/zedu/acme/ideas/12"');
     expect(html).toContain("Idea #12");
-    expect(html).toMatch(/aria-label="[^"]*idea score 2 of 4"/);
-    expect(html).toContain("3 verdicts");
+    // New Ideas are the Overview's cards (#work-feed): the score against the threshold, with Approve beside it.
+    expect(html).toContain("score 2/4");
+    expect(html).toMatch(/aria-label="Approve idea #12: give it your good verdict"/);
     expect(html).not.toMatch(/click to mark important/);
     // No issue row matches an idea list.
     expect(findMany.mock.calls.at(-1)![0].where.id).toEqual({ in: [] });

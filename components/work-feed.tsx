@@ -66,7 +66,7 @@ function fileKind(type: string, name: string): string {
 const STATUS_TONE: Record<string, PillTone> = { open: "yellow", in_progress: "blue", done: "green", merge: "purple", resolved: "cyan", closed: "grey" };
 
 /** The pill on a card's right: soft tint, strong text. */
-const PILL = "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[12.5px] font-semibold";
+export const PILL = "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[12.5px] font-semibold";
 
 /**
  * The Overview's list (#work-feed): its title with the tabs and the Status filter on top, then a white card per piece
@@ -162,7 +162,7 @@ const ISSUE_KINDS: Array<{ match: RegExp; tone: PillTone; icon: string }> = [
  * The picture at a card's left (#work-feed): a small screenshot of the issue, its first image, when it has one;
  * otherwise a tile in the colour of the kind of issue its title's tag names, with an icon that stands for it.
  */
-function IssueThumb({ item }: { item: WorkFeedItem }) {
+export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files"> }) {
   const image = item.files.find((file) => file.type.startsWith("image/"));
   if (image) {
     return (

@@ -26,7 +26,7 @@ import { ToolbarFilterMenu, type ToolbarFilterGroup, type ToolbarFilterOption } 
 import { IdeasMoreFilters } from "@/components/ideas-more-filters";
 import { IDEA_AUTHOR_PARAM, parseIdeaAuthorFilter } from "@/lib/idea-filters";
 import { MY_WORK_PARAM, TRACK_PARAM, myWorkWhere, parseMyWorkFilter, parseTrackFilter, trackWhere, yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
-import { WORK_CATEGORIES, WORK_CATEGORY_PARAM, WORK_KIND_PARAM, WORK_SEGMENT_SIZE, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes, type WorkCategory } from "@/lib/work-category";
+import { WORK_CATEGORY_PARAM, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes } from "@/lib/work-category";
 import { WorkFeed, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
 import { stateLabel, statusLabel as STATUS_NAMES } from "@/lib/labels";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
@@ -44,6 +44,7 @@ import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
 import { IssueFilters } from "@/components/issue-filters";
 import { RowAge, RowAssignee } from "@/components/issue-row-meta";
+import { IdeaFeed } from "@/components/idea-feed";
 import { IdeasList, type IdeaListRow } from "@/components/ideas-list";
 import { WhimsicalEmptyState } from "@/components/whimsical-empty-state";
 import { isUnstructuredDraft } from "@/lib/ideas";
@@ -1081,30 +1082,12 @@ export async function IssuesList({
         )
       : ([] as string[]),
   ]);
-  // Each section's Add button: the report form, its type set to that kind, coming back here.
-  const addKindLink = (key: WorkCategory) => {
-    if (!canContribute) return undefined;
-    const href = newIssueHref(ref, returnTo);
-    const label = WORK_CATEGORIES.find((category) => category.key === key)!.add;
-    return { href: `${href}${href.includes("?") ? "&" : "?"}${WORK_KIND_PARAM}=${key}`, label };
-  };
-  // New ideas, with no search or kind picked (#work-segments): a few of each kind, each with a link to all of them.
-  const ideaSegments = ideasView === "new" && !qParam && !workCategory && organisationId
-    ? await loadOrEmpty("idea segments", () => Promise.all(WORK_CATEGORIES.map(async ({ key, label }) => {
-        // The New list's own scope (product ideas, this project or all, open), narrowed to one kind.
-        const kindWhere: Prisma.IdeaWhereInput = { ...ideaWhere, AND: [ideaCategoryWhere(key, categoryTypes)] };
-        const [count, top] = await Promise.all([
-          prisma.idea.count({ where: kindWhere }),
-          prisma.idea.findMany({ where: kindWhere, orderBy: getIdeaOrderBy(currentIdeaSort), take: WORK_SEGMENT_SIZE, select: { id: true } }),
-        ]);
-        return { key, label, add: addKindLink(key), count, ids: top.map((row) => row.id), href: listHref(new URLSearchParams({ status: IDEAS_STATUS, [WORK_CATEGORY_PARAM]: key })) };
-      })), null)
-    : null;
-  const ideaSegmentIds = ideaSegments?.flatMap((segment) => segment.ids) ?? null;
+
+  // New ideas are the Overview's New Ideas tab (#work-feed): one list of cards, newest first, not grouped by kind.
   // The Ideas lists page like the issue lists (#ideas-pages), 25 at a time.
   const ideaPagination = calculatePagination({
     page: pageParam,
-    totalCount: ideaSegmentIds ? ideaSegmentIds.length : ideasView === "drafts" ? draftIds.length : ideasView === "rejected" ? rejectedIdeasCount : ideasCount,
+    totalCount: ideasView === "drafts" ? draftIds.length : ideasView === "rejected" ? rejectedIdeasCount : ideasCount,
   });
   const ideaPageParams: Record<string, string | undefined> = Object.fromEntries(
     Object.entries(params)
@@ -1113,7 +1096,7 @@ export async function IssuesList({
   );
   const ideaRows: IdeaListRow[] = isIdeasView && organisationId
     ? await loadOrEmpty("ideas list", async () => {
-        const originalIdeaWhere = ideasView === "drafts" ? { ...ideaWhere, id: { in: draftIds } } : ideasView === "rejected" ? rejectedIdeaWhere : ideaSegmentIds ? { ...ideaWhere, id: { in: ideaSegmentIds } } : ideaWhere;
+        const originalIdeaWhere = ideasView === "drafts" ? { ...ideaWhere, id: { in: draftIds } } : ideasView === "rejected" ? rejectedIdeaWhere : ideaWhere;
         let indexedIdeaIds: string[] | null = null;
         if (qParam && boundSearchTerm(qParam).length >= 3 && ideasView !== "drafts") {
           try {
@@ -1585,14 +1568,14 @@ export async function IssuesList({
         ) : null}
 
         {isNewIdeasView ? <div className="flex flex-wrap items-center justify-between gap-2">{overviewTabs}</div> : null}
-        {isIdeasView ? (
+        {isNewIdeasView ? (
+          // The Overview's New Ideas tab: the Work Feed's cards, with Approve on each idea you can still approve.
+          <IdeaFeed slug={ref} ideas={ideaRows} empty={qParam ? <p className="m-0 text-sm text-zk-muted">No new ideas match that search.</p> : <IdeasWelcome projectId={project.id} />} />
+        ) : isIdeasView ? (
           <IdeasList
-            sections={ideaSegments ?? undefined}
             slug={ref}
             ideas={ideaRows}
             sort={currentIdeaSort}
-            // Open ideas, none yet and no search: what Ziki is for and where to type (#ideas-welcome).
-            welcome={ideasView === "new" && !qParam ? <IdeasWelcome projectId={project.id} /> : undefined}
             empty={
               ideasView === "drafts"
                 ? "No unstructured draft ideas are waiting to be structured."
