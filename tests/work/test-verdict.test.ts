@@ -101,7 +101,7 @@ function report(overrides: Record<string, unknown> = {}) {
 
 import { submitTestVerdict } from "@/lib/agent-api/test-verdict";
 import { actOnTestCardRow, addTestCardRows } from "@/lib/agent-api/test-card";
-import { acceptReviewOffer, REVIEW_DEADLINE_MS, REVIEW_OFFER_TTL_MS, sweepReviewOffers } from "@/lib/agent-api/review-offer";
+import { acceptReviewOffer, PR_REVIEW_DEADLINE_MS, PR_REVIEW_OFFER_TTL_MS, REVIEW_DEADLINE_MS, REVIEW_OFFER_TTL_MS, sweepReviewOffers } from "@/lib/agent-api/review-offer";
 import { acceptJobReviewOffer, reviewJobSubmission } from "@/lib/jobs/review";
 import { judgeBlockKind } from "@/lib/agent-api/judge-block";
 import type { PrGate } from "@/lib/agent-api/pr-gate";
@@ -643,7 +643,7 @@ describe("durable PR review offer expiry (#592)", () => {
         const now = Date.now();
         return state.reviewOffers
           .filter((offer) =>
-            (offer.status === "offered" && now - offer.offeredAt.getTime() >= REVIEW_OFFER_TTL_MS) ||
+            (offer.status === "offered" && now - offer.offeredAt.getTime() >= PR_REVIEW_OFFER_TTL_MS) ||
             (offer.status === "accepted" && (offer.deadlineAt === null || offer.deadlineAt.getTime() <= now)),
           )
           .map(({ id }) => ({ id }));
@@ -679,12 +679,12 @@ describe("durable PR review offer expiry (#592)", () => {
     state.reviewOffers = [
       {
         id: "offered-during-restart", bugId: "bug1", beneficiaryUserId: "reviewer-1", agentId: "agent-1",
-        status: "offered", offeredAt: new Date(now - REVIEW_OFFER_TTL_MS - 1), deadlineAt: null,
+        status: "offered", offeredAt: new Date(now - PR_REVIEW_OFFER_TTL_MS - 1), deadlineAt: null,
         pullRequestUrl: PR, headSha: "head1",
       },
       {
         id: "accepted-during-restart", bugId: "bug1", beneficiaryUserId: "reviewer-2", agentId: "agent-2",
-        status: "accepted", offeredAt: new Date(now - REVIEW_OFFER_TTL_MS * 2), deadlineAt: new Date(now - REVIEW_DEADLINE_MS - 1),
+        status: "accepted", offeredAt: new Date(now - PR_REVIEW_OFFER_TTL_MS * 2), deadlineAt: new Date(now - PR_REVIEW_DEADLINE_MS - 1),
         pullRequestUrl: PR, headSha: "head1",
       },
     ];
@@ -698,8 +698,8 @@ describe("durable PR review offer expiry (#592)", () => {
   it("offers a replacement reviewer as part of the durable expiry transition", async () => {
     state.reviewOffers = [{
       id: "expired-accepted", bugId: "bug1", beneficiaryUserId: "reviewer-1", agentId: "agent-1",
-      status: "accepted", offeredAt: new Date(Date.now() - REVIEW_OFFER_TTL_MS * 2),
-      deadlineAt: new Date(Date.now() - REVIEW_DEADLINE_MS - 1), pullRequestUrl: PR, headSha: "head1",
+      status: "accepted", offeredAt: new Date(Date.now() - PR_REVIEW_OFFER_TTL_MS * 2),
+      deadlineAt: new Date(Date.now() - PR_REVIEW_DEADLINE_MS - 1), pullRequestUrl: PR, headSha: "head1",
     }];
     db.membership.findMany.mockResolvedValue([
       { userId: "reviewer-2", user: { agents: [{ id: "agent-2" }] } },
@@ -710,6 +710,50 @@ describe("durable PR review offer expiry (#592)", () => {
     expect(db.reviewOffer.create).toHaveBeenCalledTimes(1);
     await expect(sweepReviewOffers()).resolves.toEqual({ expired: 0 });
     expect(db.reviewOffer.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send a new request for an unattended PR review every 30 minutes", async () => {
+    state.reviewOffers = [{
+      id: "unaccepted-review", bugId: "bug1", beneficiaryUserId: "reviewer-1", agentId: "agent-1",
+      status: "offered", offeredAt: new Date(Date.now() - 30 * 60_000 - 1), deadlineAt: null,
+      pullRequestUrl: PR, headSha: "head1",
+    }];
+    db.membership.findMany.mockResolvedValue([
+      { userId: "reviewer-1", user: { agents: [{ id: "agent-1" }] } },
+    ]);
+
+    await expect(sweepReviewOffers()).resolves.toEqual({ expired: 0 });
+    expect(state.reviewOffers.map(({ status }) => status)).toEqual(["offered"]);
+    expect(db.reviewOffer.create).not.toHaveBeenCalled();
+    expect(db.agentEvent.create).not.toHaveBeenCalled();
+
+    state.reviewOffers[0].offeredAt = new Date(Date.now() - PR_REVIEW_OFFER_TTL_MS - 1);
+    await expect(sweepReviewOffers()).resolves.toEqual({ expired: 1 });
+    expect(state.reviewOffers.map(({ status }) => status)).toEqual(["expired", "offered"]);
+    expect(db.reviewOffer.create).toHaveBeenCalledTimes(1);
+    expect(db.agentEvent.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows six hours to finish an accepted PR review before sending a new request", async () => {
+    state.reviewOffers = [{
+      id: "accepted-review", bugId: "bug1", beneficiaryUserId: "reviewer-1", agentId: "agent-1",
+      status: "accepted", offeredAt: new Date(Date.now() - 60 * 60_000),
+      deadlineAt: new Date(Date.now() + PR_REVIEW_DEADLINE_MS - 30 * 60_000), pullRequestUrl: PR, headSha: "head1",
+    }];
+    db.membership.findMany.mockResolvedValue([
+      { userId: "reviewer-1", user: { agents: [{ id: "agent-1" }] } },
+    ]);
+
+    await expect(sweepReviewOffers()).resolves.toEqual({ expired: 0 });
+    expect(state.reviewOffers.map(({ status }) => status)).toEqual(["accepted"]);
+    expect(db.reviewOffer.create).not.toHaveBeenCalled();
+    expect(db.agentEvent.create).not.toHaveBeenCalled();
+
+    state.reviewOffers[0].deadlineAt = new Date(Date.now() - PR_REVIEW_DEADLINE_MS - 1);
+    await expect(sweepReviewOffers()).resolves.toEqual({ expired: 1 });
+    expect(state.reviewOffers.map(({ status }) => status)).toEqual(["expired", "offered"]);
+    expect(db.reviewOffer.create).toHaveBeenCalledTimes(1);
+    expect(db.agentEvent.create).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -737,7 +781,7 @@ describe("late review-offer acceptance commits expiry (#532)", () => {
       beneficiaryUserId: "reviewer-owner-1",
       agentId: "reviewer-agent-1",
       status: "offered",
-      offeredAt: new Date(Date.now() - REVIEW_OFFER_TTL_MS - 1),
+      offeredAt: new Date(Date.now() - PR_REVIEW_OFFER_TTL_MS - 1),
       deadlineAt: null,
       pullRequestUrl: PR,
       headSha: "head1",

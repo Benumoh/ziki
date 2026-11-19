@@ -14,7 +14,7 @@ import { findReadyToMergeIssues } from "@/lib/agent-api/merger";
 import { verdictClass, type VerdictClass } from "@/lib/agent-api/merge-verdicts";
 import { findReviewableIssues } from "@/lib/agent-api/reviewer";
 import { openIssueConfirmations, type ConfirmationState } from "@/lib/issue-stage";
-import { REVIEW_OFFER_TTL_MS } from "@/lib/agent-api/review-offer";
+import { PR_REVIEW_OFFER_TTL_MS, REVIEW_OFFER_TTL_MS } from "@/lib/agent-api/review-offer";
 import { isThresholdOnly, managerWeightNote, tallyLine, weightedTally } from "@/lib/governance";
 import { CLOSE_REASON_MEANING, closeReasonLabel, closeTallies, isCloseReason, type CloseTally } from "@/lib/close-reasons";
 import { mergeReviewVotes, type MergeReviewVotes } from "@/lib/agent-api/merge-review-tally";
@@ -1004,7 +1004,8 @@ export type AgentWork = Awaited<ReturnType<typeof agentWork>>;
 /** What is addressed to this agent alone: its offers, its claims and its unread inbox. */
 async function agentWork(agent: AgentContext, projectId: string, offerWindowSeconds: number, track: WorkTrack = "product", now = Date.now()) {
   const offerCutoff = new Date(now - offerWindowSeconds * 1000);
-  const reviewCutoff = new Date(now - REVIEW_OFFER_TTL_MS);
+  const reviewCutoff = new Date(now - PR_REVIEW_OFFER_TTL_MS);
+  const jobReviewCutoff = new Date(now - REVIEW_OFFER_TTL_MS);
   const [offers, reviewOffers, jobReviewOffers, claims, unread] = await Promise.all([
     prisma.issueClaim.findMany({
       where: { agentId: agent.agentId, status: "offered", releasedAt: null, offeredAt: { gt: offerCutoff }, bug: { projectId, isDeleted: false, ...trackFilter(track) } },
@@ -1018,7 +1019,7 @@ async function agentWork(agent: AgentContext, projectId: string, offerWindowSeco
     track === "marketing"
       ? Promise.resolve([])
       : prisma.jobReviewOffer.findMany({
-          where: { agentId: agent.agentId, status: "offered", offeredAt: { gt: reviewCutoff }, submission: { job: { projectId } } },
+          where: { agentId: agent.agentId, status: "offered", offeredAt: { gt: jobReviewCutoff }, submission: { job: { projectId } } },
           select: { id: true, offeredAt: true, submission: { select: { id: true, job: { select: { brief: true } } } } },
         }),
     prisma.issueClaim.findMany({
@@ -1127,7 +1128,7 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       minimumRole: "working",
       canAct: true,
       issue: issueRef(offer.bug),
-      dueAt: plus(offer.offeredAt.getTime() + REVIEW_OFFER_TTL_MS),
+      dueAt: plus(offer.offeredAt.getTime() + PR_REVIEW_OFFER_TTL_MS),
       actions: [{ name: "accept_review_offer", minimumRole: "working", method: "POST", path: `/api/v1/reviews/${offer.id}/accept`, cli: `accept-review-offer --id ${offer.id}` }],
     });
   }

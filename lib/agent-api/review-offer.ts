@@ -12,8 +12,14 @@ import { workflowFor } from "@/lib/workflow";
 import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 import { activeIn } from "@/lib/agents/active-in";
 
-export const REVIEW_OFFER_TTL_MS = 30 * 60_000; // 30 minutes to accept
-export const REVIEW_DEADLINE_MS = 30 * 60_000; // 30 minutes to review after acceptance
+// PR reviews are not claim offers: a six-hour window avoids generating a new
+// review.requested inbox event every few minutes for an unattended review.
+export const PR_REVIEW_OFFER_TTL_MS = 6 * 60 * 60_000;
+export const PR_REVIEW_DEADLINE_MS = 6 * 60 * 60_000;
+
+// Research-job review offers keep their shorter window.
+export const REVIEW_OFFER_TTL_MS = 30 * 60_000;
+export const REVIEW_DEADLINE_MS = 30 * 60_000;
 export const DEFAULT_REVIEW_VERDICTS_NEEDED = DEFAULT_PROJECT_WORKFLOW.verdictsNeeded;
 
 type Db = typeof prisma | Prisma.TransactionClient;
@@ -28,6 +34,10 @@ export type ReviewOfferCandidate = {
 
 export function isReviewOfferExpired(offeredAt: Date | null, now = Date.now()): boolean {
   return !offeredAt || now - offeredAt.getTime() >= REVIEW_OFFER_TTL_MS;
+}
+
+export function isPrReviewOfferExpired(offeredAt: Date | null, now = Date.now()): boolean {
+  return !offeredAt || now - offeredAt.getTime() >= PR_REVIEW_OFFER_TTL_MS;
 }
 
 export function isReviewDeadlineExpired(deadlineAt: Date | null, now = Date.now()): boolean {
@@ -173,7 +183,7 @@ async function findEligibleReviewerCandidates(
       }
     }
 
-    const pendingCutoff = new Date(Date.now() - REVIEW_OFFER_TTL_MS);
+    const pendingCutoff = new Date(Date.now() - PR_REVIEW_OFFER_TTL_MS);
     const pending = await db.reviewOffer.findMany({
       where: {
         beneficiaryUserId: { in: userIds },
@@ -233,7 +243,7 @@ export async function createReviewOffers(
     });
 
     for (const o of existingOffers) {
-      if (o.status === "offered" && !isReviewOfferExpired(o.offeredAt)) {
+      if (o.status === "offered" && !isPrReviewOfferExpired(o.offeredAt)) {
         excludeUserIds.add(o.beneficiaryUserId);
       } else if (o.status === "accepted" || o.status === "completed") {
         excludeUserIds.add(o.beneficiaryUserId);
@@ -273,7 +283,7 @@ export async function createReviewOffers(
       },
     });
 
-    const expiresAt = new Date(offer.offeredAt.getTime() + REVIEW_OFFER_TTL_MS).toISOString();
+    const expiresAt = new Date(offer.offeredAt.getTime() + PR_REVIEW_OFFER_TTL_MS).toISOString();
 
     await publish(db, {
       organisationId: bug.organisationId,
@@ -339,7 +349,7 @@ export async function acceptReviewOffer(agent: AgentContext, offerId: string) {
       throw new IssueApiError(409, `This review offer is already ${offer.status}.`);
     }
 
-    if (isReviewOfferExpired(offer.offeredAt, now.getTime())) {
+    if (isPrReviewOfferExpired(offer.offeredAt, now.getTime())) {
       await expireReviewOfferInTransaction(tx, offer.id);
       return { expired: true as const };
     }
@@ -347,7 +357,7 @@ export async function acceptReviewOffer(agent: AgentContext, offerId: string) {
     const conflict = reviewerConflict({ id: agent.agentId, ownerUserId: agent.ownerId }, offer.bug);
     if (conflict) throw new IssueApiError(403, "not_independent", { message: new ReviewerNotIndependentError(conflict).message });
 
-    const deadlineAt = new Date(now.getTime() + REVIEW_DEADLINE_MS);
+    const deadlineAt = new Date(now.getTime() + PR_REVIEW_DEADLINE_MS);
     const updated = await tx.reviewOffer.update({
       where: { id: offer.id },
       data: {
@@ -394,7 +404,7 @@ export async function reofferReview(
   const excludeUserIds = new Set<string>();
 
   for (const o of existingOffers) {
-    if (o.status === "offered" && !isReviewOfferExpired(o.offeredAt, now)) {
+    if (o.status === "offered" && !isPrReviewOfferExpired(o.offeredAt, now)) {
       excludeUserIds.add(o.beneficiaryUserId);
     } else if (o.status === "accepted" && !isReviewDeadlineExpired(o.deadlineAt, now)) {
       excludeUserIds.add(o.beneficiaryUserId);
@@ -422,7 +432,7 @@ export async function reofferReview(
     },
   });
 
-  const expiresAt = new Date(newOffer.offeredAt.getTime() + REVIEW_OFFER_TTL_MS).toISOString();
+  const expiresAt = new Date(newOffer.offeredAt.getTime() + PR_REVIEW_OFFER_TTL_MS).toISOString();
 
   await publish(db, {
     organisationId: bug.organisationId,
@@ -473,12 +483,12 @@ async function expireReviewOfferInTransaction(
   // Start the deadline check after acquiring both locks so a long lock wait
   // cannot defer a row that became due while this transaction was waiting.
   const now = new Date();
-  const isOfferDue = offer.status === "offered" && isReviewOfferExpired(offer.offeredAt, now.getTime());
+  const isOfferDue = offer.status === "offered" && isPrReviewOfferExpired(offer.offeredAt, now.getTime());
   const isDeadlineDue = offer.status === "accepted" && isReviewDeadlineExpired(offer.deadlineAt, now.getTime());
   if (!isOfferDue && !isDeadlineDue) return false;
 
   const dueWhere: Prisma.ReviewOfferWhereInput = isOfferDue
-    ? { status: "offered", offeredAt: { lte: new Date(now.getTime() - REVIEW_OFFER_TTL_MS) } }
+    ? { status: "offered", offeredAt: { lte: new Date(now.getTime() - PR_REVIEW_OFFER_TTL_MS) } }
     : {
         status: "accepted",
         OR: [{ deadlineAt: { lte: now } }, { deadlineAt: null }],
@@ -513,7 +523,7 @@ export async function sweepReviewOffers(): Promise<{ expired: number }> {
   const dueOffers = await prisma.reviewOffer.findMany({
     where: {
       OR: [
-        { status: "offered", offeredAt: { lte: new Date(now.getTime() - REVIEW_OFFER_TTL_MS) } },
+        { status: "offered", offeredAt: { lte: new Date(now.getTime() - PR_REVIEW_OFFER_TTL_MS) } },
         { status: "accepted", OR: [{ deadlineAt: { lte: now } }, { deadlineAt: null }] },
       ],
     },
