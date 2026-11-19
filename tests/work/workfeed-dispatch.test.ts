@@ -26,6 +26,8 @@ import { parseEventFilters } from "@/lib/agent-api/events";
 import { webhookBody } from "@/lib/webhooks/deliver";
 import { prGate } from "@/lib/agent-api/pr-gate";
 import type { StoredPullRequestReport } from "@/lib/agent-api/pull-request-report";
+import * as workflow from "@/lib/workflow";
+import { getDispatcherMetrics } from "@/lib/agent-api/dispatcher";
 import {
   HOLD_MS,
   MAX_ASKS,
@@ -155,6 +157,32 @@ function work(overrides: Partial<ProjectWork> = {}): ProjectWork {
 }
 
 const nothingMine: AgentWork = { offers: [], reviewOffers: [], jobReviewOffers: [], claims: [], unread: 0, planning: [], unproven: new Map(), testsToAdd: [], askFirst: false };
+
+describe("getDispatcherMetrics: pending offers (#566)", () => {
+  it.each([30, 300])("uses the project's %i-second offer window", async (offerWindowSeconds) => {
+    const now = new Date("2026-11-19T12:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const workflowFor = vi.spyOn(workflow, "workflowFor").mockResolvedValue({
+      offerWindowSeconds,
+    } as Awaited<ReturnType<typeof workflow.workflowFor>>);
+    queries.length = 0;
+
+    try {
+      await getDispatcherMetrics(agent("manager"), "p1");
+      const offerCount = queries.find((query) =>
+        query.model === "issueClaim" && query.method === "count" && query.args?.where?.status === "offered"
+      );
+
+      expect(offerCount?.args?.where?.offeredAt).toEqual({
+        gt: new Date(now.getTime() - offerWindowSeconds * 1000),
+      });
+    } finally {
+      workflowFor.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
 
 /** #plan-review: a complex issue's award held by this agent, with where its plan is. */
 const planningClaim = (plan: AgentWork["planning"][number]["plan"]): AgentWork["planning"][number] => ({
