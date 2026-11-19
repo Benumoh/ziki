@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { withdrawableOf } from "./ledger";
+import { TEST_CURRENCY } from "./test-mode";
 
 /**
  * The money page's numbers (#ziki-coins), read straight off the ledger.
@@ -106,7 +107,8 @@ export async function reconcile(
   readBalance: () => Promise<{ availableCents: number; pendingCents: number }>,
 ): Promise<Reconciliation> {
   const [purchases, transfers] = await Promise.all([
-    db.coinPurchase.aggregate({ _sum: { amountCents: true, stripeFeeCents: true } }),
+    // Test-mode purchases (lib/coins/test-mode.ts) never went through Stripe, so they are not part of what it should hold.
+    db.coinPurchase.aggregate({ where: { currency: { not: TEST_CURRENCY } }, _sum: { amountCents: true, stripeFeeCents: true } }),
     db.withdrawal.aggregate({ where: { status: { in: ["pending", "paid"] } }, _sum: { amountCents: true } }),
   ]);
   const expectedCents = (purchases._sum.amountCents ?? 0) - (purchases._sum.stripeFeeCents ?? 0) - (transfers._sum.amountCents ?? 0);

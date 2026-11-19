@@ -90,6 +90,13 @@ const db = vi.hoisted(() => {
       findUnique: async ({ where }: { where: { stripeSubscriptionId: string } }) => world.subscriptions.find((s) => s.stripeSubscriptionId === where.stripeSubscriptionId) ?? null,
       findFirst: async ({ where }: { where: { userId: string; status: { in: string[] } } }) =>
         world.subscriptions.find((s) => s.userId === where.userId && where.status.in.includes(s.status)) ?? null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const made = { id: `csub-${world.subscriptions.length + 1}`, cancelAtPeriodEnd: false, ...data } as (typeof world.subscriptions)[number];
+        world.subscriptions.push(made);
+        return made;
+      },
+      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
+        Object.assign(world.subscriptions.find((s) => s.id === where.id) ?? {}, data),
       upsert: async ({ where, create, update }: { where: { stripeSubscriptionId: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
         const found = world.subscriptions.find((s) => s.stripeSubscriptionId === where.stripeSubscriptionId);
         if (found) return Object.assign(found, update);
@@ -169,9 +176,10 @@ import { refundEscrow, releaseEscrow } from "@/lib/coins/escrow";
 import { escrowBalance, escrowByBug, walletBalance, walletSummary } from "@/lib/coins/ledger";
 import { dollarsToZiks, estimateToZik, feeOf, planRelease, splitByWeight, ziksToDollars } from "@/lib/coins/math";
 import { ledgerBalances } from "@/lib/coins/money";
-import { createPackCheckout, recordPurchase } from "@/lib/coins/purchase";
+import { createPackCheckout, createTestPurchase, recordPurchase } from "@/lib/coins/purchase";
+import { testPayments } from "@/lib/coins/test-mode";
 import { discountedCents, planBreakEvenCents, ZIK_PLANS } from "@/lib/coins/plans";
-import { createSubscriptionCheckout, recordSubscriptionPayment, setSubscriptionEnding } from "@/lib/coins/subscription";
+import { createSubscriptionCheckout, recordSubscriptionPayment, setSubscriptionEnding, startTestSubscription } from "@/lib/coins/subscription";
 import Stripe from "stripe";
 import { failWithdrawal, retryPendingWithdrawals } from "@/lib/coins/withdraw";
 
@@ -320,6 +328,50 @@ describe("Stripe webhook purchases", () => {
     expect(await recordPurchase(session({ payment_status: "unpaid" }))).toBe("ignored");
     expect(await recordPurchase(session({ id: "cs_2", amount_total: 100 }))).toBe("ignored");
     expect(await walletBalance(db as never, "owner")).toBe(0);
+  });
+});
+
+describe("Test payments (no card step while the Stripe key is a test key)", () => {
+  it("credits the pack at once, marked as a test purchase, without asking Stripe", async () => {
+    expect(await createTestPurchase("owner", "starter")).toBe("/coins?bought=1");
+    expect(await walletBalance(db as never, "owner")).toBe(50);
+    expect(world.purchases).toHaveLength(1);
+    expect((world.purchases[0] as { currency?: string }).currency).toBe("test");
+    expect(world.stripeCalls).toHaveLength(0);
+  });
+
+  it("refuses a pack that does not exist, and credits nothing", async () => {
+    await expect(createTestPurchase("owner", "nope")).rejects.toThrow("Choose one of the packs.");
+    expect(await walletBalance(db as never, "owner")).toBe(0);
+  });
+
+  it("starts a plan at once, once, and ending it never calls Stripe", async () => {
+    await startTestSubscription("owner", "plus");
+    expect(world.subscriptions).toHaveLength(1);
+    expect(world.subscriptions[0].status).toBe("active");
+    await expect(startTestSubscription("owner", "pro")).rejects.toThrow("already have a monthly plan");
+    await setSubscriptionEnding("owner", true);
+    expect(world.subscriptions[0].cancelAtPeriodEnd).toBe(true);
+    expect(world.stripeCalls).toHaveLength(0);
+  });
+
+  it("is on for a test key and off for a live one, unless forced", () => {
+    const keep = { key: process.env.STRIPE_SECRET_KEY, flag: process.env.ZIKI_TEST_PAYMENTS };
+    try {
+      delete process.env.ZIKI_TEST_PAYMENTS;
+      process.env.STRIPE_SECRET_KEY = "sk_test_abc";
+      expect(testPayments()).toBe(true);
+      process.env.STRIPE_SECRET_KEY = "sk_live_abc";
+      expect(testPayments()).toBe(false);
+      process.env.ZIKI_TEST_PAYMENTS = "0";
+      process.env.STRIPE_SECRET_KEY = "sk_test_abc";
+      expect(testPayments()).toBe(false);
+    } finally {
+      for (const [name, value] of [["STRIPE_SECRET_KEY", keep.key], ["ZIKI_TEST_PAYMENTS", keep.flag]] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });
 
