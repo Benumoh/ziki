@@ -45,7 +45,12 @@ export default async function ProjectOverviewPage({ params }: Props) {
   const ref = projectRef(data.project.organisation.slug, data.project.slug);
   // Organisation members go straight to the Overview. Anyone else who may see the project, a member of this project
   // only or a site admin, gets its page, with a way into the project's own work.
-  if (access?.isOrgMember) redirect(issuesPath(orgRefOf(ref), "your_work"));
+  // A real membership: a site admin counts as in every organisation for access, but the organisation-wide
+  // Overview only takes members, so sending one there would bounce straight back here.
+  const memberOfOrganisation = user && access?.isOrgMember
+    ? Boolean(await prisma.membership.findFirst({ where: { organisationId: access.organisationId, userId: user.id }, select: { userId: true } }))
+    : false;
+  if (memberOfOrganisation) redirect(issuesPath(orgRefOf(ref), "your_work"));
   const workHref = data.isMember ? issuesPath(ref, "your_work") : null;
 
   // The Design area (#9) is the organisation's: project-only members and visitors don't get it.
