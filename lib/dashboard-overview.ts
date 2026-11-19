@@ -326,10 +326,11 @@ export async function loadOwnAgents({
         take: 1,
         select: { createdAt: true, body: true, bug: { select: { number: true, isDeleted: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } } } },
       },
+      // Every claim it holds, not just the newest: a quiet claim behind a newer
+      // one that already has its pull request linked still makes it stuck.
       claims: {
         where: { releasedAt: null, status: "active" },
         orderBy: [{ claimedAt: "desc" }, { id: "desc" }],
-        take: 1,
         select: {
           claimedAt: true,
           lastHeartbeatAt: true,
@@ -356,26 +357,33 @@ export async function loadOwnAgents({
 
   return agents.map((agent) => {
     const unanswered = agent.questions.length > 0;
-    const claim = agent.claims[0] ?? null;
-    const claimedBug = claim?.bug ?? null;
-    const heartbeat = claim?.lastHeartbeatAt ?? claim?.claimedAt ?? null;
-    const claimHeld = claim !== null && claimedBug !== null && !claimedBug.isDeleted && claimedBug.status === "in_progress";
-    const quiet = heartbeat === null || heartbeat.getTime() < workingCutoff;
-    const claimStalled =
-      claimHeld &&
-      isClaimStalled({ quiet, deliverBy: claim.deliverBy, waitingOnOwnerSince: claim.waitingOnOwnerSince, pullRequestUrl: claimedBug.pullRequestUrl, now });
-    const claimIsLive = claimHeld && !quiet;
+    // Read each claim it holds; newest first, so ties go to the latest work.
+    const held = agent.claims.flatMap((claim) => {
+      const bug = claim.bug;
+      if (!bug || bug.isDeleted || bug.status !== "in_progress") return [];
+      const heartbeat = claim.lastHeartbeatAt ?? claim.claimedAt ?? null;
+      const quiet = heartbeat === null || heartbeat.getTime() < workingCutoff;
+      const stalled = isClaimStalled({ quiet, deliverBy: claim.deliverBy, waitingOnOwnerSince: claim.waitingOnOwnerSince, pullRequestUrl: bug.pullRequestUrl, now });
+      return [{ claim, bug, heartbeat, quiet, stalled }];
+    });
+    const stalledClaim = held.find((entry) => entry.stalled) ?? null;
+    const liveClaim = held.find((entry) => !entry.quiet) ?? null;
+    // The claim the activity line and issue link speak about: the stuck one first.
+    const shown = stalledClaim ?? liveClaim;
+    const claim = shown?.claim ?? null;
+    const claimedBug = shown?.bug ?? null;
+    const heartbeat = shown?.heartbeat ?? null;
 
     const lastSeenAt = latest(
-      heartbeat,
+      ...agent.claims.map((entry) => entry.lastHeartbeatAt ?? entry.claimedAt ?? null),
       eventById.get(agent.id) ?? null,
       ...agent.apiKeys.map((key) => key.lastUsedAt),
     );
 
     const status = classifyAgentStatus({
       hasUnansweredQuestion: unanswered,
-      hasStalledClaim: claimStalled,
-      hasActiveClaim: claimIsLive,
+      hasStalledClaim: stalledClaim !== null,
+      hasActiveClaim: liveClaim !== null,
       lastSeenAt,
       now,
     });

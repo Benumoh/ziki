@@ -293,7 +293,6 @@ enum GoalAllocationTarget {
 }
 
 model User {
-  expressImportGrants        ExpressImportGrant[]
   featurePlans              FeaturePlan[]
   marketingPlans            MarketingPlan[]           @relation("MarketingPlanCreator")
   marketingPlanRevisions    MarketingPlanRevision[]   @relation("MarketingPlanRevisionCreator")
@@ -354,6 +353,7 @@ model User {
   sessionVersion            Int                     @default(0)
   createdAt                 DateTime                @default(now())
   reportedBugs              Bug[]                   @relation("BugReporter")
+  publicSubmissions         PublicSubmission[]
   assignedBugs              Bug[]                   @relation("BugAssignee")
   attachments               Attachment[]
   comments                  Comment[]
@@ -467,7 +467,6 @@ model IssueType {
 
 model Bug {
   coinEntries               CoinEntry[]
-  outsideWork               OutsideWorkImport?
   featurePlanItems          FeaturePlanItem[]
   previewBuilds             PreviewBuild[]
   pullRequestLinkRepairs    PullRequestLinkRepair[]
@@ -561,6 +560,7 @@ model Bug {
   comments                  Comment[]
   votes                     Vote[]
   watches                   IssueWatch[]
+  publicFeedbackVotes       PublicFeedbackVote[]
   notifications             Notification[]
   activities                BugActivity[]
   revisions                 BugRevision[]
@@ -956,9 +956,6 @@ model Organisation {
 /// A project inside an organisation (organisation), e.g. Zedu Web or Zedu Desktop.
 /// Organisations hold projects and nothing in between (#no-platforms).
 model Project {
-  expressImportRequests ExpressImportRequest[]
-  expressImportGrants    ExpressImportGrant[]
-  outsideWorkImports     OutsideWorkImport[]
   featurePlans          FeaturePlan[]
   clusters              Cluster[]
   marketingPlans        MarketingPlan[]
@@ -1025,6 +1022,8 @@ model Project {
   repositories          ProjectRepository[]
   proofRules            ProofRule[]
   forumPosts            ForumPost[]
+  workAlerts            WorkAlert[]
+  workSnapshots         WorkSnapshot[]
 
   @@unique([organisationId, slug])
 }
@@ -1376,9 +1375,6 @@ model ProjectJoinRequest {
 /// A named agent working for its owner inside an organisation (#427). It always acts
 /// as itself and for a named person.
 model Agent {
-  expressImportRequests ExpressImportRequest[]
-  expressImportGrants  ExpressImportGrant[]
-  outsideWorkImports   OutsideWorkImport[]
   /// Parts of security checks this agent holds or did (#security-checks).
   securityCheckItems   SecurityCheckItem[]
   requests             AgentRequest[]
@@ -1462,6 +1458,7 @@ model Agent {
   jobReviews           JobReview[]
   jobReviewOffers      JobReviewOffer[]
   inboxItems           AgentInboxItem[]
+  workAlerts           WorkAlert[]
   goalAllocations      GoalAllocation[]
   recordedMistakes     AgentMistake[]
 
@@ -1493,58 +1490,6 @@ model Agent {
 /// choose which to activate where. An agent works in every project of an
 /// organisation it is active in. The organisation's grants live here: its
 /// class (an organisation admin's grant) and its rate budget.
-/// A person administering a project may let a particular agent import outside work.
-/// This never changes its class or grants GitHub merge permissions.
-model ExpressImportGrant {
-  agentId         String
-  projectId       String
-  grantedByUserId String
-  createdAt       DateTime @default(now())
-  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  grantedBy       User     @relation(fields: [grantedByUserId], references: [id], onDelete: Restrict)
-
-  @@id([agentId, projectId])
-  @@index([projectId])
-}
-
-/// A request is not a grant. Only an organisation admin can approve it.
-model ExpressImportRequest {
-  agentId          String
-  projectId        String
-  reason           String
-  decision         String   @default("pending")
-  response         String?
-  requestedAt      DateTime @default(now())
-  decidedAt        DateTime?
-  reviewedByUserId String?
-  agent            Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@id([agentId, projectId])
-  @@index([projectId, decision, requestedAt])
-}
-
-/// Immutable provenance and retry identity for a delivery imported outside the board (#788).
-/// PR identity is normalized, so URL casing, fragments and retries cannot earn twice.
-model OutsideWorkImport {
-  id             String   @id @default(cuid())
-  bugId          String   @unique
-  projectId      String
-  agentId        String
-  pullRequestKey String
-  requestKey     String
-  requestHash    String
-  initialState   String
-  createdAt      DateTime @default(now())
-  bug            Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
-
-  @@unique([projectId, pullRequestKey])
-  @@unique([agentId, projectId, requestKey])
-}
-
 model AgentActivation {
   id             String       @id @default(cuid())
   agentId        String
@@ -2009,6 +1954,7 @@ model Idea {
   source             String           @default("internal")
   /// SHA-256 of the unguessable token in a guest's tracking URL. The token itself is never stored.
   publicTrackingTokenHash String?      @unique
+  publicSubmission   PublicSubmission?
   /// Why it is worth doing. Required on marketing ideas, by validation.
   rationale          String?
   /// Product or marketing work (`WorkTrack`). Converting copies it to the issue.
@@ -2074,6 +2020,28 @@ model Idea {
   @@index([projectId, track, status])
   @@index([reporterId])
   @@index([createdByAgentId])
+}
+
+/// Customer interest, never an agent verdict, importance vote or workflow input (#1046).
+model PublicFeedbackVote {
+  id          String   @id @default(cuid())
+  bugId       String
+  bug         Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  visitorHash String
+  createdAt   DateTime @default(now())
+
+  @@unique([bugId, visitorHash])
+}
+
+/// Ownership of a public report, separate from its non-login system reporter (#1046).
+model PublicSubmission {
+  ideaId    String   @id
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// A member's feature request and reviewed breakdown. Drafts remain private to their creator.
@@ -3043,7 +3011,7 @@ model AgentEvent {
 model AgentInboxItem {
   id        String      @id @default(cuid())
   agentId   String
-  /// offer | reply | mention | answer | message | approval | claim | request
+  /// offer | reply | mention | answer | message | approval | claim | request | ping | alert (#work-alerts)
   kind      String
   eventId   String?
   /// The event that put it here, e.g. `claim.offered`.
@@ -3059,6 +3027,88 @@ model AgentInboxItem {
   @@unique([agentId, eventId])
   @@index([agentId, createdAt, id])
   @@index([agentId, readAt, createdAt, id])
+}
+
+/// A work alert (#work-alerts): Ziki telling one free agent that work in a
+/// project has stopped moving or is piling up, so the agent tells its person
+/// in their coding terminal and asks whether to start. One row per agent per
+/// project while the rise lasts (lib/agents/work-alerts.ts). It is a notice,
+/// never an assignment: the person's yes is what starts the work.
+model WorkAlert {
+  id             String    @id @default(cuid())
+  organisationId String
+  projectId      String
+  agentId        String
+  /// rise: work stopped moving or piled up; welcome: a new agent's first look
+  /// at the work it can do (#work-alerts).
+  kind           String    @default("rise")
+  /// pinged: waiting for an away agent to check in before it is sent; sent:
+  /// delivered, waiting for the person's answer; passed: they said no, or
+  /// didn't answer any ask, so it isn't sent to this agent again while the
+  /// rise lasts; ended: the rise is over for this agent.
+  status         String
+  /// What was last sent: the lines this agent's role can act on, with counts.
+  summary        Json
+  pingedAt       DateTime?
+  sentAt         DateTime?
+  /// Asks since the last answer (the first send counts).
+  asks           Int       @default(0)
+  lastAskedAt    DateTime?
+  /// yes | no | later: the person's answer, reported by the agent.
+  answer         String?
+  answeredAt     DateTime?
+  endedAt        DateTime?
+  /// When the agent let this alert lapse: it ignored every ask, or said yes
+  /// and took no step before its share's hold ran out. Lapses shrink its
+  /// next shares and fade over a week (#work-alert-shares).
+  lapsedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agent          Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  items          WorkAlertItem[]
+
+  @@index([projectId, endedAt])
+  @@index([agentId, endedAt])
+  @@index([agentId, lapsedAt])
+}
+
+/// One item of an agent's share in a work alert (#work-alert-shares): an issue
+/// or idea held for that agent until `heldUntil`, so two agents aren't sent
+/// the same item (beyond the verdicts it still needs). Rows stay after the
+/// hold ends: the last 24 hours of them say how much each agent was given.
+model WorkAlertItem {
+  id             String    @id @default(cuid())
+  alertId        String
+  organisationId String
+  projectId      String
+  agentId        String
+  /// The alert line it was given on (lib/agents/work-alerts.ts PROJECT_LINES).
+  line           String
+  /// issue | idea
+  itemType       String
+  itemId         String
+  number         Int
+  heldUntil      DateTime
+  createdAt      DateTime  @default(now())
+  alert          WorkAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, heldUntil])
+  @@index([organisationId, agentId, createdAt])
+  @@index([alertId])
+}
+
+/// How much was waiting in a project, per work-alert line, at one sweep
+/// (#work-alerts). The sweep compares now with 20 minutes ago to see work
+/// piling up, and keeps an hour of them.
+model WorkSnapshot {
+  id        String   @id @default(cuid())
+  projectId String
+  counts    Json
+  takenAt   DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, takenAt])
 }
 
 /// An agent with a public HTTPS endpoint opting in to webhooks (#445). The
@@ -3614,6 +3664,9 @@ enum SecurityCheckItemKind {
   check
   /// Once every part is in: an always-on agent writes the one report the client sees.
   collate
+  /// Ziki's own code checks (the quick scan, 18 Nov): its findings join the main list. Never given to an agent,
+  /// never counted as a part, saved already done.
+  automatic
 }
 
 /// Where one job is (#security-checks).
@@ -3626,6 +3679,14 @@ enum SecurityCheckItemStatus {
   done
   /// Dropped: the check was cancelled, or the part does not apply.
   skipped
+}
+
+/// What a rescan's agent said about an earlier finding (#security-rescan, 17 Nov).
+enum SecurityRecheckState {
+  /// The problem is still there.
+  still_there
+  /// The problem is gone.
+  fixed
 }
 
 /// A website, server or repo a workspace wants checked (#security-checks).
@@ -3679,13 +3740,12 @@ model SecurityCheck {
   requestedById  String
   requestedBy    User                  @relation("SecurityCheckRequester", fields: [requestedById], references: [id], onDelete: Cascade)
   status         SecurityCheckStatus   @default(awaiting_ownership)
-  /// The price in coins when the check was asked for. Replaced by per-finding
-  /// prices (SecurityCheckResult.priceCoins) and removed once the pay page uses them.
+  /// The scan admission price in Ziks: first deeper scan or follow-up rescan.
+  /// Separate from per-finding remediation prices.
   priceCoins     Int
-  /// A free scan (#security-checks): the first scan of a target is free, within
-  /// FREE_SCANS_PER_TARGET and FREE_SCANS_PER_WORKSPACE_PER_MONTH.
+  /// Historical free agent scans are grandfathered. New deeper scans are paid.
   free           Boolean               @default(false)
-  /// When the client paid; null while unpaid. Unlocks the full report and releases agent pay.
+  /// When scan admission was paid. New non-free checks cannot start agents until set.
   paidAt         DateTime?
   /// When the collate job was queued, after every part was in; null before. Guards against queuing it twice.
   collatingAt    DateTime?
@@ -3695,10 +3755,28 @@ model SecurityCheck {
   postedAt       DateTime?
   startedAt      DateTime?
   finishedAt     DateTime?
+  /// A rescan (#security-rescan, 17 Nov): the check it follows. Its agents recheck that check's open
+  /// findings (still there or fixed) and look for new ones. Null for a first scan.
+  previousCheckId String?              @unique
+  /// What the quick scan saw of the site, as short hashes per area (certificate, TLS, headers, cookies, files, email; a
+  /// repo's file lists), so a rescan can say whether the site changed since (18 Nov). Null before then, or when the
+  /// quick scan couldn't run.
+  siteFingerprint Json?
+  previousCheck  SecurityCheck?        @relation("SecurityRescan", fields: [previousCheckId], references: [id], onDelete: SetNull)
+  /// The rescan that followed this check, if any. A check followed by a rescan leaves the scans list.
+  nextCheck      SecurityCheck?        @relation("SecurityRescan")
+  /// A code scan (#security-code-scan, 18 Nov): the website scan whose Connect code started it, paid for
+  /// separately (CODE_SCAN_PRICE_ZIKS). Unique, so a website scan gets one code scan, and a double click pays once.
+  codeScanForId  String?               @unique
+  codeScanFor    SecurityCheck?        @relation("SecurityCodeScan", fields: [codeScanForId], references: [id], onDelete: SetNull)
+  /// The code scan started from this website scan's Code scan step, if any.
+  codeScan       SecurityCheck?        @relation("SecurityCodeScan")
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   items          SecurityCheckItem[]
   results        SecurityCheckResult[]
+  /// Earlier findings this check (a rescan) rechecked.
+  rechecked      SecurityCheckResult[] @relation("SecurityRecheckCheck")
 
   @@index([organisationId, createdAt])
   @@index([targetId, createdAt])
@@ -3708,6 +3786,22 @@ model SecurityCheck {
 /// One job inside a security check (#security-checks): the split, or one part
 /// to check. Ziki gives it to an agent, which does it and reports back. No
 /// votes or bids.
+/// One file (or the file list) an agent read from a repo through Ziki while holding a part (#security-repo-scan, 18 Nov).
+/// A private repo's code reaches agents only this way, through the workspace's GitHub App; every read is kept here.
+model SecurityCodeRead {
+  id        String            @id @default(cuid())
+  itemId    String
+  item      SecurityCheckItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  agentId   String
+  /// The file's path in the repo; empty for the file list.
+  path      String
+  bytes     Int
+  createdAt DateTime          @default(now())
+
+  @@index([itemId])
+  @@index([agentId, createdAt])
+}
+
 model SecurityCheckItem {
   id               String                  @id @default(cuid())
   checkId          String
@@ -3729,6 +3823,9 @@ model SecurityCheckItem {
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
   results          SecurityCheckResult[]
+  codeReads        SecurityCodeRead[]
+  /// A rescan's recheck part: the earlier findings its agent says are still there or fixed.
+  recheckResults   SecurityCheckResult[]   @relation("SecurityRecheckItem")
 
   @@index([checkId, status])
   @@index([agentId, status])
@@ -3758,11 +3855,25 @@ model SecurityCheckResult {
   unlockedAt  DateTime?
   /// When its finder was paid for it, once, after the unlock.
   payoutReleasedAt DateTime?
+  /// Rechecked by a rescan (#security-rescan, 17 Nov): the finding stays this row, so its unlock, price and any
+  /// issue it was moved to carry over and nothing is paid twice. The latest rescan's answer; null until one.
+  recheckState   SecurityRecheckState?
+  recheckedAt    DateTime?
+  /// The rescan that rechecked it last.
+  recheckCheckId String?
+  recheckCheck   SecurityCheck?     @relation("SecurityRecheckCheck", fields: [recheckCheckId], references: [id], onDelete: SetNull)
+  /// The rescan part that holds it to recheck; set when the rescan is planned.
+  recheckItemId  String?
+  recheckItem    SecurityCheckItem? @relation("SecurityRecheckItem", fields: [recheckItemId], references: [id], onDelete: SetNull)
+  /// What the rechecking agent saw, in a line.
+  recheckNote    String?
   createdAt   DateTime          @default(now())
 
   @@index([checkId, severity])
   @@index([checkId, unlockedAt])
   @@index([itemId])
+  @@index([recheckCheckId])
+  @@index([recheckItemId])
 }
 
 /// Status of a support thread raised about a stuck fix (#requests).

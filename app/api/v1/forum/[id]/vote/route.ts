@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveSessionUserId } from "@/lib/session-user";
 import { requireAgent } from "@/lib/agents/require-agent";
 import { toggleForumVote, createForumVoteSchema } from "@/lib/forum";
 import { createMethodNotAllowed, createOptions } from "@/lib/agent-api/http-errors";
@@ -10,7 +9,7 @@ export const runtime = "nodejs";
  * POST /api/v1/forum/[id]/vote
  *
  * Casts, flips, or toggles an upvote/downvote on a forum post or reply.
- * Anti-farming enforced: one vote per user/agent on each target.
+ * Strictly agent-only; enforces owner independence (voterUserId !== targetUserId).
  */
 export async function POST(
   request: NextRequest,
@@ -18,23 +17,22 @@ export async function POST(
 ) {
   const { id: postId } = await params;
 
+  if (!request.headers.has("authorization")) {
+    return NextResponse.json(
+      { error: "Unauthorized. The Agent Forum is read-only for humans; provide an Agent API key." },
+      { status: 401 }
+    );
+  }
+
   let voterUserId: string;
   let voterAgentId: string | undefined;
 
-  if (request.headers.has("authorization")) {
-    try {
-      const agentCtx = await requireAgent(request);
-      voterUserId = agentCtx.ownerId;
-      voterAgentId = agentCtx.agentId;
-    } catch {
-      return NextResponse.json({ error: "Invalid agent credentials." }, { status: 401 });
-    }
-  } else {
-    const sessionResult = await resolveSessionUserId();
-    if ("error" in sessionResult) {
-      return NextResponse.json({ error: "Unauthorized. Sign in or provide Agent key." }, { status: 401 });
-    }
-    voterUserId = sessionResult.userId;
+  try {
+    const agentCtx = await requireAgent(request);
+    voterUserId = agentCtx.ownerId;
+    voterAgentId = agentCtx.agentId;
+  } catch {
+    return NextResponse.json({ error: "Invalid agent credentials." }, { status: 401 });
   }
 
   try {
@@ -60,6 +58,9 @@ export async function POST(
     const message = error instanceof Error ? error.message : "Vote failed";
     if (message.includes("not found")) {
       return NextResponse.json({ error: message }, { status: 404 });
+    }
+    if (message.includes("Owner independence")) {
+      return NextResponse.json({ error: message }, { status: 403 });
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
-import { ZIKI_SECURITY_AGENT_USERNAME, fallbackAfterMs, provenTargetWhere } from "@/lib/security-checks";
+import { ZIKI_SECURITY_AGENT_USERNAME, fallbackAfterMs, provenTargetWhere, scanPaymentWhere } from "@/lib/security-checks";
 import { claudeSecurityAi, type PageReader, type SecurityAi } from "./ai";
 import { postFinishedReports, readPublicPage, releaseJob, submitReport, type ResultInput } from "./engine";
 import { previewScan, type PreviewFinding } from "./preview";
@@ -135,7 +135,7 @@ ${pages}`;
 /** Does one waiting part as Ziki's security agent. True when it was reported. */
 async function workPart(db: PrismaClient, agentId: string, part: Part, ai: SecurityAi, now: Date, deps: FallbackDeps): Promise<boolean> {
   const { count } = await db.securityCheckItem.updateMany({
-    where: { id: part.id, status: "waiting", agentId: null },
+    where: { id: part.id, status: "waiting", agentId: null, check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() } },
     data: { status: "checking", agentId, assignedAt: now },
   });
   // A real agent took it in the meantime.
@@ -180,7 +180,7 @@ export async function sweepFallback(db: PrismaClient, now = new Date(), deps: Fa
       status: "waiting",
       agentId: null,
       createdAt: { lt: new Date(now.getTime() - after) },
-      check: { status: "checking", ...provenTargetWhere() },
+      check: { status: "checking", ...provenTargetWhere(), ...scanPaymentWhere() },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: deps.partsPerSweep ?? fallbackPartsPerSweep(),

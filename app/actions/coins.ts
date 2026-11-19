@@ -34,7 +34,8 @@ export async function buyZiksAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   let url: string;
   try {
-    url = await createPackCheckout(user.id, user.email ?? undefined, String(formData.get("packId") ?? ""));
+    // From a scan's checkout (#deeper-scan-gate): Stripe sends them back to that scan. Checked again in createPackCheckout.
+    url = await createPackCheckout(user.id, user.email ?? undefined, String(formData.get("packId") ?? ""), formData.get("returnTo"));
   } catch (error) {
     const message = failure(error);
     redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
@@ -97,7 +98,7 @@ export async function setUpPayoutsAction(): Promise<void> {
     url = await startPayoutOnboarding(user.id, user.email ?? undefined);
   } catch (error) {
     const message = failure(error);
-    redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
+    redirect(`/coins/payouts?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
   }
   redirect(url);
 }
@@ -107,7 +108,7 @@ export async function refreshPayoutsAction(): Promise<boolean> {
   const user = await requireUser();
   try {
     const enabled = await syncPayoutsEnabled(user.id);
-    revalidatePath("/coins");
+    revalidatePath("/coins/payouts");
     return enabled;
   } catch {
     return (await prisma.user.findUnique({ where: { id: user.id }, select: { payoutsEnabled: true } }))?.payoutsEnabled ?? false;
@@ -120,6 +121,7 @@ export async function withdrawZiksAction(): Promise<CoinActionResult> {
   try {
     const outcome = await withdrawEarned(user.id);
     revalidatePath("/coins");
+    revalidatePath("/coins/payouts");
     if (outcome.status === "failed") return { ok: false, error: "Stripe couldn't send the money. Your Ziks are back in your wallet." };
     const amount = `$${(outcome.amountCents / 100).toFixed(2)}`;
     if (outcome.waiting) {

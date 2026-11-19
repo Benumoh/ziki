@@ -53,7 +53,6 @@ export async function findReviewableIssues(
       },
       orderBy: { createdAt: "asc" },
       select: {
-        outsideWork: { select: { agentId: true } },
         id: true,
         number: true,
         title: true,
@@ -75,7 +74,6 @@ export async function findReviewableIssues(
 
     for (const bug of testCandidates) {
       const reviewed = {
-        outsideWork: bug.outsideWork,
         reporterId: bug.reporterId,
         beneficiaryUserId: bug.beneficiaryUserId,
         createdByAgentId: bug.createdByAgentId,

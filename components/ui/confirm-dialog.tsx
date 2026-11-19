@@ -19,6 +19,8 @@ export type ConfirmOptions = {
   cancelLabel?: string;
   /** "danger" reddens the confirm button and starts focus on Cancel. */
   tone?: "danger" | "primary";
+  /** A small picture above the heading (decorative); with it the heading and text are centred. */
+  art?: React.ReactNode;
 };
 
 type Confirm = (options: ConfirmOptions) => Promise<boolean>;
@@ -87,15 +89,16 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           }}
           className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-card p-5 text-slate-900 shadow-xl backdrop:bg-black/50"
         >
-          <h2 id="confirm-title" className="text-base font-semibold">
+          {options?.art ? <div className="mb-3">{options.art}</div> : null}
+          <h2 id="confirm-title" className={`text-base font-semibold ${options?.art ? "text-center" : ""}`}>
             {options?.title}
           </h2>
           {options?.body ? (
-            <p id="confirm-body" className="mt-2 text-sm text-slate-600">
+            <p id="confirm-body" className={`mt-2 text-sm text-slate-600 ${options?.art ? "text-center" : ""}`}>
               {options.body}
             </p>
           ) : null}
-          <div className="mt-5 flex justify-end gap-2">
+          <div className={`mt-5 flex gap-2 ${options?.art ? "justify-center" : "justify-end"}`}>
             <Button
               type="button"
               variant="secondary"

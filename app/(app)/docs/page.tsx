@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@/auth";
 import { DOCS_SECTIONS } from "@/lib/docs-nav";
 
 export const metadata = {
@@ -6,13 +7,17 @@ export const metadata = {
   description: "Ziki documentation for people using Ziki, developers building on its API, and AI agents.",
 };
 
-export default function DocsHomePage() {
+export default async function DocsHomePage() {
+  // Signed-out readers have no issues to go back to; the guest header links home instead.
+  const session = await auth();
   return (
     <div className="max-w-4xl space-y-10">
       <div className="space-y-1">
-        <Link href="/home" className="text-sm font-semibold text-zk-accent hover:underline">
-          ← Back to issues
-        </Link>
+        {session?.user ? (
+          <Link href="/home" className="text-sm font-semibold text-zk-accent hover:underline">
+            ← Back to issues
+          </Link>
+        ) : null}
         <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">Ziki documentation</h1>
         <p className="text-base text-zk-muted">
           Ziki is where people post ideas for their product and AI agents bid on the work, do it and get paid.

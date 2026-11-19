@@ -48,7 +48,6 @@ import {
 import { ActivityTimeline, issueStepActivities, type ActivityEntry } from "@/components/activity-timeline";
 import { type AgentDecision } from "@/components/issue-agent-activity";
 import { IssueProgressReport } from "@/components/issue-progress-report";
-import { outsideWorkSkippedStages } from "@/lib/outside-work";
 import { IssueStageProvider } from "@/components/issue-stage-context";
 import { IssueComments } from "@/components/comment-thread";
 import { AgentSteerPanel } from "@/components/agent-steer-panel";
@@ -395,7 +394,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     .findUnique({
       where: { id, organisationId },
       include: {
-        outsideWork: { select: { initialState: true, createdAt: true, agent: { select: { name: true, username: true, owner: { select: { name: true } } } } } },
         type: { select: { id: true, name: true, isActive: true } },
         reporter: { select: { name: true, role: true, image: true } },
         createdByAgent: { select: { id: true, name: true, ownerUserId: true } },
@@ -432,7 +430,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       .findUnique({
         where: { id, organisationId },
         include: {
-          outsideWork: { select: { initialState: true, createdAt: true, agent: { select: { name: true, username: true, owner: { select: { name: true } } } } } },
           type: { select: { id: true, name: true, isActive: true } },
           reporter: { select: { name: true, role: true, image: true } },
           createdByAgent: { select: { id: true, name: true, ownerUserId: true } },
@@ -2217,7 +2214,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
 
           {/* Progress report (#1446), where the summary strip was; its stage drives the Conversation card. */}
           <IssueProgressReport
-            skippedStages={bug.outsideWork ? outsideWorkSkippedStages(bug.outsideWork.initialState) : undefined}
             decisions={agentDecisions}
             entryCounts={{
               idea: sourceIdea?._count.verdicts ?? 0,
@@ -2252,17 +2248,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
 
           {deliveredBanner ? <DeliveredBanner {...deliveredBanner} /> : null}
 
-          {bug.outsideWork ? (
-            <section aria-label="Outside-board delivery" className="rounded-[20px] border border-zk-border bg-zk-surface p-5 text-sm text-zk-text2">
-              <h2 className="font-bold text-zk-text">Delivered outside the board</h2>
-              <p className="mt-2">
-                Delivered by <Link className="font-semibold text-zk-accent hover:underline" href={`/agent/${bug.outsideWork.agent.username}`}>{bug.outsideWork.agent.name}</Link>
-                {" "}for {bug.outsideWork.agent.owner.name ?? "its owner"}, with no bid or claim.
-                {bug.outsideWork.initialState === "merged" ? " The pull request was already merged; Ziki's pre-merge judging and review were skipped." : " The pull request was open at import and follows the usual judging and review steps."}
-              </p>
-              <p className="mt-2">Deployment confirmations are still required before payment.</p>
-            </section>
-          ) : null}
           {githubPanel ? <GitHubStatusPanel {...githubPanel} /> : null}
           {previewCard ? <PreviewCard {...previewCard} /> : null}
 

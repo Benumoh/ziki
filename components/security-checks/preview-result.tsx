@@ -168,6 +168,8 @@ export function QuickScanList({ summary }: { summary: PreviewSummary }) {
 
 const RISKS: PreviewRisk[] = ["minimal", "low", "medium", "high", "critical"];
 /** Where each level sits on the meter, in percent: the middle of its fifth. */
+/** Ziki's severity colours across the whole meter (Minimal green, Low blue, Medium amber, High orange, Critical red), from Minimal to Critical (the same as check-header.tsx). */
+const RISK_GRADIENT = "linear-gradient(90deg, #16a34a 0%, #16a34a 12%, #0ea5e9 26%, #0ea5e9 34%, #f59e0b 46%, #f59e0b 54%, #ea580c 66%, #ea580c 74%, #dc2626 86%, #b91c1c 100%)";
 const RISK_AT: Record<PreviewRisk, number> = { minimal: 10, low: 30, medium: 50, high: 70, critical: 90 };
 
 /**
@@ -185,7 +187,6 @@ function RiskMeter({ risk, headline, breakdown, tone, https }: {
   https: boolean | null;
 }) {
   const at = RISK_AT[risk];
-  const minimal = risk === "minimal";
   return (
     <div className="mt-4 rounded-xl border border-zk-border px-3 py-3 sm:px-4">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -216,8 +217,9 @@ function RiskMeter({ risk, headline, breakdown, tone, https }: {
       >
         <span
           aria-hidden="true"
-          className={`absolute inset-y-0 left-0 rounded-full ${minimal ? "bg-zk-ok-fg" : `security-severity security-severity--${risk}`}`}
-          style={{ width: `${at}%`, ...(minimal ? {} : { background: "var(--sev-dot)" }) }}
+          className="absolute inset-y-0 left-0 rounded-full"
+          // Green to red across the whole scale, shown up to the risk, the same as the scan page's meter (check-header.tsx).
+          style={{ width: `${at}%`, backgroundImage: RISK_GRADIENT, backgroundSize: `${(100 / at) * 100}% 100%` }}
         />
         {/* The pointer where the fill stops. */}
         <span

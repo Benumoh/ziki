@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { IssueActionsMenu } from "@/components/issue-actions-menu";
-import { RemoveScanButton } from "@/components/security-checks/remove-scan-button";
+import { ScanActionsMenu } from "@/components/security-checks/scan-actions-menu";
 import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
 import { CheckHeader } from "@/components/security-checks/check-header";
@@ -25,15 +24,18 @@ export const metadata = { title: "Security check" };
  * The report never goes away; moved findings are marked. Only the person who
  * asked for the check sees it.
  */
-export default async function SecurityCheckPage({ params }: { params: Promise<{ id: string }> }) {
-  const [{ id }, user] = await Promise.all([params, requireUser()]);
+export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[]; bought?: string }> }) {
+  const [{ id }, query, user] = await Promise.all([params, searchParams, requireUser()]);
+  // `?fix=id1,id2`: tick these and open the fix panel ("Fix the critical one", a finding's "Fix it for me").
+  const initialFix = (Array.isArray(query.fix) ? query.fix.join(",") : query.fix ?? "").split(",").filter(Boolean).slice(0, 100);
   const access = await currentOrganisationAccess(user.id, user.role);
   if (!access.organisationId) notFound();
   const report = await loadCheckReport(id, access.organisationId, user.id);
   if (!report) notFound();
 
   const linkClass = "font-semibold text-zk-accent hover:underline";
-  const working = !FINISHED_CHECK_STATUSES.has(report.status);
+  // Waiting for the deeper scan's payment (#deeper-scan-gate) nothing moves, so the page doesn't refresh itself.
+  const working = !FINISHED_CHECK_STATUSES.has(report.status) && !report.paymentRequired;
   const kind = TARGET_KIND_LABEL[report.target.kind].toLowerCase();
 
   return (
@@ -59,25 +61,26 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
           <li aria-current="page" className="truncate px-1.5">{report.target.value}</li>
         </ol>
       </nav>
-      {/* Remove sits here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
+      {/* Scan again, the PDF and Remove sit here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
       {report.status !== "cancelled" ? (
         <div className="flex shrink-0 items-center gap-2">
           <SiteChatButton />
-          <IssueActionsMenu>
-            {/* The PDF is a secondary action (16 Nov call): people want things fixed, not a file. */}
-            {report.posted ? (
-              <a href={`/security/checks/${report.checkId}/report.pdf`} className="px-2.5 py-1 text-xs font-semibold text-zk-text hover:underline">
-                Download report (PDF)
-              </a>
-            ) : null}
-            <RemoveScanButton checkId={report.checkId} site={report.target.value} posted={report.posted} />
-          </IssueActionsMenu>
+          <ScanActionsMenu checkId={report.checkId} site={report.target.value} posted={report.posted} nextCheckId={report.nextCheckId} />
         </div>
       ) : null}
       </div>
       {report.status !== "cancelled" ? <SiteChatPanel /> : null}
       </div>
       </SiteChatHolder>
+
+      {/* Scanned again (#security-rescan): an older scan points to the newest. A rescan has no note of its own (18 Nov,
+          Tolu): its Still there and New labels say where each finding came from, with more on hover. */}
+      {report.nextCheckId ? (
+        <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
+          This site was scanned again since.{" "}
+          <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
+        </p>
+      ) : null}
 
       {/* Only while ownership proof is on: with it off, the report shows such a check as waiting to start. */}
       {report.status === "awaiting_ownership" ? (
@@ -95,8 +98,10 @@ export default async function SecurityCheckPage({ params }: { params: Promise<{ 
         <>
           {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
           <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
-            <CheckHeader report={report} />
-            <CheckList checkId={report.checkId} tabs={checkListTabs(report)} />
+            {/* Back from buying Ziks (#deeper-scan-gate): the checkout opens again, to press Pay. */}
+            <CheckHeader report={report} backFromBuying={query.bought === "1"} />
+            {/* Keyed by `?fix`, so "Fix the critical one" on this same page ticks its findings afresh. */}
+            <CheckList key={initialFix.join(",")} checkId={report.checkId} tabs={checkListTabs(report)} initialFix={initialFix} />
           </section>
 
         </>
