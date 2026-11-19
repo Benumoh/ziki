@@ -83,7 +83,7 @@ function IdeaAction({ idea }: { idea: IdeaListRow }) {
         disabled={pending}
         aria-label={`Approve idea #${idea.number}: give it your good verdict`}
         // A real button, as on the ideas list before: solid green, raised, with a hover and a press, unlike the pills.
-        className={`inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-md border border-zk-ok-fg bg-zk-ok-fg px-2.5 text-[12px] font-bold text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] transition hover:brightness-110 active:translate-y-px active:shadow-none disabled:opacity-60 ${focus} ${error ? "ring-2 ring-zk-bad-fg" : ""}`}
+        className={`inline-flex h-7 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md border border-zk-ok-fg bg-zk-ok-fg px-2.5 text-[12px] font-bold text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] transition hover:brightness-110 active:translate-y-px active:shadow-none disabled:cursor-default disabled:opacity-60 ${focus} ${error ? "ring-2 ring-zk-bad-fg" : ""}`}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
         Approve

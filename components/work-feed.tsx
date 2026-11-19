@@ -109,7 +109,7 @@ export function WorkFeed({ items, title, toolbar, empty, footer }: {
                       type="button"
                       aria-expanded={false}
                       onClick={() => setOpenId(item.id)}
-                      className={`flex min-w-0 flex-1 items-center gap-4 text-left ${focus}`}
+                      className={`flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left ${focus}`}
                     >
                       <IssueThumb item={item} />
                       <span className="min-w-0 flex-1">
@@ -220,7 +220,7 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
   return (
     <article id={id} aria-labelledby={`${id}-title`} className="my-1 rounded-2xl border border-zk-border bg-white px-5 pb-5 pt-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
       <div className="flex flex-wrap items-center gap-3 border-b border-zk-divider pb-4">
-        <button type="button" aria-expanded={true} aria-controls={id} onClick={onClose} className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left ${focus}`}>
+        <button type="button" aria-expanded={true} aria-controls={id} onClick={onClose} className={`flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left ${focus}`}>
           <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[item.who ? toneForName(item.who) : "grey"]}>
             {who.charAt(0).toUpperCase()}
           </span>
@@ -327,7 +327,7 @@ function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; classN
             Approved
           </span>
         ) : item.canApprove ? (
-          <button type="button" onClick={approve} disabled={pending} className={`${button} hover:opacity-90 disabled:opacity-60`} style={PILL_TONES.green}>
+          <button type="button" onClick={approve} disabled={pending} className={`${button} cursor-pointer hover:opacity-90 disabled:cursor-default disabled:opacity-60`} style={PILL_TONES.green}>
             {pending ? "Approving…" : "Approve"}
           </button>
         ) : null}
