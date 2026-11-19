@@ -55,24 +55,17 @@ function LinksIcon({ size }: { size: number }) {
 const ICON_BUTTON =
   "relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue";
 
-/** Beside the stage tabs, at the top right: Project notes, Design and the project's settings, as icons only. Goals are on Project Overview. */
+/** Beside the stage tabs, at the top right: Design and the project's settings, as icons only. Project notes are on the work queue; goals in settings. */
 export function ProjectIconLinks({
-  notesHref,
   designHref,
   settingsHref,
 }: {
-  notesHref?: string;
   /** The Design area (#9): only for members of the project's organisation. */
   designHref?: string;
   settingsHref?: string;
 }) {
   return (
     <>
-      {notesHref ? (
-        <Link href={notesHref} aria-label="Project notes" title="Project notes" className={ICON_BUTTON}>
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="3" width="15" height="18" rx="2" /><path d="M9 3v18M3 7h4M3 12h4M3 17h4M12 8h5M12 12h5" /></svg>
-        </Link>
-      ) : null}
       {designHref ? (
         <Link href={designHref} aria-label="Design" title="Design" className={ICON_BUTTON}>
           {/* A palette: the redesigns proposed for this project. */}
@@ -99,7 +92,7 @@ function shortUrl(url: string): string {
  * Until the site URL is set, a grey panel above the list asks for it. Add (or
  * ×) sends it flying into the settings icon at the far right of the top row:
  * - with a site URL, it is saved and the icon opens the addresses as links (with Edit),
- *   Project notes and the full settings page;
+ *   and the full settings page;
  * - with nothing (or only a code URL, which is saved), it is snoozed in this
  *   browser for an hour and then opens on its own again, until a site is set.
  *   The icon reopens it at any time.

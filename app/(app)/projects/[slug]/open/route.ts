@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { BASE_PATH } from "@/lib/base-path";
 import { resolveSessionUserId } from "@/lib/session-user";
 import { setActiveOrganisationCookie } from "@/lib/organisations";
-import { projectPath, refOf } from "@/lib/project-paths";
+import { issuesPath, refOf } from "@/lib/project-paths";
 
 /** A relative Location, so the browser stays on the host it asked (see notifications/[id]/route.ts, #416). */
 function redirectTo(path: string): NextResponse {
@@ -67,5 +67,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (isOrgMember || isSuper) {
     await setActiveOrganisationCookie(organisationId);
   }
-  return redirectTo(safeNext(url.searchParams.get("next"), projectPath(refOf(targetProject))));
+  return redirectTo(safeNext(url.searchParams.get("next"), issuesPath(refOf(targetProject), "your_work")));
 }

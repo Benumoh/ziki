@@ -52,7 +52,7 @@ export function PreviewSettingsForm({
     <form action={action} className="space-y-4">
       <input type="hidden" name="slug" value={slug} />
       {result && !result.ok ? (
-        <p role="alert" className="rounded-[14px] bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">
+        <p role="alert" className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">
           {result.error}
         </p>
       ) : null}

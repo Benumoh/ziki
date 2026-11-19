@@ -483,7 +483,7 @@ export async function convertLocked(
   const idea = await tx.idea.findUniqueOrThrow({
     where: { id: locked.id },
     select: {
-      title: true, summary: true, description: true, typeId: true, areaId: true, proofLinks: true,
+      title: true, summary: true, description: true, typeId: true, assetId: true, areaId: true, proofLinks: true,
       reporterId: true, beneficiaryUserId: true, createdByAgentId: true,
     },
   });
@@ -497,6 +497,8 @@ export async function convertLocked(
       summary: idea.summary,
       description: idea.description,
       typeId: idea.typeId,
+      // The marketing asset it is about (#marketing-assets) carries over.
+      assetId: idea.assetId,
       areaId: idea.areaId,
       proofLinks: idea.proofLinks,
       reporterId: idea.reporterId,

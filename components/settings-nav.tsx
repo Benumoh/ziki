@@ -41,7 +41,7 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
             key={item.id}
             href={`/settings?section=${item.id}`}
             aria-current={on ? "page" : undefined}
-            className={`flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-zk-text transition ${
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-zk-text transition ${
               on ? "bg-zk-tint" : "bg-transparent hover:bg-zk-chip"
             }`}
           >

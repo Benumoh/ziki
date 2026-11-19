@@ -4,7 +4,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { optionalUser } from "@/lib/auth-helpers";
 import { pageMetadata } from "@/lib/seo/site";
-import { OPEN_ISSUES_WHERE } from "@/lib/project-overview";
 import { DiscoverProjectCard, type DiscoverableProject } from "@/components/discover-project-card";
 import { DiscoverFilters } from "@/components/discover-filters";
 import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
@@ -13,6 +12,9 @@ import {
   filterDirectoryProjects,
   normalizeAreaSlug,
 } from "@/lib/public-directory";
+
+/** What counts as an open issue on a project card. */
+const OPEN_ISSUES_WHERE = { isDeleted: false, status: { in: ["open", "in_progress"] } } satisfies Prisma.BugWhereInput;
 
 /** The list itself is the page; a search or filter of it is kept out of search results (#seo-pages). */
 export async function generateMetadata(props: DiscoverPageProps): Promise<Metadata> {

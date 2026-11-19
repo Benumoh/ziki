@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { projectRef, type ProjectRef } from "@/lib/project-paths";
+import { orgRef, projectRef, type ProjectRef } from "@/lib/project-paths";
 
 function decode(segment: string): string {
   try {
@@ -15,4 +15,14 @@ function decode(segment: string): string {
 export function useProjectRef(): ProjectRef | null {
   const params = useParams<{ org?: string; project?: string }>();
   return params?.org && params?.project ? projectRef(decode(params.org), decode(params.project)) : null;
+}
+
+/**
+ * What the lists' links are built on here (#project-filter): the project in the address, or on an
+ * organisation-wide list (`/<org>/issues/…`, `/<org>/ideas`, `/<org>/queue`) the organisation, or null.
+ */
+export function useListRef(): ProjectRef | null {
+  const params = useParams<{ org?: string; project?: string }>();
+  if (!params?.org) return null;
+  return params.project ? projectRef(decode(params.org), decode(params.project)) : orgRef(decode(params.org));
 }

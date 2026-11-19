@@ -135,10 +135,17 @@ describe("dockVisibleOn: where the agents bar shows", () => {
     expect(dockVisibleOn("/zedu/", 2)).toBe(false);
   });
 
-  it.each(["/acme/ideas", "/acme/issues/open", "/acme/42", "/acme/workstream", "/acme/work"])(
+  it.each(["/acme/ideas", "/acme/42", "/acme/workstream", "/acme/work"])(
     "hides on an old project-first address while it redirects: %s",
     (path) => {
       expect(dockVisibleOn(path, 2)).toBe(false);
+    },
+  );
+
+  it.each(["/acme/issues/open", "/acme/new", "/acme/queue", "/acme/marketing", "/acme/marketing/assets/a1"])(
+    "shows on the organisation-wide lists and Marketing (#project-filter, #org-marketing): %s",
+    (path) => {
+      expect(dockVisibleOn(path, 2)).toBe(true);
     },
   );
 

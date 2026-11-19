@@ -34,7 +34,7 @@ export default async function SecuritySettingsPage() {
 
       <section className="flex flex-col gap-4 rounded-[20px] border border-zk-border bg-zk-surface p-6">
         <div className="flex items-center gap-3.5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-zk-tint text-zk-accent">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zk-tint text-zk-accent">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
@@ -53,7 +53,7 @@ export default async function SecuritySettingsPage() {
               or Authy) as well as your password, so a stolen or reused password is not enough to get in.
             </p>
             {!isPasswordAuthEnabled() ? (
-              <p className="m-0 rounded-[14px] border border-zk-warn-bd bg-zk-warn-bg px-4 py-3 text-sm text-zk-warn-fg">
+              <p className="m-0 rounded-xl border border-zk-warn-bd bg-zk-warn-bg px-4 py-3 text-sm text-zk-warn-fg">
                 Password sign-in is turned off on this site, so the code is not asked for here.
               </p>
             ) : null}

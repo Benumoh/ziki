@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationIdFor } from "@/lib/organisation-context";
@@ -196,6 +196,32 @@ async function defaultProjectSlug(organisationId: string): Promise<string | null
   if (web) return web.slug;
   const oldest = await prisma.project.findFirst({ where: { organisationId, archivedAt: null }, orderBy: { createdAt: "asc" }, select: { slug: true } });
   return oldest?.slug ?? null;
+}
+
+/**
+ * An organisation-wide list, `/<org>/issues/…`, `/<org>/ideas` or `/<org>/queue` (#project-filter): the
+ * organisation and the project the list is drawn through (its default one), so the list keeps the project
+ * page's access checks. An old `/<project>/issues/…` address, where no organisation has the slug, goes on
+ * to that project; an organisation with no project yet goes to `/<org>`, which offers to create one.
+ */
+export async function requireOrgList(orgParam: string, path: string): Promise<{ org: string; project: string }> {
+  const { user, organisation } = await requireOrg(orgParam);
+  if (!organisation) {
+    const target = await projectFirstTarget(user, path);
+    if (target) permanentRedirect(target);
+    notFound();
+  }
+  const project = await defaultProjectSlug(organisation.id);
+  if (!project) redirect(orgHomePath(organisation.slug));
+  return { org: organisation.slug, project };
+}
+
+/**
+ * Marketing's pages belong to the organisation (#org-marketing), `/<org>/marketing/…`, but its work, settings and
+ * agent still act through a project: the organisation's main one. `rest` is the page's address after `/marketing`.
+ */
+export async function requireOrgMarketing(orgParam: string, rest = ""): Promise<{ org: string; project: string }> {
+  return requireOrgList(orgParam, `/${orgParam}/marketing${rest}`);
 }
 
 /** The first project someone can open, for addresses with no project (the site root, sign-in). */
