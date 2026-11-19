@@ -214,8 +214,8 @@ describe("issue list layout", () => {
     const html = await renderList({ q: "login", mine: "assigned", stage: "reported", page: "2", status: "open" });
     // #simple-lists: the stage bar switches status (the status filter is a menu in the toolbar).
     const list = stages(html);
-    // #project-urls: the status is the path, the rest stays in the query.
-    expect(list).toContain('href="/zedu/acme/issues/delivered?q=login&amp;mine=assigned"');
+    // #project-urls: a stage opens its Overview tab; the search and scope stay in the query.
+    expect(list).toContain('href="/zedu/acme/issues/your-work?q=login&amp;mine=assigned&amp;view=delivered"');
     expect(list).not.toContain("page=");
     expect(list).not.toContain("stage=");
     const statusCount = groupBy.mock.calls.find(([args]) => args?.by?.[0] === "status");

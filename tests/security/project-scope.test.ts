@@ -251,7 +251,7 @@ describe("project addresses carry the organisation (#project-urls)", () => {
     expect(isProjectFirstPath("/desktop/740")).toBe(true);
     expect(isProjectFirstPath("/zedu/desktop/ideas/2297")).toBe(false);
     expect(isProjectFirstPath("/zedu")).toBe(false);
-    expect(issuesPath(projectRef("zedu", "desktop"), "in_progress")).toBe("/zedu/desktop/issues/in-progress");
+    expect(issuesPath(projectRef("zedu", "desktop"), "in_progress")).toBe("/zedu/desktop/issues/your-work?view=fixes&state=in_progress");
   });
 
   it("never lets a new project or organisation take a name an address reads as old or as a site page", async () => {

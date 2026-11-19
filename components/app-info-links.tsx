@@ -33,15 +33,16 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  * are saved together; the other stays as it was.
  */
 export function AppInfoLinks({ slug, siteUrl, repoUrl, canEdit }: { slug: string; siteUrl: string | null; repoUrl: string | null; canEdit: boolean }) {
-  const [editing, setEditing] = useState<Field | null>(null);
+  // The field being edited, and the save result it was opened after: a newer successful save closes it.
+  const [opened, setOpened] = useState<{ field: Field; after: ProjectActionResult | undefined } | null>(null);
   const [result, action, pending] = useActionState<ProjectActionResult | undefined, FormData>(saveProjectLinksAction, undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const values: Record<Field, string | null> = { siteUrl, repoUrl };
 
-  // Saved: close the editor (the page's data refreshes with the new address).
-  useEffect(() => {
-    if (result?.message && !result.error) setEditing(null);
-  }, [result]);
+  // Saved: the editor closes (the page's data refreshes with the new address).
+  const saved = opened !== null && result !== opened.after && Boolean(result?.message) && !result?.error;
+  const editing = opened && !saved ? opened.field : null;
+  const setEditing = (field: Field | null) => setOpened(field ? { field, after: result } : null);
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);

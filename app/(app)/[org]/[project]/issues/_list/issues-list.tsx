@@ -161,7 +161,7 @@ const OVERVIEW_TABS = [
   ["delivered", "Delivered"],
 ] as const;
 /** The Filter's Assigned to me (#work-feed): any tab narrowed to the issues assigned to you (a claim held or offered for you). */
-const OVERVIEW_MINE_PARAM = "mine";
+const OVERVIEW_MINE_PARAM = "assigned";
 /** The Overview's Status filter (#work-feed): one main status, or every one the tab holds. */
 const OVERVIEW_STATE_PARAM = "state";
 const OVERVIEW_STATES = ["open", "in_progress", "done", "merge", "resolved"] as const satisfies readonly Status[];
@@ -170,6 +170,13 @@ const DELIVERED_STATUSES = ["done", "merge", "resolved"] as const satisfies read
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
 type OverviewTab = (typeof OVERVIEW_TABS)[number][0];
+/** How much of an agent's time to delivery has gone (#work-feed), 5% to 95%; null without a due time. */
+function timeUsed(claimedAt: Date | null, deliverBy: Date | null): number | null {
+  if (!claimedAt || !deliverBy) return null;
+  const span = deliverBy.getTime() - claimedAt.getTime();
+  if (span <= 0) return null;
+  return Math.min(0.95, Math.max(0.05, (Date.now() - claimedAt.getTime()) / span));
+}
 /** What each Overview tab says while it is empty. */
 const OVERVIEW_EMPTY: Record<OverviewTab, { title: string; description: string }> = {
   all: { title: "No work yet", description: "Tell the agents what you want done in the box above: it shows up here as they take it on." },
@@ -591,15 +598,11 @@ export async function IssuesList({
           prisma.bug.groupBy({ by: ["status"], where, _count: { _all: true } }),
         ]);
         const counts = new Map(byStatus.map((group) => [group.status as string, group._count._all]));
-        const now = Date.now();
         const items = rows.map((row): WorkFeedItem => {
           const href = issueHref(row);
           // Work under way (#work-feed): how far through its time it is, from when the agent took it to when it is due.
           const claim = row.claims[0];
-          const span = claim?.claimedAt && claim.deliverBy ? claim.deliverBy.getTime() - claim.claimedAt.getTime() : 0;
-          const progress = row.substatus === "in_progress" && claim?.claimedAt && span > 0
-            ? Math.min(0.95, Math.max(0.05, (now - claim.claimedAt.getTime()) / span))
-            : null;
+          const progress = row.substatus === "in_progress" ? timeUsed(claim?.claimedAt ?? null, claim?.deliverBy ?? null) : null;
           const kind: WorkFeedKind = row.redesigns.length > 0 ? "design"
             : row.status === "done" || row.status === "merge" ? "delivered"
             : row.status === "resolved" ? "live"

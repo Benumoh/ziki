@@ -31,6 +31,13 @@ describe("issue payloads", () => {
     expect(createBugSchema.safeParse({ ...valid, description: "too short" }).success).toBe(false);
   });
 
+  it("stores titles plain: leading tags such as [API] are dropped, and a title that is only tags is still too short", () => {
+    const parsed = createBugSchema.safeParse({ ...valid, title: "[API] [Bug] - Pull requests fail to load" });
+    expect(parsed.success && parsed.data.title).toBe("Pull requests fail to load");
+    expect(createBugSchema.safeParse({ ...valid, title: "Fix the [API] docs" }).data?.title).toBe("Fix the [API] docs");
+    expect(createBugSchema.safeParse({ ...valid, title: "[UI] ab" }).success).toBe(false);
+  });
+
   it("rejects fields a client may not set: status at creation, a severity, an invalid status update", () => {
     expect(createBugSchema.safeParse({ ...valid, status: "closed" }).success).toBe(false);
     expect(createBugSchema.safeParse({ ...valid, severity: "high" }).success).toBe(false);
