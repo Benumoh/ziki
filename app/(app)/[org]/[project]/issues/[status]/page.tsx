@@ -42,6 +42,8 @@ export default async function IssuesStatusPage({ params, searchParams }: Props) 
   if (!status) notFound();
   const query = await searchParams;
   // A stage (open, in progress, delivered, …) is a tab and Status filter on the Overview now (#work-feed).
-  if (status !== "your_work" && overviewPlaceFor(status)) redirect(issuesPath(projectRef(org, project), status));
+  // A search or the deleted issues is still a list of its own; a stage on its own opens its Overview place.
+  const listQuery = Boolean(query.q) || query.deleted === "true";
+  if (status !== "your_work" && !listQuery && overviewPlaceFor(status)) redirect(issuesPath(projectRef(org, project), status));
   return <IssuesList org={org} slug={project} status={status} returnTo={`/${org}/${project}/issues/${segment}${queryOf(query)}`} searchParams={Promise.resolve(query)} />;
 }

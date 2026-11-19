@@ -28,7 +28,9 @@ export default async function OrgIssuesStatusPage({ params, searchParams }: Prop
   const status = statusFromSegment(segment);
   if (!status) redirect(`/${encodeURIComponent(resolved.org)}/${encodeURIComponent(resolved.project)}/issues/${segment}${queryOf(query)}`);
   // A stage (open, in progress, delivered, …) is a tab and Status filter on the Overview now (#work-feed).
-  if (status !== "your_work" && overviewPlaceFor(status)) redirect(issuesPath(orgRef(org), status));
+  // A search or the deleted issues is still a list of its own; a stage on its own opens its Overview place.
+  const listQuery = Boolean(query.q) || query.deleted === "true";
+  if (status !== "your_work" && !listQuery && overviewPlaceFor(status)) redirect(issuesPath(orgRef(org), status));
   return (
     <IssuesList
       org={resolved.org}
