@@ -32,9 +32,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /**
- * `/<org>/<project>`, the project's address (#project-urls). A member goes straight to the Overview. Anyone else
- * who may see the project (a visitor to a public one, signed in or not) gets its page: what it is, and how to join
- * it or ask to. lib/project-route.ts checks access: a project you can't see is a 404, like any unknown address.
+ * `/<org>/<project>`, the project's address (#project-urls). An organisation member goes straight to the Overview.
+ * Anyone else who may see the project (a visitor to a public one, signed in or not, a member of this project only,
+ * a site admin) gets its page: what it is, how to join it or ask to, or a way into its work. lib/project-route.ts checks access: a project you can't see is a 404, like any unknown address.
  */
 export default async function ProjectOverviewPage({ params }: Props) {
   const { org, project: slug } = await params;
@@ -42,9 +42,12 @@ export default async function ProjectOverviewPage({ params }: Props) {
   const access = user ? await requireProject(org, slug) : null;
   const data = await loadProjectOverview(org, slug, user);
   if (!data) notFound();
-  if (data.isMember) redirect(issuesPath(orgRefOf(projectRef(data.project.organisation.slug, data.project.slug)), "your_work"));
-
   const ref = projectRef(data.project.organisation.slug, data.project.slug);
+  // Organisation members go straight to the Overview. Anyone else who may see the project, a member of this project
+  // only or a site admin, gets its page, with a way into the project's own work.
+  if (access?.isOrgMember) redirect(issuesPath(orgRefOf(ref), "your_work"));
+  const workHref = data.isMember ? issuesPath(ref, "your_work") : null;
+
   // The Design area (#9) is the organisation's: project-only members and visitors don't get it.
   const designHref = access?.isOrgMember ? designPath(ref) : null;
 
@@ -52,7 +55,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
   return (
     <>
       {jsonLd ? <JsonLd data={jsonLd} /> : null}
-      <ProjectOverviewView data={data} currentUserId={user?.id ?? null} workHref={null} designHref={designHref} />
+      <ProjectOverviewView data={data} currentUserId={user?.id ?? null} workHref={workHref} designHref={designHref} />
     </>
   );
 }

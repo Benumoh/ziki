@@ -2132,7 +2132,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             ) : null}
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start print:hidden">
+          {/* Wraps on a narrow screen, so the actions menu stays on it. */}
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 self-start print:hidden">
             <Link
               href={viewHref(!workView)}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip"
