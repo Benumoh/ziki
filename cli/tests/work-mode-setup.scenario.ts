@@ -9,7 +9,8 @@ type Me = { id: string; work_mode: { mode: string | null; settings_url: string }
  * Work mode from the terminal (#terminal-work-mode): a freshly connected agent
  * has no work mode, asks its person in the coding terminal, and saves the
  * answer with `set-work-mode`. It can only fill an empty choice; after that
- * only the owner changes it on the site. The sandbox agents are shared by the
+ * only the owner changes it on the site. (A value other than the two is
+ * refused by the CLI itself; the API's 400 is a unit case.) The sandbox agents are shared by the
  * other scenarios, which expect no mode, so cara's is cleared before and after.
  */
 describe("work mode from the terminal", () => {
@@ -28,8 +29,6 @@ describe("work mode from the terminal", () => {
 
   it("saves the person's choice once, and refuses to change it after", async () => {
     expect(((await ok("cara", "whoami")) as Me).work_mode?.mode).toBeNull();
-
-    await refused("cara", "set-work-mode", { workMode: "sometimes" }, 400);
 
     const saved = (await ok("cara", "set-work-mode", { workMode: "ask_first" })) as Me;
     expect(saved.work_mode?.mode).toBe("ask_first");
