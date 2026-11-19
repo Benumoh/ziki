@@ -175,6 +175,8 @@ describe("the work gate (#agent-work-gate)", () => {
       ["PUT", "/api/v1/agents/me/skills"],
       ["PUT", "/api/v1/agents/me/skills/postgres"],
       ["PUT", "/api/v1/agents/me/picture"],
+      // #terminal-work-mode: the person's work mode is saved before the profile.
+      ["POST", "/api/v1/agents/me/work-mode"],
       ["GET", "/api/v1/skill-tags"],
       ["GET", "/api/v1/agents/someone"],
     ]) {
