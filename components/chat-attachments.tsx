@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AreaCropper } from "@/components/area-cropper";
 import { CaptureError, MAX_RECORDING_SECONDS, captureScreenFrame, startScreenRecording, type ScreenRecording } from "@/components/idea-capture";
 import { BASE_PATH } from "@/lib/base-path";
@@ -8,8 +8,8 @@ import { BASE_PATH } from "@/lib/base-path";
 type Upload = { key: string; name: string; id?: string; error?: string };
 
 /**
- * A chat box's attachments, as Your App's box has them (#idea-chat): + attaches files, Record screen and Capture
- * area attach what's on screen (kept as images). Each file uploads as it's added; `ids` are the ones that made it.
+ * A chat box's attachments, the same on Your App and Marketing (#idea-chat): + opens a menu with Attach files,
+ * Record screen and Capture area; the last two attach what's on screen (kept as images). Each file uploads as it's added; `ids` are the ones that made it.
  * `controls` is the row of buttons beside +, `chips` the files waiting to go, `dialog` the crop step of a capture.
  */
 export function useChatAttachments({ disabled = false }: { disabled?: boolean } = {}) {
@@ -19,6 +19,26 @@ export function useChatAttachments({ disabled = false }: { disabled?: boolean } 
   const [recording, setRecording] = useState<{ seconds: number } | null>(null);
   const recorderRef = useRef<ScreenRecording | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // The + menu, and the box it sits in for closing it on a click outside.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Escape or a click outside closes the + menu.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [menuOpen]);
 
   async function attach(files: FileList | File[] | null) {
     for (const file of Array.from(files ?? []).slice(0, 5)) {
@@ -81,43 +101,60 @@ export function useChatAttachments({ disabled = false }: { disabled?: boolean } 
     }
   }
 
-  const pill = "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition disabled:opacity-40";
+  // The + menu: Attach files, Record screen and Capture area, under one button so the box stays clean. A recording
+  // under way shows beside +, so it can be stopped.
+  const item = "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] text-zk-text hover:bg-zk-chip disabled:cursor-default disabled:opacity-40";
   const controls: ReactNode = (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div ref={menuRef} className="relative flex min-w-0 flex-wrap items-center gap-1.5">
       <button
         type="button"
-        onClick={() => fileRef.current?.click()}
+        onClick={() => setMenuOpen((value) => !value)}
         disabled={disabled}
-        aria-label="Attach files"
-        title="Attach files"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zk-text2 hover:bg-zk-chip hover:text-zk-text disabled:opacity-40"
+        aria-label="Add files or capture the screen"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        title="Add"
+        className={`inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text disabled:opacity-40 ${menuOpen ? "bg-zk-chip text-zk-text" : ""}`}
       >
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        <svg viewBox="0 0 24 24" className={`h-5 w-5 transition ${menuOpen ? "rotate-45" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       </button>
       <input ref={fileRef} type="file" multiple hidden onChange={(event) => { void attach(event.target.files); event.target.value = ""; }} />
-      <button
-        type="button"
-        onClick={() => void toggleRecording()}
-        disabled={disabled}
-        aria-pressed={Boolean(recording)}
-        className={`${pill} ${recording ? "border-zk-bad-bd bg-zk-bad-soft text-zk-bad-fg" : "border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text"}`}
-      >
-        <span aria-hidden="true" className={`h-2 w-2 rounded-full bg-red-500 ${recording ? "motion-safe:animate-pulse" : ""}`} />
-        {recording
-          ? `Stop recording · ${Math.floor(recording.seconds / 60)}:${String(recording.seconds % 60).padStart(2, "0")} of ${MAX_RECORDING_SECONDS / 60}:00`
-          : "Record screen"}
-      </button>
-      <button
-        type="button"
-        onClick={() => void captureArea()}
-        disabled={disabled || Boolean(recording)}
-        className={`${pill} border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text`}
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
-        </svg>
-        Capture area
-      </button>
+      {menuOpen ? (
+        <div role="menu" aria-label="Add" className="absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border border-zk-border bg-zk-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+          <button type="button" role="menuitem" className={item} onClick={() => {
+              setMenuOpen(false);
+              fileRef.current?.click();
+            }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-zk-text2"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
+            Attach files
+          </button>
+          <button type="button" role="menuitem" className={item} disabled={Boolean(recording)} onClick={() => {
+              setMenuOpen(false);
+              void toggleRecording();
+            }}>
+            <span aria-hidden="true" className="flex h-4 w-4 shrink-0 items-center justify-center"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /></span>
+            Record screen
+          </button>
+          <button type="button" role="menuitem" className={item} disabled={Boolean(recording)} onClick={() => {
+              setMenuOpen(false);
+              void captureArea();
+            }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-zk-text2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /></svg>
+            Capture area
+          </button>
+        </div>
+      ) : null}
+      {recording ? (
+        <button
+          type="button"
+          onClick={() => void toggleRecording()}
+          aria-pressed={true}
+          className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border border-zk-bad-bd bg-zk-bad-soft px-2.5 text-[11px] font-semibold text-zk-bad-fg transition"
+        >
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-red-500 motion-safe:animate-pulse" />
+          {`Stop recording · ${Math.floor(recording.seconds / 60)}:${String(recording.seconds % 60).padStart(2, "0")} of ${MAX_RECORDING_SECONDS / 60}:00`}
+        </button>
+      ) : null}
     </div>
   );
 
@@ -154,6 +191,8 @@ export function useChatAttachments({ disabled = false }: { disabled?: boolean } 
   ) : null;
 
   return {
+    /** How many files are attached or uploading. */
+    count: uploads.length,
     ids: uploads.filter((u) => u.id).map((u) => u.id!),
     uploading: uploads.some((u) => !u.id && !u.error),
     error,

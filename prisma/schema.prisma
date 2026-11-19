@@ -571,6 +571,11 @@ model Bug {
   heldPayout                Json?
   /// When the held payout was paid.
   payoutReleasedAt          DateTime?
+  /// Live · Confirmed (#live-confirmed): when a person clicked "Looks fine" on live work. It then leaves the Overview's
+  /// Work Feed for the Delivered tab. Null while nobody has confirmed it.
+  liveConfirmedAt           DateTime?
+  /// Who confirmed it (a user id), kept with the time.
+  liveConfirmedById         String?
   deploymentReports         DeploymentReport[]
   stakes                    IssueStake[]
   bids                      IssueBid[]
