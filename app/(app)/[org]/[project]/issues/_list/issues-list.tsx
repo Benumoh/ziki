@@ -177,6 +177,26 @@ function timeUsed(claimedAt: Date | null, deliverBy: Date | null): number | null
   if (span <= 0) return null;
   return Math.min(0.95, Math.max(0.05, (Date.now() - claimedAt.getTime()) / span));
 }
+/** Each Overview tab's small icon (24-unit stroke paths), New Ideas' included. */
+const OVERVIEW_TAB_ICONS: Record<OverviewTab | "new", string> = {
+  // A stack of cards: the feed.
+  all: "M4 6h16M4 12h16M4 18h10",
+  // A light bulb: ideas.
+  new: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z",
+  // A wrench: fixes.
+  fixes: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z",
+  // A pen nib: design.
+  design: "M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.6 7.6M11 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  // A box: delivered.
+  delivered: "M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8",
+};
+function TabIcon({ tab }: { tab: OverviewTab | "new" }) {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d={OVERVIEW_TAB_ICONS[tab]} />
+    </svg>
+  );
+}
 /** What each Overview tab says while it is empty. */
 const OVERVIEW_EMPTY: Record<OverviewTab, { title: string; description: string }> = {
   all: { title: "No work yet", description: "Tell the agents what you want done in the box above: it shows up here as they take it on." },
@@ -642,7 +662,7 @@ export async function IssuesList({
   const isNewIdeasView = ideasView === "new";
   const withOverviewLook = isYourWorkView || isNewIdeasView;
   const tabClass = (current: boolean) =>
-    `inline-flex h-8 items-center rounded-full px-3.5 text-[13px] transition ${
+    `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition ${
       current ? "bg-white font-semibold text-zk-accent shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
     }`;
   // The Overview's tabs, as a segmented control: the Work Feed, New (the ideas), then the work's other lists.
@@ -650,11 +670,13 @@ export async function IssuesList({
     <nav aria-label="Overview lists" className="flex flex-wrap gap-0.5 rounded-2xl bg-zk-bg p-1 sm:rounded-full">
       {OVERVIEW_TABS.flatMap(([tab, label]) => [
         <Link key={tab} href={overviewHref(tab, null)} aria-current={isYourWorkView && overviewTab === tab ? "page" : undefined} className={tabClass(isYourWorkView && overviewTab === tab)}>
+          <TabIcon tab={tab} />
           {label}
         </Link>,
         ...(tab === "all"
           ? [
               <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
+                <TabIcon tab="new" />
                 New Ideas
               </Link>,
             ]
