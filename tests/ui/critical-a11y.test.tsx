@@ -568,7 +568,7 @@ describe("component accessibility (axe)", () => {
     it("returns direct page navigation shortcuts for page queries", () => {
       const issuesNav = searchSupportAnswers("take me to issues", projectRef("demo", "demo"));
       expect(issuesNav.actions).toBeDefined();
-      expect(issuesNav.actions?.[0].href).toBe("/demo/demo/issues/all");
+      expect(issuesNav.actions?.[0].href).toBe("/demo/demo/issues/your-work");
 
       const ideasNav = searchSupportAnswers("take me to ideas", projectRef("demo", "demo"));
       expect(ideasNav.actions).toBeDefined();

@@ -3,19 +3,19 @@
  */
 
 /**
- * Background / text pairs for the initials fallback. Each is a 100-level tint
- * with an 800-level text, which is well over 4.5:1 for small text. They are
- * written out in full so Tailwind sees every class.
+ * The initials fallback's tiles, from the agents design: a soft top-to-bottom gradient in one of its colours (orange,
+ * violet, indigo, green, red, teal, pink, amber) with white bold initials on it. Written out in full so Tailwind sees
+ * every class. The organisation mark and the people and agent avatars all use them, so a name keeps its colour.
  */
 export const AVATAR_TONES = [
-  "bg-teal-100 text-teal-800",
-  "bg-sky-100 text-sky-800",
-  "bg-indigo-100 text-indigo-800",
-  "bg-violet-100 text-violet-800",
-  "bg-fuchsia-100 text-fuchsia-800",
-  "bg-rose-100 text-rose-800",
-  "bg-amber-100 text-amber-900",
-  "bg-lime-100 text-lime-900",
+  "bg-[linear-gradient(180deg,#f8875c_0%,#e5521f_100%)] text-white",
+  "bg-[linear-gradient(180deg,#a585fa_0%,#7148e8_100%)] text-white",
+  "bg-[linear-gradient(180deg,#6f8cfa_0%,#3f5ae8_100%)] text-white",
+  "bg-[linear-gradient(180deg,#45c47d_0%,#1f8f50_100%)] text-white",
+  "bg-[linear-gradient(180deg,#f6637f_0%,#d92f4b_100%)] text-white",
+  "bg-[linear-gradient(180deg,#44cfc2_0%,#138a7f_100%)] text-white",
+  "bg-[linear-gradient(180deg,#f483a8_0%,#e04f80_100%)] text-white",
+  "bg-[linear-gradient(180deg,#f8c457_0%,#dc8f0c_100%)] text-white",
 ] as const;
 
 /**

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { RowAge } from "@/components/issue-row-meta";
-import { PILL_TONES, type PillTone } from "@/lib/pill-tones";
+import { PILL_TONES, TILE_TONES, toneForName, type PillTone } from "@/lib/pill-tones";
 import { marketingPath, type ProjectRef } from "@/lib/project-paths";
 import { AddAsset } from "./add-asset";
 import { ScoreBar } from "./score-bar";
@@ -62,9 +62,9 @@ function TypePills({ slug, data }: { slug: ProjectRef; data: MarketingHomeData }
     `${chip} ${selected ? "bg-white text-zk-text shadow-[0_1px_3px_rgba(16,24,40,0.12)] ring-1 ring-black/[0.04]" : "bg-zk-bg text-zk-text2 hover:bg-zk-chip"}`;
   return (
     <nav aria-label="Task types" className="flex flex-wrap items-center gap-1.5">
-      {/* First, and where Marketing opens: every type together. */}
+      {/* First, and where Marketing opens: the Feed, what needs you across every type. */}
       <Link href={marketingPath(slug)} scroll={false} aria-current={data.overview ? "page" : undefined} className={pill(data.overview)}>
-        Overview
+        Feed
         <span className="text-[12px] tabular-nums text-zk-muted">{total}</span>
       </Link>
       {data.types.map((type) => {
@@ -142,35 +142,38 @@ function StatusFilter({ scope, groups, picked }: { scope: Scope; groups: HomeTas
 
 /** The groups that wait on a person: work to review, and ideas to vote on. */
 const ATTENTION: Record<string, string> = { done: "Review it", ideas: "Vote on it" };
+/** What each of those needs from you, in a sentence, under the asset's name. */
+const NEEDS: Record<string, string> = { done: "Work is done on it: review it before it goes live", ideas: "An idea for it is waiting for your vote" };
 
 /** Which work leads an asset's row: the step that most needs someone, then the newest. */
 const GROUP_ORDER = HOME_GROUPS.map((group) => group.key as string);
 
 type Work = { item: HomeTaskItem; group: HomeTaskGroup };
 
-/** A row of the grid: an asset with the work on it, or the work on no asset. */
-type Row = { key: string; name: string; asset: HomeAsset | null; typeName: string | null; work: Work[]; updatedAt: Date };
+/** A row of the grid: an asset with the work on it. */
+type Row = { key: string; name: string; asset: HomeAsset; typeName: string | null; work: Work[]; updatedAt: Date };
 
 /**
- * The tab's work (#marketing-agent-home): what needs attention first, as larger cards (work to review, ideas to
- * vote on), then its assets (#marketing-assets) as a grid. Each row names an asset (About Us) and, underneath in
- * small text, the work going on with it; work on no asset sits in a last row of its own.
+ * The tab's work (#marketing-agent-home). The Feed (all types): only what needs you, as larger cards, each naming the
+ * asset (About Us) and, underneath, what it needs from you (work to review, an idea to vote on). A type's tab: its
+ * assets (#marketing-assets) as a grid, each row an asset and, underneath in small text, the work going on with it.
+ * All marketing work is on an asset (#marketing-assets), so there is no row of work on none.
  */
 function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; scope: Scope; groups: HomeTaskGroup[]; assets: HomeAsset[]; status: string | null }) {
+  if (!scope.type) return <AttentionFeed slug={slug} groups={groups} assets={assets} />;
   if (groups.length === 0 && assets.length === 0) {
     return (
       <div className="mt-4 rounded-xl bg-zk-bg p-4">
         <div className={`flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-zk-border bg-white px-4 py-10 text-center ${LIFT}`}>
           <div>
             <p className="font-semibold text-zk-text">Nothing in {scope.name} yet.</p>
-            <p className="mt-1 text-sm text-zk-muted">{scope.type ? "Add the first one to get started." : "Pick a type above to add its first asset."}</p>
+            <p className="mt-1 text-sm text-zk-muted">Add the first one to get started.</p>
           </div>
-          {scope.type ? <AddAsset slug={slug} typeId={scope.type.id} label={newLabel(scope.type.name)} /> : null}
+          <AddAsset slug={slug} typeId={scope.type.id} label={newLabel(scope.type.name)} />
         </div>
       </div>
     );
   }
-  const attention = groups.filter((group) => group.key in ATTENTION).flatMap((group) => group.items.map((item) => ({ item, group })));
   // The filter keeps only work in one group; an unknown one keeps it all.
   const picked = groups.find((group) => group.key === status) ?? null;
   const work: Work[] = (picked ? [picked] : groups).flatMap((group) => group.items.map((item) => ({ item, group })));
@@ -186,58 +189,20 @@ function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; s
     // While filtering, an asset with no work in that status drops out.
     .filter((row) => !picked || row.work.length > 0)
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const loose = work.filter((entry) => !entry.item.assetId || !assets.some((asset) => asset.id === entry.item.assetId)).sort(lead);
-  if (loose.length > 0) {
-    rows.push({ key: "other", name: "Other work", asset: null, typeName: null, work: loose, updatedAt: newest(loose.map((entry) => entry.item.updatedAt)) });
-  }
   const more = groups.reduce((sum, group) => sum + group.more, 0);
 
   return (
     <div className={`mt-4 flex flex-col ${GAP} rounded-xl bg-zk-bg p-4`} aria-label={`${scope.name} work`}>
-      {attention.length > 0 ? (
-        <section aria-labelledby="marketing-attention">
-          <h3 id="marketing-attention" className={`mb-3 flex items-center gap-2 px-1 ${SECTION_TITLE}`}>
-            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-zk-accent" />
-            Needs your attention
-            <span className="text-[12px] font-normal tabular-nums text-zk-muted">{attention.length}</span>
-          </h3>
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {attention.map(({ item, group }) => {
-              const tone = PILL_TONES[GROUP_TONE[group.key] ?? "grey"];
-              const who = item.agentName ?? "Nobody yet";
-              const asset = assets.find((entry) => entry.id === item.assetId);
-              return (
-                <li key={item.id}>
-                  {/* It opens the asset it is on, where all of that asset's work is; work on no asset opens itself. */}
-                  <Link href={asset ? marketingPath(slug, `assets/${encodeURIComponent(asset.id)}`) : item.href} className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg ${LIFT} ${focus}`}>
-                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold" style={tone}>
-                      {who.charAt(0).toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold text-zk-text">{item.title}</span>
-                      <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
-                        {/* Only what it is on, and when: the pill on the right says what it needs. */}
-                        {asset?.name ?? item.typeName ?? who} · <RowAge date={item.updatedAt} sort="updated" />
-                      </span>
-                    </span>
-                    <span className="shrink-0 rounded-full px-3 py-1 text-[12.5px] font-semibold" style={tone}>{ATTENTION[group.key]}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
       <section aria-labelledby="marketing-all">
         {/* The grid's heading, with the filter and the button to add an asset (New Landing Page) on its right. */}
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <h3 id="marketing-all" className={`flex items-center gap-2 ${SECTION_TITLE}`}>
-            {scope.type ? `All ${scope.name}` : "Everything"}
+            All {scope.name}
             <span className="text-[12px] font-normal tabular-nums text-zk-muted">{assets.length}</span>
           </h3>
           <div className="flex shrink-0 items-center gap-2">
             <StatusFilter scope={scope} groups={groups} picked={picked} />
-            {scope.type ? <AddAsset slug={slug} typeId={scope.type.id} label={newLabel(scope.type.name)} /> : null}
+            <AddAsset slug={slug} typeId={scope.type.id} label={newLabel(scope.type.name)} />
           </div>
         </div>
         <div className="overflow-x-auto rounded-lg border border-zk-border bg-white">
@@ -269,13 +234,9 @@ function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; s
                   <tr key={row.key} className="transition hover:bg-zk-bg">
                     <td className={CELL}>
                       {/* An asset opens its own page, with all the work on it. */}
-                      {row.asset ? (
-                        <Link href={marketingPath(slug, `assets/${encodeURIComponent(row.asset.id)}`)} className={`block truncate font-semibold text-zk-text hover:underline ${focus}`}>
-                          {row.name}
-                        </Link>
-                      ) : (
-                        <span className="block truncate font-semibold text-zk-muted">{row.name}</span>
-                      )}
+                      <Link href={marketingPath(slug, `assets/${encodeURIComponent(row.asset.id)}`)} className={`block truncate font-semibold text-zk-text hover:underline ${focus}`}>
+                        {row.name}
+                      </Link>
                       {/* Underneath, in small text: the work going on with it now. */}
                       <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-zk-muted">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-3.5 w-3.5 shrink-0"><path d="M4 4v7a4 4 0 0 0 4 4h12" /><path d="m15 10 5 5-5 5" /></svg>
@@ -290,8 +251,8 @@ function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; s
                       </span>
                     </td>
                     {scope.type ? null : <td className={`${CELL} truncate text-[12.5px] text-zk-text2`}>{row.typeName ?? "—"}</td>}
-                    {/* How good it is now (#asset-score); work on no asset has none. */}
-                    <td className={CELL}>{row.asset ? <ScoreBar score={row.asset.score} note={row.asset.scoreNote} /> : null}</td>
+                    {/* How good it is now (#asset-score). */}
+                    <td className={CELL}><ScoreBar score={row.asset.score} note={row.asset.scoreNote} /></td>
                     <td className={`${CELL} text-[12.5px] text-zk-text2`}><RowAge date={row.updatedAt} sort="updated" /></td>
                     <td className={`${CELL} bg-[#fafafb]`}>
                       {current ? (
@@ -306,6 +267,52 @@ function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; s
         </div>
         {more > 0 ? <p className="mt-2 text-center text-[13px] text-zk-muted">And {more} more not listed.</p> : null}
       </section>
+    </div>
+  );
+}
+
+/**
+ * The Marketing Feed (#marketing-agent-home): what needs you across every type, newest first, as larger cards. Each
+ * names the asset the work is on and, underneath, what it needs from you; the pill on the right says it in a word.
+ * A card opens its asset's page, where all of that asset's work is.
+ */
+function AttentionFeed({ slug, groups, assets }: { slug: ProjectRef; groups: HomeTaskGroup[]; assets: HomeAsset[] }) {
+  const attention = groups
+    .filter((group) => group.key in ATTENTION)
+    .flatMap((group) => group.items.map((item) => ({ item, group })))
+    .sort((a, b) => new Date(b.item.updatedAt).getTime() - new Date(a.item.updatedAt).getTime());
+  return (
+    <div className="mt-4 rounded-xl bg-zk-bg p-4" aria-label="Feed">
+      {attention.length === 0 ? (
+        <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-zk-border bg-white px-4 py-10 text-center">
+          <p className="font-semibold text-zk-text">Nothing needs you right now.</p>
+          <p className="mt-1 text-sm text-zk-muted">Work to review and ideas to vote on show up here.</p>
+        </div>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {attention.map(({ item, group }) => {
+            const tone = PILL_TONES[GROUP_TONE[group.key] ?? "grey"];
+            const asset = assets.find((entry) => entry.id === item.assetId);
+            const name = asset?.name ?? item.title;
+            return (
+              <li key={item.id}>
+                <Link href={asset ? marketingPath(slug, `assets/${encodeURIComponent(asset.id)}`) : item.href} className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg ${focus}`}>
+                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[toneForName(name)]}>
+                    {name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold text-zk-text">{name}</span>
+                    <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
+                      {NEEDS[group.key]} · <RowAge date={item.updatedAt} sort="updated" />
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-full px-3 py-1 text-[12.5px] font-semibold" style={tone}>{ATTENTION[group.key]}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

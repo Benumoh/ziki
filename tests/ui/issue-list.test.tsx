@@ -201,10 +201,12 @@ describe("issue list layout", () => {
     expect(ideaFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ organisationId: "organisation-acme", projectId: "project-acme", status: "open", isDeleted: false }),
     }));
-    expect(html).toContain('href="/zedu/acme/ideas/12"');
+    // A card unfolds in place for a quick glance; the whole idea is a link inside it.
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("Idea #12");
-    expect(html).toMatch(/aria-label="[^"]*idea score 2 of 4"/);
-    expect(html).toContain("3 verdicts");
+    // New Ideas are the Overview's cards (#work-feed): the score against the threshold, with Approve beside it.
+    expect(html).toContain("score 2/4");
+    expect(html).toMatch(/aria-label="Approve idea #12: give it your good verdict"/);
     expect(html).not.toMatch(/click to mark important/);
     // No issue row matches an idea list.
     expect(findMany.mock.calls.at(-1)![0].where.id).toEqual({ in: [] });
@@ -214,8 +216,8 @@ describe("issue list layout", () => {
     const html = await renderList({ q: "login", mine: "assigned", stage: "reported", page: "2", status: "open" });
     // #simple-lists: the stage bar switches status (the status filter is a menu in the toolbar).
     const list = stages(html);
-    // #project-urls: the status is the path, the rest stays in the query.
-    expect(list).toContain('href="/zedu/acme/issues/delivered?q=login&amp;mine=assigned"');
+    // #project-urls: a stage opens its Overview tab; the search and scope stay in the query.
+    expect(list).toContain('href="/zedu/acme/issues/your-work?q=login&amp;mine=assigned&amp;view=delivered"');
     expect(list).not.toContain("page=");
     expect(list).not.toContain("stage=");
     const statusCount = groupBy.mock.calls.find(([args]) => args?.by?.[0] === "status");

@@ -17,8 +17,8 @@ const primary = `inline-flex min-h-11 shrink-0 items-center justify-center round
  */
 export function MarketingChat({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId: string; siteUrl: string | null }) {
   return (
-    // The same chat box as Your App's, in a white panel of its own above the list.
-    <section aria-labelledby="marketing-agent-title" className="mx-auto mb-4 w-full max-w-[920px] rounded-xl border border-zk-border bg-zk-surface p-5">
+    // The same chat box as Your App's, on its own above the list: the box is the only frame.
+    <section aria-labelledby="marketing-agent-title" className="mx-auto mb-4 w-full max-w-[920px]">
       <h2 id="marketing-agent-title" className="sr-only">Marketing agent</h2>
       {siteUrl ? <PromptStep slug={slug} projectId={projectId} siteUrl={siteUrl} /> : <SiteStep slug={slug} />}
     </section>

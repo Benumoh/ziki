@@ -100,8 +100,40 @@ function withQuery(path: string, query?: URLSearchParams | string): string {
   return text ? `${path}?${text}` : path;
 }
 
-/** An issue list: `/<org>/<project>/issues/<status>`; `all` when no status is given. */
+/**
+ * The work's stages are the Overview's tabs and Status filter (#work-feed), not lists of their own: each stage's
+ * place on the Overview (`/issues/your-work`, with `view` for the tab and `state` for the status).
+ */
+const OVERVIEW_PLACE: Record<string, Record<string, string>> = {
+  all: {},
+  your_work: {},
+  open: { state: "open" },
+  in_progress: { view: "features", state: "in_progress" },
+  progress: { view: "features", state: "in_progress" },
+  delivered: { view: "delivered" },
+  done: { view: "delivered", state: "done" },
+  merge: { view: "delivered", state: "merge" },
+  error: { view: "delivered", state: "merge" },
+  resolved: { view: "delivered", state: "resolved" },
+};
+
+/** Where a stage list's address now goes on the Overview, or null for a list that is still its own page. */
+export function overviewPlaceFor(status: string): Record<string, string> | null {
+  return OVERVIEW_PLACE[status] ?? null;
+}
+
+/**
+ * An issue list: a stage opens its place on the Overview (`/<org>/<project>/issues/your-work?view=…&state=…`); the
+ * lists that are still pages of their own (closed, rejected, duplicates, possibly delivered, your call) are
+ * `/<org>/<project>/issues/<status>`. `all` when no status is given.
+ */
 export function issuesPath(slug: ProjectRef, status: string | null = "all", query?: URLSearchParams | string): string {
+  const place = overviewPlaceFor(status ?? "all");
+  if (place) {
+    const params = new URLSearchParams(typeof query === "string" ? query.replace(/^\?/, "") : query ?? "");
+    for (const [key, value] of Object.entries(place)) params.set(key, value);
+    return withQuery(projectPath(slug, "/issues/your-work"), params);
+  }
   const segment = STATUS_SEGMENT[status ?? "all"] ?? "all";
   return withQuery(projectPath(slug, `/issues/${segment}`), query);
 }
@@ -138,11 +170,6 @@ export function marketingPath(slug: ProjectRef, section = ""): string {
 /** Filing a new report (it starts as an idea). */
 export function newIssuePath(slug: ProjectRef, query?: URLSearchParams | string): string {
   return withQuery(projectPath(slug, "/issues/new"), query);
-}
-
-/** The project's Design area (#9): `/<org>/<project>/design`, or one proposal's page, `/<org>/<project>/design/<id>`. */
-export function designPath(slug: ProjectRef, proposalId?: string, query?: URLSearchParams | string): string {
-  return withQuery(projectPath(slug, proposalId ? `/design/${encodeURIComponent(proposalId)}` : "/design"), query);
 }
 
 /** One goal's page with its split wizard and allocation ledger: `/<org>/<project>/goals/<id>`. */

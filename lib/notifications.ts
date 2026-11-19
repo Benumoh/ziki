@@ -172,7 +172,8 @@ function agentTarget(event: Extract<NotificationEvent, AgentBase>, issuePath: st
     case "agent_question":
       return { path: `/questions/${event.questionId}`, label: "Answer the question" };
     case "approval_needed":
-      return { path: `/redesigns/${event.proposalId}`, label: "Review the proposal" };
+      // Designs are compared and chosen on their issue's page (#redesigns).
+      return { path: issuePath ? `${issuePath}#redesigns` : "/inbox", label: "Review the proposal" };
     case "organisation_invite":
       return { path: `/organisations?invite=${encodeURIComponent(event.inviteId)}`, label: "See the invite" };
     case "claim_offered":

@@ -1,4 +1,4 @@
-import { assertAssetFits } from "@/lib/marketing/assets";
+import { assetForWork } from "@/lib/marketing/assets";
 import { parseTrackFilter } from "@/lib/marketing/track";
 import { parseIdeaTrack } from "@/lib/marketing/idea-track";
 import { NextResponse, type NextRequest } from "next/server";
@@ -416,7 +416,7 @@ async function createIdeaFromBody(agent: AgentContext, request: NextRequest, bod
         if (!area) throw new IssueApiError(422, "Area not found in this project.");
       }
       const description = await normalizeOrganisationMentions(tx, scope.organisationId, input.description);
-      const assetId = await assertAssetFits(tx, scope.organisationId, input.assetId, track, policy.typeId);
+      const assetId = await assetForWork(tx, scope.organisationId, input.assetId, track, policy.typeId, severity ? placeholderTitle(severity) : input.title);
       const idea = await tx.idea.create({
         data: {
           ...scope,

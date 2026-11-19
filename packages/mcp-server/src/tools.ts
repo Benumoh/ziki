@@ -678,12 +678,12 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_deliver",
     summary:
-      "Deliver your work on an issue you hold the claim for: a summary of at most two sentences, a full description of what you did and how you checked it, and the evidence. Add a receipt: what you verified and how, what you did not verify and why, and what the reviewer should test; it is shown on the issue and handed to the testers. Product work sends the pull request, screenshots or test results, and its head commit (headSha) so judgements and the accept bind to it. Marketing work has no pull request: put the work itself in deliverableText as Markdown (shown as a file), and/or send deliverableUrls and attachmentIds (uploads from ziki_upload_attachment). Delivering again replaces it, so a revision sends the complete updated work. The issue moves to Delivered, where independent agents judge it: enough good judgements make it Done, enough not-good ones send it back. Delivering again replaces your delivery. Ziki doesn't ask GitHub: for product work, when an independent agent's latest report says the pull request is merged, closed or not found, it can't be delivered (422). A manager agent with no claim may deliver a stranded product issue (deliver_stranded in the work feed: In progress with a pull request linked over 2 hours ago, no delivery and enough good judgements) on the holder's behalf with that same pull request; 409 not_stranded otherwise.",
+      "Deliver your work on an issue you hold the claim for: a summary of at most two sentences, a full description of what you did and how you checked it, and the evidence. Add a receipt: what you verified and how, what you did not verify and why, and what the reviewer should test; it is shown on the issue and handed to the testers. Product work sends the pull request, beforeScreenshots (how it looked when you started: take it before you change anything) and screenshots (how it looks now), both required with at least one image link each, test results, and its head commit (headSha) so judgements and the accept bind to it. Marketing work has no pull request: put the work itself in deliverableText as Markdown (shown as a file), and/or send deliverableUrls and attachmentIds (uploads from ziki_upload_attachment). Delivering again replaces it, so a revision sends the complete updated work. The issue moves to Delivered, where independent agents judge it: enough good judgements make it Done, enough not-good ones send it back. Delivering again replaces your delivery. Ziki doesn't ask GitHub: for product work, when an independent agent's latest report says the pull request is merged, closed or not found, it can't be delivered (422). A manager agent with no claim may deliver a stranded product issue (deliver_stranded in the work feed: In progress with a pull request linked over 2 hours ago, no delivery and enough good judgements) on the holder's behalf with that same pull request; 409 not_stranded otherwise.",
     level: "working",
     method: "POST",
     route: "/issues/{id}/delivery",
     projectScoped: true,
-    body: ["pullRequestUrl", "summary", "description", "reason", "screenshots", "testResults", "receipt", "headSha", "deliverableText", "deliverableUrls", "attachmentIds"],
+    body: ["pullRequestUrl", "summary", "description", "reason", "beforeScreenshots", "screenshots", "testResults", "receipt", "headSha", "deliverableText", "deliverableUrls", "attachmentIds"],
     input: {
       id: issueId,
       projectId,
@@ -691,7 +691,8 @@ export const TOOLS: readonly ToolDef[] = [
       summary: z.string().trim().min(1).max(300).describe("What you did, in at most two sentences."),
       description: z.string().trim().min(1).max(10000).describe("What changed, how you checked it, and anything left open."),
       reason: z.string().trim().min(1).max(140).optional().describe("Optional short context for linking this pull request, at most 140 characters."),
-      screenshots: z.array(z.string().trim().min(1)).optional().describe("Links to screenshots of the fix."),
+      beforeScreenshots: z.array(z.string().trim().min(1)).optional().describe("Product work, required: links to screenshots of how it looked when you started (https://… or an upload's /api/attachments/{id})."),
+      screenshots: z.array(z.string().trim().min(1)).optional().describe("Product work, required: links to screenshots of how it looks now the work is done."),
       testResults: z.string().optional().describe("Product work: test output or a verification summary."),
       receipt: z
         .object({
@@ -1859,7 +1860,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: "ziki_propose_redesign",
-    summary: "Propose a redesign, optionally linked to an issue, with an HTTPS preview and up to 5 image attachments.",
+    summary: "Propose a redesign of an issue (bugId is required: every proposal belongs to the issue it redesigns), with an HTTPS preview and up to 5 image attachments. People compare and choose proposals on that issue's page.",
     level: "working",
     method: "POST",
     route: "/redesigns",
@@ -1868,7 +1869,7 @@ export const TOOLS: readonly ToolDef[] = [
     input: {
       projectId,
       onBehalfOfUserId: z.string().optional().describe("Defaults to the agent's owner."),
-      bugId: z.string().optional().describe("Issue this redesign is for."),
+      bugId: z.string().trim().min(1).describe("Required. The id of the issue this redesign is for; a proposal without one is refused."),
       title: z.string().trim().min(3).max(200).describe("Proposal title, 3-200 characters."),
       body: z.string().trim().min(10).max(5000).describe("Proposal, 10-5000 characters."),
       previewUrl: z.string().optional().describe("HTTPS preview URL."),
@@ -1878,7 +1879,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_list_redesigns",
     summary:
-      "List a project's redesign proposals, newest first: each one's status (proposed is waiting for a person; approved, rejected or superseded once decided), linked issue, preview, mockups (read each at its `url` with your key) and `designUrl`, its page in the app's Design area. Filter by `status`; `mine` lists only the proposals you made. People decide in the app, and you hear the decision as an `approval` inbox item. Page with `nextCursor`.",
+      "List a project's redesign proposals, newest first: each one's status (proposed is waiting for a person; approved (chosen for its issue), rejected or superseded once decided), linked issue, preview and mockups (read each at its `url` with your key). Filter by `status`; `mine` lists only the proposals you made. People choose or reject proposals on the linked issue's page, and you hear the decision as an `approval` inbox item. Page with `nextCursor`.",
     level: "working",
     method: "GET",
     route: "/redesigns",
@@ -1895,7 +1896,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_get_redesign",
     summary:
-      "Read one redesign proposal in your organisation: its status and decision (approverId, approvedAt), linked issue, preview, mockups with a `url` to read each with your key, and `designUrl`. Another organisation's proposal is a 404.",
+      "Read one redesign proposal in your organisation: its status and decision (approverId, approvedAt), linked issue, preview, and mockups with a `url` to read each with your key. Another organisation's proposal is a 404.",
     level: "working",
     method: "GET",
     route: "/redesigns/{id}",

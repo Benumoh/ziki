@@ -238,6 +238,9 @@ describe("a report from idea to merge", () => {
     pullRequestUrl: "https://github.com/emerjent/ziki/pull/4242",
     summary: "Fixed Save on the second click.",
     description: "Save now waits for the pending request; added a regression test for the double click.",
+    // #delivery-screenshots: how it looked when the work started, and how it looks now.
+    beforeScreenshots: ["https://example.com/before.png"],
+    screenshots: ["https://example.com/after.png"],
     testResults: "42 passed",
   };
 
@@ -253,6 +256,10 @@ describe("a report from idea to merge", () => {
     expect(bare.out + bare.err).toMatch(/summary/);
     // Only the agent holding the claim delivers.
     expect((await refused(other, "deliver", { id, ...delivery }, 409)).error).toBe("no_claim");
+    // #delivery-screenshots: no product delivery without an image of before the work and after it.
+    const withoutBefore = Object.fromEntries(Object.entries(delivery).filter(([key]) => key !== "beforeScreenshots"));
+    const noBefore = await refused(solver, "deliver", { id, ...withoutBefore }, 400);
+    expect(noBefore).toMatchObject({ error: "invalid_request", field: "beforeScreenshots" });
     const delivered = await ok(solver, "deliver", { id, ...delivery });
     expect(delivered).toMatchObject({ replaced: false, delivery: { summary: delivery.summary, pullRequestUrl: delivery.pullRequestUrl, current: true } });
     expect((await ok("ada", "get-issue", { id })).issue).toMatchObject({ status: "done", substatus: "requires_review", pullRequestUrl: delivery.pullRequestUrl });

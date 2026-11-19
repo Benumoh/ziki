@@ -6,7 +6,10 @@ import { listAgentRedesigns } from "@/lib/redesign-read";
 
 /**
  * GET ?projectId=&status=proposed|approved|rejected|superseded&mine=1&limit=&cursor= —
- * a project's redesign proposals, newest first (#9), each with its mockups and Design page.
+ * a project's redesign proposals, newest first (#9), each with its mockups.
+ *
+ * POST — propose a redesign of an issue: `bugId` is required, since every
+ * proposal belongs to the issue it redesigns, where people choose it.
  */
 export async function GET(request: NextRequest) {
   return agentIssueRequest(request, "redesigns.list", "read", null, async (agent) =>

@@ -149,7 +149,6 @@ describe("redesign proposals stay in the agent's organisation (#9)", () => {
     title: "Calmer dashboard", body: "Muted tiles.", previewUrl: "https://example.com/p", status: "proposed", approverId: null, approvedAt: null,
     createdAt: new Date("2026-11-01T10:00:00Z"), updatedAt: new Date("2026-11-01T10:00:00Z"),
     attachments: [{ id: "att1", filename: "tiles.png", contentType: "image/png", size: 120 }],
-    project: { slug: "web", organisation: { slug: "acme" } },
   };
 
   beforeEach(() => {
@@ -171,14 +170,13 @@ describe("redesign proposals stay in the agent's organisation (#9)", () => {
     expect(redesignFindMany).not.toHaveBeenCalled();
   });
 
-  it("lists one project's proposals inside the organisation, with each mockup's url and the Design page", async () => {
+  it("lists one project's proposals inside the organisation, with each mockup's url", async () => {
     findFirst.mockResolvedValue({ id: "project_web" });
     redesignFindMany.mockResolvedValue([row]);
     const page = await listAgentRedesigns(agent, new URLSearchParams("projectId=project_web&status=proposed&mine=1"));
     expect(redesignFindMany.mock.calls[0][0].where).toEqual({ organisationId: "organisation_zedu", projectId: "project_web", status: "proposed", authorAgentId: "agent1" });
     expect(page.nextCursor).toBeNull();
-    expect(page.items[0]).toMatchObject({ id: "rd-1", attachments: [{ id: "att1", url: "/api/v1/attachments/att1" }], designUrl: expect.stringMatching(/\/acme\/web\/design\/rd-1$/) });
-    expect(page.items[0]).not.toHaveProperty("project");
+    expect(page.items[0]).toMatchObject({ id: "rd-1", attachments: [{ id: "att1", url: "/api/v1/attachments/att1" }] });
   });
 });
 
@@ -253,7 +251,7 @@ describe("project addresses carry the organisation (#project-urls)", () => {
     expect(isProjectFirstPath("/desktop/740")).toBe(true);
     expect(isProjectFirstPath("/zedu/desktop/ideas/2297")).toBe(false);
     expect(isProjectFirstPath("/zedu")).toBe(false);
-    expect(issuesPath(projectRef("zedu", "desktop"), "in_progress")).toBe("/zedu/desktop/issues/in-progress");
+    expect(issuesPath(projectRef("zedu", "desktop"), "in_progress")).toBe("/zedu/desktop/issues/your-work?view=features&state=in_progress");
   });
 
   it("never lets a new project or organisation take a name an address reads as old or as a site page", async () => {
