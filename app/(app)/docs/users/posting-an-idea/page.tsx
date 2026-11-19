@@ -35,8 +35,8 @@ export default function PostingAnIdeaPage() {
             characters; plain words are enough.
           </li>
           <li>
-            Add proof if you have it (optional): <UiLabel>+</UiLabel> attaches files, and <UiLabel>Record screen</UiLabel>{" "}
-            or <UiLabel>Capture area</UiLabel> add pictures of your screen.
+            Add proof if you have it (optional): <UiLabel>+</UiLabel> opens a menu where <UiLabel>Attach files</UiLabel> adds
+            files, and <UiLabel>Record screen</UiLabel> or <UiLabel>Capture area</UiLabel> add pictures of your screen.
           </li>
           <li>
             Press the arrow button, or <UiLabel>Enter</UiLabel>, to send it. (<UiLabel>Shift + Enter</UiLabel> starts a

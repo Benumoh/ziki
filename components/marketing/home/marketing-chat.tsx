@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useId, useRef, useState, useTransition } from "react";
-import { askMarketingAssistantAction, saveMarketingSiteAction, type MarketingSiteResult } from "@/app/(app)/[org]/marketing/actions";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { askMarketingAssistantAction, saveMarketingSiteAction } from "@/app/(app)/[org]/marketing/actions";
 import { createBugAction } from "@/app/actions/issues";
 import { MARKETING_ASSISTANT_MESSAGE_MAX, type MarketingAnswer, type MarketingDraft, type MarketingTurn } from "@/lib/marketing/assistant-shared";
 import { useChatAttachments } from "@/components/chat-attachments";
@@ -12,51 +13,29 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 const primary = `inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
 
 /**
- * The Marketing agent (#marketing-agent-home), a card of its own above the Marketing list: a project without a
- * website first asks for it; then anyone in the project can ask the agent, which can draft tasks to file.
+ * The Marketing agent (#marketing-agent-home), a card of its own above the Marketing list: one chat box, the same as
+ * Your App's. A project without a website asks for it in the box: the first message that holds an address saves it
+ * (and goes on to the agent when it says more); then anyone in the project can ask the agent, which can draft tasks
+ * to file.
  */
 export function MarketingChat({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId: string; siteUrl: string | null }) {
   return (
     // The same chat box as Your App's, on its own above the list: the box is the only frame.
     <section aria-labelledby="marketing-agent-title" className="mx-auto mb-4 w-full max-w-[920px]">
       <h2 id="marketing-agent-title" className="sr-only">Marketing agent</h2>
-      {siteUrl ? <PromptStep slug={slug} projectId={projectId} siteUrl={siteUrl} /> : <SiteStep slug={slug} />}
+      <PromptStep slug={slug} projectId={projectId} siteUrl={siteUrl} />
     </section>
   );
 }
 
 const smallIcon = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, className: "h-4 w-4" } as const;
 
-function SiteStep({ slug }: { slug: ProjectRef }) {
-  const [result, action, pending] = useActionState<MarketingSiteResult | undefined, FormData>(saveMarketingSiteAction.bind(null, slug), undefined);
-  const inputId = useId();
-  const errorId = useId();
-  return (
-    <form action={action} className="text-left">
-      <div className="rounded-[22px] border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
-        <label htmlFor={inputId} className="sr-only">Which website should we market?</label>
-        <input
-          id={inputId}
-          name="siteUrl"
-          type="url"
-          inputMode="url"
-          autoComplete="url"
-          required
-          placeholder="Which website should we market? Paste its address, like https://yourproduct.com"
-          aria-invalid={result?.error ? true : undefined}
-          aria-describedby={result?.error ? errorId : undefined}
-          className="block min-h-[28px] w-full border-0 bg-transparent p-1 text-[15px] leading-6 text-zk-text placeholder:text-zk-muted focus:outline-none"
-        />
-        {result?.error ? <p id={errorId} role="alert" className="m-0 mt-1 px-1 text-xs text-zk-bad-fg">{result.error}</p> : null}
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span aria-hidden="true" />
-          <button type="submit" disabled={pending} aria-label="Save the website" title="Save" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zk-text text-zk-surface transition disabled:opacity-30">
-            {pending ? <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>}
-          </button>
-        </div>
-      </div>
-    </form>
-  );
+/** The first web address in a message ("https://acme.com", or a bare "acme.com"), or null. */
+function addressIn(text: string): string | null {
+  const full = text.match(/https?:\/\/[^\s<>"']+/i)?.[0];
+  if (full) return full.replace(/[.,;:!?)]+$/, "");
+  const bare = text.match(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>"']*)?/i)?.[0];
+  return bare ? `https://${bare.replace(/[.,;:!?)]+$/, "")}` : null;
 }
 
 /** A turn as the page shows it: an assistant reply also says what it looked at and what it drafted. */
@@ -73,7 +52,9 @@ function historyText(turn: ChatTurn): string {
 }
 
 /** Everyone in the project talks to the agent, for now. */
-function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId: string; siteUrl: string }) {
+function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId: string; siteUrl: string | null }) {
+  const router = useRouter();
+  const files = useChatAttachments();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -83,9 +64,8 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
   const inputId = useId();
   const hintId = useId();
   const errorId = useId();
-  const site = siteUrl.replace(/^https:\/\//, "").replace(/\/$/, "");
+  const site = siteUrl ? siteUrl.replace(/^https:\/\//, "").replace(/\/$/, "") : null;
   const started = turns.length > 0;
-  const files = useChatAttachments({ disabled: pending });
   // Everything attached in this conversation goes on the tasks filed from it.
   const attachmentIds = turns.flatMap((turn) => turn.attachmentIds ?? []);
 
@@ -97,6 +77,28 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
   function send(asked?: string) {
     const text = (asked ?? prompt).trim();
     if (!text || pending || files.uploading) return;
+    // No website yet: the first message names it. It is saved, then the rest of the message (if any) goes on.
+    if (!siteUrl) {
+      const address = addressIn(text);
+      if (!address) {
+        setError("First, paste your website's address, like https://yourproduct.com.");
+        return;
+      }
+      setError(null);
+      startTransition(async () => {
+        const data = new FormData();
+        data.set("siteUrl", address);
+        const saved = await saveMarketingSiteAction(slug, undefined, data);
+        if (saved.error) {
+          setError(saved.error);
+          return;
+        }
+        const rest = text.replace(/https?:\/\/[^\s<>"']+/i, "").replace(address.replace(/^https:\/\//, ""), "").trim();
+        setPrompt(rest.length >= 10 ? rest : "");
+        router.refresh();
+      });
+      return;
+    }
     const shown: ChatTurn[] = [...turns, { role: "user", text, attachmentIds: files.ids }];
     setTurns(shown);
     if (!asked) setPrompt("");
@@ -129,11 +131,11 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
     inputRef.current?.focus();
   }
 
-  const siteLink = (
+  const siteLink = siteUrl ? (
     <a href={siteUrl} target="_blank" rel="noopener noreferrer" className={`rounded-sm font-semibold text-zk-accent hover:underline ${focus}`}>
       {site}
     </a>
-  );
+  ) : null;
 
   return (
     <>
@@ -203,7 +205,9 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
             }}
             rows={1}
             maxLength={MARKETING_ASSISTANT_MESSAGE_MAX}
-            placeholder="Tell the marketing agent what you want: a page to improve, a post to write, a campaign to run…"
+            placeholder={siteUrl
+              ? "Tell the marketing agent what you want: a page to improve, a post to write, a campaign to run…"
+              : "Which website should we market? Paste its address, like https://yourproduct.com"}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `${hintId} ${errorId}` : hintId}
             className="block max-h-[220px] min-h-[28px] w-full resize-none border-0 bg-transparent p-1 text-[15px] leading-6 text-zk-text placeholder:text-zk-muted focus:outline-none [field-sizing:content]"
@@ -221,7 +225,7 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
         {error ? <p id={errorId} role="alert" className="mt-2 px-1 text-sm text-zk-bad-fg">{error}</p> : null}
         {/* Under the box: the site the agent works on, and a fresh start once there is a conversation. */}
         <p className="m-0 mt-2 flex items-center gap-2 px-2 text-[12px] text-zk-muted">
-          <span className="min-w-0 truncate">Marketing {siteLink}</span>
+          {siteLink ? <span className="min-w-0 truncate">Marketing {siteLink}</span> : null}
           {started ? (
             <button type="button" onClick={startOver} disabled={pending} className={`shrink-0 rounded-sm font-semibold text-zk-text2 hover:text-zk-text hover:underline disabled:opacity-40 ${focus}`}>
               New chat

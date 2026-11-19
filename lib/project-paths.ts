@@ -107,14 +107,16 @@ function withQuery(path: string, query?: URLSearchParams | string): string {
 const OVERVIEW_PLACE: Record<string, Record<string, string>> = {
   all: {},
   your_work: {},
-  open: { state: "open" },
+  open: { view: "features", state: "open" },
   in_progress: { view: "features", state: "in_progress" },
   progress: { view: "features", state: "in_progress" },
   delivered: { view: "delivered" },
-  done: { view: "delivered", state: "done" },
-  merge: { view: "delivered", state: "merge" },
-  error: { view: "delivered", state: "merge" },
-  resolved: { view: "delivered", state: "resolved" },
+  // The Work Feed's sections (#work-feed-sections): delivered work waits for your OK, merging is under way, a failed
+  // merge is stalled; live work is Delivered once confirmed.
+  done: { section: "needs" },
+  merge: { section: "active" },
+  error: { section: "stalled" },
+  resolved: { view: "delivered" },
 };
 
 /** Where a stage list's address now goes on the Overview, or null for a list that is still its own page. */

@@ -146,6 +146,27 @@ export async function approveDeliveredWorkAction(bugId: string): Promise<StepRes
   );
 }
 
+/**
+ * Live · Confirmed (#live-confirmed): a person looked at live work and says it is fine. It leaves the Overview's Work
+ * Feed for the Delivered tab. Any member of the issue's organisation may confirm it, once, while it is live and not
+ * broken. A person's own click, not an agent's step, so it needs no agent.
+ */
+export async function confirmLiveWorkAction(bugId: string): Promise<StepResult> {
+  const user = await requireUser();
+  const bug = await prisma.bug.findFirst({
+    where: { id: bugId, isDeleted: false },
+    select: { id: true, organisationId: true, status: true, substatus: true, liveConfirmedAt: true },
+  });
+  if (!bug) return { error: "Issue not found" };
+  const member = await prisma.membership.findFirst({ where: { organisationId: bug.organisationId, userId: user.id }, select: { id: true } });
+  if (!member) return { error: "Only members of this organisation can confirm its work." };
+  if (bug.status !== "resolved" || bug.substatus === "merged_broken") return { error: "Only live work that isn't broken can be confirmed." };
+  if (bug.liveConfirmedAt) return { ok: true };
+  await prisma.bug.update({ where: { id: bug.id }, data: { liveConfirmedAt: new Date(), liveConfirmedById: user.id } });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 /** The manager's merge review on accepted work: accept it for merge, or send it back. */
 export async function giveMergeReviewAction(
   bugId: string,

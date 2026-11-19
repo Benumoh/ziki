@@ -166,10 +166,54 @@ const OVERVIEW_MINE_PARAM = "assigned";
 /** The Overview's Status filter (#work-feed): one main status, or every one the tab holds. */
 const OVERVIEW_STATE_PARAM = "state";
 const OVERVIEW_STATES = ["open", "in_progress", "done", "merge", "resolved"] as const satisfies readonly Status[];
-/** Delivered work: done, waiting to merge, or live. */
-const DELIVERED_STATUSES = ["done", "merge", "resolved"] as const satisfies readonly Status[];
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
+/**
+ * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (delivered work to approve, live
+ * work to confirm), what is being worked on right now, and what looks stalled. `?section=` shows one of them in full.
+ */
+const OVERVIEW_SECTION_PARAM = "section";
+const FEED_SECTIONS = [
+  { key: "needs", title: "Needs your OK" },
+  { key: "active", title: "Being worked on" },
+  { key: "stalled", title: "Stalled" },
+] as const;
+type FeedSection = (typeof FEED_SECTIONS)[number]["key"];
+/** How many cards each section shows before its Show all link. */
+const FEED_SECTION_SIZE = 6;
+/** In progress counts as being worked on while its agent checked in this recently (heartbeats come every 15 minutes). */
+const ACTIVE_HEARTBEAT_MS = 30 * 60 * 1000;
+/** Review and merge count as moving while they changed this recently; after that they look stalled. */
+const MOVING_MS = 24 * 60 * 60 * 1000;
+
+/** The time now, read when the feed is loaded on the server, not while rendering. */
+function currentTime(): number {
+  return Date.now();
+}
+
+/** Which issues one Work Feed section holds (#work-feed-sections), as of now. */
+function feedSectionWhere(section: FeedSection, now: number): Prisma.BugWhereInput {
+  const fresh = new Date(now - ACTIVE_HEARTBEAT_MS);
+  const moving = new Date(now - MOVING_MS);
+  // An agent holds it and checked in lately (or took it lately and hasn't had to check in yet).
+  const heartbeat: Prisma.BugWhereInput = {
+    claims: { some: { status: { in: ["active", "planning"] }, releasedAt: null, OR: [{ lastHeartbeatAt: { gte: fresh } }, { lastHeartbeatAt: null, claimedAt: { gte: fresh } }] } },
+  };
+  if (section === "needs") {
+    return { OR: [{ substatus: "requires_review" }, { status: "resolved", substatus: { not: "merged_broken" }, liveConfirmedAt: null }] };
+  }
+  if (section === "active") {
+    return { OR: [
+      { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, heartbeat] },
+      { substatus: { in: ["accepted", "ready_to_merge"] }, updatedAt: { gte: moving } },
+    ] };
+  }
+  return { OR: [
+    { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, { NOT: heartbeat }] },
+    { substatus: { in: ["error", "merged_broken"] } },
+    { substatus: { in: ["accepted", "ready_to_merge"] }, updatedAt: { lt: moving } },
+  ] };
+}
 type OverviewTab = (typeof OVERVIEW_TABS)[number][0];
 /** A delivery's screenshot links that a page can show (web links only), at most four. */
 function webLinks(urls: string[] | undefined): string[] {
@@ -181,6 +225,26 @@ function feedBody(description: string | null | undefined): string {
   return text.length > FEED_BODY_LIMIT ? `${text.slice(0, FEED_BODY_LIMIT).trimEnd()}…` : text;
 }
 /** How much of an agent's time to delivery has gone (#work-feed), 5% to 95%; null without a due time. */
+/**
+ * Why delivered work isn't merged yet (#work-feed-sections): the latest pull request report's note, when the issue is
+ * accepted, ready to merge or blocked and that report says something stands in the way (it can't merge, conflicts,
+ * its checks fail, or it is no longer open). Null when nothing is said to be in the way.
+ */
+function mergeHold(
+  substatus: string,
+  report: { state: string; mergeable: boolean | null; checks: string | null; note: string } | null,
+): string | null {
+  if (!report || !["accepted", "ready_to_merge", "error"].includes(substatus)) return null;
+  const blocked = substatus === "error" || report.mergeable === false || report.checks === "failing" || report.state !== "open";
+  return blocked && report.note.trim() ? report.note.trim() : null;
+}
+
+/**
+ * How far along work being worked on is (#work-feed-sections), when there is no due time to measure against: by its
+ * step, from the plan to ready to merge.
+ */
+const STEP_PROGRESS: Partial<Record<string, number>> = { plan_review: 0.2, in_progress: 0.5, accepted: 0.8, ready_to_merge: 0.9 };
+
 function timeUsed(claimedAt: Date | null, deliverBy: Date | null): number | null {
   if (!claimedAt || !deliverBy) return null;
   const span = deliverBy.getTime() - claimedAt.getTime();
@@ -213,7 +277,7 @@ const OVERVIEW_EMPTY: Record<OverviewTab, { title: string; description: string }
   all: { title: "No work yet", description: "Tell the agents what you want done in the box above: it shows up here as they take it on." },
   features: { title: "Nothing being built right now", description: "Issues waiting for an agent or being worked on show up here until the work is delivered." },
   design: { title: "No designs waiting for you", description: "When an agent proposes a design for an issue, it shows up here for you to choose." },
-  delivered: { title: "Nothing delivered yet", description: "When an agent delivers its work, it shows up here for you to view and approve." },
+  delivered: { title: "Nothing confirmed yet", description: "Live work moves here once someone confirms it looks fine on the Work Feed." },
 };
 /** Work Feed: everything not closed, live included. */
 const ALL_WORK_STATUSES = ["open", "in_progress", "done", "merge", "resolved"] as const;
@@ -538,8 +602,8 @@ export async function IssuesList({
             // Design Changes: issues with a proposed design waiting for someone to choose.
             ? { redesigns: { some: { status: "proposed" } } }
             : overviewTab === "delivered"
-              // Delivered: done, waiting to merge, or live.
-              ? { status: { in: [...DELIVERED_STATUSES] } }
+              // Delivered: live work someone confirmed looks fine (#live-confirmed).
+              ? { status: "resolved", liveConfirmedAt: { not: null } }
               : { status: { in: [...ALL_WORK_STATUSES] } },
     ];
   }
@@ -586,54 +650,49 @@ export async function IssuesList({
   // The Overview (#work-feed) is one list of work on every tab, newest first: the Work Feed (mixed), and the same list narrowed to
   // Active Work, Design Changes, Delivered or My Work (the tab's own `where` above), and to one status by the filter.
   const feedView = isYourWorkView && !qParam;
-  const feed: { items: WorkFeedItem[]; total: number; page: number; counts: Map<string, number> } = feedView
+  const sectionParam = toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]);
+  const overviewSection: FeedSection | null = overviewTab === "all" ? FEED_SECTIONS.find(({ key }) => key === sectionParam)?.key ?? null : null;
+  type FeedGroup = { key: FeedSection; title: string; count: number; items: WorkFeedItem[] };
+  const emptyFeed = { items: [] as WorkFeedItem[], groups: null as FeedGroup[] | null, total: 0, page: 1, counts: new Map<string, number>() };
+  const feed = feedView
     ? await loadOrEmpty("work feed", async () => {
         const select = {
-          id: true, number: true, title: true, updatedAt: true, projectId: true, summary: true, description: true, status: true,
+          id: true, number: true, title: true, createdAt: true, updatedAt: true, projectId: true, summary: true, description: true, status: true,
           project: { select: { slug: true, organisation: { select: { slug: true } } } },
           assignee: { select: { name: true } },
           reporter: { select: { name: true } },
           // What the card shows when opened (#work-feed): the files on it.
           attachments: { orderBy: { createdAt: "asc" }, take: 4, select: { id: true, filename: true, contentType: true, size: true } },
-          claims: { where: { status: { in: ["active", "planning"] }, releasedAt: null }, select: { claimedAt: true, deliverBy: true, beneficiary: { select: { name: true } }, agent: { select: { name: true } } }, take: 1 },
+          claims: { where: { status: { in: ["active", "planning"] }, releasedAt: null }, select: { claimedAt: true, deliverBy: true, lastHeartbeatAt: true, beneficiary: { select: { name: true } }, agent: { select: { name: true } } }, take: 1 },
           // A design waiting for someone to choose it makes the row a design to review.
           redesigns: { where: { status: "proposed" }, take: 1, select: { id: true } },
           // Delivered work's View (#work-feed): where it was delivered, the newest preview first, else the delivery's link,
           // else the pull request.
-          substatus: true, pullRequestUrl: true,
+          substatus: true, pullRequestUrl: true, liveConfirmedAt: true,
           previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
-          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true } },
+          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true } },
+          // Why accepted work isn't merged yet (#work-feed-sections): the latest pull request report, when it says so.
+          pullRequestReports: { orderBy: { createdAt: "desc" }, take: 1, select: { state: true, mergeable: true, checks: true, note: true } },
         } satisfies Prisma.BugSelect;
         const page = Math.max(1, Number.parseInt(toSingleQueryParam(params.page) ?? "1", 10) || 1);
-        // The Status filter narrows the tab to one status; the filter's counts are the tab's, by status.
-        const feedWhere: Prisma.BugWhereInput = overviewState ? { AND: [where, { status: overviewState }] } : where;
         const orderBy: Prisma.BugOrderByWithRelationInput[] = [{ updatedAt: "desc" }, { id: "desc" }];
-        // The Work Feed mixes its work: newest first within each status, taken from each status in turn (delivered,
-        // under way, live, waiting, merging), so one busy status doesn't fill the page. A status that runs out leaves
-        // its turns to the others. A tab or a Status filter is one kind of work, so it is simply newest first.
-        const mixed = overviewTab === "all" && !overviewState;
-        const loadRows = async () => {
-          if (!mixed) return prisma.bug.findMany({ where: feedWhere, orderBy, skip: (page - 1) * FEED_PAGE_SIZE, take: FEED_PAGE_SIZE, select });
-          const turns = ["done", "in_progress", "resolved", "open", "merge"] as const;
-          const lanes = await Promise.all(turns.map((status) =>
-            prisma.bug.findMany({ where: { AND: [where, { status }] }, orderBy, take: page * FEED_PAGE_SIZE, select })));
-          const interleaved: (typeof lanes)[number] = [];
-          for (let i = 0; interleaved.length < page * FEED_PAGE_SIZE && lanes.some((lane) => i < lane.length); i += 1) {
-            for (const lane of lanes) if (i < lane.length) interleaved.push(lane[i]);
-          }
-          return interleaved.slice((page - 1) * FEED_PAGE_SIZE, page * FEED_PAGE_SIZE);
+        // `section` is the Work Feed section the card is in: every card Being worked on has a bar, none Stalled does.
+        // When an agent first took each issue (#work-feed-sections): its earliest claim, held or since let go.
+        const startsFor = async (rows: { id: string }[]) => {
+          if (rows.length === 0) return new Map<string, Date>();
+          const firsts = await prisma.issueClaim.groupBy({
+            by: ["bugId"],
+            where: { bugId: { in: rows.map((row) => row.id) }, claimedAt: { not: null } },
+            _min: { claimedAt: true },
+          });
+          return new Map(firsts.flatMap((first) => (first._min.claimedAt ? [[first.bugId, first._min.claimedAt] as const] : [])));
         };
-        const [rows, total, byStatus] = await Promise.all([
-          loadRows(),
-          prisma.bug.count({ where: feedWhere }),
-          prisma.bug.groupBy({ by: ["status"], where, _count: { _all: true } }),
-        ]);
-        const counts = new Map(byStatus.map((group) => [group.status as string, group._count._all]));
-        const items = rows.map((row): WorkFeedItem => {
+        const toItem = (row: Prisma.BugGetPayload<{ select: typeof select }>, section: FeedSection | null, starts: Map<string, Date>): WorkFeedItem => {
           const href = issueHref(row);
           // Work under way (#work-feed): how far through its time it is, from when the agent took it to when it is due.
           const claim = row.claims[0];
-          const progress = row.substatus === "in_progress" ? timeUsed(claim?.claimedAt ?? null, claim?.deliverBy ?? null) : null;
+          const due = row.substatus === "in_progress" ? timeUsed(claim?.claimedAt ?? null, claim?.deliverBy ?? null) : null;
+          const progress = section === "stalled" ? null : section === "active" ? due ?? STEP_PROGRESS[row.substatus] ?? null : due;
           const kind: WorkFeedKind = row.redesigns.length > 0 ? "design"
             : row.status === "done" || row.status === "merge" ? "delivered"
             : row.status === "resolved" ? "live"
@@ -651,6 +710,20 @@ export async function IssuesList({
             // Where it is, said on the card in one word with its colour and icon ("Broken", not "Live · Broken").
             substatus: row.substatus,
             progress,
+            progressBy: due !== null ? "time" : "step",
+            // Opened: when it was delivered, and why it isn't merged yet when the latest pull request report says why.
+            deliveredAt: row.deliveries[0]?.updatedAt ?? null,
+            // The opened card's timeline: when it was added and when an agent started on it.
+            addedAt: row.createdAt,
+            startedAt: starts.get(row.id) ?? null,
+            // Stalled (#work-feed-sections): since when it hasn't moved. Work in progress since its agent last checked
+            // in; anything else since it last changed.
+            stalledSince: section === "stalled"
+              ? (row.substatus === "in_progress" || row.substatus === "plan_review"
+                ? claim?.lastHeartbeatAt ?? claim?.claimedAt ?? row.updatedAt
+                : row.updatedAt)
+              : null,
+            mergeHold: mergeHold(row.substatus, row.pullRequestReports[0] ?? null),
             // Opened (#work-feed): what it is, its files, and the decision it asks of you.
             reporter: row.reporter?.name ?? null,
             summary: row.summary ?? null,
@@ -664,14 +737,56 @@ export async function IssuesList({
             // Approve is the good-to-merge judgement, given while the work waits for it.
             canApprove: row.substatus === "requires_review",
             approved: row.substatus === "accepted" || row.substatus === "ready_to_merge" || row.substatus === "error",
+            // Live work waits for a person's "Looks fine" before it moves to Delivered (#live-confirmed).
+            canConfirm: row.status === "resolved" && row.substatus !== "merged_broken" && !row.liveConfirmedAt,
+            confirmed: Boolean(row.liveConfirmedAt),
           };
-        });
-        return { items, total, page, counts };
-      }, { items: [], total: 0, page: 1, counts: new Map<string, number>() })
-    : { items: [], total: 0, page: 1, counts: new Map<string, number>() };
+        };
+
+        // The Work Feed (#work-feed-sections): its three sections, a few cards each, or one of them in full.
+        if (overviewTab === "all") {
+          const now = currentTime();
+          const counts = new Map<string, number>();
+          if (!overviewSection) {
+            const groups: FeedGroup[] = await Promise.all(FEED_SECTIONS.map(async ({ key, title }) => {
+              const sectionWhere: Prisma.BugWhereInput = { AND: [where, feedSectionWhere(key, now)] };
+              const [rows, count] = await Promise.all([
+                prisma.bug.findMany({ where: sectionWhere, orderBy, take: FEED_SECTION_SIZE, select }),
+                prisma.bug.count({ where: sectionWhere }),
+              ]);
+              counts.set(key, count);
+              const starts = await startsFor(rows);
+              return { key, title, count, items: rows.map((row) => toItem(row, key, starts)) };
+            }));
+            return { items: [], groups, total: 0, page: 1, counts };
+          }
+          const sectionWhere: Prisma.BugWhereInput = { AND: [where, feedSectionWhere(overviewSection, now)] };
+          const [rows, total, ...sectionCounts] = await Promise.all([
+            prisma.bug.findMany({ where: sectionWhere, orderBy, skip: (page - 1) * FEED_PAGE_SIZE, take: FEED_PAGE_SIZE, select }),
+            prisma.bug.count({ where: sectionWhere }),
+            ...FEED_SECTIONS.map(({ key }) => prisma.bug.count({ where: { AND: [where, feedSectionWhere(key, now)] } })),
+          ]);
+          FEED_SECTIONS.forEach(({ key }, index) => counts.set(key, sectionCounts[index]));
+          const starts = await startsFor(rows);
+          return { items: rows.map((row) => toItem(row, overviewSection, starts)), groups: null, total, page, counts };
+        }
+        // The other tabs: newest first; the Status filter narrows to one status, and its counts are the tab's.
+        const feedWhere: Prisma.BugWhereInput = overviewState ? { AND: [where, { status: overviewState }] } : where;
+        const [rows, total, byStatus] = await Promise.all([
+          prisma.bug.findMany({ where: feedWhere, orderBy, skip: (page - 1) * FEED_PAGE_SIZE, take: FEED_PAGE_SIZE, select }),
+          prisma.bug.count({ where: feedWhere }),
+          prisma.bug.groupBy({ by: ["status"], where, _count: { _all: true } }),
+        ]);
+        const counts = new Map(byStatus.map((group) => [group.status as string, group._count._all]));
+        const starts = await startsFor(rows);
+        return { items: rows.map((row) => toItem(row, null, starts)), groups: null, total, page, counts };
+      }, emptyFeed)
+    : emptyFeed;
   // An Overview tab's address, with the Status filter when one is picked.
-  const overviewHref = (tab: OverviewTab, state: string | null, mine: boolean = isMyWorkTab) =>
-    listHref(new URLSearchParams({ status: YOUR_WORK_STATUS, ...(tab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: tab }), ...(state ? { [OVERVIEW_STATE_PARAM]: state } : {}), ...(mine ? { [OVERVIEW_MINE_PARAM]: "1" } : {}) }));
+  const overviewHref = (tab: OverviewTab, state: string | null, mine: boolean = isMyWorkTab, section: FeedSection | null = null) =>
+    listHref(new URLSearchParams({ status: YOUR_WORK_STATUS, ...(tab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: tab }), ...(state ? { [OVERVIEW_STATE_PARAM]: state } : {}), ...(mine ? { [OVERVIEW_MINE_PARAM]: "1" } : {}), ...(section ? { [OVERVIEW_SECTION_PARAM]: section } : {}) }));
+  // The Work Feed with one of its sections in full, or all three.
+  const sectionHref = (section: FeedSection | null) => overviewHref("all", null, isMyWorkTab, section);
   // New ideas (`/new`) is one of the Overview's tabs (#work-feed): it has the Overview's top, chat box and tabs.
   const isNewIdeasView = ideasView === "new";
   const withOverviewLook = isYourWorkView || isNewIdeasView;
@@ -704,14 +819,21 @@ export async function IssuesList({
     <>
       {overviewTabs}
       <ToolbarFilterMenu
-        summary={[isMyWorkTab ? "Assigned to me" : "", overviewState ? STATUS_NAMES[overviewState] : ""].filter(Boolean).join(" · ")}
+        summary={[isMyWorkTab ? "Assigned to me" : "", overviewSection ? FEED_SECTIONS.find(({ key }) => key === overviewSection)!.title : "", overviewState ? STATUS_NAMES[overviewState] : ""].filter(Boolean).join(" · ")}
         groups={[{
           label: "Show",
           options: [
             { label: "Everyone's", href: overviewHref(overviewTab, overviewState, false), selected: !isMyWorkTab },
             { label: "Assigned to me", href: overviewHref(overviewTab, overviewState, true), selected: isMyWorkTab },
           ],
-        }, {
+        }, overviewTab === "all" ? {
+          // The Work Feed filters by its sections (#work-feed-sections).
+          label: "Section",
+          options: [
+            { label: "All sections", href: sectionHref(null), selected: !overviewSection },
+            ...FEED_SECTIONS.map(({ key, title }) => ({ label: title, count: feed.counts.get(key) ?? 0, href: sectionHref(key), selected: overviewSection === key })),
+          ],
+        } : {
           label: "Status",
           options: [
             { label: "All", count: [...feed.counts.values()].reduce((sum, n) => sum + n, 0), href: overviewHref(overviewTab, null), selected: !overviewState },
@@ -1621,6 +1743,7 @@ export async function IssuesList({
           // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
           <WorkFeed
             items={feed.items}
+            groups={feed.groups?.map((group) => ({ ...group, moreHref: group.count > group.items.length ? sectionHref(group.key) : null }))}
             title={OVERVIEW_TABS.find(([tab]) => tab === overviewTab)?.[1] ?? "Work Feed"}
             toolbar={overviewToolbar}
             empty={
@@ -1633,8 +1756,8 @@ export async function IssuesList({
             }
             footer={feed.total > FEED_PAGE_SIZE ? (
               <PaginationControls
-                basePath={overviewHref(overviewTab, overviewState).split("?")[0]}
-                queryParams={Object.fromEntries(new URLSearchParams(overviewHref(overviewTab, overviewState).split("?")[1] ?? ""))}
+                basePath={overviewHref(overviewTab, overviewState, isMyWorkTab, overviewSection).split("?")[0]}
+                queryParams={Object.fromEntries(new URLSearchParams(overviewHref(overviewTab, overviewState, isMyWorkTab, overviewSection).split("?")[1] ?? ""))}
                 page={feed.page}
                 totalPages={Math.ceil(feed.total / FEED_PAGE_SIZE)}
                 totalCount={feed.total}

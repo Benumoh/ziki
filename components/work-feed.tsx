@@ -3,7 +3,8 @@
 import Link from "next/link";
 import type React from "react";
 import { useState, useTransition } from "react";
-import { approveDeliveredWorkAction } from "@/app/actions/human-steps";
+import { useRouter } from "next/navigation";
+import { approveDeliveredWorkAction, confirmLiveWorkAction } from "@/app/actions/human-steps";
 import { LocalTime } from "@/components/local-time";
 import { RichText } from "@/components/rich-text";
 import { BASE_PATH } from "@/lib/base-path";
@@ -41,10 +42,26 @@ export type WorkFeedItem = {
   canApprove: boolean;
   /** Already judged good to merge: Approve shows as done. */
   approved: boolean;
+  /** Live work nobody has confirmed yet: "Looks fine" moves it to Delivered (#live-confirmed). */
+  canConfirm: boolean;
+  /** Live work someone confirmed (Live · Confirmed). */
+  confirmed: boolean;
   /** Where it is: its step (substatus), shown as one word with its colour and icon (lib/status-badge.ts). */
   substatus: Substatus;
-  /** Work under way: how much of its time to delivery has gone (0 to 1), or null when it has no due time. */
+  /** Work under way: how far along it is (0 to 1), or null for no bar. */
   progress: number | null;
+  /** What `progress` measures: the agent's time to delivery, or how far along its step is when it has no due time. */
+  progressBy: "time" | "step";
+  /** When the work was last delivered, or null when it has not been. */
+  deliveredAt: Date | null;
+  /** When the issue was added (converted from its idea). */
+  addedAt: Date;
+  /** When an agent first took it, or null when none has. */
+  startedAt: Date | null;
+  /** In the Stalled section: since when it hasn't moved; null elsewhere. */
+  stalledSince: Date | null;
+  /** Why it isn't merged yet, from the latest pull request report, or null when nothing is in the way. */
+  mergeHold: string | null;
 };
 
 /** Each kind's section name, colour, icon and the line its rows say. */
@@ -66,6 +83,21 @@ function fileSize(bytes: number): string {
 function fileKind(type: string, name: string): string {
   const ext = name.includes(".") ? name.split(".").pop()! : type.split("/").pop() ?? "";
   return ext.slice(0, 4).toUpperCase();
+}
+
+/**
+ * A card's action button (Approve, Looks fine), styled as the ideas list's original Approve (#idea-path): solid green,
+ * raised, small bold text after a thumbs-up, with a hover and a press, unlike the flat pills that only say where
+ * something is.
+ */
+export const RAISED =
+  "inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md border border-[#1f9d55] bg-[#22a85b] px-2 text-[11.5px] font-bold text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] transition hover:brightness-110 active:translate-y-px active:shadow-none disabled:cursor-default disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue";
+
+/** The thumbs-up on a raised action button. */
+function ThumbsUp() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 10v11M15 5.9 14 10h5.8a2 2 0 0 1 2 2.4l-1.4 7A2 2 0 0 1 18.4 21H7V10l4-8a3.1 3.1 0 0 1 4 3.9zM3 10h4v11H3z" /></svg>
+  );
 }
 
 /** The pill on a card's right: soft tint, strong text. */
@@ -90,8 +122,13 @@ export function StatusBadge({ substatus, className = "" }: { substatus: Substatu
  * last moved, and a pill on the right with its status, or Approve on delivered work. Clicking a card unfolds
  * it downwards, in place, as an opened email; clicking its head folds it.
  */
-export function WorkFeed({ items, title, toolbar, empty, footer }: {
+export function WorkFeed({ items, groups, title, toolbar, empty, footer }: {
   items: WorkFeedItem[];
+  /**
+   * The Work Feed's sections (#work-feed-sections), top to bottom: each its title, a line on what it holds, how many,
+   * a few cards, and a link to all of it. Given instead of `items`.
+   */
+  groups?: { key: string; title: string; count: number; items: WorkFeedItem[]; moreHref: string | null }[];
   title: string;
   /** The tabs and the Status filter, at the top right. */
   toolbar?: React.ReactNode;
@@ -103,16 +140,10 @@ export function WorkFeed({ items, title, toolbar, empty, footer }: {
   // The opened card, or null for none.
   const [openId, setOpenId] = useState<string | null>(null);
 
-  return (
-    <section aria-label={title}>
-      {/* No title: the tabs on the left say which list this is, the Status filter is on the right. */}
-      {toolbar ? <div className="mb-4 flex flex-wrap items-center justify-between gap-2">{toolbar}</div> : null}
-      {items.length === 0 ? (
-        <div className="rounded-2xl border border-zk-border bg-white p-5">{empty}</div>
-      ) : (
-        // The cards sit on a gray inset of the white panel, as Marketing's do.
-        <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-4" aria-label="Work">
-          {items.map((item) => {
+  // A list of cards on the gray inset, as Marketing's are.
+  const cards = (list: WorkFeedItem[], label: string) => (
+        <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-4" aria-label={label}>
+          {list.map((item) => {
             const who = item.who ?? "Nobody yet";
             return (
               <li key={item.id}>
@@ -136,11 +167,17 @@ export function WorkFeed({ items, title, toolbar, empty, footer }: {
                         </span>
                       </span>
                     </button>
-                    {/* On the right: delivered work's Approve (or Approved), else its status. */}
-                    {item.kind === "delivered" ? (
-                      <DeliveredActions item={item} className="max-sm:hidden" />
+                    {/* On the right, one thing: the progress bar on work being worked on (accepted and merging work
+                        included, though it was delivered), else Approve on delivered work, Approve on live work, else
+                        its status. */}
+                    {item.stalledSince ? (
+                      <StalledLabel item={item} className="max-sm:hidden" />
                     ) : item.progress !== null ? (
-                      <ProgressBar value={item.progress} className="max-sm:hidden" />
+                      <ProgressBar value={item.progress} by={item.progressBy} substatus={item.substatus} className="max-sm:hidden" />
+                    ) : item.kind === "delivered" ? (
+                      <DeliveredActions item={item} className="max-sm:hidden" />
+                    ) : item.canConfirm || item.confirmed ? (
+                      <ConfirmLive item={item} className="max-sm:hidden" />
                     ) : (
                       <StatusBadge substatus={item.substatus} className="max-sm:hidden" />
                     )}
@@ -150,6 +187,39 @@ export function WorkFeed({ items, title, toolbar, empty, footer }: {
             );
           })}
         </ul>
+  );
+
+  return (
+    <section aria-label={title}>
+      {/* No title: the tabs on the left say which list this is, the Status filter is on the right. */}
+      {toolbar ? <div className="mb-4 flex flex-wrap items-center justify-between gap-2">{toolbar}</div> : null}
+      {groups ? (
+        // The Work Feed's sections, each with its few newest cards and a link to all of them.
+        <div className="flex flex-col gap-6">
+          {groups.map((group) => (
+            <section key={group.key} aria-labelledby={`work-feed-${group.key}`}>
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1">
+                <div className="min-w-0">
+                  <h2 id={`work-feed-${group.key}`} className="m-0 inline text-[15px] font-semibold text-zk-text">
+                    {group.title} <span className="ml-1 text-[13px] font-medium tabular-nums text-zk-muted">{group.count}</span>
+                  </h2>
+                </div>
+                {group.moreHref ? (
+                  <Link href={group.moreHref} className={`shrink-0 text-[13px] font-medium text-zk-accent hover:underline ${focus}`}>
+                    Show all {group.count} →
+                  </Link>
+                ) : null}
+              </div>
+              {group.items.length > 0 ? cards(group.items, group.title) : (
+                <p className="m-0 rounded-xl bg-zk-bg px-4 py-4 text-[13px] text-zk-muted">Nothing here right now.</p>
+              )}
+            </section>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-2xl border border-zk-border bg-white p-5">{empty}</div>
+      ) : (
+        cards(items, "Work")
       )}
       {footer ? <div className="mt-3">{footer}</div> : null}
     </section>
@@ -202,19 +272,54 @@ export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files
 }
 
 /** Work under way: a small rounded bar, filled as far as the agent is through its time to delivery. */
-function ProgressBar({ value, className = "" }: { value: number; className?: string }) {
+/** How many segments the bar has. */
+const SEGMENTS = 20;
+
+/**
+ * Whether work under way is fine (#work-feed-sections): blue while there is time, orange once three quarters of the
+ * agent's time has gone, red when it is nearly or already due. Work with no due time is measured by its step, and is fine.
+ */
+function progressTone(percent: number, by: "time" | "step"): { on: string; label: string } {
+  if (by === "time" && percent >= 90) return { on: "#e5484d", label: "nearly due" };
+  if (by === "time" && percent >= 75) return { on: "#f08a24", label: "running short" };
+  return { on: "#2f8cf0", label: "fine" };
+}
+
+/** What work under way is waiting for, by its step. */
+const WAITING_FOR: Partial<Record<Substatus, string>> = {
+  plan_review: "Waiting for its plan to be approved",
+  in_progress: "Waiting for the agent to deliver",
+  accepted: "Waiting for a manager's review",
+  ready_to_merge: "Waiting to be merged",
+};
+
+/**
+ * Work under way (#work-feed-sections): how far along it is in small text, a segmented bar in the colour that says
+ * whether it is fine, and under it what it is waiting for.
+ */
+function ProgressBar({ value, by, substatus, className = "" }: { value: number; by: "time" | "step"; substatus: Substatus; className?: string }) {
   const percent = Math.round(value * 100);
+  const filled = Math.round(value * SEGMENTS);
+  const tone = progressTone(percent, by);
+  const waiting = WAITING_FOR[substatus];
   return (
-    <span
-      role="progressbar"
-      aria-label="In progress"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-      title={`In progress · ${percent}% of its time used`}
-      className={`block h-2 w-28 shrink-0 overflow-hidden rounded-full bg-[#ebe7fd] ${className}`}
-    >
-      <span className="block h-full rounded-full bg-[linear-gradient(90deg,#8b6cf6,#7a52ee)]" style={{ width: `${percent}%` }} />
+    <span className={`flex w-[150px] shrink-0 flex-col gap-1 ${className}`}>
+      <span className="text-[11.5px] leading-none text-zk-muted">
+        <span className="text-[13px] font-semibold tabular-nums text-zk-text">{percent}%</span> {by === "time" ? "of its time used" : "along"}
+      </span>
+      <span
+        role="progressbar"
+        aria-label={by === "time" ? `Time used, ${tone.label}` : "Progress"}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="flex h-3.5 items-stretch gap-[3px]"
+      >
+        {Array.from({ length: SEGMENTS }, (_, index) => (
+          <span key={index} className="w-[4px] rounded-full" style={{ backgroundColor: index < filled ? tone.on : "#e3e5ea" }} />
+        ))}
+      </span>
+      {waiting ? <span className="truncate text-[11.5px] leading-tight text-zk-muted">{waiting}</span> : null}
     </span>
   );
 }
@@ -251,8 +356,15 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
           </span>
         </button>
         {/* The decision it asks of you, on the right (full width under the head on a phone). */}
-        {item.kind === "delivered" ? (
+        {/* The same one thing as the closed card: the bar on work being worked on, else Approve. */}
+        {item.stalledSince ? (
+          <StalledLabel item={item} />
+        ) : item.progress !== null ? (
+          <ProgressBar value={item.progress} by={item.progressBy} substatus={item.substatus} />
+        ) : item.kind === "delivered" ? (
           <DeliveredActions item={item} />
+        ) : item.canConfirm || item.confirmed ? (
+          <ConfirmLive item={item} />
         ) : (
         <Link
           href={item.decision.href}
@@ -267,6 +379,16 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
       <div className={item.kind === "delivered" || item.kind === "live" ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,320px)]" : ""}>
       <div className="min-w-0 pt-4 text-[14.5px] leading-relaxed text-zk-text2">
         <h2 id={`${id}-title`} className="m-0 mb-3 text-[16px] font-semibold leading-snug text-zk-text">{cleanTitle(item.title)}</h2>
+        {/* When it was delivered, and why it isn't merged yet when the latest pull request report says why. */}
+        {item.deliveredAt ? (
+          <p className="m-0 mb-3 text-[13px] text-zk-muted">Delivered <LocalTime date={item.deliveredAt} /></p>
+        ) : null}
+        {item.mergeHold ? (
+          <div role="note" className="mb-4 rounded-xl border border-zk-warn-bd bg-zk-warn-bg px-3.5 py-2.5 text-[13.5px] text-zk-warn-fg">
+            <p className="m-0 font-semibold">Why it isn&apos;t merged yet</p>
+            <p className="m-0 mt-0.5 whitespace-pre-line">{item.mergeHold}</p>
+          </div>
+        ) : null}
         {/* The summary, unless the description already opens with it. */}
         {item.summary && !item.body?.trimStart().startsWith(item.summary.trim().split("\n")[0]) ? <p className="m-0 mb-3 whitespace-pre-line">{item.summary}</p> : null}
         {item.body ? (
@@ -321,6 +443,65 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
  * An opened delivered card's preview (#work-feed): the delivery's screenshots, the first large and the rest small, each
  * opening full size; under them, the link to view what was delivered (its preview, else its link or pull request).
  */
+/** "3 days", "5 hours", "12 minutes": how long since a moment, roughly. */
+function since(date: Date): string {
+  const minutes = Math.max(1, Math.round((Date.now() - new Date(date).getTime()) / 60_000));
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+/**
+ * A stalled card's right (#work-feed-sections): where it is, as the one-word status ("Mergeable", "Working"), and under
+ * it how long it has sat there, so it reads as stuck rather than done.
+ */
+function StalledLabel({ item, className = "" }: { item: WorkFeedItem; className?: string }) {
+  return (
+    <span className={`flex shrink-0 flex-col items-end gap-1 ${className}`}>
+      <StatusBadge substatus={item.substatus} />
+      {item.stalledSince ? (
+        <span className="text-[11.5px] tabular-nums text-zk-muted" suppressHydrationWarning>{since(item.stalledSince)}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Steps whose wait is for the merge, and the one whose wait is for review. */
+const WAITING_FOR_MERGE = new Set<string>(["accepted", "ready_to_merge", "error"]);
+
+/**
+ * Under the preview (#work-feed-sections): when the issue was added, when an agent started, when it was delivered, and
+ * how long it has been waiting since: for its review, or for the merge.
+ */
+function Timeline({ item }: { item: WorkFeedItem }) {
+  const waiting = item.deliveredAt && (WAITING_FOR_MERGE.has(item.substatus) || item.substatus === "requires_review")
+    ? { label: WAITING_FOR_MERGE.has(item.substatus) ? "Waiting for merge" : "Waiting for review", value: since(item.deliveredAt) }
+    : null;
+  const rows: { label: string; value: React.ReactNode }[] = [
+    { label: "Added", value: <LocalTime date={item.addedAt} /> },
+    { label: "Started", value: item.startedAt ? <LocalTime date={item.startedAt} /> : "Not yet" },
+    { label: "Delivered", value: item.deliveredAt ? <LocalTime date={item.deliveredAt} /> : "Not yet" },
+  ];
+  return (
+    <dl className="m-0 mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
+      {rows.map((row) => (
+        <div key={row.label} className="contents">
+          <dt className="text-zk-muted">{row.label}</dt>
+          <dd className="m-0 text-right text-zk-text2">{row.value}</dd>
+        </div>
+      ))}
+      {waiting ? (
+        <div className="contents">
+          <dt className="font-medium text-zk-text">{waiting.label}</dt>
+          <dd className="m-0 text-right font-semibold tabular-nums text-zk-text" suppressHydrationWarning>{waiting.value}</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
+}
+
 function DeliveryPreview({ item }: { item: WorkFeedItem }) {
   const [first, ...rest] = item.screenshots;
   return (
@@ -363,6 +544,7 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           </div>
         </div>
       ) : null}
+      <Timeline item={item} />
       {item.viewUrl ? (
         <a href={item.viewUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
           View what was delivered
@@ -370,6 +552,44 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
         </a>
       ) : null}
     </aside>
+  );
+}
+
+/**
+ * Live work's one label (#live-confirmed): "Looks fine" while nobody has confirmed it; one click marks it Live ·
+ * Confirmed and it moves from the Work Feed to the Delivered tab. Confirmed work reads Confirmed.
+ */
+function ConfirmLive({ item, className = "" }: { item: WorkFeedItem; className?: string }) {
+  const [pending, start] = useTransition();
+  const [done, setDone] = useState(item.confirmed);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const confirm = () =>
+    start(async () => {
+      setError(null);
+      const result = await confirmLiveWorkAction(item.id);
+      if ("error" in result) setError(result.error);
+      else {
+        setDone(true);
+        router.refresh();
+      }
+    });
+  const button = `${PILL} transition ${focus}`;
+  return (
+    <div className={`flex flex-col items-end gap-1 ${className}`}>
+      {done ? (
+        <span className={button} style={PILL_TONES.green}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+          Confirmed
+        </span>
+      ) : (
+        <button type="button" onClick={confirm} disabled={pending} aria-label={`Approve: ${formatIssueNumber(item.number)} works live`} className={RAISED}>
+          <ThumbsUp />
+          {pending ? "Approving…" : "Approve"}
+        </button>
+      )}
+      {error ? <p role="alert" className="m-0 max-w-[220px] text-[12px] text-zk-bad-fg">{error}</p> : null}
+    </div>
   );
 }
 
@@ -399,7 +619,8 @@ function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; classN
             Approved
           </span>
         ) : item.canApprove ? (
-          <button type="button" onClick={approve} disabled={pending} className={`${button} cursor-pointer hover:opacity-90 disabled:cursor-default disabled:opacity-60`} style={PILL_TONES.green}>
+          <button type="button" onClick={approve} disabled={pending} className={RAISED}>
+            <ThumbsUp />
             {pending ? "Approving…" : "Approve"}
           </button>
         ) : null}
