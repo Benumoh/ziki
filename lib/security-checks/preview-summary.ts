@@ -14,17 +14,20 @@ import type { PreviewArea, PreviewFinding, PreviewResult } from "./preview";
 
 export type PreviewRisk = "minimal" | "low" | "medium" | "high" | "critical";
 
-export const PREVIEW_AREA_ORDER: PreviewArea[] = ["https", "certificate", "headers", "cookies", "email", "secrets", "policy", "updates"];
+export const PREVIEW_AREA_ORDER: PreviewArea[] = ["https", "certificate", "headers", "cookies", "files", "email", "secrets", "dependencies", "workflows", "policy", "updates"];
 
 export const PREVIEW_AREA_LABEL: Record<PreviewArea, string> = {
   https: "HTTPS",
   certificate: "Certificate",
   headers: "Security headers",
   cookies: "Cookies",
+  files: "Public files",
   email: "Email settings",
   secrets: "Secrets in files",
   policy: "Security policy",
   updates: "Dependency updates",
+  dependencies: "Known holes in packages",
+  workflows: "CI workflows",
 };
 
 export const PREVIEW_RISK_LABEL: Record<PreviewRisk, string> = {

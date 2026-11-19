@@ -24,15 +24,18 @@ import {
   cookieFindings,
   emailFindings,
   headerFindings,
+  internalNames,
   MAX_REDIRECTS,
+  publicFileFindings,
   previewScan,
   realPreviewNetwork,
   type CertificateAnswer,
   type PageAnswer,
   type PreviewNetwork,
-  type RepoAnswer,
 } from "./preview";
-import { GitHubError } from "@/lib/github/client";
+import type { OsvLookup } from "@/lib/security-checks/osv";
+import type { RepoReader } from "@/lib/security-checks/repo-reader";
+import type { DependabotAlert, RepoPackage } from "@/lib/security-checks/repo-scan";
 import { PrivateAddressError } from "./ownership";
 
 const NOW = Date.parse("2026-11-12T20:00:00Z");
@@ -43,6 +46,8 @@ const SAFE_HEADERS: PageAnswer["headers"] = {
   "content-security-policy": "default-src 'self'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "cross-origin-opener-policy": "same-origin",
   server: "cloudflare",
 };
 const GOOD_CERT: CertificateAnswer = { authorized: true, authorizationError: null, validTo: new Date(NOW + 60 * DAY), protocol: "TLSv1.3" };
@@ -52,7 +57,6 @@ function network(answers: {
   pages?: Record<string, Partial<PageAnswer>>;
   certificate?: CertificateAnswer | null;
   txt?: Record<string, string[][]>;
-  repo?: RepoAnswer;
 }): PreviewNetwork & { page: ReturnType<typeof vi.fn> } {
   return {
     page: vi.fn(async (url: string) => {
@@ -62,7 +66,8 @@ function network(answers: {
     }),
     certificate: async () => answers.certificate ?? null,
     txt: async (host) => answers.txt?.[host] ?? [],
-    repo: async () => answers.repo ?? { status: "not_found" },
+    repo: async () => fakeReader({ status: "not_found" }, { installationId: null }),
+    osv: async () => [],
   };
 }
 
@@ -101,9 +106,10 @@ describe("preview scan (#security-checks, 12 Nov plan D3)", () => {
     if (!result.ok) throw new Error(result.reason);
     expect(result.findings.map((f) => f.id)).toEqual([
       "no-https-redirect", "certificate-expiring", "missing-hsts", "missing-csp", "missing-frame-protection", "cookie-not-secure", "missing-spf",
-      "missing-nosniff", "missing-referrer-policy", "version-disclosure", "cookie-not-httponly", "cookie-no-samesite", "dmarc-not-enforced",
+      "missing-nosniff", "missing-referrer-policy", "missing-permissions-policy", "missing-cross-origin-isolation", "version-disclosure",
+      "cookie-not-httponly", "cookie-no-samesite", "dmarc-not-enforced",
     ]);
-    expect(result.counts).toEqual({ critical: 0, high: 0, medium: 7, low: 6 });
+    expect(result.counts).toEqual({ critical: 0, high: 0, medium: 7, low: 8 });
   });
 
   it("flags a site that only answers over plain HTTP", async () => {
@@ -147,7 +153,8 @@ describe("preview scan (#security-checks, 12 Nov plan D3)", () => {
       page: async () => { throw new PrivateAddressError("settle.ng"); },
       certificate: async () => null,
       txt: async () => [],
-      repo: async () => ({ status: "not_found" }),
+      repo: async () => fakeReader({ status: "not_found" }, { installationId: null }),
+      osv: async () => [],
     };
     expect(await scan("settle.ng", net)).toEqual({ ok: false, reason: expect.stringContaining("private network") });
   });
@@ -297,127 +304,167 @@ describe("preview scan (#security-checks, 12 Nov plan D3)", () => {
   });
 });
 
-describe("preview scan of a public repo (13 Nov)", () => {
-  const KEPT_REPO: RepoAnswer = { status: "ok", root: ["README.md", "package.json", ".gitignore", ".env.example", "src"], github: ["dependabot.yml", "workflows"], docs: ["SECURITY.md"] };
+/** A repo as a fake reader serves it: its files (path to text), whether it's private, and GitHub's own alerts. */
+type FakeRepo = { status?: "ok" | "not_found" | "unavailable"; files?: Record<string, string>; private?: boolean; pushedAt?: string; alerts?: DependabotAlert[] | null };
 
-  it("finds nothing in a repo with a policy, an update bot and no secrets files, and says what it looked at", async () => {
-    const result = await scan("https://github.com/settle/app", network({ repo: KEPT_REPO }));
-    expect(result).toMatchObject({ ok: true, kind: "repo", target: "settle/app", findings: [], checked: ["secrets", "policy", "updates"], counts: { critical: 0, high: 0, medium: 0, low: 0 } });
+function fakeReader(repo: FakeRepo, access: { installationId: string | null }): RepoReader {
+  const files = repo.files ?? {};
+  return {
+    meta: async () => {
+      if (repo.status === "not_found") return { status: "not_found" };
+      if (repo.status === "unavailable") return { status: "unavailable", detail: "GitHub answered 403" };
+      // A private repo is only seen through the App, as the real reader does.
+      if (repo.private && !access.installationId) return { status: "not_found" };
+      return { status: "ok", private: Boolean(repo.private), pushedAt: repo.pushedAt ?? new Date(NOW).toISOString(), defaultBranch: "main" };
+    },
+    tree: async () => ({ files: Object.entries(files).map(([path, text]) => ({ path, size: text.length })), truncated: false }),
+    file: async (path) => files[path] ?? null,
+    dependabotAlerts: async () => (access.installationId ? (repo.alerts ?? []) : null),
+  };
+}
+
+describe("repo quick scan: Ziki reads the repo itself (18 Nov)", () => {
+  const KEPT = {
+    "README.md": "# app",
+    "SECURITY.md": "Report to security@settle.test",
+    "package.json": JSON.stringify({ dependencies: { express: "4.21.2" } }),
+    "package-lock.json": JSON.stringify({ packages: { "": {}, "node_modules/express": { version: "4.21.2" } } }),
+    ".github/dependabot.yml": "version: 2",
+    ".github/workflows/ci.yml": ["on: push", "jobs:", "  t:", "    steps:", "      - uses: actions/checkout@v4", "      - run: npm test", ""].join("\n"),
+  };
+  const quietOsv = vi.fn(async (packages: readonly RepoPackage[]) => packages.map((pkg) => ({ pkg, vulns: [] })));
+  const repoNet = (repo: FakeRepo, osv: OsvLookup = quietOsv): PreviewNetwork => ({ ...network({}), repo: async (_o, _n, access) => fakeReader(repo, access), osv });
+
+  it("finds nothing in a well-kept repo, and says what it looked at", async () => {
+    const result = await scan("github.com/settle/app", repoNet({ files: KEPT }));
+    expect(result).toMatchObject({ ok: true, kind: "repo", target: "settle/app", findings: [], counts: { critical: 0, high: 0, medium: 0, low: 0 } });
+    expect(result.ok && result.checked).toEqual(expect.arrayContaining(["secrets", "dependencies", "workflows", "policy", "updates"]));
+    // Exact versions from the lockfile go to OSV.dev.
+    expect(quietOsv).toHaveBeenCalledWith([expect.objectContaining({ ecosystem: "npm", name: "express", version: "4.21.2" })]);
   });
 
-  it("reads the GitHub address the chat builds from a repo's owner/name, though not the bare owner/name", async () => {
-    const net = network({ repo: KEPT_REPO });
-    expect(await scan("github.com/settle/app", net)).toMatchObject({ ok: true, kind: "repo", target: "settle/app" });
-    expect(await scan("settle/app", net)).toMatchObject({ ok: false });
+  it("turns OSV.dev's holes into one finding per package, at its worst severity, with the version that fixes it", async () => {
+    const osv = vi.fn(async (packages: readonly RepoPackage[]) =>
+      packages.map((pkg) => ({ pkg, vulns: [{ id: "GHSA-aaaa", summary: "Path traversal in express.", severity: "high" as const, fixed: "4.21.3" }, { id: "GHSA-bbbb", summary: "x", severity: "low" as const, fixed: "4.21.2" }] })),
+    );
+    const result = await scan("github.com/settle/app", repoNet({ files: KEPT }, osv));
+    expect(result.ok && result.findings).toEqual([
+      expect.objectContaining({ area: "dependencies", severity: "high", title: "express 4.21.2 has 2 known security holes", detail: expect.stringContaining("Upgrading to 4.21.3") }),
+    ]);
   });
 
-  it("flags files that usually hold secrets as high, but not examples", async () => {
-    const result = await scan("github.com/settle/app", network({ repo: { status: "ok", root: ["SECURITY.md", ".env", ".env.example", "deploy.pem", "id_rsa", "README.md"], github: [], docs: [] } }));
-    expect(result).toMatchObject({ ok: true, counts: { high: 3, low: 0 } });
-    expect(result.ok && result.findings.map((finding) => finding.id).sort()).toEqual(["secret-file:.env", "secret-file:deploy.pem", "secret-file:id_rsa"]);
+  it("flags risky workflows, keys written in config files and secret files, never repeating the key", async () => {
+    const result = await scan("github.com/settle/app", repoNet({
+      files: {
+        ...KEPT,
+        ".github/workflows/pr.yml": [
+          "on:",
+          "  pull_request_target:",
+          "jobs:",
+          "  t:",
+          "    steps:",
+          "      - uses: actions/checkout@v4",
+          "        with:",
+          "          ref: ${{ github.event.pull_request.head.sha }}",
+          "      - uses: someone/deploy@v1",
+          '      - run: echo "${{ github.event.pull_request.title }}"',
+          "",
+        ].join("\n"),
+        "config/settings.json": `{"aws": "AKIAABCDEFGHIJKLMNOP"}`,
+        "deploy.pem": "-----BEGIN PRIVATE KEY-----",
+      },
+    }));
+    const ids = result.ok ? result.findings.map((finding) => [finding.id, finding.severity]) : [];
+    expect(ids).toEqual(expect.arrayContaining([
+      ["workflow-prt-checkout:pr.yml", "critical"],
+      ["workflow-injection:pr.yml", "high"],
+      ["workflow-unpinned:pr.yml", "low"],
+      ["secret-key:config/settings.json:an AWS access key", "critical"],
+      ["secret-file:deploy.pem", "high"],
+    ]));
+    expect(JSON.stringify(result)).not.toContain("AKIAABCDEFGHIJKLMNOP");
   });
 
-  it("flags a missing security policy and a missing update bot, only when the repo has dependencies", async () => {
-    const withDeps = await scan("github.com/settle/a", network({ repo: { status: "ok", root: ["package.json", "src"], github: ["workflows"], docs: [] } }));
-    expect(withDeps).toMatchObject({ ok: true, checked: ["secrets", "policy", "updates"], counts: { low: 2 } });
-    const noDeps = await scan("github.com/settle/b", network({ repo: { status: "ok", root: ["index.html"], github: [], docs: [] } }));
-    expect(noDeps).toMatchObject({ ok: true, checked: ["secrets", "policy"], counts: { low: 1 } });
+  it("never reads a private repo without the workspace's App installation, and reads it (with GitHub's alerts) with it", async () => {
+    const privateRepo: FakeRepo = { private: true, files: KEPT, alerts: [{ package: "lodash", ecosystem: "npm", severity: "critical", summary: "Prototype pollution", manifest: "package-lock.json", fixed: "4.17.21" }] };
+    expect(await scan("github.com/settle/secret", repoNet(privateRepo))).toEqual({ ok: false, reason: expect.stringContaining("GitHub App") });
+    clearPreviewCache();
+    const result = await previewScan("github.com/settle/secret", { visitor: "owner", network: repoNet(privateRepo), now: NOW, repoAccess: { installationId: "42" } });
+    expect(result.ok && result.findings).toEqual([expect.objectContaining({ id: "dependency:npm:lodash", severity: "critical", title: expect.stringContaining("GitHub flags lodash") })]);
   });
 
-  it("finds a policy or an update bot wherever they are allowed to live", async () => {
-    const result = await scan("github.com/settle/c", network({ repo: { status: "ok", root: ["package.json", "renovate.json", ".github"], github: ["SECURITY.md"], docs: [] } }));
-    expect(result).toMatchObject({ ok: true, findings: [] });
+  it("keeps a private repo's result apart, so a visitor without access never gets it from the cache", async () => {
+    const privateRepo: FakeRepo = { private: true, files: KEPT };
+    await previewScan("github.com/settle/secret", { visitor: "owner", network: repoNet(privateRepo), now: NOW, repoAccess: { installationId: "42" } });
+    expect(await previewScan("github.com/settle/secret", { visitor: "stranger", network: repoNet(privateRepo), now: NOW + 1000 })).toMatchObject({ ok: false });
   });
 
-  it("says a repo it can't see is private or misspelt, and one GitHub won't answer for is unavailable, and never throws", async () => {
-    expect(await scan("github.com/settle/private", network({ repo: { status: "not_found" } }))).toEqual({ ok: false, reason: expect.stringContaining("private") });
-    expect(await scan("github.com/settle/busy", network({ repo: { status: "unavailable" } }))).toEqual({ ok: false, reason: expect.stringContaining("just now") });
-  });
-
-  it("counts repo scans against the same hourly limit, and reuses a result for a while", async () => {
-    const net = network({ repo: KEPT_REPO });
-    const repo = vi.spyOn(net, "repo");
-    await previewScan("github.com/settle/app", { visitor: "same", network: net, now: NOW });
-    await previewScan("github.com/settle/app", { visitor: "same", network: net, now: NOW + 60_000 });
-    expect(repo).toHaveBeenCalledTimes(1);
+  it("says a repo it can't see is private or misspelt, and one GitHub won't answer for is unavailable, with why", async () => {
+    expect(await scan("github.com/settle/missing", repoNet({ status: "not_found" }))).toEqual({ ok: false, reason: expect.stringContaining("private") });
+    expect(await scan("github.com/settle/busy", repoNet({ status: "unavailable" }))).toEqual({ ok: false, reason: expect.stringContaining("(GitHub answered 403)") });
   });
 });
 
-describe("reading a public repo through Ziki's GitHub client (13 Nov)", () => {
-  // A block body: returning the mock would make Vitest call it again as the test's cleanup.
-  beforeEach(() => {
-    github.getOrNull.mockReset();
-    github.auth = "token";
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe("yes/no facts the quick scan checks for every scan (18 Nov: same answer every time)", () => {
+  it("flags old TLS still accepted, unless the site already agreed to it by default", () => {
+    expect(certificateFindings(GOOD_CERT, "website", "settle.ng", NOW, ["TLSv1", "TLSv1.1"]).map((f) => [f.id, f.detail.includes("TLS 1.0 and TLS 1.1")])).toEqual([["old-tls-accepted", true]]);
+    expect(certificateFindings(GOOD_CERT, "website", "settle.ng", NOW, [])).toEqual([]);
+    expect(certificateFindings(GOOD_CERT, "website", "settle.ng", NOW, null)).toEqual([]);
+    // Agreed to by default: one finding, not two.
+    expect(certificateFindings({ ...GOOD_CERT, protocol: "TLSv1" }, "website", "settle.ng", NOW, ["TLSv1"]).map((f) => f.id)).toEqual(["old-tls"]);
   });
 
-  it("reads the names at the top level, in .github and in docs, and nothing else", async () => {
-    github.getOrNull.mockImplementation(async (path: string) => ({
-      "/repos/settle/app": { private: false },
-      "/repos/settle/app/contents": [{ name: "README.md", type: "file" }, { name: ".github", type: "dir" }, { name: "docs", type: "dir" }],
-      "/repos/settle/app/contents/.github": [{ name: "dependabot.yml" }],
-      "/repos/settle/app/contents/docs": [{ name: "SECURITY.md" }],
-    })[path] ?? null);
-    expect(await realPreviewNetwork.repo("settle", "app")).toEqual({ status: "ok", root: ["README.md", ".github", "docs"], github: ["dependabot.yml"], docs: ["SECURITY.md"] });
-    expect(github.getOrNull).toHaveBeenCalledTimes(4);
+  it("flags internal-looking names on the certificate, never the site's own or ordinary ones", () => {
+    expect(internalNames(["settle.ng", "www.settle.ng", "*.settle.ng", "api.settle.ng", "staging.settle.ng", "dev2.settle.ng", "qa-eu.settle.ng", "developer.settle.ng"], "settle.ng")).toEqual([
+      "staging.settle.ng", "dev2.settle.ng", "qa-eu.settle.ng",
+    ]);
+    const cert = certificateFindings({ ...GOOD_CERT, names: ["settle.ng", "internal.settle.ng"] }, "website", "settle.ng", NOW);
+    expect(cert.map((f) => [f.id, f.detail.includes("internal.settle.ng")])).toEqual([["certificate-internal-names", true]]);
   });
 
-  it("only looks inside .github and docs when the top level has them", async () => {
-    github.getOrNull.mockImplementation(async (path: string) => (path === "/repos/settle/app" ? { private: false } : [{ name: "README.md" }]));
-    expect(await realPreviewNetwork.repo("settle", "app")).toEqual({ status: "ok", root: ["README.md"], github: [], docs: [] });
-    expect(github.getOrNull).toHaveBeenCalledTimes(2);
+  it("reads robots.txt for private paths and security.txt for a contact that hasn't expired", () => {
+    const robots = { status: 200, body: ["User-agent: *", "Disallow: /admin/", "Disallow: /search", "Allow: /internal-tools", "Disallow: /admin/"].join("\n") };
+    const contact = { status: 200, body: ["Contact: mailto:security@settle.ng", "Expires: 2027-01-01T00:00:00Z"].join("\n") };
+    expect(publicFileFindings(robots, contact, "settle.ng", NOW).map((f) => [f.id, f.detail.includes("/admin/, /internal-tools")])).toEqual([["robots-private-paths", true]]);
+    expect(publicFileFindings({ status: 200, body: ["User-agent: *", "Disallow: /search"].join("\n") }, contact, "settle.ng", NOW)).toEqual([]);
+    expect(publicFileFindings(null, { status: 404, body: "" }, "settle.ng", NOW).map((f) => f.id)).toEqual(["missing-security-txt"]);
+    const expired = { status: 200, body: ["Contact: mailto:s@settle.ng", "Expires: 2026-01-01T00:00:00Z"].join("\n") };
+    expect(publicFileFindings(null, expired, "settle.ng", NOW).map((f) => f.id)).toEqual(["security-txt-expired"]);
+    // Neither answered: nothing is said about either.
+    expect(publicFileFindings(null, null, "settle.ng", NOW)).toEqual([]);
   });
 
-  it("never looks into a repo GitHub says is private, even though Ziki's token could read it", async () => {
-    github.getOrNull.mockImplementation(async (path: string) => (path === "/repos/settle/secret" ? { private: true } : [{ name: ".env" }]));
-    expect(await realPreviewNetwork.repo("settle", "secret")).toEqual({ status: "not_found" });
-    expect(github.getOrNull).toHaveBeenCalledTimes(1);
-    expect(github.getOrNull).toHaveBeenCalledWith("/repos/settle/secret");
-    // A record that doesn't plainly say public is treated the same way.
-    github.getOrNull.mockReset();
-    github.getOrNull.mockResolvedValue({});
-    expect(await realPreviewNetwork.repo("settle", "unclear")).toEqual({ status: "not_found" });
+  it("flags cookies shared with every subdomain", () => {
+    expect(cookieFindings({ "set-cookie": ["sid=1; Secure; HttpOnly; SameSite=Lax; Domain=.settle.ng"] }).map((f) => f.id)).toEqual(["cookie-domain-wide"]);
   });
 
-  it("says not found for a private or missing repo", async () => {
-    github.getOrNull.mockResolvedValue(null);
-    expect(await realPreviewNetwork.repo("settle", "private")).toEqual({ status: "not_found" });
+  it("fingerprints the site so a rescan can tell a real change from per-visit noise", async () => {
+    const withPage = (headers: PageAnswer["headers"], certificate = GOOD_CERT) =>
+      network({ ...WELL_KEPT, pages: { ...WELL_KEPT.pages, "https://settle.ng/": { headers } }, certificate });
+    const base = { ...SAFE_HEADERS, "content-security-policy": "script-src 'nonce-abc123'", "set-cookie": ["sid=111; Secure; HttpOnly; Expires=Wed, 19 Nov 2026 10:00:00 GMT"] };
+    const first = await scan("settle.ng", withPage(base));
+    clearPreviewCache();
+    // Another visit: a new nonce, a new cookie value and expiry. Not a change.
+    const again = await scan("settle.ng", withPage({ ...base, "content-security-policy": "script-src 'nonce-zzz999'", "set-cookie": ["sid=222; Secure; HttpOnly; Expires=Thu, 20 Nov 2026 10:00:00 GMT"] }));
+    clearPreviewCache();
+    // A renewed certificate and a cookie that lost HttpOnly: both changes.
+    const changed = await scan("settle.ng", withPage({ ...base, "set-cookie": ["sid=333; Secure"] }, { ...GOOD_CERT, validTo: new Date(NOW + 90 * DAY) }));
+    if (!first.ok || !again.ok || !changed.ok) throw new Error("scan failed");
+    expect(again.fingerprint).toEqual(first.fingerprint);
+    expect(changed.fingerprint!.certificate).not.toBe(first.fingerprint!.certificate);
+    expect(changed.fingerprint!.cookies).not.toBe(first.fingerprint!.cookies);
+    expect(changed.fingerprint!.headers).toBe(first.fingerprint!.headers);
   });
 
-  it("says unavailable, with why, and never throws, when GitHub can't be read at all", async () => {
-    github.getOrNull.mockImplementation(async () => {
-      throw new GitHubError(403, "Ziki has used up its GitHub rate limit for now.");
-    });
-    const answer = await realPreviewNetwork.repo("settle", "busy").catch((error: unknown) => ({ threw: String(error) }));
-    expect(answer).toEqual({ status: "unavailable", detail: expect.stringContaining("403") });
-  });
-
-  it("asks once with no token when the one Ziki has is rejected, so a public repo can still be read", async () => {
-    github.getOrNull.mockImplementation(async () => {
-      throw new GitHubError(401, "Bad credentials");
-    });
-    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/contents") ? [{ name: "README.md" }, { name: "SECURITY.md" }] : { private: false }), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
-    expect(await realPreviewNetwork.repo("settle", "app")).toEqual({ status: "ok", root: ["README.md", "SECURITY.md"], github: [], docs: [] });
-    expect(fetchMock).toHaveBeenCalledWith("https://api.github.test/repos/settle/app/contents", expect.not.objectContaining({ headers: expect.objectContaining({ Authorization: expect.anything() }) }));
-  });
-
-  it("doesn't ask again without a token when Ziki had none to begin with", async () => {
-    github.auth = "none";
-    github.getOrNull.mockImplementation(async () => {
-      throw new GitHubError(403, "Ziki has used up its GitHub rate limit for now.");
-    });
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    expect(await realPreviewNetwork.repo("settle", "busy")).toEqual({ status: "unavailable", detail: expect.stringContaining("403") });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("puts why GitHub couldn't be read into what the person is told", async () => {
-    const net = network({ repo: { status: "unavailable", detail: "GitHub answered 403" } });
-    expect(await scan("github.com/settle/busy", net)).toEqual({ ok: false, reason: expect.stringContaining("(GitHub answered 403)") });
+  it("checks old TLS and the public files on a full website scan, and says it looked at them", async () => {
+    const text = vi.fn(async (url: string) =>
+      url.endsWith("/robots.txt") ? { status: 200, body: "Disallow: /staging/" } : { status: 404, body: "" },
+    );
+    const net = { ...network(WELL_KEPT), oldTls: vi.fn(async () => ["TLSv1.1"]), text };
+    const result = await scan("settle.ng", net);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.checked).toContain("files");
+    expect(result.findings.map((f) => f.id).sort()).toEqual(["missing-security-txt", "old-tls-accepted", "robots-private-paths"]);
+    expect(text.mock.calls.map(([url]) => url)).toEqual(["https://settle.ng/robots.txt", "https://settle.ng/.well-known/security.txt"]);
   });
 });

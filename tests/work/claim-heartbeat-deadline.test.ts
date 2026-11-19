@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 /** Active work (#556, #593): the holder heartbeats its claim, a silent or overdue claim is released and its issue reopened for bids, and delivered work is never taken back. */
 const db = vi.hoisted(() => ({
   agentApiKey: { findUnique: vi.fn() }, agentActivation: { findUnique: vi.fn() }, agentAuditEvent: { create: vi.fn() },
-  agentEvent: { create: vi.fn() }, webhookSubscription: { findMany: vi.fn() },
+  agentEvent: { create: vi.fn(), groupBy: vi.fn() }, webhookSubscription: { findMany: vi.fn() },
   webhookDelivery: { createMany: vi.fn() },
   bugActivity: { createMany: vi.fn() },
   project: { findFirst: vi.fn(), findUnique: vi.fn() },
@@ -33,7 +33,7 @@ import { setAgentPaused, sendIssueSteer } from "@/app/actions/agent-steering";
 import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { currentHold } from "@/lib/issue-holders";
 import { staleHold } from "@/lib/agent-api/stale-hold";
-import { classifyAgentStatus, isClaimStalled } from "@/lib/dashboard-overview";
+import { classifyAgentStatus, isClaimStalled, loadOwnAgents } from "@/lib/dashboard-overview";
 import { isListedOnPage, projectAgentState, NOT_RESPONDING_AFTER_MS, type HeldClaimSignal } from "@/lib/agents/project-agents";
 import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
 
@@ -236,6 +236,27 @@ describe("agent status for its owner", () => {
     expect(isClaimStalled({ ...claim, deliverBy: new Date(now.getTime() - 60_000) })).toBe(true);
     expect(isClaimStalled({ ...claim, quiet: true, pullRequestUrl: "https://github.com/o/r/pull/1" })).toBe(false);
     expect(isClaimStalled({ ...claim, quiet: true, waitingOnOwnerSince: now })).toBe(false);
+  });
+
+  it("calls an agent stuck on an older quiet claim even when its newest claim already has a pull request", async () => {
+    const quietSince = new Date(now.getTime() - 25 * 60_000);
+    const project = { slug: "platform", organisation: { slug: "acme" } };
+    db.agentEvent.groupBy.mockResolvedValue([]);
+    db.agent.findMany.mockResolvedValueOnce([{
+      id: "agent", name: "Builder", username: "builder", avatar: null, model: null, tagline: "Builds", about: "Builds things.",
+      _count: { skills: 1 }, activations: [{ organisationId: "organisation", level: "working" }], apiKeys: [], questions: [],
+      // Newest first, as the query orders them: the newest is quiet too, but its fix is linked.
+      claims: [
+        { claimedAt: quietSince, lastHeartbeatAt: quietSince, deliverBy: null, waitingOnOwnerSince: null,
+          bug: { number: 108, title: "Delivered", status: "in_progress", isDeleted: false, pullRequestUrl: "https://github.com/o/r/pull/1", project } },
+        { claimedAt: quietSince, lastHeartbeatAt: quietSince, deliverBy: null, waitingOnOwnerSince: null,
+          bug: { number: 107, title: "Stalled work", status: "in_progress", isDeleted: false, pullRequestUrl: null, project } },
+      ],
+    }]);
+
+    const [agent] = await loadOwnAgents({ userId: "owner", organisationId: "organisation", now });
+    expect(agent).toMatchObject({ status: "stuck", activity: "No word on #107 for 25 min", issue: { number: 107, href: "/acme/platform/107" } });
+    expect(db.agent.findMany.mock.calls[0][0].select.claims).not.toHaveProperty("take");
   });
 
   it("ignores another organisation's issue-linked question while showing this organisation's stuck issue", async () => {
@@ -507,6 +528,14 @@ describe("active agents in a project (#active-agents)", () => {
     expect(state([], { lastSeenAt: minutes(20) })).toBe("away");
     expect(state([], { lastSeenAt: minutes(60 * 23) })).toBe("away");
     expect(state([], { lastSeenAt: minutes(60 * 25) })).toBe("offline");
+  });
+
+  it("calls an agent clearing the queue working, claim or not, for 5 minutes after its last step (#work-alerts)", () => {
+    expect(state([], { lastActedAt: minutes(2) })).toBe("working");
+    expect(state([], { openBids: 2, lastActedAt: minutes(2) })).toBe("working");
+    expect(state([], { lastActedAt: minutes(6) })).toBe("idle");
+    // An offer still says so first: its owner has to know it is waiting.
+    expect(state([offer], { lastActedAt: minutes(2) })).toBe("offered");
   });
 
   it("leaves a delivered agent that isn't online off the page, and lists it while it is", () => {

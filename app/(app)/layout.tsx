@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { isLinkPreviewBot } from "@/lib/link-preview";
 import { isPublicAgentPath } from "@/lib/public-agent-paths";
 import { projectOverviewSegments } from "@/lib/project-slug";
-import { publicIntakeSegments, publicIssuesSegments } from "@/lib/public-project-paths";
+import { publicIntakeSegments, publicIssuesSegments, publicOrgFeedbackSegments } from "@/lib/public-project-paths";
 import { AppHeader } from "@/components/app-header";
 import { getUnreadCount } from "@/lib/lookups";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/skip-link";
@@ -22,7 +22,6 @@ import type { OrganisationRole } from "@/lib/organisation-role";
 import { countPendingEscalations } from "@/lib/agent-questions";
 import { loadOwnAgents } from "@/lib/dashboard-overview";
 import { AgentsDock, type DockAgent } from "@/components/agents-dock";
-import { dockClusters, type DockCluster } from "@/lib/clusters";
 import { appVersionLabel } from "@/lib/deployed-version";
 import { agentActivity, agentEarnings } from "@/lib/points/agent-earnings";
 import { headerEarnings } from "@/lib/earnings";
@@ -65,22 +64,28 @@ export default async function AppLayout({
   if (!session?.user && reqPath === "/security") return <>{children}</>;
   const intakeSegments = !session?.user ? publicIntakeSegments(reqPath) : null;
   const publicIssues = !session?.user ? publicIssuesSegments(reqPath) : null;
-  const overviewSegments = !session?.user ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
+  const orgFeedback = !session?.user ? publicOrgFeedbackSegments(reqPath) : null;
+  const overviewSegments = !session?.user && !orgFeedback ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
+  const isFeedbackOrTrack = intakeSegments?.kind === "feedback" || intakeSegments?.kind === "track";
   const overviewProject = overviewSegments
     ? await prisma.project.findFirst({
         where: {
           slug: overviewSegments.projectSlug,
-          // Only a public project gets the guest shell. A private one sends a
-          // guest to sign in, the same as an address that names no project, so
-          // the shell doesn't tell outsiders which private projects exist.
-          visibility: "public",
+          // Only a public project gets the guest shell for overview/public-issues;
+          // shared feedback portal and tracking links also support private projects (#1048).
+          ...(isFeedbackOrTrack ? {} : { visibility: "public" }),
           archivedAt: null,
           ...(intakeSegments?.kind === "report" || intakeSegments?.kind === "contribute" ? { acceptsGuestIdeas: true } : {}),
           organisation: { slug: overviewSegments.orgSlug, archivedAt: null },
         },
         select: { id: true },
       })
-    : null;
+    : orgFeedback
+      ? await prisma.organisation.findFirst({
+          where: { slug: orgFeedback.orgSlug, archivedAt: null },
+          select: { id: true },
+        })
+      : null;
   // Guests may read a project's public overview. The page itself decides
   // whether the project is public or the viewer is a member.
   const isPublicSkillsPath = reqPath === "/skills" || reqPath.startsWith("/skills/");
@@ -197,8 +202,6 @@ export default async function AppLayout({
 
   let pendingEscalationsCount = 0;
   let dockAgents: DockAgent[] = [];
-  // The clusters the person's agents are in, listed in the Agents panel like group chats (#agent-clusters).
-  let dockGroups: DockCluster[] = [];
   // Members of this organisation, for the Leaderboard link: nobody ranks against no one. Null when it couldn't be read.
   let memberCount: number | null = null;
   const dockOrganisationId = organisationId;
@@ -228,11 +231,6 @@ export default async function AppLayout({
       dockAgents = agents.map((agent) => ({ id: agent.id, name: agent.name, username: agent.username, avatar: agent.avatar, status: agent.status, activity: agent.activity, issue: agent.issue, question: agent.question, needsSetup: agent.needsSetup, earnedPoints: earned.get(agent.id) ?? 0, ...(activity.get(agent.id) ?? { bids: 0, comments: 0, pointsToday: 0 }), pendingRequests: pendingBy.get(agent.id) ?? 0 }));
     } catch (error) {
       console.error("[layout] agents failed", error);
-    }
-    try {
-      if (dockAgents.length) dockGroups = await dockClusters(user.id, organisationId);
-    } catch (error) {
-      console.error("[layout] clusters failed", error);
     }
   }
 
@@ -296,7 +294,7 @@ export default async function AppLayout({
         </main>
       </div>
       {/* The agents dock keeps the page's foot clear of its floor line itself, as tall as what stands on it, and draws nothing (no spacer either) where it doesn't help. */}
-      <AgentsDock agents={dockAgents} clusters={dockGroups} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} showActiveAgents={showActiveAgents} />
+      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} showActiveAgents={showActiveAgents} />
       <FocusMainOnNavigate />
       <KeyboardShortcuts
         enabled={shortcutsEnabled}

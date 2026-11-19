@@ -1,14 +1,13 @@
 import "server-only";
 
 import type { Prisma, PrismaClient, SecuritySeverity } from "@prisma/client";
-import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { z } from "zod";
 import { convertClientVettedIdea } from "@/lib/agent-api/idea-verdicts";
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
 import { CoinError } from "@/lib/coins/ledger";
-import { findingPrice, payForFindings } from "@/lib/security-checks/payment";
+import { payForFindings } from "@/lib/security-checks/payment";
 import { createFinding, PLACEHOLDER_DESCRIPTION, PLACEHOLDER_SUMMARY, placeholderTitle } from "@/lib/security-findings";
 
 const id = z.string().trim().min(1).max(128);
@@ -20,14 +19,19 @@ export const fixSelection = z.object({
 });
 
 export type FixProject = { id: string; name: string };
-export type FixOptions = { projects: FixProject[]; projectId: string | null };
+/**
+ * `site` is the scanned site, the new project's suggested name. `match` is a workspace project whose website is that
+ * site (ziki.dev into Web), picked by default instead of a new project.
+ */
+export type FixOptions = { projects: FixProject[]; projectId: string | null; site: string; match: string | null };
 export type FixOutcome =
   | { ok: true; created: number; reused: number; coins: number; issues: { resultId: string; number: number; href: string }[] }
   | { ok: false; error: string; canBorrow?: boolean };
 
 type Client = { userId: string; organisationId: string; superAdmin: boolean };
 type Check = { postedAt: Date | null; projectId: string | null };
-type Result = { id: string; severity: SecuritySeverity; finding: { bug: { number: number } | null } | null };
+/** `checkId` is the scan that found it: this one, or for a rescan an earlier scan whose finding it rechecks. */
+type Result = { id: string; checkId: string; severity: SecuritySeverity; finding: { bug: { number: number } | null } | null };
 
 const unavailable = { ok: false, error: "This check is unavailable in your workspace." } as const;
 
@@ -45,6 +49,15 @@ function eligibleProjects(client: Client): Prisma.ProjectWhereInput {
   };
 }
 
+/** A site's host without "www.", for matching a scan to a project's website. */
+function hostOf(value: string): string | null {
+  try {
+    return new URL(/^[a-z]+:\/\//i.test(value) ? value : `https://${value}`).hostname.replace(/^www\./, "").toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listFixProjects(client: Client, checkId: string, db = prisma): Promise<FixOptions | null> {
   const check = await db.securityCheck.findFirst({
     where: {
@@ -53,16 +66,19 @@ export async function listFixProjects(client: Client, checkId: string, db = pris
       organisationId: client.organisationId,
 
     },
-    select: { postedAt: true, projectId: true },
+    select: { postedAt: true, projectId: true, target: { select: { value: true } } },
   });
   // A finding can be sent as soon as its part is done (16 Nov call); a result exists only once reported.
   if (!check) return null;
-  const projects = await db.project.findMany({
+  const rows = await db.project.findMany({
     where: { ...eligibleProjects(client), ...(check.projectId ? { id: check.projectId } : {}) },
     orderBy: [{ name: "asc" }, { id: "asc" }],
-    select: { id: true, name: true },
+    select: { id: true, name: true, siteUrl: true, stagingUrl: true },
   });
-  return { projects, projectId: check.projectId };
+  const site = check.target.value;
+  const host = hostOf(site);
+  const match = host ? rows.find((row) => [row.siteUrl, row.stagingUrl].some((url) => url && hostOf(url) === host))?.id ?? null : null;
+  return { projects: rows.map(({ id, name }) => ({ id, name })), projectId: check.projectId, site, match };
 }
 
 export async function sendCheckFindings(
@@ -91,19 +107,26 @@ export async function sendCheckFindings(
       return { ok: false, error: "This check already has a destination project. Refresh and choose that project." };
     }
 
+    // This check's own findings, and on a rescan the earlier findings it rechecks and didn't find fixed (18 Nov, Tolu):
+    // a problem still there can be sent to fix from the rescan. The rescan's own part holds them, so they're this
+    // person's, in this workspace, through the check row locked above.
     const results = await tx.securityCheckResult.findMany({
-      where: { checkId, id: { in: resultIds } },
-      select: { id: true, severity: true, finding: { select: { bug: { select: { number: true } } } } },
+      where: {
+        id: { in: resultIds },
+        OR: [{ checkId }, { recheckItem: { checkId }, NOT: { recheckState: "fixed" } }],
+      },
+      select: { id: true, checkId: true, severity: true, finding: { select: { bug: { select: { number: true } } } } },
     });
     if (results.length !== resultIds.length) {
       return { ok: false, error: "One or more selected findings are unavailable in this check." };
     }
 
-    // The findings being sent are paid for in Ziks from the client's wallet, in this same transaction. Short of Ziks,
-    // nothing is charged, unlocked or created.
+    // The findings being sent are paid for in Ziks from the client's wallet, in this same transaction, all in one
+    // payment whichever scan found them. Short of Ziks, nothing is charged, unlocked or created.
     let paid;
     try {
-      paid = await payForFindings(tx, client.userId, checkId, results.filter((result) => !result.finding).map((result) => result.id));
+      const sources = [...new Set(results.map((result) => result.checkId))];
+      paid = await payForFindings(tx, client.userId, sources, results.filter((result) => !result.finding).map((result) => result.id));
     } catch (error) {
       if (error instanceof CoinError && error.code === "closed") return { ok: false, error: "These findings changed while you were sending them. Try again." };
       throw error;
@@ -118,7 +141,7 @@ export async function sendCheckFindings(
     for (const result of results) {
       const number = result.finding
         ? result.finding.bug?.number
-        : await createResultIssue(tx, client, projectId, checkId, result);
+        : await createResultIssue(tx, client, projectId, result.checkId, result);
       if (!result.finding) created += 1;
       if (number !== undefined) issues.push({ resultId: result.id, number, href: issuePath(refOf(project), number) });
     }
@@ -163,38 +186,4 @@ async function createResultIssue(tx: Prisma.TransactionClient, client: Client, p
   const issue = await convertClientVettedIdea(tx, scope, idea.id, client.userId);
   await tx.securityCheckResult.update({ where: { id: result.id }, data: { findingId: finding.id } });
   return issue.issueNumber;
-}
-
-export async function loadMovePage(client: Client, checkId: string, db = prisma) {
-  const parsed = fixCheckId.safeParse(checkId);
-  if (!parsed.success) return null;
-  const check = await db.securityCheck.findFirst({
-    where: { id: parsed.data, organisationId: client.organisationId, requestedById: client.userId },
-    select: { postedAt: true, target: { select: { value: true } } },
-  });
-  if (!check) return null;
-  const results = await db.securityCheckResult.findMany({
-    where: { checkId: parsed.data },
-    select: {
-      id: true, severity: true, title: true, priceCoins: true, unlockedAt: true, findingId: true,
-      finding: { select: { bug: { select: {
-        number: true, project: { select: { slug: true, organisation: { select: { slug: true } } } },
-      } } } },
-    },
-    orderBy: { id: "asc" },
-  });
-  return {
-    asset: check.target.value,
-    posted: Boolean(check.postedAt),
-    results: results.sort((a, b) => SECURITY_SEVERITIES.indexOf(a.severity) - SECURITY_SEVERITIES.indexOf(b.severity))
-      .map((result) => {
-        const issue = result.finding?.bug;
-        return {
-          id: result.id, severity: result.severity, title: result.title,
-          price: result.unlockedAt || result.findingId ? 0 : findingPrice(result),
-          moved: Boolean(result.findingId),
-          issue: issue && { number: issue.number, href: issuePath(refOf(issue.project), issue.number) },
-        };
-      }),
-  };
 }

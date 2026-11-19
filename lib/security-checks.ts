@@ -21,6 +21,54 @@ import type {
  */
 export const SECURITY_CHECK_PRICE_COINS = 50;
 
+/** First deeper scan, paid before any agent or AI work starts. */
+export const DEEPER_SCAN_PRICE_ZIKS = 20;
+
+/**
+ * What a code scan costs, in Ziks (#security-code-scan, 18 Nov): a website scan's Code scan step, paid when the
+ * person connects their code. Agents then read the repo (lib/security-checks/code-scan.ts).
+ */
+export const CODE_SCAN_PRICE_ZIKS = 50;
+
+/**
+ * What the deeper scan checks that the free quick scan can't see (#deeper-scan-gate, 18 Nov): why it's worth paying
+ * for, shown before payment on the check's page and in its checkout. Taken from the agents' own parts for each kind
+ * (the fixed list in lib/security-checks/ai.ts), minus what the quick scan already covers (headers, HTTPS, cookies).
+ */
+export const DEEPER_SCAN_COVERS: Record<SecurityTargetKind, { title: string; why: string }[]> = {
+  website: [
+    { title: "Exposed files", why: "Passwords and keys left in public files like .env or .git" },
+    { title: "Admin and status pages", why: "Control pages anyone can open" },
+    { title: "Login, sign-up and account recovery", why: "Pages that reveal who has an account, or weak protections" },
+    { title: "Forms and user input", why: "Ways to inject code or trick your visitors" },
+    { title: "Third-party scripts and libraries", why: "Old versions with known holes" },
+    { title: "JavaScript files", why: "Keys, tokens or internal addresses in your site's code" },
+    { title: "Error pages and information leaks", why: "Errors that reveal your software and versions" },
+  ],
+  server: [
+    { title: "Open services", why: "Services answering the internet that don't need to" },
+    { title: "Exposed admin or status pages", why: "Control pages anyone can reach" },
+    { title: "Default pages and banners", why: "Software and versions shown to attackers" },
+    { title: "DNS and mail settings", why: "Your domain used to send fake emails" },
+  ],
+  repo: [
+    { title: "Secrets committed to the repo", why: "API keys and passwords in your code" },
+    { title: "Outdated dependencies", why: "Packages with published security holes" },
+    { title: "Access checks on server routes", why: "Data anyone can read or change" },
+    { title: "Injection risks", why: "User input that can change your queries" },
+    { title: "Authentication and sessions", why: "Weak sign-in and password storage" },
+  ],
+};
+
+/** Historical free scans remain usable; every new paid scan needs a recorded payment. */
+export function scanPaymentWhere(): Prisma.SecurityCheckWhereInput {
+  return { AND: [{ OR: [{ free: true }, { paidAt: { not: null } }] }] };
+}
+
+export function isScanPaymentSatisfied(check: { free: boolean; paidAt: Date | null }): boolean {
+  return check.free === true || check.paidAt != null;
+}
+
 export const SECURITY_TARGET_KINDS = ["website", "server", "repo"] as const satisfies readonly SecurityTargetKind[];
 
 export const TARGET_KIND_LABEL: Record<SecurityTargetKind, string> = {
@@ -49,7 +97,7 @@ export const CHECK_STATUS_LABEL: Record<SecurityCheckStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export const SECURITY_CHECK_ITEM_KINDS = ["split", "check", "collate"] as const satisfies readonly SecurityCheckItemKind[];
+export const SECURITY_CHECK_ITEM_KINDS = ["split", "check", "collate", "automatic"] as const satisfies readonly SecurityCheckItemKind[];
 
 export const SECURITY_CHECK_ITEM_STATUSES = ["waiting", "checking", "done", "skipped"] as const satisfies readonly SecurityCheckItemStatus[];
 
@@ -104,8 +152,8 @@ export function provenTargetWhere(required = ownershipProofRequired()): { target
 }
 
 /** Whether agents may touch this check's target: never before ownership is proven (when proof is required). */
-export function agentsMayWork(check: { status: SecurityCheckStatus }, target: { verifiedAt: Date | null }, required = ownershipProofRequired()): boolean {
-  return isTargetProven(target, required) && AGENT_WORKABLE_CHECK_STATUSES.has(check.status);
+export function agentsMayWork(check: { status: SecurityCheckStatus; free: boolean; paidAt: Date | null }, target: { verifiedAt: Date | null }, required = ownershipProofRequired()): boolean {
+  return isScanPaymentSatisfied(check) && isTargetProven(target, required) && AGENT_WORKABLE_CHECK_STATUSES.has(check.status);
 }
 
 /** Whether the client sees the full report (and agents get paid): only once paid. */

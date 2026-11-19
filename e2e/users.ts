@@ -19,6 +19,16 @@ export function nameFor(role: Role, width: Width): string {
 /** Signs in fresh in the session-expiry test, then is deleted mid-session. */
 export const STALE_EMAIL = (width: Width) => `e2e-stale-${width}@test.local`;
 
+/**
+ * An organisation none of the test accounts belong to (#access-control), with one
+ * public and one private project. Its issues are #1 (public) and #2 (private).
+ */
+export const OUTSIDE_ORG = "e2e-outside";
+export const OUTSIDE_PUBLIC = "open-web";
+export const OUTSIDE_PRIVATE = "vault";
+export const OUTSIDE_PUBLIC_ISSUE = "Outside public issue";
+export const OUTSIDE_PRIVATE_ISSUE = "Outside private issue";
+
 export const ROLES: Role[] = ["user", "admin", "super"];
 export const WIDTHS: Width[] = ["desktop", "mobile"];
 

@@ -117,7 +117,13 @@ export const requireProject = cache(async (orgParam: string, projectParam: strin
   const canContribute = isOrgMember || isProjectMember || user.role === "super_admin";
 
   const ref = projectRef(orgSlug, project.slug);
-  if (isOrgMember && project.organisationId !== (await currentOrganisationIdFor(user.id))) {
+  // Only someone who really belongs to the organisation can make it current: the current organisation ignores a
+  // pick they aren't a member of, so switching the site super admin into an organisation they don't belong to
+  // would send them back here forever. They read it from wherever they are.
+  const belongsToOrg = organisationIds === null
+    ? Boolean(await prisma.membership.findFirst({ where: { organisationId: project.organisationId, userId: user.id }, select: { id: true } }))
+    : isOrgMember;
+  if (belongsToOrg && project.organisationId !== (await currentOrganisationIdFor(user.id))) {
     // Switch to the project's organisation first, then come back to this page.
     switchTo(project.organisationId, project.slug, await requestPath(projectPath(ref)));
   }
