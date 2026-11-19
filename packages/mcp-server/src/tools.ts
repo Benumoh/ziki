@@ -327,7 +327,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/ideas",
     projectScoped: true,
-    body: ["title", "summary", "description", "track", "rationale", "typeId", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote", "difficulty", "security"],
+    body: ["title", "summary", "description", "track", "rationale", "typeId", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote", "difficulty", "requiresHumanApproval", "humanApprovalReason", "security"],
     headers: { "Idempotency-Key": "idempotencyKey" },
     input: {
       idempotencyKey,
@@ -379,6 +379,17 @@ export const TOOLS: readonly ToolDef[] = [
         .boolean()
         .optional()
         .describe("Send true, with the same Idempotency-Key, to file the idea after a 409 similar_issues answer, once you've checked it isn't a duplicate."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this idea falls under the project's humanApprovalGuidelines and needs human sign-off before converting."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this idea requires human approval per the project's humanApprovalGuidelines."),
       security: z
         .object({ severity: z.enum(["critical", "high", "medium", "low"]) })
         .strict()
@@ -866,7 +877,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/ideas/{id}/verdicts",
     projectScoped: true,
-    body: ["opinion", "votes", "summary", "description"],
+    body: ["opinion", "votes", "summary", "description", "requiresHumanApproval", "humanApprovalReason"],
     input: {
       id: ideaId,
       projectId,
@@ -874,6 +885,17 @@ export const TOOLS: readonly ToolDef[] = [
       votes: z.number().int().min(1).max(10).optional().describe("Votes this verdict carries. 1 by default; only manager and merger agents may give more, up to the project's managerVoteWeight."),
       summary: z.string().trim().min(1).max(300).describe("Your verdict in at most two sentences."),
       description: z.string().trim().min(1).max(10000).describe("Why, in full."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this idea falls under the project's humanApprovalGuidelines and needs human sign-off before converting."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this idea requires human approval per the project's humanApprovalGuidelines."),
     },
   },
   {
@@ -972,7 +994,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/issues/{id}/test-results",
     projectScoped: true,
-    body: ["goodToMerge", "summary", "description", "reason", "onBehalfOfUserId", "headSha", "files", "proof"],
+    body: ["goodToMerge", "summary", "description", "reason", "onBehalfOfUserId", "headSha", "files", "proof", "requiresHumanApproval", "humanApprovalReason"],
     input: {
       id: issueId,
       projectId,
@@ -1011,6 +1033,17 @@ export const TOOLS: readonly ToolDef[] = [
         .strict()
         .optional()
         .describe("What you proved. Where the organisation has checks, a good-to-merge counts only with proof for every required check."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this PR touches a restricted area in humanApprovalGuidelines and needs human sign-off before merging."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this PR requires human approval per the project's humanApprovalGuidelines."),
     },
   },
   {
@@ -1579,7 +1612,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/issues/{id}/merge",
     projectScoped: true,
-    body: ["verdict", "summary", "description", "mistake"],
+    body: ["verdict", "summary", "description", "mistake", "requiresHumanApproval", "humanApprovalReason"],
     input: {
       id: issueId,
       projectId,
@@ -1596,6 +1629,17 @@ export const TOOLS: readonly ToolDef[] = [
         .catchall(z.unknown())
         .optional()
         .describe("With reject only: an anti-pattern to record in the project's mistake registry."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this PR touches a restricted area in humanApprovalGuidelines and needs human sign-off before merging."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this PR requires human approval per the project's humanApprovalGuidelines."),
     },
   },
   {

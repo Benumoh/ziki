@@ -96,6 +96,9 @@ export const testVerdictBodySchema = z.object({
    * for every required check (GET /api/v1/issues/{id}/test-card lists them).
    */
   proof: proofSchema.optional(),
+  /** #human-approval-gate: flag this PR as requiring human sign-off per the project's humanApprovalGuidelines. */
+  requiresHumanApproval: z.boolean().optional(),
+  humanApprovalReason: z.string().trim().min(3).max(500).optional(),
 });
 
 export type TestVerdictBody = z.infer<typeof testVerdictBodySchema>;
@@ -451,6 +454,12 @@ export async function submitTestVerdict(
       });
 
       await handleTestVerdictSubmitted(tx, { bugId: bug.id, agentId: agent.agentId, organisationId: bug.organisationId, pullRequestUrl }).catch(() => null);
+      if (body.requiresHumanApproval) {
+        await tx.bug.update({
+          where: { id: bug.id },
+          data: { requiresHumanApproval: true, humanApprovalReason: body.humanApprovalReason ?? body.summary },
+        });
+      }
       return { status: 201 as const, verdict };
     });
     // #deeper-testing: a card rated too easy gets a row of a kind it doesn't have yet.
