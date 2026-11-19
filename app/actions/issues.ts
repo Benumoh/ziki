@@ -34,7 +34,7 @@ import {
   normalizeMentions,
 } from "@/lib/mentions";
 import { resolveOrganisationMentions, organisationMemberWhere } from "@/lib/organisation-mentions";
-import { assertAssetFits } from "@/lib/marketing/assets";
+import { assetForWork } from "@/lib/marketing/assets";
 import { parseIdeaTrack, typeFitsTrack } from "@/lib/marketing/idea-track";
 import { structureIdea } from "@/lib/idea-structuring";
 import {
@@ -324,7 +324,7 @@ export async function createBugAction(
   const assetRaw = formData.get("assetId");
   let assetId: string | null = null;
   try {
-    assetId = await assertAssetFits(prisma, organisationId, typeof assetRaw === "string" ? assetRaw.trim() : null, track, typeId);
+    assetId = await assetForWork(prisma, organisationId, typeof assetRaw === "string" ? assetRaw.trim() : null, track, typeId, parsed.data.title);
   } catch {
     return fieldError("typeId", "That page or asset isn't one of this type's. Please pick another.");
   }

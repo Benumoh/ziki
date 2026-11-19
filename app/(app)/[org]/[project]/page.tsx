@@ -3,7 +3,7 @@ import { ProjectOverviewView } from "@/components/project-overview";
 import { optionalUser } from "@/lib/auth-helpers";
 import { requireProject } from "@/lib/project-route";
 import { loadProjectOverview } from "@/lib/project-overview";
-import { designPath, issuesPath, orgRefOf, projectPath, projectRef } from "@/lib/project-paths";
+import { issuesPath, orgRefOf, projectPath, projectRef } from "@/lib/project-paths";
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
 import { NOINDEX, pageMetadata } from "@/lib/seo/site";
@@ -53,14 +53,11 @@ export default async function ProjectOverviewPage({ params }: Props) {
   if (memberOfOrganisation) redirect(issuesPath(orgRefOf(ref), "your_work"));
   const workHref = data.isMember ? issuesPath(ref, "your_work") : null;
 
-  // The Design area (#9) is the organisation's: project-only members and visitors don't get it.
-  const designHref = access?.isOrgMember ? designPath(ref) : null;
-
   const jsonLd = projectJsonLd(data.project);
   return (
     <>
       {jsonLd ? <JsonLd data={jsonLd} /> : null}
-      <ProjectOverviewView data={data} currentUserId={user?.id ?? null} workHref={workHref} designHref={designHref} />
+      <ProjectOverviewView data={data} currentUserId={user?.id ?? null} workHref={workHref} />
     </>
   );
 }

@@ -118,17 +118,31 @@ export async function updateMarketingAsset(organisationId: string, assetId: stri
 }
 
 /**
- * Whether an idea may sit on `assetId`: a marketing idea, on one of this organisation's assets, under the idea's own
- * type. 422 invalid_asset otherwise. `null` or missing: no asset.
+ * The asset marketing work sits on (#marketing-assets): `assetId` when given, which must be one of this organisation's
+ * assets under the work's own type (422 invalid_asset otherwise). Marketing work filed without one gains an asset of
+ * its own under its type, named after its title (at most 80 characters), or the one already by that name: every piece
+ * of marketing work is on an asset, so there is no "Other work". Work that isn't marketing, or has no type, has none.
  */
-export async function assertAssetFits(
+export async function assetForWork(
   db: Pick<typeof prisma, "marketingAsset">,
   organisationId: string,
   assetId: string | null | undefined,
   track: string,
   typeId: string | null,
+  title: string,
 ): Promise<string | null> {
-  if (!assetId) return null;
+  if (!assetId) {
+    if (track !== "marketing" || !typeId) return null;
+    // Named as the migration named earlier work's assets: the title, trimmed, cut at 80 characters.
+    const name = title.trim().slice(0, 80);
+    const asset = await db.marketingAsset.upsert({
+      where: { typeId_name: { typeId, name } },
+      create: { organisationId, typeId, name },
+      update: {},
+      select: { id: true },
+    });
+    return asset.id;
+  }
   const asset = await db.marketingAsset.findFirst({ where: { id: assetId, organisationId }, select: { typeId: true } });
   if (track !== "marketing" || !asset || asset.typeId !== typeId) {
     const message = "assetId must be one of this organisation's marketing assets, under the idea's typeId (list them with GET /api/v1/projects/{id}/marketing/assets).";

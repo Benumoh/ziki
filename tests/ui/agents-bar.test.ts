@@ -115,8 +115,6 @@ describe("dockVisibleOn: where the agents bar shows", () => {
     "/milestones",
     "/jobs",
     "/marketing",
-    "/redesigns",
-    "/redesigns/abc",
     "/leaderboard",
     "/zedu/acme/notes",
     "/zedu/acme/notes/agents/robo",

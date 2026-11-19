@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { statusFromSegment } from "@/lib/project-paths";
+import { issuesPath, orgRef, overviewPlaceFor, statusFromSegment } from "@/lib/project-paths";
 import { requireOrgList } from "@/lib/project-route";
 import { IssuesList } from "../../[project]/issues/_list/issues-list";
 import { queryOf } from "../../[project]/issues/_list/route-page";
@@ -27,6 +27,8 @@ export default async function OrgIssuesStatusPage({ params, searchParams }: Prop
   const resolved = await requireOrgList(org, `/${org}/issues/${segment}${queryOf(query)}`);
   const status = statusFromSegment(segment);
   if (!status) redirect(`/${encodeURIComponent(resolved.org)}/${encodeURIComponent(resolved.project)}/issues/${segment}${queryOf(query)}`);
+  // A stage (open, in progress, delivered, …) is a tab and Status filter on the Overview now (#work-feed).
+  if (status !== "your_work" && overviewPlaceFor(status)) redirect(issuesPath(orgRef(org), status));
   return (
     <IssuesList
       org={resolved.org}

@@ -14,6 +14,9 @@ import { deliverWork } from "@/lib/agent-api/delivery";
 import { heldByMyAgent, webAgentFor } from "@/lib/web-agent";
 import { revalidateIssue } from "@/lib/revalidate-issue";
 import { checkPostForSecrets } from "@/lib/security/secret-guard";
+import { githubClientFor } from "@/lib/github/client";
+import { parsePullRequestUrl } from "@/lib/github/pull-request-url";
+import { installationIdForPullRequest, PROJECT_REPOSITORIES_SELECT } from "@/lib/github/project-repositories";
 
 /**
  * Steps a person takes from the issue page through their own agent
@@ -98,6 +101,49 @@ export async function giveTestVerdictAction(
     });
   const { goodToMerge, summary, description } = input;
   return run(() => submitTestVerdict(agent, bug.id, { goodToMerge, summary, description, files, projectId: bug.projectId }));
+}
+
+/**
+ * Approved, from the Overview's Delivered list (#work-feed): the person looked at the delivered work and it is good to
+ * merge. It is the same good-to-merge judgement as the issue page's, through their agent and with its checks. On code
+ * work a judgement names the changed files it judged; one tap judges the whole pull request, so they are read from it.
+ */
+export async function approveDeliveredWorkAction(bugId: string): Promise<StepResult> {
+  const user = await requireUser();
+  const bug = await prisma.bug.findFirst({
+    where: { id: bugId, isDeleted: false },
+    select: {
+      id: true, organisationId: true, projectId: true, track: true, pullRequestUrl: true,
+      project: { select: { repoUrl: true, githubInstallationId: true, ...PROJECT_REPOSITORIES_SELECT } },
+    },
+  });
+  if (!bug) return { error: "Issue not found" };
+  const agent = await webAgentFor(user.id, bug.organisationId);
+  if (!agent) return { error: NO_AGENT };
+  let files: Array<{ path: string }> | undefined;
+  if (bug.track !== "marketing") {
+    const ref = parsePullRequestUrl(bug.pullRequestUrl);
+    if (!ref) return { error: "This work has no pull request to approve. Open the issue to judge it." };
+    try {
+      const client = await githubClientFor({ githubInstallationId: installationIdForPullRequest(bug.project, bug.pullRequestUrl) });
+      const changed = await client.get<Array<{ filename: string }>>(
+        `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}/files?per_page=100`,
+      );
+      files = changed.map((file) => ({ path: file.filename }));
+    } catch {
+      return { error: "Ziki couldn't read the pull request's changed files. Open the issue to judge it." };
+    }
+    if (!files.length) return { error: "The pull request changes no files. Open the issue to judge it." };
+  }
+  return run(() =>
+    submitTestVerdict(agent, bug.id, {
+      goodToMerge: true,
+      summary: "Approved: the delivered work is good to merge.",
+      description: `${user.name ?? "The owner"} looked at the delivered work and approved it from the Overview.`,
+      ...(files ? { files } : {}),
+      projectId: bug.projectId,
+    }),
+  );
 }
 
 /** The manager's merge review on accepted work: accept it for merge, or send it back. */

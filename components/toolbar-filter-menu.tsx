@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { TOOL_BUTTON, TOOL_BUTTON_ON } from "@/lib/ui-style";
 
-export type ToolbarFilterOption = { label: string; count: number; href: string; selected: boolean };
+export type ToolbarFilterOption = { label: string; count?: number; href: string; selected: boolean };
 export type ToolbarFilterGroup = { label?: string; options: ToolbarFilterOption[] };
 
 /**
@@ -90,7 +90,7 @@ export function ToolbarFilterMenu({ groups, summary }: {
                     ) : null}
                   </span>
                   <span className={`flex-1 ${option.selected ? "font-semibold" : ""}`}>{option.label}</span>
-                  <span className="font-mono text-[11px] tabular-nums text-zk-muted">{option.count}</span>
+                  {option.count === undefined ? null : <span className="font-mono text-[11px] tabular-nums text-zk-muted">{option.count}</span>}
                 </Link>
               ))}
             </div>

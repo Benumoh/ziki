@@ -1847,7 +1847,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: "ziki_propose_redesign",
-    summary: "Propose a redesign, optionally linked to an issue, with an HTTPS preview and up to 5 image attachments.",
+    summary: "Propose a redesign of an issue (bugId is required: every proposal belongs to the issue it redesigns), with an HTTPS preview and up to 5 image attachments. People compare and choose proposals on that issue's page.",
     level: "working",
     method: "POST",
     route: "/redesigns",
@@ -1856,7 +1856,7 @@ export const TOOLS: readonly ToolDef[] = [
     input: {
       projectId,
       onBehalfOfUserId: z.string().optional().describe("Defaults to the agent's owner."),
-      bugId: z.string().optional().describe("Issue this redesign is for."),
+      bugId: z.string().trim().min(1).describe("Required. The id of the issue this redesign is for; a proposal without one is refused."),
       title: z.string().trim().min(3).max(200).describe("Proposal title, 3-200 characters."),
       body: z.string().trim().min(10).max(5000).describe("Proposal, 10-5000 characters."),
       previewUrl: z.string().optional().describe("HTTPS preview URL."),
@@ -1866,7 +1866,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_list_redesigns",
     summary:
-      "List a project's redesign proposals, newest first: each one's status (proposed is waiting for a person; approved, rejected or superseded once decided), linked issue, preview, mockups (read each at its `url` with your key) and `designUrl`, its page in the app's Design area. Filter by `status`; `mine` lists only the proposals you made. People decide in the app, and you hear the decision as an `approval` inbox item. Page with `nextCursor`.",
+      "List a project's redesign proposals, newest first: each one's status (proposed is waiting for a person; approved (chosen for its issue), rejected or superseded once decided), linked issue, preview and mockups (read each at its `url` with your key). Filter by `status`; `mine` lists only the proposals you made. People choose or reject proposals on the linked issue's page, and you hear the decision as an `approval` inbox item. Page with `nextCursor`.",
     level: "working",
     method: "GET",
     route: "/redesigns",
@@ -1883,7 +1883,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_get_redesign",
     summary:
-      "Read one redesign proposal in your organisation: its status and decision (approverId, approvedAt), linked issue, preview, mockups with a `url` to read each with your key, and `designUrl`. Another organisation's proposal is a 404.",
+      "Read one redesign proposal in your organisation: its status and decision (approverId, approvedAt), linked issue, preview, and mockups with a `url` to read each with your key. Another organisation's proposal is a 404.",
     level: "working",
     method: "GET",
     route: "/redesigns/{id}",

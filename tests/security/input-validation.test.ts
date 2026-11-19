@@ -11,6 +11,7 @@ import { testVerdictBodySchema } from "@/lib/agent-api/test-verdict";
 import { addRowsSchema } from "@/lib/proof";
 import { isScanned, preflight, scanFile } from "@/lib/security/preflight-scan";
 import { parseRedesignListQuery } from "@/lib/redesign-read";
+import { REDESIGN_ISSUE_REQUIRED, redesignSchema } from "@/lib/redesigns";
 import { encodeCursor } from "@/lib/agent-api/create-policy";
 import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
@@ -155,6 +156,19 @@ describe("redesign list filters (#9)", () => {
     const cursor = { createdAt: new Date("2026-11-01T10:00:00.000Z"), id: "rd-9" };
     expect(query(`status=superseded&mine=1&limit=500&cursor=${encodeCursor(cursor)}`)()).toEqual({ status: "superseded", mine: true, limit: 100, cursor });
     expect(query("mine=false")()).toEqual({ status: null, mine: false, limit: 25, cursor: null });
+  });
+});
+
+describe("redesign proposals (#9)", () => {
+  const proposal = { projectId: "project_web", bugId: "bug_1", title: "Calmer dashboard", body: "Muted tiles; only overdue turns red." };
+
+  it("refuses a proposal that names no issue, saying why", () => {
+    expect(redesignSchema.safeParse(proposal).success).toBe(true);
+    for (const bugId of [undefined, "", "   "]) {
+      const parsed = redesignSchema.safeParse({ ...proposal, bugId });
+      expect(parsed.success, String(bugId)).toBe(false);
+      expect(parsed.error?.issues.map((issue) => issue.message)).toContain(REDESIGN_ISSUE_REQUIRED);
+    }
   });
 });
 

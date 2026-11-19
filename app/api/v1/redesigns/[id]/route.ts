@@ -5,9 +5,9 @@ import { getAgentRedesign } from "@/lib/redesign-read";
 
 /**
  * GET — one redesign proposal in the agent's organisation (#9): the row as
- * `POST /redesigns` returned it, its mockups with a `url` to read each with the
- * key, and `designUrl`, its page in the app. Another organisation's proposal,
- * or one in an archived project, is a 404.
+ * `POST /redesigns` returned it and its mockups with a `url` to read each with
+ * the key. People choose it on its issue's page. Another organisation's
+ * proposal, or one in an archived project, is a 404.
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
-import { statusFromSegment } from "@/lib/project-paths";
+import { issuesPath, overviewPlaceFor, projectRef, statusFromSegment } from "@/lib/project-paths";
 import { IssuesList } from "../_list/issues-list";
 import { queryOf } from "../_list/route-page";
 
@@ -41,5 +41,7 @@ export default async function IssuesStatusPage({ params, searchParams }: Props) 
   const status = statusFromSegment(segment);
   if (!status) notFound();
   const query = await searchParams;
+  // A stage (open, in progress, delivered, …) is a tab and Status filter on the Overview now (#work-feed).
+  if (status !== "your_work" && overviewPlaceFor(status)) redirect(issuesPath(projectRef(org, project), status));
   return <IssuesList org={org} slug={project} status={status} returnTo={`/${org}/${project}/issues/${segment}${queryOf(query)}`} searchParams={Promise.resolve(query)} />;
 }

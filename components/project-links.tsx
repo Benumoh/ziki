@@ -55,23 +55,14 @@ function LinksIcon({ size }: { size: number }) {
 const ICON_BUTTON =
   "relative inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue";
 
-/** Beside the stage tabs, at the top right: Design and the project's settings, as icons only. Project notes are on the work queue; goals in settings. */
+/** Beside the stage tabs, at the top right: the project's settings, as an icon. Designs to choose are the Overview's Design Changes tab. */
 export function ProjectIconLinks({
-  designHref,
   settingsHref,
 }: {
-  /** The Design area (#9): only for members of the project's organisation. */
-  designHref?: string;
   settingsHref?: string;
 }) {
   return (
     <>
-      {designHref ? (
-        <Link href={designHref} aria-label="Design" title="Design" className={ICON_BUTTON}>
-          {/* A palette: the redesigns proposed for this project. */}
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2a4.6 4.6 0 0 0 4.6-4.6C21 6.4 17 3 12 3Z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10" cy="7.5" r="1" /><circle cx="14.5" cy="7.5" r="1" /></svg>
-        </Link>
-      ) : null}
       {settingsHref ? (
         <Link href={settingsHref} aria-label="Project settings" title="Project settings" className={ICON_BUTTON}>
           <SettingsIcon size={17} />
