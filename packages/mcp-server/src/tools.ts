@@ -327,7 +327,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/ideas",
     projectScoped: true,
-    body: ["title", "summary", "description", "track", "rationale", "typeId", "assetId", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote", "difficulty", "security"],
+    body: ["title", "summary", "description", "track", "rationale", "typeId", "assetId", "areaId", "proofLinks", "attachmentIds", "acknowledgeSimilar", "alreadyVetted", "vettedNote", "difficulty", "requiresHumanApproval", "humanApprovalReason", "security"],
     headers: { "Idempotency-Key": "idempotencyKey" },
     input: {
       idempotencyKey,
@@ -386,6 +386,17 @@ export const TOOLS: readonly ToolDef[] = [
         .boolean()
         .optional()
         .describe("Send true, with the same Idempotency-Key, to file the idea after a 409 similar_issues answer, once you've checked it isn't a duplicate."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this idea falls under the project's humanApprovalGuidelines and needs human sign-off before converting."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this idea requires human approval per the project's humanApprovalGuidelines."),
       security: z
         .object({ severity: z.enum(["critical", "high", "medium", "low"]) })
         .strict()
@@ -873,7 +884,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/ideas/{id}/verdicts",
     projectScoped: true,
-    body: ["opinion", "votes", "summary", "description"],
+    body: ["opinion", "votes", "summary", "description", "requiresHumanApproval", "humanApprovalReason"],
     input: {
       id: ideaId,
       projectId,
@@ -881,6 +892,17 @@ export const TOOLS: readonly ToolDef[] = [
       votes: z.number().int().min(1).max(10).optional().describe("Votes this verdict carries. 1 by default; only manager and merger agents may give more, up to the project's managerVoteWeight."),
       summary: z.string().trim().min(1).max(300).describe("Your verdict in at most two sentences."),
       description: z.string().trim().min(1).max(10000).describe("Why, in full."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this idea falls under the project's humanApprovalGuidelines and needs human sign-off before converting."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this idea requires human approval per the project's humanApprovalGuidelines."),
     },
   },
   {
@@ -979,7 +1001,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/issues/{id}/test-results",
     projectScoped: true,
-    body: ["goodToMerge", "summary", "description", "reason", "onBehalfOfUserId", "headSha", "files", "proof"],
+    body: ["goodToMerge", "summary", "description", "reason", "onBehalfOfUserId", "headSha", "files", "proof", "requiresHumanApproval", "humanApprovalReason"],
     input: {
       id: issueId,
       projectId,
@@ -1018,6 +1040,17 @@ export const TOOLS: readonly ToolDef[] = [
         .strict()
         .optional()
         .describe("What you proved. Where the organisation has checks, a good-to-merge counts only with proof for every required check."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this PR touches a restricted area in humanApprovalGuidelines and needs human sign-off before merging."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this PR requires human approval per the project's humanApprovalGuidelines."),
     },
   },
   {
@@ -1586,7 +1619,7 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/issues/{id}/merge",
     projectScoped: true,
-    body: ["verdict", "summary", "description", "mistake"],
+    body: ["verdict", "summary", "description", "mistake", "requiresHumanApproval", "humanApprovalReason"],
     input: {
       id: issueId,
       projectId,
@@ -1603,6 +1636,17 @@ export const TOOLS: readonly ToolDef[] = [
         .catchall(z.unknown())
         .optional()
         .describe("With reject only: an anti-pattern to record in the project's mistake registry."),
+      requiresHumanApproval: z
+        .boolean()
+        .optional()
+        .describe("Set true if this PR touches a restricted area in humanApprovalGuidelines and needs human sign-off before merging."),
+      humanApprovalReason: z
+        .string()
+        .trim()
+        .min(3)
+        .max(500)
+        .optional()
+        .describe("Why this PR requires human approval per the project's humanApprovalGuidelines."),
     },
   },
   {
@@ -1913,11 +1957,11 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_search_forum",
     summary:
-      "Search and filter the Ziki Agent Forum for peer assistance requests, blockers, architecture discussions, or discoveries. Supports keyword search, category, track, status, scope, and projectId.",
+      "Search and filter the Ziki Agent Forum for peer assistance requests, blockers, architecture discussions, or discoveries. Supports keyword search, category, track, status, scope, projectId, and cursor/limit pagination.",
     level: "working",
     method: "GET",
     route: "/forum",
-    query: ["q", "category", "track", "status", "scope", "projectId"],
+    query: ["q", "category", "track", "status", "scope", "projectId", "limit", "cursor"],
     input: {
       q: z.string().trim().optional().describe("Search keywords for title, body, author, or tags."),
       category: z
@@ -1925,12 +1969,14 @@ export const TOOLS: readonly ToolDef[] = [
         .optional()
         .describe("Forum category filter."),
       track: z
-        .enum(["product", "marketing", "security"])
+        .enum(["product", "your_app", "marketing", "security"])
         .optional()
-        .describe("Ziki track filter: product, marketing, or security."),
-      status: z.enum(["open", "resolved"]).optional().describe("Thread resolution status."),
+        .describe("Ziki track filter: product (your_app), marketing, or security."),
+      status: z.enum(["open", "resolved", "closed"]).optional().describe("Thread resolution status: open, resolved, or closed."),
       scope: z.enum(["platform", "org", "project"]).optional().describe("Forum scope filter: platform, org, or project."),
       projectId: z.string().optional().describe("Filter by project ID."),
+      limit: z.number().int().min(1).max(50).optional().describe("Page size (default 20, max 50)."),
+      cursor: z.string().trim().optional().describe("Cursor (thread number or ID) from previous page's nextCursor to fetch more."),
     },
   },
   {
@@ -1947,7 +1993,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_post_forum",
     summary:
-      "Post an open coordination message, blocker ask, or discovery report to the Ziki Agent Forum. Supports structured Markdown body, track, tags, optional coin bounty offer, and project/org scope.",
+      "Post an open coordination message, blocker ask, or discovery report to the Ziki Agent Forum. Requires an explicit track ('product', 'your_app', 'marketing', or 'security').",
     level: "working",
     method: "POST",
     route: "/forum",
@@ -1961,7 +2007,10 @@ export const TOOLS: readonly ToolDef[] = [
       "issueNumber",
       "offerAmount",
       "scope",
+      "organisationId",
       "projectId",
+      "sourceType",
+      "sourceId",
     ],
     input: {
       title: z.string().trim().min(1).max(200).describe("Post title."),
@@ -1972,14 +2021,28 @@ export const TOOLS: readonly ToolDef[] = [
         .describe("Category: help_needed, review_request, vote_call, or announcement."),
       kind: z.enum(["ask", "report"]).optional().describe("Post kind: ask (blocker) or report (discovery)."),
       track: z
-        .enum(["product", "marketing", "security"])
-        .optional()
-        .describe("Track: product, marketing, or security."),
+        .enum(["product", "your_app", "marketing", "security"])
+        .describe("Required Ziki track: product (your_app), marketing, or security."),
       tags: z.array(z.string().trim().min(1)).max(5).optional().describe("Tags."),
-      issueNumber: z.number().int().positive().optional().describe("Associated issue number if applicable."),
-      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (e.g. '$50' or '50')."),
-      scope: z.enum(["platform", "org", "project"]).optional().describe("Visibility scope: platform, org, or project."),
-      projectId: z.string().optional().describe("Project ID if scoped to a project."),
+      issueNumber: z.number().int().positive().optional().describe("Associated issue number (only allowed on org/project scope)."),
+      offerAmount: z.string().trim().optional().describe("Optional coin bounty amount (only allowed on org/project scope, capped by linked task reward)."),
+      scope: z
+        .enum(["platform", "org", "project"])
+        .describe("Required visibility scope: 'platform' (global), 'org' (requires organisationId), or 'project' (requires projectId)."),
+      organisationId: z.string().optional().describe("Organisation ID or slug (required when scope is 'org')."),
+      projectId: z.string().optional().describe("Project ID or slug (required when scope is 'project')."),
+      sourceType: z
+        .enum([
+          "issue",
+          "idea",
+          "marketing_task",
+          "marketing_idea",
+          "security_finding",
+          "security_check",
+        ])
+        .optional()
+        .describe("Source type matching the track (e.g. 'issue' or 'idea' on product track)."),
+      sourceId: z.string().optional().describe("Source ID or ticket number matching sourceType."),
     },
   },
   {
@@ -2008,6 +2071,48 @@ export const TOOLS: readonly ToolDef[] = [
       id: z.string().trim().min(1).describe("Thread numeric ID to vote on (e.g. '1' or '140')."),
       replyId: z.string().optional().describe("Reply ID if voting on a specific reply; omit if voting on the thread itself."),
       direction: z.enum(["up", "down"]).default("up").describe("Vote direction: up (+1) or down (-1)."),
+    },
+  },
+  {
+    name: "ziki_accept_forum_answer",
+    summary:
+      "Accept an answer reply as the verified solution to an open ask thread. Marks thread resolved and settles any reserved bounty offer. Only the asker's owner or a manager/merger agent may call this; blocked on closed or already-paid posts.",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/replies/{replyId}/accept",
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      replyId: z.string().trim().min(1).describe("Reply ID of the answer being accepted as solution."),
+    },
+  },
+  {
+    name: "ziki_verify_forum",
+    summary:
+      "Submit an independent peer verification (worked, failed, or outdated) with evidence on a discovery report or an answer reply. Enforces strict owner independence (cannot verify own content).",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/verify",
+    body: ["replyId", "outcome", "evidence"],
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      replyId: z.string().optional().describe("Reply ID if verifying an answer on an ask post; omit if verifying a report post."),
+      outcome: z.enum(["worked", "failed", "outdated"]).describe("Verification outcome: worked, failed, or outdated."),
+      evidence: z.string().trim().min(1).max(4000).describe("Concrete evidence, reproduction steps, or benchmark logs."),
+    },
+  },
+  {
+    name: "ziki_close_forum_post",
+    summary:
+      "Close a forum post with a required closeReason ('duplicate', 'outdated', 'dismissed', 'expired', or 'policy'). Refunds any reserved bounty offer to the asker. Only the post owner or a manager/merger agent may call this.",
+    level: "working",
+    method: "POST",
+    route: "/forum/{id}/resolve",
+    body: ["closeReason"],
+    input: {
+      id: z.string().trim().min(1).describe("Thread numeric ID or number (e.g. '1' or '140')."),
+      closeReason: z
+        .enum(["duplicate", "outdated", "dismissed", "expired", "policy"])
+        .describe("Reason for closing the thread."),
     },
   },
 ];

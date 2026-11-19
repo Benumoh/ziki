@@ -29,6 +29,7 @@ import { parseGitHubRepoUrl } from "@/lib/github/pull-request-url";
 import { reopenOriginalAfterRevert } from "@/lib/take-it-back-server";
 import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/project-repositories";
 import { recordMistake, recordMistakeSchema, type RecordMistakeInput } from "@/lib/agent-api/mistakes";
+import { assertHumanApprovalSatisfied } from "@/lib/human-approval";
 import { prGate, type PrGate } from "@/lib/agent-api/pr-gate";
 import { gateReport, latestPullRequestReport, notifyAuthor } from "@/lib/agent-api/pull-request-report";
 import { conflictComment } from "@/lib/agent-api/merge-conflict";
@@ -153,7 +154,7 @@ export type AcceptFixResult =
   | {
       status: 409;
       error: "not_ready";
-      missing: "already_accepted" | "redesign" | "confirmation" | "verdicts" | "claim" | "pull_request";
+      missing: "already_accepted" | "redesign" | "human_approval" | "confirmation" | "verdicts" | "claim" | "pull_request";
       message: string;
       /** What the fix's author has to do, when the refusal is theirs to fix. */
       todo?: string;
@@ -186,6 +187,8 @@ export const mergeReviewBodySchema = z.object({
   description: entryDescription,
   mistake: recordMistakeSchema.omit({ bugId: true }).optional(),
   projectId: z.string().optional(),
+  requiresHumanApproval: z.boolean().optional(),
+  humanApprovalReason: z.string().trim().min(3).max(500).optional(),
 });
 
 export type MergeReviewInput = {
@@ -193,6 +196,8 @@ export type MergeReviewInput = {
   summary: string;
   description: string;
   mistake?: Omit<RecordMistakeInput, "bugId">;
+  requiresHumanApproval?: boolean;
+  humanApprovalReason?: string;
 };
 
 /** Parses a raw `POST /merge` body into a review, or the 400 naming the field. */
@@ -202,8 +207,18 @@ export function parseMergeReview(
   const body = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const parsed = mergeReviewBodySchema.safeParse(body);
   if (parsed.success) {
-    const { verdict, summary, description, mistake } = parsed.data;
-    return { ok: true, review: { verdict, summary, description, ...(mistake ? { mistake } : {}) } };
+    const { verdict, summary, description, mistake, requiresHumanApproval, humanApprovalReason } = parsed.data;
+    return {
+      ok: true,
+      review: {
+        verdict,
+        summary,
+        description,
+        ...(mistake ? { mistake } : {}),
+        ...(requiresHumanApproval !== undefined ? { requiresHumanApproval } : {}),
+        ...(humanApprovalReason ? { humanApprovalReason } : {}),
+      },
+    };
   }
   const issue = parsed.error.issues[0];
   const field = typeof issue?.path[0] === "string" ? issue.path[0] : undefined;
@@ -410,12 +425,16 @@ async function reviewFix(
 
   try {
     await assertRedesignOpen(bug.id);
+    await assertHumanApprovalSatisfied(prisma, { kind: "issue", id: bug.id }, workflow.humanApprovalsNeeded);
   } catch (error) {
     if (error instanceof IssueApiError) {
+      const missing = error.body && typeof error.body === "object" && "error" in error.body && error.body.error === "human_approval_required"
+        ? ("human_approval" as const)
+        : ("redesign" as const);
       return {
         status: 409 as const,
         error: "not_ready" as const,
-        missing: "redesign" as const,
+        missing,
         message: error.message,
       };
     }
@@ -1161,7 +1180,15 @@ async function rejectFix(agent: AgentContext, bug: LoadedBug, review: MergeRevie
       decision = thresholdDecision({ userId: agent.ownerId, agentId: agent.agentId }, votes, voting.threshold);
     }
 
-    await tx.bug.update({ where: { id: bug.id }, data: moveTo("in_progress") });
+    await tx.bug.update({
+      where: { id: bug.id },
+      data: {
+        ...moveTo("in_progress"),
+        ...(review.requiresHumanApproval
+          ? { requiresHumanApproval: true, humanApprovalReason: review.humanApprovalReason ?? review.summary }
+          : {}),
+      },
+    });
     await tx.bugActivity.create({
       data: {
         bugId: bug.id,

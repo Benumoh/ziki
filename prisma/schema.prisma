@@ -343,6 +343,7 @@ model User {
   comments                    Comment[]
   votes                       Vote[]
   activities                  BugActivity[]
+  humanApprovals              HumanApproval[]
   bugRevisions                BugRevision[]
   passwordResetTokens         PasswordResetToken[]
   forumPosts                  ForumPost[]                   @relation("ForumPostAuthorUser")
@@ -595,6 +596,10 @@ model Bug {
   supportThreads            SupportThread[]
   /// #time-tracking: time logged against this issue.
   timeEntries               TimeEntry[]
+  /// #human-approval-gate: set when the issue/PR touches a restricted area and needs human sign-off before merging.
+  requiresHumanApproval     Boolean                 @default(false)
+  humanApprovalReason       String?
+  humanApprovals            HumanApproval[]
 
   /// #517: issue numbers are per organisation, so two organisations can both have a #1.
   @@unique([organisationId, number])
@@ -987,6 +992,8 @@ model Project {
   acceptsGuestIdeas       Boolean                 @default(false)
   /// Optional guidelines shown to applicants when requesting to join.
   contributorGuidelines   String?
+  /// #human-approval-gate: per-project criticality guidelines telling agents what requires human approval. Null falls back to DEFAULT_HUMAN_APPROVAL_GUIDELINES.
+  humanApprovalGuidelines String?
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   organisation            Organisation            @relation(fields: [organisationId], references: [id], onDelete: Cascade)
@@ -1077,6 +1084,8 @@ model ProjectWorkflow {
   revisionLimit          Int               @default(2)
   /// How long a complex issue's award has for the plan to be written and approved (#plan-review); restarts on a send-back.
   planReviewSeconds      Int               @default(7200)
+  /// #human-approval-gate: how many human members (excluding the creator) must approve a flagged idea or PR before it moves forward or merges.
+  humanApprovalsNeeded   Int               @default(1)
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
   project                Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -2006,6 +2015,10 @@ model Idea {
   attachments             Attachment[]
   pointEntries            PointEntry[]
   idempotencyKeys         IdempotencyKey[]
+  /// #human-approval-gate: flagged when an idea touches a restricted area and needs human sign-off before converting.
+  requiresHumanApproval   Boolean           @default(false)
+  humanApprovalReason     String?
+  humanApprovals          HumanApproval[]
 
   @@unique([organisationId, number])
   @@unique([organisationId, legacyBugNumber])
@@ -4404,4 +4417,31 @@ model MarketingAsset {
 
   @@unique([typeId, name])
   @@index([organisationId, typeId])
+}
+
+/// #human-approval-gate: a human member's sign-off or rejection on a flagged idea or issue/PR.
+enum HumanApprovalDecision {
+  approved
+  rejected
+}
+
+/// #human-approval-gate: one record per human member per flagged idea or issue/PR.
+model HumanApproval {
+  id        String                @id @default(cuid())
+  ideaId    String?
+  idea      Idea?                 @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  bugId     String?
+  bug       Bug?                  @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  decision  HumanApprovalDecision
+  note      String?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@unique([ideaId, userId])
+  @@unique([bugId, userId])
+  @@index([ideaId])
+  @@index([bugId])
+  @@index([userId])
 }

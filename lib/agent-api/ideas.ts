@@ -67,6 +67,9 @@ export const createIdeaSchema = createBugSchema
     vettedNote: z.string().trim().min(5).max(300).optional(),
     /** #plan-review: the issue's difficulty when `alreadyVetted` converts it at once; medium if left out. */
     difficulty: difficultySchema.optional(),
+    /** #human-approval-gate: set true if this idea falls under the project's humanApprovalGuidelines. */
+    requiresHumanApproval: z.boolean().optional(),
+    humanApprovalReason: z.string().trim().min(3).max(500).optional(),
     attachmentIds: attachmentIdsSchema,
     // Up to three plain lines a person can read at a glance (#report-summary).
     summary: reportSummarySchema,
@@ -107,6 +110,9 @@ export const ideaSelect = {
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
+  requiresHumanApproval: true,
+  humanApprovalReason: true,
+  humanApprovals: { select: { decision: true } },
   area: { select: { id: true, name: true, slug: true } },
   issue: { select: { id: true, number: true } },
 } satisfies Prisma.IdeaSelect;
@@ -114,8 +120,10 @@ export const ideaSelect = {
 type IdeaRow = Prisma.IdeaGetPayload<{ select: typeof ideaSelect }>;
 
 /** The idea as the API shows it: the issue it became, and whether it can be converted now. */
-export function ideaJson(idea: IdeaRow, ideaThreshold: number) {
-  const { issue, rationale, ...rest } = idea;
+export function ideaJson(idea: IdeaRow, ideaThreshold: number, humanApprovalsNeeded = 1) {
+  const { issue, rationale, humanApprovals, ...rest } = idea;
+  const approvalsCount = (humanApprovals ?? []).filter((a) => a.decision === "approved").length;
+  const humanApprovalSatisfied = !idea.requiresHumanApproval || approvalsCount >= humanApprovalsNeeded;
   return {
     ...rest,
     // Only marketing ideas carry a rationale.
@@ -123,7 +131,14 @@ export function ideaJson(idea: IdeaRow, ideaThreshold: number) {
     issueId: issue?.id ?? null,
     issueNumber: issue?.number ?? null,
     ideaThreshold,
-    convertible: idea.status === "open" && idea.score >= ideaThreshold,
+    humanApproval: {
+      required: idea.requiresHumanApproval,
+      reason: idea.humanApprovalReason ?? null,
+      approvalsCount,
+      needed: humanApprovalsNeeded,
+      satisfied: humanApprovalSatisfied,
+    },
+    convertible: idea.status === "open" && idea.score >= ideaThreshold && humanApprovalSatisfied,
   };
 }
 
@@ -144,7 +159,7 @@ export async function listAgentIdeas(scope: Scope, params: URLSearchParams) {
   if (cursorRaw !== null && !cursor) throw new IssueApiError(400, "Invalid cursor.");
   const limit = pageSize(params.get("limit"));
   if (limit === null) throw new IssueApiError(400, LIMIT_RANGE_ERROR);
-  const { ideaThreshold } = await workflowFor(scope.projectId);
+  const { ideaThreshold, humanApprovalsNeeded } = await workflowFor(scope.projectId);
   const q = params.get("q")?.trim();
   const term = q ? escapeSearchQuery(boundSearchTerm(q)) : null;
   const where: Prisma.IdeaWhereInput = {
@@ -197,7 +212,7 @@ export async function listAgentIdeas(scope: Scope, params: URLSearchParams) {
   const page = toPage(rows, limit);
   // #724: each idea's weighted good, bad and neutral votes, as the Ideas list shows them.
   const totals = await ideaVoteTotals(prisma, page.items.map((row) => row.id));
-  return { ...page, items: page.items.map((row) => ({ ...ideaJson(row, ideaThreshold), votes: totals.get(row.id) ?? NO_VOTES })) };
+  return { ...page, items: page.items.map((row) => ({ ...ideaJson(row, ideaThreshold, humanApprovalsNeeded), votes: totals.get(row.id) ?? NO_VOTES })) };
 }
 
 function ideaCursorWhere(cursor: IssueCursor): Prisma.IdeaWhereInput {
@@ -221,7 +236,7 @@ export async function findIdea(scope: Scope, ref: string) {
 export async function readAgentIdea(scope: Scope, ref: string, viewer: FindingViewer | null = null) {
   const found = await findIdea(scope, ref);
   if (!found) throw new IssueApiError(404, "Idea not found.");
-  const [idea, { ideaThreshold }] = await Promise.all([
+  const [idea, { ideaThreshold, humanApprovalsNeeded }] = await Promise.all([
     prisma.idea.findUniqueOrThrow({
       where: { id: found.id },
       select: {
@@ -235,7 +250,7 @@ export async function readAgentIdea(scope: Scope, ref: string, viewer: FindingVi
     workflowFor(scope.projectId),
   ]);
   const votes = (await ideaVoteTotals(prisma, [idea.id])).get(idea.id) ?? NO_VOTES;
-  const json = ideaJson(idea, ideaThreshold) as ReturnType<typeof ideaJson> & { attachments: typeof idea.attachments };
+  const json = ideaJson(idea, ideaThreshold, humanApprovalsNeeded) as ReturnType<typeof ideaJson> & { attachments: typeof idea.attachments };
   // #722: each file with the URL an agent reads it from, with its key.
   return {
     ...json,
@@ -350,6 +365,10 @@ async function createIdeaFromBody(agent: AgentContext, request: NextRequest, bod
   }
   const { track, rationale } = fields.value;
   assertVettedFields(input);
+  if (input.requiresHumanApproval && input.alreadyVetted) {
+    const message = "An idea that requires human approval cannot skip the gate with alreadyVetted.";
+    throw new IssueApiError(409, message, { error: "human_approval_required", message });
+  }
   const scope = await issueProject(agent, request.nextUrl.searchParams, input.projectId);
   const beneficiaryUserId = agent.ownerId;
   let converted: { issueId: string; issueNumber: number; claimId: string; claimStatus: "active" | "planning"; deliverBy: string | null } | null = null;
@@ -414,6 +433,9 @@ async function createIdeaFromBody(agent: AgentContext, request: NextRequest, bod
           reporterId: beneficiaryUserId,
           beneficiaryUserId,
           createdByAgentId: agent.agentId,
+          ...(input.requiresHumanApproval
+            ? { requiresHumanApproval: true, humanApprovalReason: input.humanApprovalReason ?? null }
+            : {}),
         },
         select: { id: true, number: true },
       });

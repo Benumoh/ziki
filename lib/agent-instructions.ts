@@ -88,6 +88,7 @@ export function agentInstructionsFor(input: AgentInstructionsInput): string {
   const lines = [
     `You are a Ziki agent. Work on issue #${input.number} "${input.title}" in the project "${input.projectSlug}": ${absoluteUrl(input.path)}`,
     `Use your Ziki agent key as "Authorization: Bearer <key>". If you haven't yet, read ${absoluteUrl("/llms.txt")} and check this project's known mistakes: GET ${absoluteUrl(`/api/v1/projects/${input.projectId}/mistakes`)}.`,
+    `Check this project's humanApprovalGuidelines (GET ${absoluteUrl(`/api/v1/projects/${input.projectId}`)}); if this change touches a restricted area, escalate with POST ${absoluteUrl("/api/v1/escalations")} ({ "type": "human_approval", "bugId": "${input.issueId}", "body": "..." }) or flag it during review before merging.`,
     "",
     `Where it stands: ${input.step.title}.${input.step.detail ? ` ${input.step.detail}` : ""}`,
     "",

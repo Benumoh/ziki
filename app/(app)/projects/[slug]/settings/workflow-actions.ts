@@ -7,7 +7,7 @@ import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import { currentOrganisationIdFor, NO_ORGANISATION_MESSAGE } from "@/lib/organisation-context";
 import { prisma } from "@/lib/prisma";
 import { invalidateWorkflow } from "@/lib/workflow";
-import { workflowSettingsSchema, workflowValues } from "@/lib/workflow-config";
+import { DEFAULT_PROJECT_WORKFLOW, workflowSettingsSchema, workflowValues } from "@/lib/workflow-config";
 
 export type WorkflowActionResult =
   | { ok: true }
@@ -31,6 +31,7 @@ const NUMERIC_FIELDS = [
   "stakeLimit",
   "stakeInProgressLimit",
   "planReviewSeconds",
+  "humanApprovalsNeeded",
 ] as const;
 
 async function projectSettingsAccess(slug: string) {
@@ -61,7 +62,13 @@ export async function updateProjectWorkflowAction(
     autoMerge: formData.get("autoMerge") === "on",
     governance: formData.get("governance"),
   };
-  for (const field of NUMERIC_FIELDS) raw[field] = Number(formData.get(field));
+  for (const field of NUMERIC_FIELDS) {
+    const rawValue = formData.get(field);
+    raw[field] =
+      field === "humanApprovalsNeeded" && rawValue === null
+        ? DEFAULT_PROJECT_WORKFLOW.humanApprovalsNeeded
+        : Number(rawValue);
+  }
 
   const parsed = workflowSettingsSchema.safeParse(raw);
   if (!parsed.success) {

@@ -27,6 +27,7 @@ import { trackRules } from "@/lib/marketing/track";
 import { assertUnderCapacity, isAtCapacityError } from "@/lib/agent-api/capacity";
 import { deliveryDeadline, deliveryWindowMinutes } from "@/lib/claim-deadline";
 import { needsPlanReview } from "@/lib/difficulty";
+import { assertHumanApprovalSatisfied, getHumanApprovalSummary } from "@/lib/human-approval";
 
 /**
  * Idea verdicts and conversion (#idea-verdicts, #idea-table). Each person
@@ -62,6 +63,8 @@ export const ideaVerdictFields = z
     votes: z.number().int().min(1).max(WORKFLOW_LIMITS.managerVoteWeight.max).optional(),
     summary: entrySummary,
     description: entryDescription,
+    requiresHumanApproval: z.boolean().optional(),
+    humanApprovalReason: z.string().trim().min(3).max(500).optional(),
   })
   .strict();
 
@@ -174,7 +177,7 @@ export async function giveIdeaVerdict(
   input: IdeaVerdictInput,
 ): Promise<GivenVerdict> {
   const workflow = await workflowFor(projectId);
-  const { ideaThreshold } = workflow;
+  const { ideaThreshold, humanApprovalsNeeded } = workflow;
   const thresholdOnly = isThresholdOnly(workflow);
   const allowed = maxVotesFor(giver, workflow.managerVoteWeight);
   // In a threshold-only project a manager agent's verdict carries its full weight by default.
@@ -220,6 +223,18 @@ export async function giveIdeaVerdict(
     });
     const ideaScore = await rescore(tx, ideaId);
 
+    if (input.requiresHumanApproval) {
+      await tx.idea.update({
+        where: { id: ideaId },
+        data: {
+          requiresHumanApproval: true,
+          ...(input.humanApprovalReason ? { humanApprovalReason: input.humanApprovalReason } : {}),
+        },
+      });
+    }
+
+    const humanApproval = await getHumanApprovalSummary(tx, { kind: "idea", id: ideaId }, humanApprovalsNeeded);
+
     // The first verdict on each idea earns the person a point; the key makes a replacement free.
     const paid = await award(tx, {
       organisationId: giver.organisationId,
@@ -232,7 +247,7 @@ export async function giveIdeaVerdict(
       agentId: giver.agent?.id ?? null,
     });
 
-    const convertible = ideaScore >= ideaThreshold;
+    const convertible = ideaScore >= ideaThreshold && humanApproval.satisfied;
     await publish(tx, {
       organisationId: giver.organisationId,
       type: "idea.verdict",
@@ -263,11 +278,11 @@ export async function giveIdeaVerdict(
       if (isBadIdea(tally, ideaThreshold)) {
         await rejectLocked(tx, scope, { ...idea, score: ideaScore }, by, tally, thresholdDecision(by, tally.total, ideaThreshold));
         decided = { outcome: "rejected" };
-      } else if (ideaScore >= ideaThreshold) {
+      } else if (ideaScore >= ideaThreshold && humanApproval.satisfied) {
         const issue = await convertLocked(tx, scope, { ...idea, score: ideaScore }, by, ideaThreshold, thresholdDecision(by, ideaScore, ideaThreshold));
         decided = { outcome: "converted", issueId: issue.issueId, issueNumber: issue.issueNumber };
       }
-    } else if (opensAtThreshold && ideaScore >= ideaThreshold) {
+    } else if (opensAtThreshold && ideaScore >= ideaThreshold && humanApproval.satisfied) {
       // A marketing idea opens on the vote that reaches its threshold. A bad one waits for a manager agent to reject it.
       const by = { userId: giver.userId, agentId: giver.agent?.id ?? null };
       const tally = ideaVotes(await tx.ideaVerdict.findMany({ where: { ideaId }, select: { opinion: true, votes: true } }));
@@ -480,6 +495,7 @@ export async function convertLocked(
   difficulty: Difficulty = "medium",
 ) {
   const { projectId } = scope;
+  await assertHumanApprovalSatisfied(tx, { kind: "idea", id: locked.id });
   const idea = await tx.idea.findUniqueOrThrow({
     where: { id: locked.id },
     select: {

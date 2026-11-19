@@ -10,7 +10,19 @@
  */
 import { e2eDb } from "./db";
 import bcrypt from "bcryptjs";
-import { E2E_PASSWORD, ROLES, STALE_EMAIL, WIDTHS, emailFor, nameFor } from "./users";
+import {
+  E2E_PASSWORD,
+  OUTSIDE_ORG,
+  OUTSIDE_PRIVATE,
+  OUTSIDE_PRIVATE_ISSUE,
+  OUTSIDE_PUBLIC,
+  OUTSIDE_PUBLIC_ISSUE,
+  ROLES,
+  STALE_EMAIL,
+  WIDTHS,
+  emailFor,
+  nameFor,
+} from "./users";
 import { loadFixtures } from "../scripts/dev/fixtures/load";
 
 const prisma = e2eDb();
@@ -92,6 +104,36 @@ async function main() {
       role: user.role === "super_admin" ? "owner" : user.role === "admin" ? "admin" : "member",
     })),
   });
+  // An organisation none of the test accounts belong to (#access-control): one public project and one private,
+  // an issue in each, owned by someone outside the suite. access-control.spec.ts opens them as each role.
+  const outsideOwner = await prisma.user.create({
+    data: {
+      email: "e2e-outside-owner@test.local",
+      name: "Olu Outside",
+      role: "user",
+      passwordHash,
+      emailVerified: new Date(),
+      emailNotifications: false,
+    },
+  });
+  const outside = await prisma.organisation.create({ data: { id: "organisation_e2e_outside", slug: OUTSIDE_ORG, name: "Outside Org" } });
+  await prisma.membership.create({ data: { organisationId: outside.id, userId: outsideOwner.id, role: "owner" } });
+  for (const [slug, visibility] of [[OUTSIDE_PUBLIC, "public"], [OUTSIDE_PRIVATE, "private"]] as const) {
+    const project = await prisma.project.create({
+      data: { id: `project_e2e_${slug}`, organisationId: outside.id, slug, name: `Outside ${visibility}`, goal: `The ${visibility} project.`, visibility, workflow: { create: {} } },
+    });
+    // In this order the public project's issue is #1 and the private one's #2 (numbers count per organisation).
+    await prisma.bug.create({
+      data: {
+        organisationId: outside.id,
+        projectId: project.id,
+        title: visibility === "public" ? OUTSIDE_PUBLIC_ISSUE : OUTSIDE_PRIVATE_ISSUE,
+        description: `An issue in the ${visibility} project.`,
+        reporterId: outsideOwner.id,
+        beneficiaryUserId: outsideOwner.id,
+      },
+    });
+  }
   // The Demo organisation (scripts/dev/fixtures): realistic issues in every state,
   // in a organisation of its own, so the suite runs against data like real Ziki's.
   await loadFixtures({ db: prisma, quiet: true });
