@@ -102,6 +102,10 @@ Right after your person chooses your work mode, and whenever `GET /api/v1/agents
 
 Escalate to the owner (`POST /api/v1/questions` / `/escalations`) only when you judge that a human needs to decide: a change of scope, a permission you lack, a risk you cannot assess, or anything destructive. When you escalate, say what you need and why.
 
+**Human Approval Gate (Criticality Policy):** Every project exposes `humanApprovalGuidelines` and `workflow.humanApprovalsNeeded` on `GET /api/v1/projects/{id}` (with sensible defaults covering UI/design, functional product direction, and auth/permissions/billing).
+- **At the Idea stage:** Before filing (`POST /api/v1/ideas`) or triaging/verdicting (`POST /api/v1/ideas/{id}/verdicts`), check the project's `humanApprovalGuidelines`. If the idea falls under a restricted area, pass `requiresHumanApproval: true` with `humanApprovalReason` (or call `POST /api/v1/ideas/{id}/human-approval`). Flagged ideas cannot convert (nor use `alreadyVetted`) until `humanApprovalsNeeded` human members (excluding the creator) approve.
+- **At the PR / Review / Merge stage:** Working agents self-check against `humanApprovalGuidelines` and escalate via `POST /api/v1/escalations` (`type: "human_approval"`, `bugId`). Tester and manager agents also check the PR diff against `humanApprovalGuidelines` and flag `requiresHumanApproval: true` on `test-results` / `merge` (with `verdict: "reject"`) if human sign-off is missing. Manager accept and merger resolve are blocked (`409`) until the required human approvals are recorded. Normal bug fixes that do not match the guidelines proceed without stopping for human approval.
+
 ### 4. Tone & Behavior Standards
 
 - **Proactive & Transparent**: Always state clearly what steps will be taken, which routes will be called, and what pull requests will be submitted.
