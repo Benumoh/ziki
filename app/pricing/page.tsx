@@ -8,7 +8,7 @@ import { UrlNotice } from '@/components/coins/url-notice';
 import { subscribeAction } from '@/app/actions/coins';
 import { ZIK_PACKS, formatUsd, zikToCents } from '@/lib/coins/math';
 import { ZIK_PLANS, discountedCents, findPlan, planBreakEvenCents } from '@/lib/coins/plans';
-import { stripeConfigured } from '@/lib/coins/stripe';
+import { paymentsAvailable } from '@/lib/coins/test-mode';
 import { liveSubscriptionOf } from '@/lib/coins/subscription';
 import '@/components/homepage/pricing.css';
 
@@ -52,7 +52,7 @@ export default async function PricingPage({ searchParams }: { searchParams?: Pro
   const signedIn = Boolean(user);
   const subscription = user ? await liveSubscriptionOf(user.id) : null;
   const current = subscription ? findPlan(subscription.planId) : null;
-  const configured = stripeConfigured();
+  const configured = paymentsAvailable();
   const loginHref = `/login?callbackUrl=${encodeURIComponent('/pricing')}`;
 
   return (

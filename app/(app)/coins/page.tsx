@@ -6,6 +6,7 @@ import { walletSummary } from "@/lib/coins/ledger";
 import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
+import { paymentsAvailable } from "@/lib/coins/test-mode";
 import { LocalTime } from "@/components/local-time";
 import { ZikiPlans } from "@/components/coins/ziki-plans";
 import { discountedCents } from "@/lib/coins/plans";
@@ -68,7 +69,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       select: { id: true, kind: true, sourceKey: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
     }),
   ]);
-  const configured = stripeConfigured();
+  const configured = paymentsAvailable();
   // Whether the Stripe webhook has already credited what was just paid for (a purchase in the last few minutes).
   const justCredited = hasRecentPurchase(entries);
   // Came from a deeper scan's checkout (#deeper-scan-gate): after paying, Stripe sends them back to that scan.
@@ -131,8 +132,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
             </li>
           ))}
         </ul>
-        {!configured ? <p className="mb-0 mt-3 text-sm text-zk-text2">Buying Ziks isn&apos;t available yet.</p> : null}
-      </section>
+        {!configured ? <p className="mb-0 mt-3 text-sm text-zk-text2">Buying Ziks isn&apos;t available yet.</p> : null}      </section>
 
       <ZikiPlans subscription={subscription} configured={configured} />
 
