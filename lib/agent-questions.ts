@@ -104,6 +104,12 @@ export async function askAgentQuestion(agent: AgentContext, input: AskAgentQuest
         where: { bugId: created.bugId, agentId: agent.agentId, status: "active", releasedAt: null, waitingOnOwnerSince: null },
         data: { waitingOnOwnerSince: created.createdAt },
       });
+      if (typeSlug === "human_approval") {
+        await tx.bug.update({
+          where: { id: created.bugId },
+          data: { requiresHumanApproval: true, humanApprovalReason: input.body },
+        });
+      }
     }
 
     await audit(agent, "question.asked", created.id, { bugId: created.bugId, type: typeSlug }, { db: tx, bugId: created.bugId });

@@ -12,6 +12,7 @@ import {
   openForBidsAction,
   type StepResult,
 } from "@/app/actions/human-steps";
+import { approveHumanGateAction, type HumanApprovalActionResult } from "@/app/actions/human-approval";
 
 /**
  * The one thing the viewer can do at this step, through their agent
@@ -26,7 +27,8 @@ export type YourTurn =
   | { kind: "verdict"; agentName: string }
   | { kind: "review"; agentName: string }
   | { kind: "offer"; agentName: string }
-  | { kind: "deliver"; agentName: string };
+  | { kind: "deliver"; agentName: string }
+  | { kind: "human_approval"; agentName?: string; reason: string | null; approvals: number; needed: number };
 
 const COPY: Record<YourTurn["kind"], { title: string; body: (turn: YourTurn) => string }> = {
   open: {
@@ -43,9 +45,16 @@ const COPY: Record<YourTurn["kind"], { title: string; body: (turn: YourTurn) => 
     title: "Deliver the work",
     body: () => "When the pull request is ready, hand it in here. Other agents then test it before it can merge.",
   },
+  human_approval: {
+    title: "Human approval required",
+    body: (turn) =>
+      turn.kind === "human_approval"
+        ? `${turn.approvals} of ${turn.needed} human approvals recorded.${turn.reason ? ` ${turn.reason}` : ""}`
+        : "",
+  },
 };
 
-export function YourTurnCard({ bugId, turn }: { bugId: string; turn: YourTurn }) {
+export function YourTurnCard({ bugId, turn, targetKind = "issue" }: { bugId: string; turn: YourTurn; targetKind?: "issue" | "idea" }) {
   const copy = COPY[turn.kind];
   const [writing, setWriting] = useState<null | "good" | "bad">(null);
   const [summary, setSummary] = useState("");
@@ -63,7 +72,7 @@ export function YourTurnCard({ bugId, turn }: { bugId: string; turn: YourTurn })
   const prId = useId();
   const proofId = useId();
 
-  const go = (step: () => Promise<StepResult>, done: string) => {
+  const go = (step: () => Promise<StepResult | HumanApprovalActionResult>, done: string) => {
     setError(null);
     startTransition(async () => {
       const result = await step();
@@ -114,10 +123,42 @@ export function YourTurnCard({ bugId, turn }: { bugId: string; turn: YourTurn })
       className="flex flex-col gap-3 rounded-[20px] border border-zk-accent/40 bg-zk-surface p-4 sm:p-5"
     >
       <div className="flex flex-col gap-1">
-        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-zk-accent">Your turn · as {turn.agentName}</p>
+        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-zk-accent">
+          {turn.kind === "human_approval" ? "Your turn · Human gate" : `Your turn · as ${turn.agentName}`}
+        </p>
         <h2 className="m-0 text-base font-semibold text-zk-text">{copy.title}</h2>
         <p className="m-0 text-sm text-zk-text2">{copy.body(turn)}</p>
       </div>
+
+      {turn.kind === "human_approval" ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              go(
+                () => approveHumanGateAction({ kind: targetKind, id: bugId }, "approved"),
+                "Human approval recorded.",
+              )
+            }
+          >
+            {pending ? "Saving…" : "Approve"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() =>
+              go(
+                () => approveHumanGateAction({ kind: targetKind, id: bugId }, "rejected"),
+                "Human rejection recorded.",
+              )
+            }
+          >
+            Reject
+          </Button>
+        </div>
+      ) : null}
 
       {turn.kind === "open" ? (
         <div>

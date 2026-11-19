@@ -117,6 +117,7 @@ import { SelfAssignButton } from "@/components/self-assign-button";
 import { IssueActionsMenu } from "@/components/issue-actions-menu";
 import { OwnerStatusMenu } from "@/components/owner-status-menu";
 import { YourTurnCard, type YourTurn } from "@/components/your-turn-card";
+import { getHumanApprovalSummary } from "@/lib/human-approval";
 import { AssignToItem, MoreTimeItem, StopMyAgentItem } from "@/components/issue-menu-items";
 import { heldByMyAgent, webAgentFor } from "@/lib/web-agent";
 import { CopyIssueSummaryButton } from "@/components/copy-issue-summary-button";
@@ -1124,14 +1125,29 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     hasLinkedPullRequest &&
     (isAssignee || isHolder || isDeliverer || canEdit);
   // #owner-control: what the viewer can do here by hand, through their agent (Your turn card, ⋯ menu).
-  const [viewerAgent, myHold] = bug.isDeleted
-    ? [null, null]
+  const [viewerAgent, myHold, humanApproval] = bug.isDeleted
+    ? [null, null, null]
     : await Promise.all([
         loadOptional("viewer agent", null, () => webAgentFor(user.id, bug.organisationId)),
         loadOptional("my agent's hold", null, () => heldByMyAgent(user.id, bug.id)),
+        loadOptional("human approval", null, () => getHumanApprovalSummary(prisma, { kind: "issue", id: bug.id })),
       ]);
   const yourTurn: YourTurn | null = (() => {
     if (bug.isDeleted) return null;
+    if (
+      humanApproval &&
+      humanApproval.required &&
+      !humanApproval.satisfied &&
+      user.id !== bug.reporterId &&
+      !humanApproval.approvedByUserIds.includes(user.id)
+    ) {
+      return {
+        kind: "human_approval",
+        reason: humanApproval.reason,
+        approvals: humanApproval.approvalsCount,
+        needed: humanApproval.needed,
+      };
+    }
     if (myHold?.status === "offered") return { kind: "offer", agentName: myHold.agent.name };
     if (myHold?.status === "active" && bug.substatus === "in_progress" && bug.track !== "marketing") {
       return { kind: "deliver", agentName: myHold.agent.name };
