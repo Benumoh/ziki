@@ -108,7 +108,7 @@ export function MilestoneManager({ milestones }: { milestones: ManagedMilestone[
             {editing === "new" ? "New milestone" : `Edit "${editing.title}"`}
           </h2>
           {error ? (
-            <p role="alert" className="rounded-[14px] border border-zk-bad-bd bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">
+            <p role="alert" className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">
               {error}
             </p>
           ) : null}

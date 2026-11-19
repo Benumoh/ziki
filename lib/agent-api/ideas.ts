@@ -1,3 +1,4 @@
+import { assetForWork } from "@/lib/marketing/assets";
 import { parseTrackFilter } from "@/lib/marketing/track";
 import { parseIdeaTrack } from "@/lib/marketing/idea-track";
 import { NextResponse, type NextRequest } from "next/server";
@@ -54,6 +55,8 @@ export const createIdeaSchema = createBugSchema
     // #494: no beneficiaryUserId. The reporter is always the agent's owner.
     projectId: idSchema.optional(),
     typeId: z.unknown().optional(),
+    /** #marketing-assets: the marketing asset it is about (the About Us page), under its typeId. Marketing ideas only. */
+    assetId: idSchema.optional(),
     // Product (the default) or marketing, and why a marketing idea is worth doing (parseIdeaTrack).
     track: z.unknown().optional(),
     rationale: z.unknown().optional(),
@@ -93,6 +96,7 @@ export const ideaSelect = {
   status: true,
   score: true,
   typeId: true,
+  assetId: true,
   areaId: true,
   proofLinks: true,
   projectId: true,
@@ -386,6 +390,7 @@ async function createIdeaFromBody(agent: AgentContext, request: NextRequest, bod
       : {}),
     ...(digests.length ? { files: [...digests].sort() } : {}),
     ...(input.areaId ? { areaId: input.areaId } : {}),
+    ...(input.assetId ? { assetId: input.assetId } : {}),
     ...(input.security ? { security: input.security.severity } : {}),
   });
   const severity = input.security?.severity ?? null;
@@ -411,10 +416,12 @@ async function createIdeaFromBody(agent: AgentContext, request: NextRequest, bod
         if (!area) throw new IssueApiError(422, "Area not found in this project.");
       }
       const description = await normalizeOrganisationMentions(tx, scope.organisationId, input.description);
+      const assetId = await assetForWork(tx, scope.organisationId, input.assetId, track, policy.typeId, severity ? placeholderTitle(severity) : input.title);
       const idea = await tx.idea.create({
         data: {
           ...scope,
           typeId: policy.typeId,
+          assetId,
           title: severity ? placeholderTitle(severity) : input.title,
           summary: severity ? PLACEHOLDER_SUMMARY : input.summary,
           description: severity ? PLACEHOLDER_DESCRIPTION : description,

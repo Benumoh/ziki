@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-import { marketingPath, type ProjectRef } from "@/lib/project-paths";
 import { AspectRatioPicker } from "./aspect-ratio-picker";
 import { CreateFrom } from "./create-from";
 import { LengthSlider } from "./length-slider";
@@ -22,7 +20,8 @@ import { styles } from "./styles";
 import "./video-studio.css";
 
 /** The complete prototype is local to this component: no uploads or generation requests. */
-export function VideoStudio({ slug, projectName }: { slug: ProjectRef; projectName: string }) {
+/** The video studio (#marketing-assets): it sits in a Videos asset's page, making that video. */
+export function VideoStudio({ projectName }: { projectName: string }) {
   const [state, setState] = useState<StudioState>(INITIAL_STUDIO_STATE);
   const id = useId();
   const prompt = useRef<HTMLTextAreaElement>(null);
@@ -264,7 +263,7 @@ export function VideoStudio({ slug, projectName }: { slug: ProjectRef; projectNa
   return (
     <section className={styles.studio} aria-label="Video studio">
       <div className={styles.topBar}>
-        <Link className={styles.link} href={marketingPath(slug)}>← Back to Marketing</Link>
+        <span />
         <Badge className={styles.tag}><span aria-live="polite" aria-atomic="true">{state.credits} credits</span></Badge>
       </div>
       <div className={styles.tabs} role="tablist" aria-label="Video studio">

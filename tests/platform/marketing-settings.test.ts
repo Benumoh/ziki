@@ -352,7 +352,7 @@ describe("updateMarketingSettingsAction (M-API-6, M-UI-7)", () => {
         update: { revisionLimit: 4 },
       }),
     );
-    expect(revalidatePath).toHaveBeenCalledWith("/acme/marketing-proj/marketing/settings");
+    expect(revalidatePath).toHaveBeenCalledWith("/acme/marketing/settings");
     expect(revalidatePath).toHaveBeenCalledWith("/acme/marketing-proj/settings");
   });
 

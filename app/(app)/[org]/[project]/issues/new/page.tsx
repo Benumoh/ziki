@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { parseWorkCategory, typeForCategory } from "@/lib/work-category";
 import { notFound } from "next/navigation";
 import "./create-issue.css";
 import { CreateIssueForm } from "@/components/create-issue-form";
@@ -14,11 +15,14 @@ export default async function NewBugPage({
   searchParams,
 }: {
   params: Promise<{ org: string; project: string }>;
-  searchParams: Promise<{ security?: string }>;
+  searchParams: Promise<{ security?: string; kind?: string }>;
 }) {
   const { org, project } = await params;
   // #security-findings: the Security page's "Report a vulnerability" opens the form with it ticked.
-  const security = (await searchParams).security === "1";
+  const query = await searchParams;
+  const security = query.security === "1";
+  // A section's Add button (#work-segments): the type starts at that kind.
+  const kind = parseWorkCategory(query.kind);
   const { user, admin, users, assigneeUsers, types, projectId, projectSlug, canContribute } =
     await loadReportFormData(org, project);
   if (!canContribute) notFound();
@@ -54,6 +58,7 @@ export default async function NewBugPage({
           projectId={projectId}
           projectSlug={projectSlug}
           defaultSecurity={security}
+          defaultTypeId={kind ? typeForCategory(kind, types)?.id : undefined}
         />
       </div>
     </div>

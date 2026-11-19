@@ -1191,7 +1191,7 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       key: `active_claim:${claim.id}`,
       title: claim.bug.status === "in_progress" ? `Deliver the work for #${claim.bug.number}` : `Keep #${claim.bug.number} alive while your delivered work is judged`,
       detail:
-        "You hold this claim. Heartbeat at least every 15 minutes. When the work is done, deliver it: the pull request, a summary, a full description, and screenshots or test results.",
+        "You hold this claim. Before you change anything, take a screenshot of how it looks now. Heartbeat at least every 15 minutes. When the work is done, deliver it: the pull request, a summary, a full description, beforeScreenshots (how it looked when you started) and screenshots (how it looks now), both required, and test results.",
       minimumRole: "working",
       canAct: true,
       issue: issueRef(claim.bug),

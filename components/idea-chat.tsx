@@ -7,6 +7,7 @@ import { ClaudeWorking } from "@/components/claude-working";
 import { BASE_PATH } from "@/lib/base-path";
 import { AreaCropper } from "@/components/area-cropper";
 import { CaptureError, MAX_RECORDING_SECONDS, captureScreenFrame, startScreenRecording, type ScreenRecording } from "@/components/idea-capture";
+import { TOOL_BUTTON } from "@/lib/ui-style";
 
 type Upload = { key: string; name: string; id?: string; error?: string };
 
@@ -184,7 +185,7 @@ export function IdeaChat({
         }}
         aria-expanded={open}
         title="Add Idea"
-        className={`issues-new inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-2.5 text-[13px] font-semibold text-zk-text hover:bg-zk-chip ${className}`}
+        className={`issues-new ${TOOL_BUTTON} justify-center ${className}`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
         Add Idea
@@ -234,7 +235,8 @@ export function IdeaChat({
             {/* While the idea goes to Claude to be written up, show the work happening. */}
             {pending ? <ClaudeWorking className="mt-2" /> : null}
             {error ? <p role="alert" className="m-0 mt-1 px-1 text-xs text-zk-bad-fg">{error}</p> : null}
-            <div className="mt-2 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
@@ -245,6 +247,33 @@ export function IdeaChat({
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               </button>
               <input ref={fileRef} type="file" multiple hidden onChange={(event) => { void attach(event.target.files); event.target.value = ""; }} />
+                  {/* Beside +: record the screen, or capture an area of it. Both attach to the idea. */}
+                <button
+                  type="button"
+                  onClick={() => void toggleRecording()}
+                  disabled={pending}
+                  aria-pressed={Boolean(recording)}
+                  className={`inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition disabled:opacity-40 ${
+                    recording ? "border-zk-bad-bd bg-zk-bad-soft text-zk-bad-fg" : "border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text"
+                  }`}
+                >
+                  <span aria-hidden="true" className={`h-2 w-2 rounded-full bg-red-500 ${recording ? "motion-safe:animate-pulse" : ""}`} />
+                  {recording
+                    ? `Stop recording · ${Math.floor(recording.seconds / 60)}:${String(recording.seconds % 60).padStart(2, "0")} of ${MAX_RECORDING_SECONDS / 60}:00`
+                    : "Record screen"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void captureArea()}
+                  disabled={pending || Boolean(recording)}
+                  className="inline-flex h-7 items-center gap-1 rounded-full border border-zk-border bg-zk-surface px-2.5 text-[11px] font-semibold text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text disabled:opacity-40"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
+                  </svg>
+                  Capture area
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={send}
@@ -260,34 +289,6 @@ export function IdeaChat({
                 )}
               </button>
             </div>
-          </div>
-          {/* Under the box: record the screen, or capture an area of it. Both attach images to the idea. */}
-          <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
-            <button
-              type="button"
-              onClick={() => void toggleRecording()}
-              disabled={pending}
-              aria-pressed={Boolean(recording)}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition disabled:opacity-40 ${
-                recording ? "border-zk-bad-bd bg-zk-bad-soft text-zk-bad-fg" : "border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text"
-              }`}
-            >
-              <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full bg-red-500 ${recording ? "motion-safe:animate-pulse" : ""}`} />
-              {recording
-                ? `Stop recording · ${Math.floor(recording.seconds / 60)}:${String(recording.seconds % 60).padStart(2, "0")} of ${MAX_RECORDING_SECONDS / 60}:00`
-                : "Record screen"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void captureArea()}
-              disabled={pending || Boolean(recording)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zk-border bg-zk-surface px-3 text-xs font-semibold text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text disabled:opacity-40"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
-              </svg>
-              Capture area
-            </button>
           </div>
           {crop ? (
             <div role="dialog" aria-modal="true" aria-label="Crop the capture" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

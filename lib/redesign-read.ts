@@ -5,18 +5,16 @@ import { IssueApiError } from "@/lib/agent-api/errors";
 import { PROJECT_ID_REQUIRED } from "@/lib/agent-api/issues";
 import { agentAttachmentUrl } from "@/lib/agent-api/attachment-read";
 import { LIMIT_RANGE_ERROR, decodeCursor, pageSize, toPage, type IssueCursor } from "@/lib/agent-api/create-policy";
-import { absoluteUrl } from "@/lib/site-url";
-import { designPath, refOf } from "@/lib/project-paths";
-import { DESIGN_VIEW_STATUSES, type DesignView } from "@/lib/design-view";
 
 /**
- * Reading redesign proposals back (#9, the Design area): agents through
- * `GET /api/v1/redesigns[/{id}]`, people on `/<org>/<project>/design[/<id>]`.
+ * Reading redesign proposals back (#9): agents through
+ * `GET /api/v1/redesigns[/{id}]`. People compare and choose them on the
+ * issue each one redesigns (its "Compare redesign proposals" section).
  *
  * The boundary is the organisation (#user-agents): an agent reads proposals
- * in its own organisation only, in a project that isn't archived, as people
- * see them on the Design pages. Anything else is a 404, so a proposal in
- * another organisation looks the same as one that doesn't exist.
+ * in its own organisation only, in a project that isn't archived. Anything
+ * else is a 404, so a proposal in another organisation looks the same as one
+ * that doesn't exist.
  */
 
 export const REDESIGN_STATUSES = ["proposed", "approved", "rejected", "superseded"] as const satisfies readonly RedesignStatus[];
@@ -60,17 +58,15 @@ const agentProposalSelect = {
   title: true, body: true, previewUrl: true, status: true, approverId: true, approvedAt: true, createdAt: true, updatedAt: true,
   // The mockups' details only: an agent reads the bytes at each one's `url` with its key.
   attachments: { select: { id: true, filename: true, contentType: true, size: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-  project: { select: { slug: true, organisation: { select: { slug: true } } } },
 } satisfies Prisma.RedesignProposalSelect;
 
 type AgentProposalRow = Prisma.RedesignProposalGetPayload<{ select: typeof agentProposalSelect }>;
 
-/** The proposal row as `POST /redesigns` returns it, plus its mockups and its Design page. */
-function agentProposalJson({ attachments, project, ...proposal }: AgentProposalRow) {
+/** The proposal row as `POST /redesigns` returns it, plus its mockups. */
+function agentProposalJson({ attachments, ...proposal }: AgentProposalRow) {
   return {
     ...proposal,
     attachments: attachments.map((file) => ({ ...file, url: agentAttachmentUrl(file.id) })),
-    designUrl: absoluteUrl(designPath(refOf(project), proposal.id)),
   };
 }
 
@@ -108,61 +104,4 @@ export async function getAgentRedesign(agent: Pick<AgentContext, "organisationId
   });
   if (!row) throw new IssueApiError(404, "Proposal not found.");
   return { proposal: agentProposalJson(row) };
-}
-
-// ---------------------------------------------------------------------------
-// The Design pages. The caller resolves access first (requireProject, then
-// organisation membership); every read stays inside that organisation and project.
-// ---------------------------------------------------------------------------
-
-const designCardSelect = {
-  id: true, title: true, body: true, previewUrl: true, status: true, bugId: true, createdAt: true, updatedAt: true, approvedAt: true,
-  authorAgent: { select: { name: true, ownerUserId: true } },
-  onBehalfOf: { select: { name: true } },
-  approver: { select: { name: true } },
-  bug: { select: { number: true, title: true } },
-  attachments: { select: { id: true, filename: true, contentType: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-} satisfies Prisma.RedesignProposalSelect;
-
-export type DesignCard = Prisma.RedesignProposalGetPayload<{ select: typeof designCardSelect }>;
-
-export const DESIGN_PAGE_SIZE = 24;
-
-/** The Design list: one filter's proposals, newest first, and how many each filter holds. */
-export async function loadDesignList(scope: { organisationId: string; projectId: string }, view: DesignView, rawCursor?: string) {
-  const cursor = decodeCursor(rawCursor);
-  const statuses = DESIGN_VIEW_STATUSES[view];
-  const [rows, grouped] = await Promise.all([
-    prisma.redesignProposal.findMany({
-      where: { ...scope, ...(statuses ? { status: { in: statuses } } : {}), ...afterCursor(cursor) },
-      orderBy: newestFirst,
-      take: DESIGN_PAGE_SIZE + 1,
-      select: designCardSelect,
-    }),
-    prisma.redesignProposal.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
-  ]);
-  const count = (wanted: RedesignStatus[] | null) =>
-    grouped.filter((row) => !wanted || wanted.includes(row.status)).reduce((sum, row) => sum + row._count._all, 0);
-  const counts = { waiting: count(DESIGN_VIEW_STATUSES.waiting), decided: count(DESIGN_VIEW_STATUSES.decided), all: count(null) } satisfies Record<DesignView, number>;
-  return { ...toPage(rows, DESIGN_PAGE_SIZE), counts };
-}
-
-/** One proposal on its Design page, or null when it isn't this project's. */
-export async function loadDesignProposal(scope: { organisationId: string; projectId: string }, id: string): Promise<DesignCard | null> {
-  return prisma.redesignProposal.findFirst({ where: { id, ...scope }, select: designCardSelect });
-}
-
-/**
- * Where an old `/redesigns/<id>` link (Escalations, the approval email) now
- * opens: the proposal's Design page, for a member of its organisation. Null
- * when it doesn't exist, its project is archived, or the person isn't a member.
- */
-export async function designAddressFor(user: { id: string; role?: string | null }, id: string): Promise<string | null> {
-  // The site super admin may open any organisation's pages (lib/project-route.ts).
-  const member = user.role === "super_admin" ? {} : { memberships: { some: { userId: user.id } } };
-  const proposal = await prisma.redesignProposal.findFirst({
-    where: { id, project: { archivedAt: null, organisation: { archivedAt: null, ...member } } },
-    select: { id: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } },
-  });
-  return proposal ? designPath(refOf(proposal.project), proposal.id) : null;
 }

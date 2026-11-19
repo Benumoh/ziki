@@ -3,8 +3,8 @@ import Link from "next/link";
 interface WhimsicalEmptyStateProps {
   title?: string;
   description?: string;
-  clearHref: string;
-  createHref: string;
+  clearHref?: string;
+  createHref?: string;
   showClear?: boolean;
   showCreate?: boolean;
 }
@@ -76,9 +76,9 @@ export function WhimsicalEmptyState({
         {description}
       </p>
 
-      {/* Action Buttons */}
+      {/* Action buttons, only those given a link. */}
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        {showClear ? (
+        {showClear && clearHref ? (
           <Link
             href={clearHref}
             className="inline-flex h-10 items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white shadow-[0_4px_14px_rgba(46,111,239,0.28)] transition-all hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
@@ -86,7 +86,7 @@ export function WhimsicalEmptyState({
             Clear filters
           </Link>
         ) : null}
-        {showCreate ? (
+        {showCreate && createHref ? (
           <Link
             href={createHref}
             className="inline-flex h-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface px-5 text-sm font-bold text-zk-text transition-colors hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"

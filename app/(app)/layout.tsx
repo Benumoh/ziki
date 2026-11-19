@@ -261,7 +261,7 @@ export default async function AppLayout({
 
   return (
     // data-app-shell marks the signed-in app shell for the on-screen guide.
-    <div data-app-shell="" className="flex min-h-screen flex-col bg-zk-bg">
+    <div data-app-shell="" className="flex min-h-screen flex-col bg-background">
       <SkipLink />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader

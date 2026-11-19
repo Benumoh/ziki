@@ -19,11 +19,12 @@ export type WeekPerson = {
 
 /**
  * Project Overview (#project-overview): the organisation's people with how
- * many of this project's tickets each delivered this week (a delivery made for
+ * many tickets each delivered this week, in one project or (`projectId` null)
+ * every project (a delivery made for
  * them, by them or their agents, since Monday 00:00 UTC). A ticket delivered
  * twice counts once. Most first, then by name.
  */
-export async function weeklyDeliveries(organisationId: string, projectId: string, now = new Date()): Promise<WeekPerson[]> {
+export async function weeklyDeliveries(organisationId: string, projectId: string | null, now = new Date()): Promise<WeekPerson[]> {
   const since = startOfWeek(now);
   const [members, deliveries] = await Promise.all([
     prisma.membership.findMany({
@@ -31,7 +32,8 @@ export async function weeklyDeliveries(organisationId: string, projectId: string
       select: { user: { select: { id: true, name: true, image: true } } },
     }),
     prisma.delivery.findMany({
-      where: { createdAt: { gte: since }, bug: { projectId, isDeleted: false } },
+      // One project, or every project of the organisation (#project-filter).
+      where: { createdAt: { gte: since }, bug: { organisationId, ...(projectId ? { projectId } : {}), isDeleted: false } },
       select: { bugId: true, beneficiaryUserId: true },
     }),
   ]);

@@ -73,14 +73,11 @@ export function ProjectOverviewView({
   data,
   currentUserId,
   workHref,
-  designHref = null,
 }: {
   data: ProjectOverviewData;
   currentUserId: string | null;
   /** Where a member starts work: the project's Marketing tab or its Ideas. */
   workHref: string | null;
-  /** The Design area (#9), for members of the project's organisation only. */
-  designHref?: string | null;
 }) {
   const { project } = data;
   const ref = projectRef(project.organisation.slug, project.slug);
@@ -266,14 +263,6 @@ export function ProjectOverviewView({
               >
                 View Issues →
               </Link>
-              {designHref ? (
-                <Link
-                  href={designHref}
-                  className="inline-flex min-h-10 items-center rounded-xl border border-zk-border bg-zk-surface px-4 py-2 text-sm font-semibold text-zk-text hover:bg-zk-chip"
-                >
-                  Design →
-                </Link>
-              ) : null}
             </section>
           ) : null}
         </div>

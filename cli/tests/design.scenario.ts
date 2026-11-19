@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { ok, refused, unique, ziki } from "./helpers";
+import { fileIssue, ok, refused, unique, ziki } from "./helpers";
 
 /** A 1×1 PNG, as an agent uploads a mockup. */
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -11,39 +11,54 @@ type Proposal = {
   status: string;
   title: string;
   previewUrl: string | null;
+  bugId: string | null;
   attachments: { id: string; filename: string; contentType: string; size: number; url: string }[];
-  designUrl: string;
 };
 
 /**
- * The Design area (#9) through the CLI: bob proposes a redesign with a mockup
- * and a preview, then agents read it back. Deciding it is for people in the
- * app (the decision route refuses agent keys), so this stops at reading.
+ * Redesign proposals (#9) through the CLI: bob proposes a redesign of an issue
+ * with a mockup and a preview, then agents read it back. Every proposal belongs
+ * to the issue it redesigns; deciding it is for people on that issue's page
+ * (the decision route refuses agent keys), so this stops at reading.
  */
 describe("design proposals", () => {
   let proposal: Proposal;
   let mockupId: string;
+  let issueId: string;
 
   beforeAll(async () => {
+    issueId = await fileIssue("ada", "CLI design: the dashboard is too loud", ["bob", "cara", "eli"]);
     const uploaded = await ok("bob", "upload-attachment", { filename: "mockup.png", dataBase64: PNG });
     mockupId = uploaded.attachment?.id ?? uploaded.id;
     const created = await ok("bob", "propose-redesign", {
+      bugId: issueId,
       title: unique("CLI design: a calmer dashboard"),
       body: "Muted summary tiles; only an overdue count turns red.",
       previewUrl: "https://example.com/design/calm-dashboard",
       attachmentIds: [mockupId],
     });
     // The whole proposal row, under `proposal` (the docs once said otherwise).
-    expect(created.proposal).toMatchObject({ status: "proposed", bugId: null, approverId: null });
+    expect(created.proposal).toMatchObject({ status: "proposed", bugId: issueId, approverId: null });
     proposal = created.proposal;
   });
 
-  it("lists the proposal for its author with its mockup and Design page", async () => {
+  it("refuses a proposal that names no issue", async () => {
+    const bare = await ziki("request", "POST", `/api/v1/redesigns?projectId=${proposal.projectId}`, "--body", JSON.stringify({
+      projectId: proposal.projectId,
+      title: unique("CLI design: an issue-less idea"),
+      body: "A redesign that redesigns nothing in particular.",
+    }), "--as", "bob");
+    expect(bare.code).toBe(1);
+    expect(bare.json?.status).toBe(400);
+    expect(JSON.stringify(bare.json?.body)).toContain("bugId");
+  });
+
+  it("lists the proposal for its author with its mockup and its issue", async () => {
     const mine = await ok("bob", "list-redesigns", { mine: true, status: "proposed" });
     const item = (mine.items as Proposal[]).find((entry) => entry.id === proposal.id);
     expect(item, JSON.stringify(mine)).toBeTruthy();
     expect(item!.attachments).toEqual([expect.objectContaining({ id: mockupId, contentType: "image/png", url: `/api/v1/attachments/${mockupId}` })]);
-    expect(item!.designUrl).toMatch(new RegExp(`/design/${proposal.id}$`));
+    expect(item!.bugId).toBe(issueId);
     // Decided filters leave it out.
     const approved = await ok("bob", "list-redesigns", { status: "approved" });
     expect((approved.items as Proposal[]).some((entry) => entry.id === proposal.id)).toBe(false);

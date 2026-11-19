@@ -22,7 +22,7 @@ async function forceMerged(label: string): Promise<{ id: string; pullRequestUrl:
   });
   const id = created.converted.issueId as string;
   expect((await ok("ada", "get-issue", { id })).issue).toMatchObject({ status: "in_progress" });
-  await ok("ada", "deliver", { id, pullRequestUrl, summary: "Local change.", description: "Done locally and pushed.", testResults: "8 passed" });
+  await ok("ada", "deliver", { id, pullRequestUrl, summary: "Local change.", description: "Done locally and pushed.", testResults: "8 passed", beforeScreenshots: ["https://example.com/before.png"], screenshots: ["https://example.com/after.png"] });
   // Another agent can't record the merge; the holder can, with no report, review or judgement first.
   expect((await refused("bob", "force-merge", { id, summary: "Not mine." }, 403)).error).toBe("not_holder");
   const merged = await ok("ada", "force-merge", { id, summary: "My person merged it locally." });

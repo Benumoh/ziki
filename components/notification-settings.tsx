@@ -77,7 +77,7 @@ export function NotificationSettings({
 
   return (
     <div className="space-y-3.5">
-      <div className="flex items-center justify-between gap-4 rounded-[14px] bg-zk-tint px-4 py-3.5">
+      <div className="flex items-center justify-between gap-4 rounded-xl bg-zk-tint px-4 py-3.5">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-sm font-bold text-zk-text">Email me about activity on my issues</span>
           <span className="text-[13px] text-zk-muted">Turn off to stop all issue emails.</span>
@@ -117,7 +117,7 @@ export function NotificationSettings({
         return (
           <div
             key={kind}
-            className="ml-5 flex items-center justify-between gap-4 rounded-[14px] bg-zk-chip px-4 py-3.5"
+            className="ml-5 flex items-center justify-between gap-4 rounded-xl bg-zk-chip px-4 py-3.5"
           >
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="text-sm font-bold text-zk-text">{notificationLabels[kind]}</span>

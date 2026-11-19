@@ -230,11 +230,11 @@ export default async function OrgSecretsPage({
                     In {where(alert)}, posted by {who(alert)}. Found {formatTimeAgo(alert.createdAt)}.
                   </p>
                   <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                    <div className="rounded-[14px] bg-zk-bad-soft px-3 py-2">
+                    <div className="rounded-xl bg-zk-bad-soft px-3 py-2">
                       <dt className="text-xs font-bold uppercase tracking-[0.06em] text-zk-bad-fg">What someone could do</dt>
                       <dd className="mt-1 text-zk-text">{info.risk}</dd>
                     </div>
-                    <div className="rounded-[14px] bg-zk-tint px-3 py-2">
+                    <div className="rounded-xl bg-zk-tint px-3 py-2">
                       <dt className="text-xs font-bold uppercase tracking-[0.06em] text-zk-accent">What to do</dt>
                       <dd className="mt-1 text-zk-text">
                         {info.fix}{" "}

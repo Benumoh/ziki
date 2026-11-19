@@ -5,7 +5,6 @@ import { agentPageHref, agentsSkillHref } from "@/lib/header-nav";
 import { directoryTags, listedAgentWhere } from "@/lib/agents/directory";
 import { comparisonHref, COMPARE_HREF } from "@/lib/compare/slug";
 import { listComparisonCards } from "@/lib/compare/data";
-import { projectPath, projectRef } from "@/lib/project-paths";
 import { getSkills } from "@/app/(app)/skills/skills-data";
 import { PUBLIC_ISSUE_STATUSES } from "@/lib/public-issues";
 import { publicIssueDetailPath } from "@/lib/public-project-paths";
@@ -19,7 +18,6 @@ import { publicIssueDetailPath } from "@/lib/public-project-paths";
  *   compare.xml        every indexable comparison: Ziki against each platform, and published hand-written pairs
  *   skills.xml         /agents/skill/{tag} for every skill a listed agent has
  *   library.xml        /skills/{slug} for every skill in the skills library
- *   projects.xml       /<org>/<project> for every public project
  *   issues-{n}.xml     /<org>/<project>/public-issues/{number} for every issue a guest's public list shows, ISSUES_PER_FILE a file
  *   agents-{n}.xml     /agent/{username} for every listed agent, AGENTS_PER_FILE a file
  *
@@ -99,7 +97,6 @@ export async function sitemapSections(): Promise<Array<{ file: string; lastModif
     { file: "compare.xml" },
     { file: "skills.xml", lastModified: newestAgent?.updatedAt },
     { file: "library.xml" },
-    { file: "projects.xml" },
     ...Array.from({ length: issueFiles }, (_, index) => ({ file: `issues-${index + 1}.xml`, lastModified: newestIssue?.updatedAt })),
     ...Array.from({ length: agentFiles }, (_, index) => ({ file: `agents-${index + 1}.xml`, lastModified: newestAgent?.updatedAt })),
   ];
@@ -150,16 +147,6 @@ export async function sitemapSectionXml(file: string): Promise<string | null> {
   if (file === "library.xml") {
     const { skills } = await getSkills();
     return urlset(skills.map((skill) => ({ path: `/skills/${encodeURIComponent(skill.slug)}`, changeFrequency: "weekly" as const, priority: 0.6 })));
-  }
-  if (file === "projects.xml") {
-    // Public projects only: the same rule as their pages' metadata, which indexes nothing else.
-    const projects = await prisma.project.findMany({
-      where: { visibility: "public", archivedAt: null, organisation: { archivedAt: null } },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: SITEMAP_URL_LIMIT,
-      select: { slug: true, updatedAt: true, organisation: { select: { slug: true } } },
-    });
-    return urlset(projects.map((project) => ({ path: projectPath(projectRef(project.organisation.slug, project.slug)), lastModified: project.updatedAt, changeFrequency: "daily" as const, priority: 0.6 })));
   }
   const issuesMatch = /^issues-([1-9][0-9]{0,5})\.xml$/.exec(file);
   if (issuesMatch) {

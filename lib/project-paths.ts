@@ -15,6 +15,21 @@ export function projectRef(orgSlug: string, projectSlug: string): ProjectRef {
   return `${encodeURIComponent(orgSlug)}/${encodeURIComponent(projectSlug)}` as ProjectRef;
 }
 
+/**
+ * Every project of an organisation, for the lists that show them all (#project-filter): with no project
+ * picked, the lists live at `/<org>/issues/<status>`, `/<org>/ideas` and `/<org>/queue`, and picking one
+ * moves them to `/<org>/<project>/…`. The list helpers (`issuesPath`, `ideasPath`, `queuePath`) take it like
+ * a project's ref; nothing else does.
+ */
+export function orgRef(orgSlug: string): ProjectRef {
+  return encodeURIComponent(orgSlug) as ProjectRef;
+}
+
+/** The organisation-wide ref of a project's ref (`zedu/desktop` → `zedu`). */
+export function orgRefOf(ref: ProjectRef): ProjectRef {
+  return ref.split("/")[0] as ProjectRef;
+}
+
 /** The ref of a project read with `organisation: { select: { slug: true } }`. */
 export function refOf(project: { slug: string; organisation: { slug: string } }): ProjectRef {
   return projectRef(project.organisation.slug, project.slug);
@@ -31,11 +46,22 @@ export function orgHomePath(orgSlug: string, query?: URLSearchParams | string): 
  * issue number. A project may not take one of these names, so
  * `/<a>/<b>/...` with such a `b` is always an old project-first address.
  */
-const PROJECT_PAGES = new Set(["goals", "ideas", "issues", "marketing", "notes", "org", "projects", "tasks", "workstream", "work"]);
+const PROJECT_PAGES = new Set(["goals", "marketing", "notes", "org", "projects", "tasks", "workstream", "work"]);
 
+/**
+ * `/<org>/issues/…`, `/<org>/new` (and its `rejected` and `drafts`), `/<org>/queue` and `/<org>/marketing/…` are the
+ * organisation-wide lists (#project-filter), not old addresses; an old `/<project>/issues/…` reaches
+ * those pages, which send it on when no organisation has that slug. An idea, `/<project>/ideas/<number>`,
+ * is still an old address.
+ */
 export function isProjectFirstPath(path: string): boolean {
-  const [first, second] = path.split("?")[0].split("/").filter(Boolean);
-  return Boolean(first && second && (PROJECT_PAGES.has(second) || /^[0-9]+$/.test(second)));
+  const [first, second, third] = path.split("?")[0].split("/").filter(Boolean);
+  if (!first || !second) return false;
+  // `/<org>/marketing/…` is the organisation's Marketing (#org-marketing); an old `/<project>/marketing/…`
+  // reaches those pages, which send it on when no organisation has that slug.
+  if (second === "marketing") return false;
+  if (second === "ideas") return Boolean(third && /^[0-9]+$/.test(third));
+  return PROJECT_PAGES.has(second) || /^[0-9]+$/.test(second);
 }
 
 /** The path segment of each issue list, by the status it shows. */
@@ -54,6 +80,8 @@ const STATUS_SEGMENT: Record<string, string> = {
   rejected: "rejected",
   duplicate: "duplicates",
   finished: "finished",
+  progress: "progress",
+  delivered: "delivered",
 };
 const SEGMENT_STATUS: Record<string, string> = Object.fromEntries(Object.entries(STATUS_SEGMENT).map(([status, segment]) => [segment, status]));
 
@@ -72,15 +100,52 @@ function withQuery(path: string, query?: URLSearchParams | string): string {
   return text ? `${path}?${text}` : path;
 }
 
-/** An issue list: `/<org>/<project>/issues/<status>`; `all` when no status is given. */
+/**
+ * The work's stages are the Overview's tabs and Status filter (#work-feed), not lists of their own: each stage's
+ * place on the Overview (`/issues/your-work`, with `view` for the tab and `state` for the status).
+ */
+const OVERVIEW_PLACE: Record<string, Record<string, string>> = {
+  all: {},
+  your_work: {},
+  open: { state: "open" },
+  in_progress: { view: "features", state: "in_progress" },
+  progress: { view: "features", state: "in_progress" },
+  delivered: { view: "delivered" },
+  done: { view: "delivered", state: "done" },
+  merge: { view: "delivered", state: "merge" },
+  error: { view: "delivered", state: "merge" },
+  resolved: { view: "delivered", state: "resolved" },
+};
+
+/** Where a stage list's address now goes on the Overview, or null for a list that is still its own page. */
+export function overviewPlaceFor(status: string): Record<string, string> | null {
+  return OVERVIEW_PLACE[status] ?? null;
+}
+
+/**
+ * An issue list: a stage opens its place on the Overview (`/<org>/<project>/issues/your-work?view=…&state=…`); the
+ * lists that are still pages of their own (closed, rejected, duplicates, possibly delivered, your call) are
+ * `/<org>/<project>/issues/<status>`. `all` when no status is given.
+ */
 export function issuesPath(slug: ProjectRef, status: string | null = "all", query?: URLSearchParams | string): string {
+  const place = overviewPlaceFor(status ?? "all");
+  if (place) {
+    const params = new URLSearchParams(typeof query === "string" ? query.replace(/^\?/, "") : query ?? "");
+    for (const [key, value] of Object.entries(place)) params.set(key, value);
+    return withQuery(projectPath(slug, "/issues/your-work"), params);
+  }
   const segment = STATUS_SEGMENT[status ?? "all"] ?? "all";
   return withQuery(projectPath(slug, `/issues/${segment}`), query);
 }
 
-/** The ideas lists: new ideas, `drafts` or `rejected`. */
+/** The Work queue: `/<org>/queue` for every project, `/<org>/<project>/queue` for one. */
+export function queuePath(slug: ProjectRef, query?: URLSearchParams | string): string {
+  return withQuery(projectPath(slug, "/queue"), query);
+}
+
+/** The ideas lists, the New tab: `/new` for new ideas, `/new/drafts` or `/new/rejected`. An idea's own page stays `/ideas/<number>`. */
 export function ideasPath(slug: ProjectRef, view: "new" | "drafts" | "rejected" = "new", query?: URLSearchParams | string): string {
-  return withQuery(projectPath(slug, view === "new" ? "/ideas" : `/ideas/${view}`), query);
+  return withQuery(projectPath(slug, view === "new" ? "/new" : `/new/${view}`), query);
 }
 
 /** An idea's page: `/<org>/<project>/ideas/<number>`. Ideas are numbered apart from issues. */
@@ -94,27 +159,17 @@ export function orgPath(slug: ProjectRef, section = ""): string {
 }
 
 /** `/<slug>/marketing`, or one of its sub-tabs. */
-export function marketingPath(slug: ProjectRef, section = ""): string {
-  return projectPath(slug, section ? `/marketing/${section}` : "/marketing");
-}
-
 /**
- * The video studio, `/<org>/<project>/marketing/video`. It brings its own
- * chrome: the page opens on "← Back to Marketing", so the project breadcrumb
- * and the Marketing action bar leave it alone and every other page keeps them.
+ * Marketing's pages belong to the organisation, not a project (#org-marketing): `/<org>/marketing` and
+ * `/<org>/marketing/<section>`, whichever project's ref is given.
  */
-export function isVideoStudio(pathname: string): boolean {
-  return /\/marketing\/video\/?$/.test(pathname);
+export function marketingPath(slug: ProjectRef, section = ""): string {
+  return projectPath(orgRefOf(slug), section ? `/marketing/${section}` : "/marketing");
 }
 
 /** Filing a new report (it starts as an idea). */
 export function newIssuePath(slug: ProjectRef, query?: URLSearchParams | string): string {
   return withQuery(projectPath(slug, "/issues/new"), query);
-}
-
-/** The project's Design area (#9): `/<org>/<project>/design`, or one proposal's page, `/<org>/<project>/design/<id>`. */
-export function designPath(slug: ProjectRef, proposalId?: string, query?: URLSearchParams | string): string {
-  return withQuery(projectPath(slug, proposalId ? `/design/${encodeURIComponent(proposalId)}` : "/design"), query);
 }
 
 /** One goal's page with its split wizard and allocation ledger: `/<org>/<project>/goals/<id>`. */

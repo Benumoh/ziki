@@ -8,10 +8,13 @@ import { publicOrgFeedbackPath } from "@/lib/public-project-paths";
 export function FeedbackPortalPopover({
   orgSlug,
   projectName,
+  iconOnly = false,
 }: {
   orgSlug: string;
   projectSlug: string;
   projectName: string;
+  /** A square icon button, for the row of icons beside a project's tabs. */
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -57,27 +60,35 @@ export function FeedbackPortalPopover({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-zk-accent ${
-          open
-            ? "border-electric-blue-strong bg-electric-blue-strong/10 text-electric-blue-strong"
-            : "border-zk-border bg-zk-surface text-zk-text hover:bg-zk-chip"
-        }`}
+        aria-label={iconOnly ? "Feedback portal" : undefined}
+        title={iconOnly ? "Feedback portal" : undefined}
+        className={
+          iconOnly
+            ? `relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border bg-zk-surface transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${
+                open ? "border-electric-blue-strong text-electric-blue-strong" : "border-zk-border text-zk-text2 hover:bg-zk-chip hover:text-zk-text"
+              }`
+            : `inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-zk-accent ${
+                open
+                  ? "border-electric-blue-strong bg-electric-blue-strong/10 text-electric-blue-strong"
+                  : "border-zk-border bg-zk-surface text-zk-text hover:bg-zk-chip"
+              }`
+        }
       >
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-        </svg>
-        Feedback portal
+        {iconOnly ? (
+          /* A speech bubble with a plus: feedback coming in. */
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M12 7v6M9 10h6" />
+          </svg>
+        ) : (
+          <>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            Feedback portal
+          </>
+        )}
       </button>
 
       {open ? (

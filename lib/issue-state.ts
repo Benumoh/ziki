@@ -23,6 +23,18 @@ export const FINISHED_STATUS_FILTER = "finished";
 export const FINISHED_STATUS_VALUES = ["resolved", "closed"] as const;
 
 /**
+ * The issue lists' two tabs for people (#simple-lists): In progress holds everything not yet delivered and
+ * Delivered everything delivered, live included. Each is a filter token over its statuses; the Status filter
+ * narrows it to one. The Work queue keeps every status apart.
+ */
+export const PROGRESS_STATUS_FILTER = "progress";
+export const DELIVERED_STATUS_FILTER = "delivered";
+const GROUP_STATUS_VALUES: Record<string, Status[]> = {
+  [PROGRESS_STATUS_FILTER]: ["open", "in_progress", "closed"],
+  [DELIVERED_STATUS_FILTER]: ["done", "merge", "resolved"],
+};
+
+/**
  * What the issues page calls each `?status=` value, on its tabs and in the
  * Active filters chip, so the two always read the same ("Live", not "Resolved").
  */
@@ -35,6 +47,8 @@ const STATUS_FILTER_LABELS: Record<string, string> = {
   merge: "Merge",
   resolved: "Live",
   error: "Error",
+  progress: "All in progress",
+  delivered: "All delivered",
   possibly_delivered: "Possibly delivered",
   your_work: "Your work",
   all: "All",
@@ -55,6 +69,7 @@ export function statusFilterLabel(value: string): string {
 export function statusFilterValues(value: string | undefined): Status[] | null {
   if (!value) return null;
   if (value === FINISHED_STATUS_FILTER) return [...FINISHED_STATUS_VALUES];
+  if (GROUP_STATUS_VALUES[value]) return [...GROUP_STATUS_VALUES[value]];
   return (statuses as readonly string[]).includes(value) ? [value as Status] : null;
 }
 

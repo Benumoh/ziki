@@ -148,7 +148,7 @@ describe("acting through your agent (#owner-control)", () => {
   });
 
   it("delivers only while my agent holds the work, with the agent's own checks", async () => {
-    const work = { pullRequestUrl: "https://github.com/emerjent/ziki/pull/1", summary: "Done.", description: "Changed it.", proof: "Tests pass." };
+    const work = { pullRequestUrl: "https://github.com/emerjent/ziki/pull/1", summary: "Done.", description: "Changed it.", proof: "Tests pass.", before: "https://example.com/before.png", after: "https://example.com/after.png" };
     heldByMyAgent.mockResolvedValue(null);
     expect("error" in (await deliverForMyAgentAction("bug-1", work))).toBe(true);
     expect(deliverWork).not.toHaveBeenCalled();
@@ -159,6 +159,6 @@ describe("acting through your agent (#owner-control)", () => {
     checkPostForSecrets.mockResolvedValue({ ok: true });
     deliverWork.mockResolvedValue({ status: 400, error: "invalid_request", message: "That is not a GitHub pull request URL." });
     expect(await deliverForMyAgentAction("bug-1", work)).toEqual({ error: "That is not a GitHub pull request URL." });
-    expect(deliverWork).toHaveBeenCalledWith(agent, "bug-1", expect.objectContaining({ pullRequestUrl: work.pullRequestUrl, testResults: "Tests pass." }));
+    expect(deliverWork).toHaveBeenCalledWith(agent, "bug-1", expect.objectContaining({ pullRequestUrl: work.pullRequestUrl, testResults: "Tests pass.", beforeScreenshots: [work.before], screenshots: [work.after] }));
   });
 });

@@ -2,6 +2,7 @@ import { IssuePriorityBadge } from "@/components/issue-priority-badge";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { IdeasWelcome } from "@/components/ideas-welcome";
 import { IdeaChat } from "@/components/idea-chat";
+import { ProjectFilter } from "@/components/project-filter";
 import { LocalTime } from "@/components/local-time";
 import { POSSIBLY_DELIVERED_STATUS, POSSIBLY_DELIVERED_WHERE, deliverySignals, type DeliverySignals } from "@/lib/possibly-delivered";
 import Link from "next/link";
@@ -12,7 +13,7 @@ import "./issues.css";
 import { Avatar } from "@/components/avatar";
 import { Suspense } from "react";
 import { RememberIssueList } from "@/components/back-to-list";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Status } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getIssueTypes } from "@/lib/lookups";
 
@@ -20,18 +21,21 @@ import { PipelineSteps } from "@/components/pipeline-steps";
 import { loadYourCall } from "@/lib/your-call";
 import { YourCall } from "@/components/your-call";
 import { LightOnly } from "@/components/light-only";
-import { StageSidebar } from "@/components/stage-sidebar";
 import { StatusFilterChips } from "@/components/status-filter-chips";
 import { ToolbarFilterMenu, type ToolbarFilterGroup, type ToolbarFilterOption } from "@/components/toolbar-filter-menu";
 import { IdeasMoreFilters } from "@/components/ideas-more-filters";
 import { IDEA_AUTHOR_PARAM, parseIdeaAuthorFilter } from "@/lib/idea-filters";
 import { MY_WORK_PARAM, TRACK_PARAM, myWorkWhere, parseMyWorkFilter, parseTrackFilter, trackWhere, yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
-import { ProjectWeekPanel } from "@/components/project-week-panel";
-import { startOfWeek, weeklyDeliveries, type WeekPerson } from "@/lib/project-week";
+import { WORK_CATEGORY_PARAM, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes } from "@/lib/work-category";
+import { WorkFeed, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
+import { statusLabel as STATUS_NAMES } from "@/lib/labels";
+import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { WORK_TAG_TONE, whatsNext } from "@/lib/whats-next";
 import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } from "@/lib/list-sort";
 import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
+import { AppInfoLinks } from "@/components/app-info-links";
+import { ShareMenu } from "@/components/share-menu";
 import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
 import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
 import { NEXT_STEP_COOKIE, organisationNextStep, type OrganisationNextStep } from "@/lib/organisation-next-step";
@@ -40,6 +44,7 @@ import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
 import { IssueFilters } from "@/components/issue-filters";
 import { RowAge, RowAssignee } from "@/components/issue-row-meta";
+import { IdeaFeed } from "@/components/idea-feed";
 import { IdeasList, type IdeaListRow } from "@/components/ideas-list";
 import { WhimsicalEmptyState } from "@/components/whimsical-empty-state";
 import { isUnstructuredDraft } from "@/lib/ideas";
@@ -61,6 +66,8 @@ import {
 import { Highlighted, SearchSnippet } from "@/components/search-highlight";
 import { formatIssueNumber, parseIssueNumberQuery } from "@/lib/issue-number";
 import {
+  DELIVERED_STATUS_FILTER,
+  PROGRESS_STATUS_FILTER,
   SHOW_RESOLVED_PARAM,
   isDone,
   parseShowResolved,
@@ -90,7 +97,8 @@ import { UnwatchButton, UnwatchFinishedButton } from "@/components/unwatch-butto
 import { parseTagFilter, serializeTags, tagTypeIds } from "@/lib/tag-filter";
 import { bugInOrganisation, isMissingOrganisationColumnError } from "@/lib/organisation-context";
 import { requireProject } from "@/lib/project-route";
-import { designPath, ideasPath, issuesPath, orgPath, projectPath, type ProjectRef } from "@/lib/project-paths";
+import { redirect } from "next/navigation";
+import { ideasPath, issuesPath, orgPath, orgRefOf, projectPath, refOf, type ProjectRef } from "@/lib/project-paths";
 import { RichText } from "@/components/rich-text";
 import { isOrganisationAdmin } from "@/lib/organisation-role";
 import { cookies } from "next/headers";
@@ -114,7 +122,6 @@ import { PROD_CONFIRMATIONS_NEEDED } from "@/lib/live-confirm";
 import { LiveRefresh } from "@/components/live-refresh";
 import { ConfirmDots } from "@/components/confirm-dots";
 import { ExpandableRow, RowToggle } from "@/components/expandable-row";
-import { PROJECT_ALL_PARAM, showsAllProjects } from "@/lib/issue-list-filters";
 import { ideaVoteTotals, NO_VOTES } from "@/lib/idea-vote-totals";
 import { bugSearchSort, ideaSearchSort, searchWorkItems, typesenseFilter } from "@/lib/search-index";
 import { activeIn } from "@/lib/agents/active-in";
@@ -146,8 +153,70 @@ const ERROR_STATUS = "error";
 const YOUR_CALL_STATUS = "your_call";
 /** Your Work: the issues assigned to you (a claim held or offered for you), a stage of its own shown only while there are any. */
 const YOUR_WORK_STATUS = "your_work";
-/** Project Overview's list tab: Delivered Work (the default) or `mine`, My Work. */
+/** Project Overview's list tab: Work Feed (the default), `features` (New Features), `design` (Design Changes) or `delivered`. Fixes (the new ideas, at /new) sits after New Features. */
 const OVERVIEW_TAB_PARAM = "view";
+const OVERVIEW_TABS = [
+  ["all", "Work Feed"],
+  ["features", "New Features"],
+  ["design", "Design Changes"],
+  ["delivered", "Delivered"],
+] as const;
+/** The Filter's Assigned to me (#work-feed): any tab narrowed to the issues assigned to you (a claim held or offered for you). */
+const OVERVIEW_MINE_PARAM = "assigned";
+/** The Overview's Status filter (#work-feed): one main status, or every one the tab holds. */
+const OVERVIEW_STATE_PARAM = "state";
+const OVERVIEW_STATES = ["open", "in_progress", "done", "merge", "resolved"] as const satisfies readonly Status[];
+/** Delivered work: done, waiting to merge, or live. */
+const DELIVERED_STATUSES = ["done", "merge", "resolved"] as const satisfies readonly Status[];
+/** How many rows the Overview's list shows a page. */
+const FEED_PAGE_SIZE = 30;
+type OverviewTab = (typeof OVERVIEW_TABS)[number][0];
+/** A delivery's screenshot links that a page can show (web links only), at most four. */
+function webLinks(urls: string[] | undefined): string[] {
+  return (urls ?? []).filter((url) => /^(https?:\/\/|\/)/i.test(url)).slice(0, 4);
+}
+/** An opened card's text (#work-feed): the description, trimmed for a quick glance; empty when there is none. */
+function feedBody(description: string | null | undefined): string {
+  const text = description ?? "";
+  return text.length > FEED_BODY_LIMIT ? `${text.slice(0, FEED_BODY_LIMIT).trimEnd()}…` : text;
+}
+/** How much of an agent's time to delivery has gone (#work-feed), 5% to 95%; null without a due time. */
+function timeUsed(claimedAt: Date | null, deliverBy: Date | null): number | null {
+  if (!claimedAt || !deliverBy) return null;
+  const span = deliverBy.getTime() - claimedAt.getTime();
+  if (span <= 0) return null;
+  return Math.min(0.95, Math.max(0.05, (Date.now() - claimedAt.getTime()) / span));
+}
+/** Each Overview tab's small icon (24-unit stroke paths), Fixes' (the new ideas) included. */
+const OVERVIEW_TAB_ICONS: Record<OverviewTab | "new", string> = {
+  // A stack of cards: the feed.
+  all: "M4 6h16M4 12h16M4 18h10",
+  // A wrench: Fixes, the new ideas waiting for approval.
+  new: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z",
+  // A wrench: fixes.
+  // A sparkle: something new being built.
+  features: "M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",
+  // A pen nib: design.
+  design: "M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.6 7.6M11 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  // A box: delivered.
+  delivered: "M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8",
+};
+function TabIcon({ tab }: { tab: OverviewTab | "new" }) {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d={OVERVIEW_TAB_ICONS[tab]} />
+    </svg>
+  );
+}
+/** What each Overview tab says while it is empty. */
+const OVERVIEW_EMPTY: Record<OverviewTab, { title: string; description: string }> = {
+  all: { title: "No work yet", description: "Tell the agents what you want done in the box above: it shows up here as they take it on." },
+  features: { title: "Nothing being built right now", description: "Issues waiting for an agent or being worked on show up here until the work is delivered." },
+  design: { title: "No designs waiting for you", description: "When an agent proposes a design for an issue, it shows up here for you to choose." },
+  delivered: { title: "Nothing delivered yet", description: "When an agent delivers its work, it shows up here for you to view and approve." },
+};
+/** Work Feed: everything not closed, live included. */
+const ALL_WORK_STATUSES = ["open", "in_progress", "done", "merge", "resolved"] as const;
 /** Open issues that may already be done (#possibly-delivered): a manager's list to check and close. */
 const POSSIBLY_DELIVERED = POSSIBLY_DELIVERED_STATUS;
 const REJECTED_WHERE = { some: { verdict: "reject", undoneAt: null } } satisfies Prisma.IssueConfirmationListRelationFilter;
@@ -169,15 +238,17 @@ const STAGE_GROUPS = [
   // lists every substatus of its status together (Open: Requires confirmation
   // and Open), and each row says which one it is at.
   { label: "New", statuses: [IDEAS_STATUS, REJECTED_IDEAS_STATUS] },
-  { label: "In Progress", statuses: ["open", "in_progress", "closed", POSSIBLY_DELIVERED] },
-  { label: "Delivered", statuses: ["done", "merge", ERROR_STATUS] },
-  { label: "Live", statuses: ["resolved"] },
+  // In Progress and Delivered (live included) each list all of their statuses together, the first value; the
+  // Status filter narrows them to one (#simple-lists). The Work queue keeps every status apart.
+  { label: "In Progress", statuses: [PROGRESS_STATUS_FILTER, "open", "in_progress", "closed", POSSIBLY_DELIVERED] },
+  { label: "Delivered", statuses: [DELIVERED_STATUS_FILTER, "done", "merge", ERROR_STATUS, "resolved"] },
 ] as const;
+/** The tabs' own values, which stand for all of their statuses. */
+const GROUP_FILTERS: readonly string[] = [PROGRESS_STATUS_FILTER, DELIVERED_STATUS_FILTER];
 /** Where In Progress sits in STAGE_GROUPS: Your call belongs to it. */
 const IN_PROGRESS_STAGE = 2;
-/** The stages that show only while they hold issues (or are open). */
+/** The stage that shows only while it holds issues (or is open). */
 const YOUR_WORK_STAGE = 0;
-const LIVE_STAGE = STAGE_GROUPS.length - 1;
 
 /** A bug with head, antennae, segmented body and three pairs of legs. */
 const BUG_ICON_PATH =
@@ -241,9 +312,28 @@ function issuesQueryError(reference: string, message?: string) {
  * route passes the organisation and project slugs and the list it names;
  * lib/project-route.ts resolves the project and checks access.
  */
+/** How much of an issue's description an opened Overview card shows (#work-feed); the full issue has the rest. */
+const FEED_BODY_LIMIT = 1200;
+
+/**
+ * The decision an Overview card asks of you (#work-feed), and where you take it: the issue's simple view, at the
+ * part where that decision is made (designs to choose, Your turn, the bids).
+ */
+function feedDecision(kind: WorkFeedKind, href: string): { label: string; href: string } {
+  const work = href;
+  switch (kind) {
+    case "design": return { label: "Choose a design", href: `${work}#redesigns` };
+    case "delivered": return { label: "Review the work", href: `${work}#your-turn` };
+    case "live": return { label: "Check it works", href: `${work}#your-turn` };
+    case "working": return { label: "See progress", href: work };
+    case "waiting": return { label: "Choose an agent", href: `${work}#bids` };
+  }
+}
+
 export async function IssuesList({
   org,
   slug,
+  everyProject = false,
   status,
   ideas,
   returnTo,
@@ -251,6 +341,11 @@ export async function IssuesList({
 }: {
   org: string;
   slug: string;
+  /**
+   * The organisation-wide list, `/<org>/issues/…` or `/<org>/ideas` (#project-filter): every project's work.
+   * `slug` is then the project it is drawn through. Without it the list shows only `slug`'s work.
+   */
+  everyProject?: boolean;
   /** The list the path names: a status, `ideas` or `rejected_ideas` (#project-urls). */
   status: string;
   /** `drafts` on `/<slug>/ideas/drafts`. */
@@ -261,6 +356,8 @@ export async function IssuesList({
 }) {
   const { user, organisationId, project, isOrgMember, canContribute, isOrgAdmin } = await requireProject(org, slug);
   const ref = project.ref;
+  // The lists' own links stay organisation-wide on `/<org>/…`; everything else is the project's.
+  const listRef = everyProject ? orgRefOf(ref) : ref;
   const userId: string | undefined = user.id;
   const effectiveRole: AppRole | null | undefined = user.role;
   const membershipRole: OrganisationRole | null = (await organisationAccessFor(user.id, organisationId, user.role)).membershipRole;
@@ -271,16 +368,20 @@ export async function IssuesList({
   const canDelete = canDeleteTicket(effectiveRole, membershipRole);
   const params: Awaited<SearchParams> = { ...(await searchParams), status, ...(ideas ? { [IDEAS_PARAM]: ideas } : {}) };
   /** A list's address from its query: the status and ideas view become the path (lib/project-paths.ts). */
-  const listHref = (query: URLSearchParams): string => {
+  const listHrefIn = (target: ProjectRef, query: URLSearchParams): string => {
     const next = new URLSearchParams(query);
     const listStatus = next.get("status");
     const ideasParam = next.get(IDEAS_PARAM);
     next.delete("status");
     next.delete(IDEAS_PARAM);
-    if (!listStatus || listStatus === IDEAS_STATUS) return ideasPath(ref, ideasParam === "drafts" ? "drafts" : "new", next);
-    if (listStatus === REJECTED_IDEAS_STATUS) return ideasPath(ref, "rejected", next);
-    return issuesPath(ref, listStatus, next);
+    if (!listStatus || listStatus === IDEAS_STATUS) return ideasPath(target, ideasParam === "drafts" ? "drafts" : "new", next);
+    if (listStatus === REJECTED_IDEAS_STATUS) return ideasPath(target, "rejected", next);
+    return issuesPath(target, listStatus, next);
   };
+  const listHref = (query: URLSearchParams): string => listHrefIn(listRef, query);
+  // This list's query (its filters, without the page), for the same list in another project or in all of them.
+  const switchQuery = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (typeof value === "string" && key !== "page") switchQuery.set(key, value);
   const qParam = toSingleQueryParam(params.q);
   // The path names the list; a search stays in it (All looks across every issue).
   const statusParam: string = status;
@@ -293,8 +394,25 @@ export async function IssuesList({
   // Search follows the same track as the list; "all" names none, so both come back.
   const trackSearch = trackFilter === "all" ? {} : { track: trackFilter };
   const isDeletedView = canDelete && deletedParam === "true";
-  // Organisation-wide view (`?project=all`). Absent → unchanged project scope.
-  const allProjects = isOrgMember && showsAllProjects(params[PROJECT_ALL_PARAM]);
+  // The project filter (#project-filter): `/<org>/…` shows a member every project's work, `/<org>/<project>/…`
+  // only that project's; a visitor from outside the organisation sees only the project, at its own address.
+  if (everyProject && !isOrgMember) redirect(listHrefIn(ref, switchQuery));
+  const orgProjects = isOrgMember && organisationId
+    ? await loadOrEmpty("projects", () => prisma.project.findMany({
+        where: { organisationId, archivedAt: null },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+        select: { id: true, slug: true, name: true, organisation: { select: { slug: true } } },
+      }), [] as Array<{ id: string; slug: string; name: string; organisation: { slug: string } }>)
+    : [];
+  const filterProject = isOrgMember && !everyProject ? orgProjects.find((item) => item.id === project.id) ?? null : null;
+  // The address decides the scope: `/<org>/…` is every project, `/<org>/<project>/…` that project, whether or not
+  // the organisation's project list loaded.
+  const allProjects = isOrgMember && everyProject;
+  // The one project the list is limited to, or null for every project.
+  const scopeProjectId: string | null = allProjects ? null : projectId;
+  // Rows say which project they are in only when the list holds several.
+  const projectNames = new Map(orgProjects.length > 1 ? orgProjects.map((item) => [item.id, item.name]) : []);
+  const projectRefs = new Map(orgProjects.map((item) => [item.id, refOf(item)]));
 
   // Column sort (#column-sort): the address wins, then the sort remembered in this list's cookie.
   const sortCookies = await cookies();
@@ -305,7 +423,7 @@ export async function IssuesList({
   const showDuplicates = parseShowDuplicates(params[DUPLICATES_PARAM]);
   const where: Prisma.BugWhereInput = {
     ...bugInOrganisation(organisationId),
-    ...(projectId && !allProjects ? { projectId } : {}),
+    ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
     ...trackWhere(trackFilter),
     isDeleted: isDeletedView,
     ...mineFilterWhere(mineFilter, userId),
@@ -402,15 +520,27 @@ export async function IssuesList({
   // Project Overview (#project-overview): two lists under the contributors, as tabs. Delivered Work (the default):
   // the project's tickets delivered this week, by anyone. My Work: what you hold.
   const isYourWorkView = statusParam === YOUR_WORK_STATUS && !isDeletedView;
-  const overviewTab: "delivered" | "mine" = toSingleQueryParam(params[OVERVIEW_TAB_PARAM]) === "mine" ? "mine" : "delivered";
-  const isMyWorkTab = isYourWorkView && overviewTab === "mine";
+  const overviewParam = toSingleQueryParam(params[OVERVIEW_TAB_PARAM]);
+  const overviewTab: OverviewTab = OVERVIEW_TABS.find(([tab]) => tab === overviewParam)?.[0] ?? "all";
+  // Assigned to me (the Filter): what you or your agents hold or are offered, on whichever tab.
+  const isMyWorkTab = isYourWorkView && toSingleQueryParam(params[OVERVIEW_MINE_PARAM]) === "1";
+  const overviewStateParam = toSingleQueryParam(params[OVERVIEW_STATE_PARAM]);
+  const overviewState = OVERVIEW_STATES.find((value) => value === overviewStateParam) ?? null;
   if (isYourWorkView) {
     const and = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
     where.AND = [
       ...and,
-      isMyWorkTab
-        ? userId ? yourWorkWhere(userId) : { id: { in: [] } }
-        : { deliveries: { some: { createdAt: { gte: startOfWeek() } } } },
+      ...(isMyWorkTab ? [userId ? yourWorkWhere(userId) : { id: { in: [] } }] : []),
+      overviewTab === "features"
+          // New Features: issues not delivered yet, waiting for an agent or being worked on, that aren't a design to choose.
+          ? { status: { in: ["open", "in_progress"] as Status[] }, redesigns: { none: { status: "proposed" } } }
+          : overviewTab === "design"
+            // Design Changes: issues with a proposed design waiting for someone to choose.
+            ? { redesigns: { some: { status: "proposed" } } }
+            : overviewTab === "delivered"
+              // Delivered: done, waiting to merge, or live.
+              ? { status: { in: [...DELIVERED_STATUSES] } }
+              : { status: { in: [...ALL_WORK_STATUSES] } },
     ];
   }
   if (qParam?.trim()) {
@@ -437,12 +567,168 @@ export async function IssuesList({
   let typesenseBugSearch: { found: number } | null = null;
   if (qParam && boundSearchTerm(qParam).length >= 3 && organisationId && !isIdeasView && !complexBugSearchFilter) {
     try {
-      const indexed = await searchWorkItems({ query: boundSearchTerm(qParam), kind: "bug", organisationId, ...(projectId && !allProjects ? { projectId } : {}), ...trackSearch, includeDeleted: isDeletedView, page: 1, perPage: 1, sortBy: bugSearchSort(currentSort, !isWatchingView), extraFilters: bugSearchExtraFilters });
+      const indexed = await searchWorkItems({ query: boundSearchTerm(qParam), kind: "bug", organisationId, ...(scopeProjectId ? { projectId: scopeProjectId } : {}), ...trackSearch, includeDeleted: isDeletedView, page: 1, perPage: 1, sortBy: bugSearchSort(currentSort, !isWatchingView), extraFilters: bugSearchExtraFilters });
       if (indexed.found > 0) typesenseBugSearch = indexed;
     } catch (error) {
       console.error("[issues] Typesense search failed; using PostgreSQL", error);
     }
   }
+
+  // The kinds of work (#work-segments): `?category=` lists one kind; the Work Feed and New ideas otherwise show a few of each.
+  const workCategory = parseWorkCategory(params[WORK_CATEGORY_PARAM]);
+  const categoryTypes: CategoryTypes = organisationId && (isYourWorkView || isIdeasView)
+    ? await loadOrEmpty("work categories", () => categoryTypesFor(organisationId), { design: [], feature: [] })
+    : { design: [], feature: [] };
+  if (workCategory && isYourWorkView) {
+    const and = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+    where.AND = [...and, workCategoryWhere(workCategory, categoryTypes)];
+  }
+  // The Overview (#work-feed) is one list of work on every tab, newest first: the Work Feed (mixed), and the same list narrowed to
+  // Active Work, Design Changes, Delivered or My Work (the tab's own `where` above), and to one status by the filter.
+  const feedView = isYourWorkView && !qParam;
+  const feed: { items: WorkFeedItem[]; total: number; page: number; counts: Map<string, number> } = feedView
+    ? await loadOrEmpty("work feed", async () => {
+        const select = {
+          id: true, number: true, title: true, updatedAt: true, projectId: true, summary: true, description: true, status: true,
+          project: { select: { slug: true, organisation: { select: { slug: true } } } },
+          assignee: { select: { name: true } },
+          reporter: { select: { name: true } },
+          // What the card shows when opened (#work-feed): the files on it.
+          attachments: { orderBy: { createdAt: "asc" }, take: 4, select: { id: true, filename: true, contentType: true, size: true } },
+          claims: { where: { status: { in: ["active", "planning"] }, releasedAt: null }, select: { claimedAt: true, deliverBy: true, beneficiary: { select: { name: true } }, agent: { select: { name: true } } }, take: 1 },
+          // A design waiting for someone to choose it makes the row a design to review.
+          redesigns: { where: { status: "proposed" }, take: 1, select: { id: true } },
+          // Delivered work's View (#work-feed): where it was delivered, the newest preview first, else the delivery's link,
+          // else the pull request.
+          substatus: true, pullRequestUrl: true,
+          previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
+          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true } },
+        } satisfies Prisma.BugSelect;
+        const page = Math.max(1, Number.parseInt(toSingleQueryParam(params.page) ?? "1", 10) || 1);
+        // The Status filter narrows the tab to one status; the filter's counts are the tab's, by status.
+        const feedWhere: Prisma.BugWhereInput = overviewState ? { AND: [where, { status: overviewState }] } : where;
+        const orderBy: Prisma.BugOrderByWithRelationInput[] = [{ updatedAt: "desc" }, { id: "desc" }];
+        // The Work Feed mixes its work: newest first within each status, taken from each status in turn (delivered,
+        // under way, live, waiting, merging), so one busy status doesn't fill the page. A status that runs out leaves
+        // its turns to the others. A tab or a Status filter is one kind of work, so it is simply newest first.
+        const mixed = overviewTab === "all" && !overviewState;
+        const loadRows = async () => {
+          if (!mixed) return prisma.bug.findMany({ where: feedWhere, orderBy, skip: (page - 1) * FEED_PAGE_SIZE, take: FEED_PAGE_SIZE, select });
+          const turns = ["done", "in_progress", "resolved", "open", "merge"] as const;
+          const lanes = await Promise.all(turns.map((status) =>
+            prisma.bug.findMany({ where: { AND: [where, { status }] }, orderBy, take: page * FEED_PAGE_SIZE, select })));
+          const interleaved: (typeof lanes)[number] = [];
+          for (let i = 0; interleaved.length < page * FEED_PAGE_SIZE && lanes.some((lane) => i < lane.length); i += 1) {
+            for (const lane of lanes) if (i < lane.length) interleaved.push(lane[i]);
+          }
+          return interleaved.slice((page - 1) * FEED_PAGE_SIZE, page * FEED_PAGE_SIZE);
+        };
+        const [rows, total, byStatus] = await Promise.all([
+          loadRows(),
+          prisma.bug.count({ where: feedWhere }),
+          prisma.bug.groupBy({ by: ["status"], where, _count: { _all: true } }),
+        ]);
+        const counts = new Map(byStatus.map((group) => [group.status as string, group._count._all]));
+        const items = rows.map((row): WorkFeedItem => {
+          const href = issueHref(row);
+          // Work under way (#work-feed): how far through its time it is, from when the agent took it to when it is due.
+          const claim = row.claims[0];
+          const progress = row.substatus === "in_progress" ? timeUsed(claim?.claimedAt ?? null, claim?.deliverBy ?? null) : null;
+          const kind: WorkFeedKind = row.redesigns.length > 0 ? "design"
+            : row.status === "done" || row.status === "merge" ? "delivered"
+            : row.status === "resolved" ? "live"
+            : row.status === "in_progress" ? "working"
+            : "waiting";
+          return {
+            id: row.id,
+            kind,
+            number: row.number,
+            title: row.title,
+            href,
+            at: row.updatedAt,
+            projectName: allProjects ? projectNames.get(row.projectId) ?? null : null,
+            who: row.claims[0]?.agent?.name ?? row.claims[0]?.beneficiary?.name ?? row.assignee?.name ?? null,
+            // Where it is, said on the card in one word with its colour and icon ("Broken", not "Live · Broken").
+            substatus: row.substatus,
+            progress,
+            // Opened (#work-feed): what it is, its files, and the decision it asks of you.
+            reporter: row.reporter?.name ?? null,
+            summary: row.summary ?? null,
+            body: row.description.length > FEED_BODY_LIMIT ? `${row.description.slice(0, FEED_BODY_LIMIT).trimEnd()}…` : row.description,
+            files: row.attachments.map((file) => ({ id: file.id, name: file.filename, type: file.contentType, size: file.size })),
+            decision: feedDecision(kind, href),
+            viewUrl: row.previewBuilds[0]?.url ?? row.deliveries[0]?.deliverableUrls[0] ?? row.deliveries[0]?.pullRequestUrl ?? row.pullRequestUrl ?? null,
+            // The opened card's preview: the delivery's screenshots, web links only.
+            screenshots: webLinks(row.deliveries[0]?.screenshots),
+            beforeScreenshots: webLinks(row.deliveries[0]?.beforeScreenshots),
+            // Approve is the good-to-merge judgement, given while the work waits for it.
+            canApprove: row.substatus === "requires_review",
+            approved: row.substatus === "accepted" || row.substatus === "ready_to_merge" || row.substatus === "error",
+          };
+        });
+        return { items, total, page, counts };
+      }, { items: [], total: 0, page: 1, counts: new Map<string, number>() })
+    : { items: [], total: 0, page: 1, counts: new Map<string, number>() };
+  // An Overview tab's address, with the Status filter when one is picked.
+  const overviewHref = (tab: OverviewTab, state: string | null, mine: boolean = isMyWorkTab) =>
+    listHref(new URLSearchParams({ status: YOUR_WORK_STATUS, ...(tab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: tab }), ...(state ? { [OVERVIEW_STATE_PARAM]: state } : {}), ...(mine ? { [OVERVIEW_MINE_PARAM]: "1" } : {}) }));
+  // New ideas (`/new`) is one of the Overview's tabs (#work-feed): it has the Overview's top, chat box and tabs.
+  const isNewIdeasView = ideasView === "new";
+  const withOverviewLook = isYourWorkView || isNewIdeasView;
+  const tabClass = (current: boolean) =>
+    `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition ${
+      current ? "bg-white font-semibold text-zk-accent shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
+    }`;
+  // The Overview's tabs, as a segmented control: the Work Feed, New (the ideas), then the work's other lists.
+  const overviewTabs = withOverviewLook ? (
+    <nav aria-label="Overview lists" className="flex flex-wrap gap-0.5 rounded-2xl bg-zk-bg p-1 sm:rounded-full">
+      {OVERVIEW_TABS.flatMap(([tab, label]) => [
+        <Link key={tab} href={overviewHref(tab, null)} aria-current={isYourWorkView && overviewTab === tab ? "page" : undefined} className={tabClass(isYourWorkView && overviewTab === tab)}>
+          <TabIcon tab={tab} />
+          {label}
+        </Link>,
+        // Fixes (the new ideas) sits after New Features.
+        ...(tab === "features"
+          ? [
+              <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
+                <TabIcon tab="new" />
+                Fixes
+              </Link>,
+            ]
+          : []),
+      ])}
+    </nav>
+  ) : null;
+  // The Work Feed's top: its tabs on the left, the Status filter on the right.
+  const overviewToolbar = isYourWorkView ? (
+    <>
+      {overviewTabs}
+      <ToolbarFilterMenu
+        summary={[isMyWorkTab ? "Assigned to me" : "", overviewState ? STATUS_NAMES[overviewState] : ""].filter(Boolean).join(" · ")}
+        groups={[{
+          label: "Show",
+          options: [
+            { label: "Everyone's", href: overviewHref(overviewTab, overviewState, false), selected: !isMyWorkTab },
+            { label: "Assigned to me", href: overviewHref(overviewTab, overviewState, true), selected: isMyWorkTab },
+          ],
+        }, {
+          label: "Status",
+          options: [
+            { label: "All", count: [...feed.counts.values()].reduce((sum, n) => sum + n, 0), href: overviewHref(overviewTab, null), selected: !overviewState },
+            ...OVERVIEW_STATES.filter((value) => (feed.counts.get(value) ?? 0) > 0 || value === overviewState).map((value) => ({
+              label: STATUS_NAMES[value],
+              count: feed.counts.get(value) ?? 0,
+              href: overviewHref(overviewTab, value),
+              selected: overviewState === value,
+            })),
+          ],
+        }]}
+      />
+    </>
+  ) : null;
+  // The Overview shows the cards above, not the list: the list's count, rows and confirmations are skipped, which with
+  // thousands of issues are most of the page's work (the Work Feed's filter matches every issue in the organisation).
+  if (feedView) where.id = { in: [] };
 
   let totalCount = 0;
   try {
@@ -558,7 +844,7 @@ export async function IssuesList({
   let indexedBugIds: string[] | null = null;
   if (typesenseBugSearch && organisationId && qParam) {
     try {
-      const result = await searchWorkItems({ query: boundSearchTerm(qParam), kind: "bug", organisationId, ...(projectId && !allProjects ? { projectId } : {}), ...trackSearch, includeDeleted: isDeletedView, page: pagination.page, perPage: pagination.take, sortBy: bugSearchSort(currentSort, !isWatchingView), extraFilters: bugSearchExtraFilters });
+      const result = await searchWorkItems({ query: boundSearchTerm(qParam), kind: "bug", organisationId, ...(scopeProjectId ? { projectId: scopeProjectId } : {}), ...trackSearch, includeDeleted: isDeletedView, page: pagination.page, perPage: pagination.take, sortBy: bugSearchSort(currentSort, !isWatchingView), extraFilters: bugSearchExtraFilters });
       indexedBugIds = result.hits.map((hit) => hit.id);
     } catch (error) {
       console.error("[issues] Typesense result lookup failed; using PostgreSQL", error);
@@ -684,7 +970,7 @@ export async function IssuesList({
   const ideaWhere: Prisma.IdeaWhereInput = {
     organisationId: organisationId ?? "",
     ...PRODUCT_TRACK,
-    ...(projectId && !allProjects ? { projectId } : {}),
+    ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
     isDeleted: false,
     status: "open",
     ...(qParam?.trim()
@@ -698,6 +984,7 @@ export async function IssuesList({
     // The Ideas list's more-filters widget: who wrote it, and only mine.
     ...(ideaAuthor === "agents" ? { createdByAgentId: { not: null } } : ideaAuthor === "people" ? { createdByAgentId: null } : {}),
     ...(mineFilter === "created" && userId ? { reporterId: userId } : {}),
+    ...(workCategory ? { AND: [ideaCategoryWhere(workCategory, categoryTypes)] } : {}),
   };
   // Rejected ideas (#idea-rejected), with the same scope and search as new
   // ones. Archived ideas (#idea-archive) show here too, labelled Archived.
@@ -773,7 +1060,7 @@ export async function IssuesList({
           "my work",
           () =>
             prisma.bug.count({
-              where: { ...bugInOrganisation(organisationId), ...(projectId && !allProjects ? { projectId } : {}), ...trackWhere(trackFilter), isDeleted: false, ...myWorkWhere(userId) },
+              where: { ...bugInOrganisation(organisationId), ...(scopeProjectId ? { projectId: scopeProjectId } : {}), ...trackWhere(trackFilter), isDeleted: false, ...myWorkWhere(userId) },
             }),
           0,
         )
@@ -785,20 +1072,15 @@ export async function IssuesList({
           "your work",
           () =>
             prisma.bug.count({
-              where: { ...bugInOrganisation(organisationId), ...(projectId && !allProjects ? { projectId } : {}), isDeleted: false, ...duplicatesWhere(showDuplicates), AND: [yourWorkWhere(userId)] },
+              where: { ...bugInOrganisation(organisationId), ...(scopeProjectId ? { projectId: scopeProjectId } : {}), isDeleted: false, ...duplicatesWhere(showDuplicates), AND: [yourWorkWhere(userId)] },
             }),
           0,
         )
       : 0;
-  // Project Overview (#project-overview): who delivered what this week, and your open bids, counted, not listed.
-  const [weekPeople, openBidCount] = isYourWorkView && organisationId
-    ? await Promise.all([
-        loadOrEmpty("week deliveries", () => weeklyDeliveries(organisationId, project.id), [] as WeekPerson[]),
-        userId
-          ? loadOrEmpty("open bids", () => prisma.bug.count({ where: { ...bugInOrganisation(organisationId), projectId: project.id, isDeleted: false, ...yourOpenBidsWhere(userId) } }), 0)
-          : Promise.resolve(0),
-      ])
-    : [[] as WeekPerson[], 0];
+  // Project Overview (#project-overview): your open bids, counted, not listed. Who delivered what this week is on the Work queue.
+  const openBidCount = isYourWorkView && organisationId && userId
+    ? await loadOrEmpty("open bids", () => prisma.bug.count({ where: { ...bugInOrganisation(organisationId), ...(scopeProjectId ? { projectId: scopeProjectId } : {}), isDeleted: false, ...yourOpenBidsWhere(userId) } }), 0)
+    : 0;
   // The Ideas tab's counts show on every tab; drafts only while Ideas is open.
   const [ideasCount, rejectedIdeasCount, draftIds] = await Promise.all([
     organisationId && !isDeletedView ? loadOrEmpty("ideas tab", () => prisma.idea.count({ where: ideaWhere }), 0) : 0,
@@ -814,6 +1096,8 @@ export async function IssuesList({
         )
       : ([] as string[]),
   ]);
+
+  // New ideas are the Overview's New Ideas tab (#work-feed): one list of cards, newest first, not grouped by kind.
   // The Ideas lists page like the issue lists (#ideas-pages), 25 at a time.
   const ideaPagination = calculatePagination({
     page: pageParam,
@@ -835,7 +1119,7 @@ export async function IssuesList({
               ...(ideaAuthor === "agents" ? ["hasAgentCreator:=true"] : ideaAuthor === "people" ? ["hasAgentCreator:=false"] : []),
               ...(mineFilter === "created" && userId ? [`reporterId:=${userId}`] : []),
             ];
-            const indexed = await searchWorkItems({ query: boundSearchTerm(qParam), kind: "idea", organisationId, ...(projectId && !allProjects ? { projectId } : {}), track: "product", page: ideaPagination.page, perPage: ideaPagination.take, sortBy: ideaSearchSort(currentIdeaSort), extraFilters: filters });
+            const indexed = await searchWorkItems({ query: boundSearchTerm(qParam), kind: "idea", organisationId, ...(scopeProjectId ? { projectId: scopeProjectId } : {}), track: "product", page: ideaPagination.page, perPage: ideaPagination.take, sortBy: ideaSearchSort(currentIdeaSort), extraFilters: filters });
             if (indexed.found === ideaPagination.totalCount) indexedIdeaIds = indexed.hits.map((hit) => hit.id);
           } catch (error) {
             console.error("[ideas] Typesense result lookup failed; using PostgreSQL", error);
@@ -852,7 +1136,7 @@ export async function IssuesList({
           skip: indexedIdeaIds ? 0 : ideaPagination.skip,
           take: indexedIdeaIds ? indexedIdeaIds.length : ideaPagination.take,
           select: {
-            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true,
+            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true, summary: true, description: true,
             status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true,
             // Its newest verdict, for the Last update column.
             verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
@@ -878,7 +1162,7 @@ export async function IssuesList({
         }
         if (indexedIdeaIds && (forcePgIdeaFallback || validatedRows.length < Math.min(ideaPagination.take, Math.max(0, ideaPagination.totalCount - ideaPagination.skip)))) {
           rows = await prisma.idea.findMany({ where: originalIdeaWhere, orderBy: getIdeaOrderBy(currentIdeaSort), skip: ideaPagination.skip, take: ideaPagination.take, select: {
-            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true,
+            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true, summary: true, description: true,
             status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true,
             verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
             reporter: { select: { name: true } }, _count: { select: { verdicts: true } },
@@ -906,11 +1190,16 @@ export async function IssuesList({
         return listed.map(({ row, votes }) => ({
           id: row.id,
           number: row.number,
+          ref: projectRefs.get(row.projectId),
+          projectName: allProjects ? projectNames.get(row.projectId) ?? null : null,
           title: row.title,
           score: row.score,
           threshold: thresholds.get(row.projectId) ?? null,
           createdAt: row.createdAt,
           reporterName: row.reporter.name,
+          // Opened in place (#work-feed): what it says, trimmed for a quick glance.
+          summary: row.summary ?? null,
+          body: feedBody(row.description),
           verdicts: row._count.verdicts,
           rejected: ideasView === "rejected",
           archived: row.status === "archived" ? archiveReasonLabel(row.archiveReason, row.archiveDuplicateOf) : null,
@@ -985,7 +1274,7 @@ export async function IssuesList({
         where: {
           ...bugInOrganisation(organisationId),
           ...PRODUCT_TRACK,
-          ...(projectId && !allProjects ? { projectId } : {}),
+          ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
           isDeleted: false,
         },
       })) === 0;
@@ -1078,17 +1367,6 @@ export async function IssuesList({
     ? ALL_FILTERS.map(({ value, label }) => ({ label, count: allFilterCount(value), href: statusHref(value), selected: statusParam === value }))
     : [];
   const myWorkFilter: ToolbarFilterOption[] = myWorkCount > 0 || myWorkOn ? [{ label: "My Work", count: myWorkCount, href: myWorkHref, selected: myWorkOn }] : [];
-  const filterGroups: ToolbarFilterGroup[] = [
-    ...(allTabFilters.length ? [{ label: "Show", options: allTabFilters }] : []),
-    ...(myWorkFilter.length ? [{ options: myWorkFilter }] : []),
-    { label: "Track", options: trackFilterOptions },
-  ];
-  // What the Filter button names while closed: anything beyond the default "All".
-  const filterSummary = [
-    ...allTabFilters.filter((option) => option.selected && option.label !== "All").map((option) => option.label),
-    ...(myWorkOn ? ["My Work"] : []),
-    ...(trackFilter !== "product" ? [trackFilter === "all" ? "Track: All" : `Track: ${trackFilter.charAt(0).toUpperCase() + trackFilter.slice(1)}`] : []),
-  ].join(" · ");
   // Only a status tab is picked (no search or other filter): an empty list then
   // just means that tab is empty, so the empty state names the tab.
   const onlyStatusTab =
@@ -1104,20 +1382,50 @@ export async function IssuesList({
       : STAGE_GROUPS.findIndex((group) => (group.statuses as readonly string[]).includes(currentStatus ?? ""));
   // Your call (#your-call): the issues the agents split on that this person has to settle. Its step sits above Open only while there
   // are any, and only In Progress shows it, so the other views don't ask for it.
-  const yourCall = stageIndex !== IN_PROGRESS_STAGE || !organisationId || !projectId || allProjects || !userId
+  const yourCall = stageIndex !== IN_PROGRESS_STAGE || !organisationId || !scopeProjectId || !userId
     ? []
-    : await loadOrEmpty("your call", () => loadYourCall(projectId, { userId, isAdmin: Boolean(membershipRole && isOrganisationAdmin(membershipRole, effectiveRole)) }), []);
+    : await loadOrEmpty("your call", () => loadYourCall(scopeProjectId, { userId, isAdmin: Boolean(membershipRole && isOrganisationAdmin(membershipRole, effectiveRole)) }), []);
   // Priority now (#priority-now): the top Open issues and who each is offered to, at the top of In Progress.
-  const priorityIssues = stageIndex !== IN_PROGRESS_STAGE || isDeletedView || !organisationId || !projectId || allProjects
+  const priorityIssues = stageIndex !== IN_PROGRESS_STAGE || isDeletedView || !organisationId || !scopeProjectId
     ? []
     : await loadOrEmpty("priority now", async () => {
-      const { offerWindowSeconds } = await workflowFor(projectId);
+      const { offerWindowSeconds } = await workflowFor(scopeProjectId);
       return priorityNow({ organisationId, projectId, offerWindowSeconds });
     }, [] as PriorityNowIssue[]);
   const statusCount = (value: string) =>
     value === YOUR_WORK_STATUS ? yourWorkCount : value === IDEAS_STATUS ? ideasCount : value === REJECTED_IDEAS_STATUS ? rejectedIdeasCount : value === ERROR_STATUS ? errorCount : value === POSSIBLY_DELIVERED ? possiblyDeliveredCount : countForStatus(value);
   const statusLink = (value: string) => (value === IDEAS_STATUS ? statusHref(null) : statusHref(value));
-
+  // The Status filter (#simple-lists): on In Progress and Delivered, all of the tab's statuses or one of them; Your call joins
+  // In Progress only while the agents have split on something.
+  const tabGroup = stageIndex >= 0 && !isIdeasView && !isYourWorkView ? STAGE_GROUPS[stageIndex] : null;
+  const statusFilters: ToolbarFilterOption[] = tabGroup && !isDeletedView
+    ? [
+        ...tabGroup.statuses.map((value) => ({
+          label: GROUP_FILTERS.includes(value) ? "All" : statusFilterLabel(value),
+          count: GROUP_FILTERS.includes(value)
+            ? tabGroup.statuses.reduce((sum, item) => sum + (item === ERROR_STATUS || item === POSSIBLY_DELIVERED || GROUP_FILTERS.includes(item) ? 0 : statusCount(item)), 0)
+            : statusCount(value),
+          href: statusLink(value),
+          selected: value === currentStatus,
+        })),
+        ...(stageIndex === IN_PROGRESS_STAGE && yourCall.length > 0
+          ? [{ label: "Your call", count: yourCall.length, href: statusLink(YOUR_CALL_STATUS), selected: isYourCallView }]
+          : []),
+      ]
+    : [];
+  const filterGroups: ToolbarFilterGroup[] = [
+    ...(statusFilters.length ? [{ label: "Status", options: statusFilters }] : []),
+    ...(allTabFilters.length ? [{ label: "Show", options: allTabFilters }] : []),
+    ...(myWorkFilter.length ? [{ options: myWorkFilter }] : []),
+    { label: "Track", options: trackFilterOptions },
+  ];
+  // What the Filter button names while closed: anything beyond the default "All".
+  const filterSummary = [
+    ...statusFilters.filter((option) => option.selected && option.label !== "All").map((option) => option.label),
+    ...allTabFilters.filter((option) => option.selected && option.label !== "All").map((option) => option.label),
+    ...(myWorkOn ? ["My Work"] : []),
+    ...(trackFilter !== "product" ? [trackFilter === "all" ? "Track: All" : `Track: ${trackFilter.charAt(0).toUpperCase() + trackFilter.slice(1)}`] : []),
+  ].join(" · ");
   const headerContent = (
     <>
       {activeProject?.goal ? (
@@ -1131,7 +1439,8 @@ export async function IssuesList({
           <RichText content={activeProject.goal} className="mt-1 text-sm text-zk-text2" />
         </section>
       ) : null}
-      <div className="issues-heading flex flex-wrap items-start justify-between gap-4">
+      {/* On the Overview it holds nothing on a desktop unless there are projects to pick between: no empty band and line then. */}
+      <div className={`issues-heading flex flex-wrap items-start justify-between gap-4 ${isYourWorkView && !(isOrgMember && orgProjects.length > 1) ? "md:hidden" : ""}`}>
         {/* flex-1: the Add Idea chat box opens in this bar and takes its width. */}
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           {/* No visible title: the stages above say where you are. */}
@@ -1139,12 +1448,9 @@ export async function IssuesList({
           {isDeletedView || allProjects || !isFirstRun ? (
             <div className="flex flex-wrap items-center gap-2">
               {/* Desktop: Add Idea at the far left of the toolbar. */}
-              {!isDeletedView && !isFirstRun ? <IdeaChat projectId={project.id} className="max-md:hidden" /> : null}
+              {!isDeletedView && !isFirstRun && !isYourWorkView ? <IdeaChat projectId={project.id} className="max-md:hidden" /> : null}
               {isDeletedView ? (
                 <span className="rounded-md bg-zk-bad-bg px-2 py-0.5 text-[11px] font-bold text-zk-bad-fg">Admin view</span>
-              ) : null}
-              {allProjects && !isDeletedView ? (
-                <span className="rounded-md border border-zk-border bg-zk-tint px-2 py-0.5 text-[11px] font-bold text-zk-accent">All projects</span>
               ) : null}
             </div>
           ) : null}
@@ -1155,6 +1461,30 @@ export async function IssuesList({
             stageCounts={isDeletedView ? undefined : { confirming: confirmingCount, ready: readyCount }} />
         </Suspense>}
         <div className="issues-actions flex flex-wrap items-center gap-2 print:hidden">
+          {/* The Ideas section's statuses (STAGE_GROUPS), beside the search: New ideas and Rejected ideas. */}
+          {isIdeasView ? (
+              <StatusFilterChips
+                label={false}
+                filters={[
+                  { label: "New ideas", count: ideasCount, href: ideasPath(listRef), selected: ideasView === "new" },
+                  { label: "Rejected", count: rejectedIdeasCount, href: ideasPath(listRef, "rejected"), selected: ideasView === "rejected" },
+                ]}
+                more={
+                  <Suspense fallback={null}>
+                    <IdeasMoreFilters draftsHref={ideasPath(listRef, "drafts")} />
+                  </Suspense>
+                }
+              />
+          ) : null}
+          {/* The project filter (#project-filter): every project by default, or one. */}
+          {/* Only where there is more than one project to choose from. */}
+          {isOrgMember && orgProjects.length > 1 && !isDeletedView ? (
+            <ProjectFilter
+              allHref={listHrefIn(orgRefOf(ref), switchQuery)}
+              projects={orgProjects.map((item) => ({ slug: item.slug, name: item.name, href: listHrefIn(refOf(item), switchQuery) }))}
+              current={filterProject?.slug ?? null}
+            />
+          ) : null}
           {/* The issue tabs' filter, beside the search: a standard Filter button and menu. */}
           {!isIdeasView && !isYourWorkView && filterGroups.length > 0 ? <ToolbarFilterMenu groups={filterGroups} summary={filterSummary} /> : null}
           {finishedWatched > 0 ? <UnwatchFinishedButton count={finishedWatched} /> : null}
@@ -1163,7 +1493,7 @@ export async function IssuesList({
           />
           {/* Phones: the + beside the title, since the tools row is collapsed there.
               Desktop has it at the far left of the toolbar, except on a first run. */}
-          {!isDeletedView ? <IdeaChat projectId={project.id} className={isFirstRun ? "" : "md:hidden"} /> : null}
+          {!isDeletedView && !isYourWorkView ? <IdeaChat projectId={project.id} className={isFirstRun ? "" : "md:hidden"} /> : null}
         </div>
       </div>
     </>
@@ -1238,25 +1568,7 @@ export async function IssuesList({
 
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}
-        {isYourWorkView && organisationId ? <ProjectWeekPanel people={weekPeople} viewerId={userId ?? null} /> : null}
 
-        {/* Project Overview's two lists, as tabs: the week's delivered work first, then yours. */}
-        {isYourWorkView ? (
-          <nav aria-label="Overview lists" className="flex gap-1 border-b border-zk-divider">
-            {([["delivered", "Delivered Work"], ["mine", "My Work"]] as const).map(([tab, label]) => (
-              <Link
-                key={tab}
-                href={listHref(new URLSearchParams({ status: YOUR_WORK_STATUS, ...(tab === "mine" ? { [OVERVIEW_TAB_PARAM]: "mine" } : {}) }))}
-                aria-current={overviewTab === tab ? "page" : undefined}
-                className={`-mb-px border-b-2 px-3 pb-2.5 pt-1 text-sm font-semibold transition ${
-                  overviewTab === tab ? "border-electric-blue-strong text-zk-text" : "border-transparent text-zk-muted hover:text-zk-text"
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        ) : null}
 
         {milestoneSummary ? (
           <section aria-label={`Milestone ${milestoneSummary.title}`} className="rounded-[20px] border border-zk-border bg-zk-surface p-5">
@@ -1272,27 +1584,15 @@ export async function IssuesList({
           </section>
         ) : null}
 
-        {isIdeasView ? (
+        {isNewIdeasView ? <div className="flex flex-wrap items-center justify-between gap-2">{overviewTabs}</div> : null}
+        {isNewIdeasView ? (
+          // The Overview's New Ideas tab: the Work Feed's cards, with Approve on each idea you can still approve.
+          <IdeaFeed slug={ref} ideas={ideaRows} empty={qParam ? <p className="m-0 text-sm text-zk-muted">No new ideas match that search.</p> : <IdeasWelcome projectId={project.id} />} />
+        ) : isIdeasView ? (
           <IdeasList
             slug={ref}
             ideas={ideaRows}
             sort={currentIdeaSort}
-            // The Ideas section's statuses (STAGE_GROUPS): New ideas and Rejected ideas.
-            filters={
-              <StatusFilterChips
-                filters={[
-                  { label: "New ideas", count: ideasCount, href: ideasPath(ref), selected: ideasView === "new" },
-                  { label: "Rejected", count: rejectedIdeasCount, href: ideasPath(ref, "rejected"), selected: ideasView === "rejected" },
-                ]}
-                more={
-                  <Suspense fallback={null}>
-                    <IdeasMoreFilters draftsHref={ideasPath(ref, "drafts")} />
-                  </Suspense>
-                }
-              />
-            }
-            // Open ideas, none yet and no search: what Ziki is for and where to type (#ideas-welcome).
-            welcome={ideasView === "new" && !qParam ? <IdeasWelcome projectId={project.id} /> : undefined}
             empty={
               ideasView === "drafts"
                 ? "No unstructured draft ideas are waiting to be structured."
@@ -1304,7 +1604,7 @@ export async function IssuesList({
         ) : null}
         {isIdeasView && ideaRows.length > 0 ? (
           <PaginationControls
-            basePath={ideasPath(ref, ideasView ?? "new")}
+            basePath={ideasPath(listRef, ideasView ?? "new")}
             page={ideaPagination.page}
             totalPages={ideaPagination.totalPages}
             totalCount={ideaPagination.totalCount}
@@ -1316,6 +1616,34 @@ export async function IssuesList({
         ) : null}
         {isIdeasView ? null : isFirstRun ? (
           <FirstRunWelcome isAdmin={canDelete} hasOrganisation={Boolean(organisationId)} slug={ref} returnTo={returnTo} canContribute={canContribute} />
+        ) : feedView ? (
+          // The Work Feed: one card with its tabs and filter on top, the table of work, and its pages under it. An
+          // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
+          <WorkFeed
+            items={feed.items}
+            title={OVERVIEW_TABS.find(([tab]) => tab === overviewTab)?.[1] ?? "Work Feed"}
+            toolbar={overviewToolbar}
+            empty={
+              <WhimsicalEmptyState
+                title={OVERVIEW_EMPTY[overviewTab].title}
+                description={OVERVIEW_EMPTY[overviewTab].description}
+                showClear={false}
+                showCreate={false}
+              />
+            }
+            footer={feed.total > FEED_PAGE_SIZE ? (
+              <PaginationControls
+                basePath={overviewHref(overviewTab, overviewState).split("?")[0]}
+                queryParams={Object.fromEntries(new URLSearchParams(overviewHref(overviewTab, overviewState).split("?")[1] ?? ""))}
+                page={feed.page}
+                totalPages={Math.ceil(feed.total / FEED_PAGE_SIZE)}
+                totalCount={feed.total}
+                from={(feed.page - 1) * FEED_PAGE_SIZE + 1}
+                to={Math.min(feed.page * FEED_PAGE_SIZE, feed.total)}
+                itemLabel="issue"
+              />
+            ) : undefined}
+          />
         ) : bugs.length === 0 ? (
           <WhimsicalEmptyState
             title={
@@ -1332,7 +1660,7 @@ export async function IssuesList({
                   ? undefined
                   : "Maybe the bugs went into hiding, or they've all been squashed! Try clearing your filters or create a new issue."
             }
-            clearHref={issuesPath(ref, statusParam ?? ALL_STATUS)}
+            clearHref={issuesPath(listRef, statusParam ?? ALL_STATUS)}
             createHref={newIssueHref(ref, returnTo)}
             showClear={Boolean((myWorkOn || !onlyStatusTab) && (qParam || statusParam || tagsParam || selectedMilestone || myWorkOn))}
             showCreate={canContribute}
@@ -1379,6 +1707,7 @@ export async function IssuesList({
                     </>
                   ) : (
                     <>
+                      <span className="hidden w-[200px] shrink-0 md:block">Status</span>
                       <span className="issues-status-cell justify-center">Bids</span>
                       <span className="issues-vote-end">
                         <SortHeader label="Importance" current={currentSort} first="importance" second="least_important" cookie={ISSUE_SORT_COOKIE} />
@@ -1473,6 +1802,10 @@ export async function IssuesList({
                             </span>
                             <span className="issues-row-meta flex items-center gap-2 text-xs text-zk-muted">
                               <span className="font-mono tabular-nums">{formatIssueNumber(bug.number)}</span>
+                              {/* With every project listed (#project-filter), which project it is in. */}
+                              {allProjects && projectNames.get(bug.projectId) ? (
+                                <span className="rounded bg-zk-chip px-1.5 py-px text-[11px] font-medium text-zk-text2">{projectNames.get(bug.projectId)}</span>
+                              ) : null}
                               {/* The type, as a small icon: bug, feature or security. */}
                               <span className="inline-flex items-center" title={typeName}>
                                 <span className="sr-only">{typeName}</span>
@@ -1495,8 +1828,8 @@ export async function IssuesList({
                                 <span>Duplicate of {formatIssueNumber(bug.duplicateOf.number)}</span>
                               ) : null}
                               <RowAge date={currentSort === "newest" ? bug.createdAt : bug.updatedAt} sort={currentSort === "newest" ? "newest" : "updated"} />
-                              {/* The status rides at the end of this line; the column beside the title holds the bids. */}
-                              <span className="inline-flex min-w-0">{rowStatus}</span>
+                              {/* On a phone the Status column is hidden: the status rides at the end of this line. */}
+                              {isMyWorkTab ? <span className="inline-flex min-w-0">{rowStatus}</span> : <span className="inline-flex min-w-0 md:hidden">{rowStatus}</span>}
                               {/* On a phone the What's next column is hidden: its tag rides here. */}
                               {next ? <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold md:hidden ${WORK_TAG_TONE[next.tag]}`}>{next.tag}</span> : null}
                             </span>
@@ -1525,6 +1858,7 @@ export async function IssuesList({
                           })()
                         ) : (
                           <>
+                        <span className="hidden w-[200px] min-w-0 shrink-0 md:flex">{rowStatus}</span>
                         <span className="issues-status-cell justify-center">
                           <BidsVoteBadge count={bug._count.bids} />
                         </span>
@@ -1558,7 +1892,7 @@ export async function IssuesList({
             </div>
 
             <PaginationControls
-              basePath={listHref(new URLSearchParams({ ...(statusParam ? { status: statusParam } : {}), ...(isMyWorkTab ? { [OVERVIEW_TAB_PARAM]: "mine" } : {}) }))}
+              basePath={listHref(new URLSearchParams({ ...(statusParam ? { status: statusParam } : {}), ...(isYourWorkView && overviewTab !== "all" ? { [OVERVIEW_TAB_PARAM]: overviewTab } : {}), ...(workCategory ? { [WORK_CATEGORY_PARAM]: workCategory } : {}) }))}
               page={pagination.page}
               totalPages={pagination.totalPages}
               totalCount={totalCount}
@@ -1576,7 +1910,6 @@ export async function IssuesList({
                 deleted: isDeletedView,
                 showDuplicates,
                 showResolved,
-                allProjects,
               })}
             />
           </section>
@@ -1585,7 +1918,7 @@ export async function IssuesList({
         {/* Project Overview: your open bids are counted, not listed, under the work you hold. */}
         {isMyWorkTab && openBidCount > 0 ? (
           <Link
-            href={issuesPath(ref, "open", `${MY_WORK_PARAM}=1`)}
+            href={issuesPath(listRef, "open", `${MY_WORK_PARAM}=1`)}
             className="group flex items-center gap-4 rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4 transition hover:border-zk-accent/40 hover:bg-zk-tint/40 focus-visible:outline-2 focus-visible:outline-electric-blue"
           >
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zk-tint text-lg font-extrabold tabular-nums text-zk-accent">
@@ -1612,20 +1945,42 @@ export async function IssuesList({
     {/* The stages, centred, with Project notes at the right of the same row. The row is as wide
         as the panel below, so the project icons line up with the panel's right edge. */}
     {/* On a phone the icons take their own row above the stages, so they never cover them. */}
-    <div className={`relative mx-auto mb-4 flex min-h-8 w-full items-start justify-center max-sm:mb-3 max-sm:flex-col-reverse max-sm:items-stretch max-sm:gap-1 ${isIdeasView ? "max-w-[920px]" : "max-w-6xl"}`}>
+    {/* From lg the icons sit at the right of this row; the same room on both sides keeps the tabs centred and clear of them. */}
+    {withOverviewLook ? (
+      // The Overview has no stage bar: its tabs filter the list. At the top, a gray card about the app itself: its name,
+      // where it runs and where its code is, with the project's icons (feedback, settings) at the right.
+      <section aria-label="Your app" className="mx-auto mb-4 flex w-full max-w-[920px] flex-wrap items-center justify-between gap-3 rounded-xl border border-zk-border bg-zk-text/[0.045] px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] text-[16px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[toneForName(project.name)]}>
+            {project.name.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="m-0 truncate text-[15px] font-semibold text-zk-text">{project.name}</p>
+            {/* Where it runs and where its code is, each with a pencil to edit it in place. */}
+            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {canContribute ? <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? orgPath(ref, "invites") : undefined} /> : null}
+          <ProjectIconLinks
+            settingsHref={isOrgAdmin ? `/projects/${encodeURIComponent(slug)}/settings` : undefined}
+          />
+        </div>
+      </section>
+    ) : (
+    <div className={`relative mx-auto mb-4 flex min-h-8 w-full items-start justify-center max-sm:mb-3 max-sm:flex-col-reverse max-sm:items-stretch max-sm:gap-1 lg:px-[12.75rem] max-w-[920px]`}>
       {!isDeletedView ? (
         <PipelineSteps
           stages={STAGE_GROUPS.flatMap((group, index) => {
             const stage = {
               label: group.label,
-              // Error is part of Merge, so the stage total counts it once.
-              count: group.statuses.reduce((sum, value) => sum + (value === ERROR_STATUS || value === POSSIBLY_DELIVERED ? 0 : statusCount(value)), 0),
+              // Error is part of Merge and the tab's own value is all of them, so the stage total counts each issue once.
+              count: group.statuses.reduce((sum, value) => sum + (value === ERROR_STATUS || value === POSSIBLY_DELIVERED || GROUP_FILTERS.includes(value) ? 0 : statusCount(value)), 0),
               href: statusLink(group.statuses[0]),
               selected: index === stageIndex,
             };
-            // Project Overview always for people who can contribute, else only while something is assigned to you;
-            // Live only once something went live.
-            const conditional = (index === YOUR_WORK_STAGE && !canContribute) || index === LIVE_STAGE;
+            // Project Overview always for people who can contribute, else only while something is assigned to you.
+            const conditional = index === YOUR_WORK_STAGE && !canContribute;
             return !conditional || stage.count > 0 || stage.selected ? [stage] : [];
           })}
         />
@@ -1642,39 +1997,37 @@ export async function IssuesList({
             askOnLoad={isIdeasView && unconfiguredAgents.length === 0}
           />
         ) : null}
-        {/* Project notes, Design and settings, as icons, beside the tabs. */}
+        {/* The feedback portal, Design and settings, as icons, beside the tabs. */}
+        {!isDeletedView && canContribute ? (
+          <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? orgPath(ref, "invites") : undefined} />
+        ) : null}
         {!isDeletedView ? (
           <ProjectIconLinks
-            notesHref={canContribute ? projectPath(ref, "/notes") : undefined}
-            designHref={isOrgMember ? designPath(ref) : undefined}
             settingsHref={isOrgAdmin ? `/projects/${encodeURIComponent(slug)}/settings` : undefined}
           />
         ) : null}
       </div>
     </div>
-    {/* The Ideas panel is narrower and centred, so each idea's status sits close to it. */}
-    <div className={`issues-page mx-auto w-full space-y-5 ${isIdeasView ? "max-w-[920px]" : "max-w-6xl"}`}>
-      {headerContent}
+    )}
+    {/* Overview opens with a chat box, in a white panel of its own above the list: what people type is filed as an
+        idea in this project for agents to take up, with files, a screen recording or a captured area. */}
+    {withOverviewLook ? (
+      <section aria-label="Tell the agents" className="mx-auto mb-4 w-full max-w-[920px]">
+        <IdeaChat
+          projectId={project.id}
+          alwaysOpen
+          placeholder="Tell the agents what you want done: a bug to fix, a change to make, a feature to add…"
+        />
+      </section>
+    ) : null}
+    {/* Every list is the same narrow, centred panel (#simple-lists). */}
+    {/* The Overview has no title row, so its tabs start a panel's padding (20px) from the top. */}
+    <div className="issues-page mx-auto w-full space-y-5 max-w-[920px]" style={withOverviewLook ? { paddingTop: 20 } : undefined}>
+      {/* The Overview has no title row: no filters to open, and the tabs say where you are. */}
+      {withOverviewLook ? null : headerContent}
       <div className="flex items-start gap-5 max-lg:flex-col max-lg:gap-3">
-        {/* The Ideas stage has no sidebar: its Filter menu switches to Rejected ideas (#ideas-filter). */}
-        {/* Your Work is one list, with no steps to pick between. */}
-        {stageIndex >= 0 && !isIdeasView && !isYourWorkView ? (
-          <StageSidebar
-            steps={[
-              // In Progress: Your call joins the top of the steps, in amber, only while the agents have split on something.
-              ...(stageIndex === IN_PROGRESS_STAGE && yourCall.length > 0
-                ? [{ label: "Your call", count: yourCall.length, href: statusLink(YOUR_CALL_STATUS), selected: isYourCallView, tone: "warn" as const }]
-                : []),
-              ...STAGE_GROUPS[stageIndex].statuses.map((value) => ({
-                label: value === IDEAS_STATUS ? "New ideas" : value === REJECTED_IDEAS_STATUS ? "Rejected ideas" : statusFilterLabel(value),
-                count: statusCount(value),
-                href: statusLink(value),
-                selected: value === currentStatus,
-              })),
-            ]}
-          />
-        ) : null}
-        <div className="min-w-0 flex-1">
+        {/* No sidebar (#simple-lists): each row has a Status column, and the toolbar's Filter narrows the tab to one status. */}
+        <div className="w-full min-w-0 flex-1">
           {statusParam === POSSIBLY_DELIVERED ? (
             <p className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-zk-warn-bg px-4 py-2.5 text-sm text-zk-warn-fg">
               <span>Open issues that may already be done: a linked or reported pull request, a delivery, or a comment that mentions a merge.</span>
