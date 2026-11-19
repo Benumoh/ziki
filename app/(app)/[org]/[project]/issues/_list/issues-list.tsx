@@ -153,7 +153,7 @@ const ERROR_STATUS = "error";
 const YOUR_CALL_STATUS = "your_call";
 /** Your Work: the issues assigned to you (a claim held or offered for you), a stage of its own shown only while there are any. */
 const YOUR_WORK_STATUS = "your_work";
-/** Project Overview's list tab: Work Feed (the default), `features` (New Features), `design` (Design Changes) or `delivered`. New Ideas sits after New Features. */
+/** Project Overview's list tab: Work Feed (the default), `features` (New Features), `design` (Design Changes) or `delivered`. Fixes (the new ideas, at /new) sits after New Features. */
 const OVERVIEW_TAB_PARAM = "view";
 const OVERVIEW_TABS = [
   ["all", "Work Feed"],
@@ -187,12 +187,12 @@ function timeUsed(claimedAt: Date | null, deliverBy: Date | null): number | null
   if (span <= 0) return null;
   return Math.min(0.95, Math.max(0.05, (Date.now() - claimedAt.getTime()) / span));
 }
-/** Each Overview tab's small icon (24-unit stroke paths), New Ideas' included. */
+/** Each Overview tab's small icon (24-unit stroke paths), Fixes' (the new ideas) included. */
 const OVERVIEW_TAB_ICONS: Record<OverviewTab | "new", string> = {
   // A stack of cards: the feed.
   all: "M4 6h16M4 12h16M4 18h10",
-  // A light bulb: ideas.
-  new: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z",
+  // A wrench: Fixes, the new ideas waiting for approval.
+  new: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z",
   // A wrench: fixes.
   // A sparkle: something new being built.
   features: "M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",
@@ -687,12 +687,12 @@ export async function IssuesList({
           <TabIcon tab={tab} />
           {label}
         </Link>,
-        // New Ideas sits after New Features.
+        // Fixes (the new ideas) sits after New Features.
         ...(tab === "features"
           ? [
               <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
                 <TabIcon tab="new" />
-                New Ideas
+                Fixes
               </Link>,
             ]
           : []),
