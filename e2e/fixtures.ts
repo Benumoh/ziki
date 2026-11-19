@@ -75,7 +75,7 @@ export async function reportIssue(page: Page, title: string, description = "Step
 /**
  * Reports an idea and converts it to an issue straight in the database, as a
  * manager agent would once its verdicts reach the threshold (#idea-table),
- * then opens the issue. Returns the issue's URL.
+ * then opens the issue in its work view. Returns the issue's URL.
  */
 export async function fileIssue(page: Page, title: string) {
   const ideaUrl = await reportIssue(page, title);
@@ -103,7 +103,8 @@ export async function fileIssue(page: Page, title: string) {
   } finally {
     await prisma.$disconnect();
   }
-  await page.goto(`${PROJECT}/${issueNumber}`);
+  // The work view: confirmations, bids, the next step and the actions menu live there; the plain view is for reading.
+  await page.goto(`${PROJECT}/${issueNumber}?view=work`);
   await expect(page.getByRole("heading", { level: 1, name: new RegExp(escapeRe(title)) })).toBeVisible();
   return page.url();
 }

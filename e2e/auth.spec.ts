@@ -31,7 +31,8 @@ test("a session whose account was deleted goes back to sign-in, not a crash", as
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/ideas/);
+  // Signing in opens the Overview.
+  await expect(page).toHaveURL(/\/issues\/your-work/);
 
   const prisma = e2eDb();
   try {

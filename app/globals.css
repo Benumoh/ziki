@@ -16,24 +16,25 @@
   --zk-surface: #ffffff;
   --zk-text: #15171c;
   --zk-text2: #384152;
-  --zk-muted: #747474;
+  --zk-muted: #686868;
   --zk-border: #e8e8e8;
   --zk-divider: #f0f0f0;
   --zk-tint: #e8f3fd;
   --zk-chip: #f5f5f5;
   --zk-seg: #f1f1f3;
-  --zk-accent: #1b8ce8;
+  /* Accent text and links: the design's blue, deepened to 4.5:1 on white, gray and the tint. */
+  --zk-accent: #1068b5;
   --zk-ok-bg: #e3f5ee;
-  --zk-ok-fg: #12855c;
+  --zk-ok-fg: #0f6e4c;
   --zk-bad-bg: #fdecec;
   --zk-bad-fg: #c4292e;
   --zk-bad-bd: #f5b8ba;
   --zk-bad-soft: #fff5f5;
   --zk-warn-bg: #fdf5e1;
-  --zk-warn-fg: #8a6200;
+  --zk-warn-fg: #835c00;
   --zk-warn-bd: #f0d48a;
   --zk-info-bg: #e8f3fd;
-  --zk-info-fg: #1170c2;
+  --zk-info-fg: #1068b5;
 }
 
 @theme inline {
@@ -75,7 +76,7 @@
   --color-electric-blue: #1b8ce8;
   /* Filled buttons and the active sidebar pill. #2E6FEF is Electric Blue
      darkened so white text clears 4.5:1. */
-  --color-electric-blue-strong: #1a80d6;
+  --color-electric-blue-strong: #1068b5;
   --color-sky-tint: #8fc9ff;
   --color-porcelain: #f5f7fc;
   --color-surface-border: rgba(143, 201, 255, 0.12);

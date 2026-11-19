@@ -147,19 +147,19 @@ function TopNav({ pathname, projectSlug }: { pathname: string | null; projectSlu
       // clear of the home indicator. From lg it sits inline in the top bar.
       className="flex items-center max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:justify-around max-lg:border-t max-lg:border-zk-border max-lg:bg-zk-surface max-lg:px-2 max-lg:pt-1.5 max-lg:pb-[max(0.375rem,env(safe-area-inset-bottom))] max-lg:shadow-[0_-1px_3px_rgba(0,0,0,0.04)] lg:ml-8 lg:gap-7"
     >
-      <TopNavLink href={productHref} active={Boolean(projectSlug && pathname?.startsWith(`/${orgRefOf(projectSlug)}/`) && !inMarketing)} label="Your App" colour="#2D7FF9">
+      <TopNavLink href={productHref} active={Boolean(projectSlug && pathname?.startsWith(`/${orgRefOf(projectSlug)}/`) && !inMarketing)} label="Your App" colour="#1a6ad8">
         <NavIcon>
           <circle cx="12" cy="12" r="9" />
           <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
         </NavIcon>
       </TopNavLink>
-      <TopNavLink href={marketingHref} active={inMarketing} label="Marketing" colour="#F82B60">
+      <TopNavLink href={marketingHref} active={inMarketing} label="Marketing" colour="#d61a4c">
         <NavIcon>
           <path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Z" />
           <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
         </NavIcon>
       </TopNavLink>
-      <TopNavLink href="/security" active={isNavItemActive(pathname, "/security")} label="Security" colour="#20C9A6">
+      <TopNavLink href="/security" active={isNavItemActive(pathname, "/security")} label="Security" colour="#0e7a64">
         <NavIcon>
           <path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z" />
           <path d="m9 12 2 2 4-4" />

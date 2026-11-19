@@ -4892,8 +4892,8 @@ MCP and CLI: `ziki_list_marketing_task_types`, `ziki_create_marketing_task_type`
 **Live.** An asset is one thing a marketing type's work is about: the About Us page under Landing Pages, a launch video, a newsletter list. Tasks and proposals sit under it (`assetId`), and the Marketing page lists each type's assets with the work on them. Assets belong to the organisation, like the types.
 
 ```
-GET  /api/v1/projects/{id}/marketing/assets?typeId=type_...
-POST  /api/v1/projects/{id}/marketing/assets             { "name": "About Us", "typeId": "type_...", "url": "https://example.com/about" }
+GET /api/v1/projects/{id}/marketing/assets?typeId=type_...
+POST /api/v1/projects/{id}/marketing/assets   { "name": "About Us", "typeId": "type_...", "url": "https://example.com/about" }
 PATCH /api/v1/projects/{id}/marketing/assets/{assetId}   { "name"?: "...", "url"?: "https://...", "score"?: 72, "scoreNote"?: "Why" }
 ```
 

@@ -28,7 +28,7 @@ export function StatCards({ stats }: { stats: WorkStat[] }) {
               <p className="m-0 text-[14px] font-medium leading-5 text-[#697386]">{stat.label}</p>
               <p className="m-0 mt-1.5 flex items-center gap-2 text-[14px] leading-5">
                 <span className="text-[20px] font-medium tracking-[-0.4px] text-zk-text">{stat.thisWeek}</span>
-                <span className={`inline-flex items-center gap-0.5 ${change.up === null ? "text-zk-muted" : change.up ? "text-[#17a673]" : "text-[#e5484d]"}`}>
+                <span className={`inline-flex items-center gap-0.5 ${change.up === null ? "text-zk-muted" : change.up ? "text-[#0f6e4c]" : "text-[#c4292e]"}`}>
                   {change.up === null ? null : (
                     <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`h-3 w-3 ${change.up ? "" : "rotate-90"}`}>
                       <path d="M3 9 9 3M4.1 3H9v4.9" />
