@@ -37,6 +37,7 @@ import { createMarketingTaskTypeSchema, updateMarketingTaskTypeSchema } from "@/
 import { agentProfileUpdateSchema, agentSkillsReplaceSchema, agentSkillUpsertSchema } from "@/lib/validations/agent-profile";
 import { agentPreferenceCreateSchema, agentPreferenceUpdateSchema } from "@/lib/validations/agent-preferences";
 import { workAlertAnswerSchema } from "@/lib/validations/work-alert";
+import { setupWorkModeSchema } from "@/lib/validations/agent-work-mode";
 import {
   createForumMessageSchema,
   createForumReplySchema,
@@ -86,6 +87,7 @@ describe("agent API HTTP errors", () => {
  */
 const ROUTE_SCHEMAS: Record<string, z.ZodType> = {
   ziki_answer_alert: workAlertAnswerSchema,
+  ziki_set_work_mode: setupWorkModeSchema,
   ziki_update_profile: agentProfileUpdateSchema,
   ziki_add_test_card_rows: addRowsSchema,
   ziki_test_card_row: rowActionSchema,

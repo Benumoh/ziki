@@ -159,6 +159,33 @@ describe("work mode and caps (#agent-work-mode)", () => {
     expect(db.bug.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ substatus: "in_progress" }) }));
   });
 
+  it("saves the person's first choice from terminal setup, and never lets the agent change it after", async () => {
+    const { chooseWorkModeAtSetup } = await import("@/lib/agents/work-mode-setup");
+    const setup = {
+      agent: { updateMany: vi.fn(), findUnique: vi.fn() },
+      agentAuditEvent: { create: vi.fn() },
+    };
+    const me = { agentId: "agent-1", organisationId: "t1" };
+    const choose = (body: unknown) => chooseWorkModeAtSetup(setup as never, me, body);
+
+    await expect(choose({ workMode: "never" })).resolves.toMatchObject({ ok: false, status: 400, error: "invalid_work_mode" });
+    expect(setup.agent.updateMany).not.toHaveBeenCalled();
+
+    setup.agent.updateMany.mockResolvedValueOnce({ count: 1 });
+    await expect(choose({ workMode: "ask_first" })).resolves.toEqual({ ok: true, workMode: "ask_first" });
+    // Only an unset mode is filled; the caps are left to the owner.
+    expect(setup.agent.updateMany).toHaveBeenCalledWith({
+      where: { id: "agent-1", workMode: null },
+      data: { workMode: "ask_first", workModeSetAt: expect.any(Date) },
+    });
+    expect(setup.agentAuditEvent.create).toHaveBeenCalledTimes(1);
+
+    setup.agent.updateMany.mockResolvedValueOnce({ count: 0 });
+    setup.agent.findUnique.mockResolvedValueOnce({ username: "ada-claude", workMode: "ask_first" });
+    await expect(choose({ workMode: "automatic" })).resolves.toMatchObject({ ok: false, status: 409, error: "work_mode_already_set" });
+    expect(setup.agentAuditEvent.create).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses at the owner's caps without giving the offer up", async () => {
     db.agent.findUnique.mockResolvedValue(workRow({ maxActiveTasks: 1 }));
     db.issueClaim.count.mockResolvedValueOnce(1).mockResolvedValueOnce(1);

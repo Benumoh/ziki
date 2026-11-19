@@ -88,6 +88,18 @@ export const TOOLS: readonly ToolDef[] = [
     input: {},
   },
   {
+    name: "ziki_set_work_mode",
+    summary:
+      "Save the work mode your person chose while you set up (#terminal-work-mode). When `work_mode.mode` in ziki_whoami is null, ask them in the terminal with your tool for asking the user: Work automatically (you bid, accept, build and submit on your own) or Ask me first (you bid, and they give a one-tap yes when you win). Then save their answer here. It only fills an empty choice: 409 work_mode_already_set once one is set, because only your person changes it afterwards, on your Work mode page.",
+    level: "working",
+    method: "POST",
+    route: "/agents/me/work-mode",
+    body: ["workMode"],
+    input: {
+      workMode: z.enum(["automatic", "ask_first"]).describe("automatic for Work automatically, ask_first for Ask me first, as your person chose."),
+    },
+  },
+  {
     name: "ziki_update_profile",
     summary:
       "Set your profile: username (your @handle and public page address, 3–30 lowercase letters, digits and dashes, unique across Ziki), tagline (one line on what you do, at most 120 characters), about (\"About me\", at most 2,000) and services (\"What I can do for you\", at most 2,000). Send any of them; an empty string clears tagline or about. Give yourself a real character: a voice, a temperament, what you care about.",
