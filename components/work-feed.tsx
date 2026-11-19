@@ -9,7 +9,9 @@ import { RichText } from "@/components/rich-text";
 import { BASE_PATH } from "@/lib/base-path";
 import { formatIssueNumber } from "@/lib/issue-number";
 import { cleanTitle } from "@/lib/issue-title";
+import type { Substatus } from "@prisma/client";
 import { PILL_TONES, TILE_TONES, toneForName, type PillTone } from "@/lib/pill-tones";
+import { STATUS_BADGE } from "@/lib/status-badge";
 
 /** What a section of the feed holds, and what it asks of you (#work-feed). */
 export type WorkFeedKind = "design" | "delivered" | "live" | "working" | "waiting";
@@ -32,11 +34,13 @@ export type WorkFeedItem = {
   decision: { label: string; href: string };
   /** Delivered work: where it was delivered (its preview, else its link or pull request), and whether it awaits approval. */
   viewUrl: string | null;
+  /** Delivered work: the delivery's screenshots (links), shown as a preview when the card is opened. */
+  screenshots: string[];
   canApprove: boolean;
   /** Already judged good to merge: Approve shows as done. */
   approved: boolean;
-  /** The Status column: the status and step as one label, and the main status for its colour. */
-  state: { label: string; status: string };
+  /** Where it is: its step (substatus), shown as one word with its colour and icon (lib/status-badge.ts). */
+  substatus: Substatus;
   /** Work under way: how much of its time to delivery has gone (0 to 1), or null when it has no due time. */
   progress: number | null;
 };
@@ -62,16 +66,26 @@ function fileKind(type: string, name: string): string {
   return ext.slice(0, 4).toUpperCase();
 }
 
-/** Each main status's pill tone, for the pill on a card's right (Live is `resolved`). */
-const STATUS_TONE: Record<string, PillTone> = { open: "yellow", in_progress: "blue", done: "green", merge: "purple", resolved: "cyan", closed: "grey" };
-
 /** The pill on a card's right: soft tint, strong text. */
 export const PILL = "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[12.5px] font-semibold";
+
+/** A card's status (#work-feed): one word for where it is, in its colour, with an icon beside it. */
+export function StatusBadge({ substatus, className = "" }: { substatus: Substatus; className?: string }) {
+  const badge = STATUS_BADGE[substatus];
+  return (
+    <span className={`${PILL} ${className}`} style={PILL_TONES[badge.tone]}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+        <path d={badge.icon} />
+      </svg>
+      {badge.label}
+    </span>
+  );
+}
 
 /**
  * The Overview's list (#work-feed): its title with the tabs and the Status filter on top, then a white card per piece
  * of work, newest first (the Work Feed mixes its statuses): who is on it, its title, its number, project and when it
- * last moved, and a pill on the right with its status, or View and Approve on delivered work. Clicking a card unfolds
+ * last moved, and a pill on the right with its status, or Approve on delivered work. Clicking a card unfolds
  * it downwards, in place, as an opened email; clicking its head folds it.
  */
 export function WorkFeed({ items, title, toolbar, empty, footer }: {
@@ -120,13 +134,13 @@ export function WorkFeed({ items, title, toolbar, empty, footer }: {
                         </span>
                       </span>
                     </button>
-                    {/* On the right: delivered work's View and Approve, else its status. */}
+                    {/* On the right: delivered work's Approve (or Approved), else its status. */}
                     {item.kind === "delivered" ? (
                       <DeliveredActions item={item} className="max-sm:hidden" />
                     ) : item.progress !== null ? (
                       <ProgressBar value={item.progress} className="max-sm:hidden" />
                     ) : (
-                      <span className={`${PILL} max-sm:hidden`} style={PILL_TONES[STATUS_TONE[item.state.status] ?? "grey"]}>{item.state.label}</span>
+                      <StatusBadge substatus={item.substatus} className="max-sm:hidden" />
                     )}
                   </div>
                 )}
@@ -245,7 +259,9 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
         </Link>
         )}
       </div>
-      <div className="pt-4 text-[14.5px] leading-relaxed text-zk-text2">
+      {/* Delivered and live work: what it says on the left, a preview of what was delivered on the right (under it on a phone). */}
+      <div className={item.kind === "delivered" || item.kind === "live" ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,320px)]" : ""}>
+      <div className="min-w-0 pt-4 text-[14.5px] leading-relaxed text-zk-text2">
         <h2 id={`${id}-title`} className="m-0 mb-3 text-[16px] font-semibold leading-snug text-zk-text">{cleanTitle(item.title)}</h2>
         {/* The summary, unless the description already opens with it. */}
         {item.summary && !item.body?.trimStart().startsWith(item.summary.trim().split("\n")[0]) ? <p className="m-0 mb-3 whitespace-pre-line">{item.summary}</p> : null}
@@ -256,6 +272,8 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
           <p className="m-0 text-zk-muted">No description.</p>
         )}
         {item.reporter ? <p className="m-0 mt-4 text-[13.5px] text-zk-muted">Reported by {item.reporter}</p> : null}
+      </div>
+      {item.kind === "delivered" || item.kind === "live" ? <DeliveryPreview item={item} /> : null}
       </div>
       {item.files.length > 0 ? (
         <ul aria-label="Files" className="m-0 mt-5 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2">
@@ -296,9 +314,50 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
 }
 
 /**
- * Delivered work's two small buttons (#work-feed): View opens where it was delivered, in a new tab; Approve judges it
- * good to merge through your agent, the same judgement as the issue page's. Approve shows only while it waits for that;
- * once approved it reads Approved, done.
+ * An opened delivered card's preview (#work-feed): the delivery's screenshots, the first large and the rest small, each
+ * opening full size; under them, the link to view what was delivered (its preview, else its link or pull request).
+ */
+function DeliveryPreview({ item }: { item: WorkFeedItem }) {
+  const [first, ...rest] = item.screenshots;
+  return (
+    <aside aria-label="Preview" className="min-w-0 pt-4">
+      {first ? (
+        <div className="flex flex-col gap-2">
+          <a href={first} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
+            <img src={first} alt={`Screenshot of the delivered work for ${formatIssueNumber(item.number)}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+          </a>
+          {rest.length > 0 ? (
+            <div className="grid grid-cols-3 gap-2">
+              {rest.map((url, index) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
+                  <img src={url} alt={`Screenshot ${index + 2}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-zk-border bg-zk-bg px-4 text-center">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-zk-muted"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21" /></svg>
+          <span className="text-[13px] text-zk-muted">No screenshots with this delivery</span>
+        </div>
+      )}
+      {item.viewUrl ? (
+        <a href={item.viewUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
+          View what was delivered
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
+        </a>
+      ) : null}
+    </aside>
+  );
+}
+
+/**
+ * Delivered work's one label (#work-feed): Approve judges it good to merge through your agent, the same judgement as
+ * the issue page's, while it waits for that; once approved it reads Approved. Viewing what was delivered is in the
+ * opened card's preview.
  */
 function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; className?: string }) {
   const [pending, start] = useTransition();
@@ -315,12 +374,6 @@ function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; classN
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
       <div className="flex items-center gap-1.5">
-        {item.viewUrl ? (
-          <a href={item.viewUrl} target="_blank" rel="noopener noreferrer" className={`${button} bg-zk-bg text-zk-text2 hover:text-zk-text`}>
-            View
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
-          </a>
-        ) : null}
         {done ? (
           <span className={button} style={PILL_TONES.green}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>

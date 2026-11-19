@@ -201,7 +201,8 @@ describe("issue list layout", () => {
     expect(ideaFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ organisationId: "organisation-acme", projectId: "project-acme", status: "open", isDeleted: false }),
     }));
-    expect(html).toContain('href="/zedu/acme/ideas/12"');
+    // A card unfolds in place for a quick glance; the whole idea is a link inside it.
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("Idea #12");
     // New Ideas are the Overview's cards (#work-feed): the score against the threshold, with Approve beside it.
     expect(html).toContain("score 2/4");

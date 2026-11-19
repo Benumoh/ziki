@@ -28,7 +28,7 @@ import { IDEA_AUTHOR_PARAM, parseIdeaAuthorFilter } from "@/lib/idea-filters";
 import { MY_WORK_PARAM, TRACK_PARAM, myWorkWhere, parseMyWorkFilter, parseTrackFilter, trackWhere, yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
 import { WORK_CATEGORY_PARAM, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes } from "@/lib/work-category";
 import { WorkFeed, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
-import { stateLabel, statusLabel as STATUS_NAMES } from "@/lib/labels";
+import { statusLabel as STATUS_NAMES } from "@/lib/labels";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { WORK_TAG_TONE, whatsNext } from "@/lib/whats-next";
 import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } from "@/lib/list-sort";
@@ -171,6 +171,11 @@ const DELIVERED_STATUSES = ["done", "merge", "resolved"] as const satisfies read
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
 type OverviewTab = (typeof OVERVIEW_TABS)[number][0];
+/** An opened card's text (#work-feed): the description, trimmed for a quick glance; empty when there is none. */
+function feedBody(description: string | null | undefined): string {
+  const text = description ?? "";
+  return text.length > FEED_BODY_LIMIT ? `${text.slice(0, FEED_BODY_LIMIT).trimEnd()}…` : text;
+}
 /** How much of an agent's time to delivery has gone (#work-feed), 5% to 95%; null without a due time. */
 function timeUsed(claimedAt: Date | null, deliverBy: Date | null): number | null {
   if (!claimedAt || !deliverBy) return null;
@@ -592,7 +597,7 @@ export async function IssuesList({
           // else the pull request.
           substatus: true, pullRequestUrl: true,
           previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
-          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true } },
+          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true } },
         } satisfies Prisma.BugSelect;
         const page = Math.max(1, Number.parseInt(toSingleQueryParam(params.page) ?? "1", 10) || 1);
         // The Status filter narrows the tab to one status; the filter's counts are the tab's, by status.
@@ -638,8 +643,8 @@ export async function IssuesList({
             at: row.updatedAt,
             projectName: allProjects ? projectNames.get(row.projectId) ?? null : null,
             who: row.claims[0]?.agent?.name ?? row.claims[0]?.beneficiary?.name ?? row.assignee?.name ?? null,
-            // The Status column: the issue's status and step, as everywhere else ("Done · Requires review").
-            state: { label: stateLabel(row.substatus), status: row.status },
+            // Where it is, said on the card in one word with its colour and icon ("Broken", not "Live · Broken").
+            substatus: row.substatus,
             progress,
             // Opened (#work-feed): what it is, its files, and the decision it asks of you.
             reporter: row.reporter?.name ?? null,
@@ -648,6 +653,8 @@ export async function IssuesList({
             files: row.attachments.map((file) => ({ id: file.id, name: file.filename, type: file.contentType, size: file.size })),
             decision: feedDecision(kind, href),
             viewUrl: row.previewBuilds[0]?.url ?? row.deliveries[0]?.deliverableUrls[0] ?? row.deliveries[0]?.pullRequestUrl ?? row.pullRequestUrl ?? null,
+            // The opened card's preview: the delivery's screenshots, web links only.
+            screenshots: (row.deliveries[0]?.screenshots ?? []).filter((url) => /^(https?:\/\/|\/)/i.test(url)).slice(0, 4),
             // Approve is the good-to-merge judgement, given while the work waits for it.
             canApprove: row.substatus === "requires_review",
             approved: row.substatus === "accepted" || row.substatus === "ready_to_merge" || row.substatus === "error",
@@ -1122,7 +1129,7 @@ export async function IssuesList({
           skip: indexedIdeaIds ? 0 : ideaPagination.skip,
           take: indexedIdeaIds ? indexedIdeaIds.length : ideaPagination.take,
           select: {
-            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true,
+            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true, summary: true, description: true,
             status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true,
             // Its newest verdict, for the Last update column.
             verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
@@ -1148,7 +1155,7 @@ export async function IssuesList({
         }
         if (indexedIdeaIds && (forcePgIdeaFallback || validatedRows.length < Math.min(ideaPagination.take, Math.max(0, ideaPagination.totalCount - ideaPagination.skip)))) {
           rows = await prisma.idea.findMany({ where: originalIdeaWhere, orderBy: getIdeaOrderBy(currentIdeaSort), skip: ideaPagination.skip, take: ideaPagination.take, select: {
-            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true,
+            id: true, number: true, title: true, score: true, projectId: true, createdAt: true, updatedAt: true, summary: true, description: true,
             status: true, archiveReason: true, archiveDuplicateOf: true, rejectedAt: true, archivedAt: true,
             verdicts: { orderBy: { updatedAt: "desc" }, take: 1, select: { updatedAt: true } },
             reporter: { select: { name: true } }, _count: { select: { verdicts: true } },
@@ -1183,6 +1190,9 @@ export async function IssuesList({
           threshold: thresholds.get(row.projectId) ?? null,
           createdAt: row.createdAt,
           reporterName: row.reporter.name,
+          // Opened in place (#work-feed): what it says, trimmed for a quick glance.
+          summary: row.summary ?? null,
+          body: feedBody(row.description),
           verdicts: row._count.verdicts,
           rejected: ideasView === "rejected",
           archived: row.status === "archived" ? archiveReasonLabel(row.archiveReason, row.archiveDuplicateOf) : null,

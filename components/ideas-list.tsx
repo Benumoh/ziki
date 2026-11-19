@@ -19,6 +19,9 @@ export type IdeaListRow = {
   threshold: number | null;
   createdAt: Date;
   reporterName: string | null;
+  /** Opened in place on the Overview (#work-feed): its summary and description, trimmed. */
+  summary?: string | null;
+  body?: string;
   /** The idea's own project, when the list shows several (#project-filter); the page's project otherwise. */
   ref?: ProjectRef;
   /** Its project's name, shown when the list holds every project. */
