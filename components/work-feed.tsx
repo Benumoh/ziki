@@ -34,8 +34,10 @@ export type WorkFeedItem = {
   decision: { label: string; href: string };
   /** Delivered work: where it was delivered (its preview, else its link or pull request), and whether it awaits approval. */
   viewUrl: string | null;
-  /** Delivered work: the delivery's screenshots (links), shown as a preview when the card is opened. */
+  /** Delivered work: the delivery's screenshots (links) of how it looks now, shown as a preview when the card is opened. */
   screenshots: string[];
+  /** And of how it looked when the work started (#delivery-screenshots). */
+  beforeScreenshots: string[];
   canApprove: boolean;
   /** Already judged good to merge: Approve shows as done. */
   approved: boolean;
@@ -173,16 +175,18 @@ const ISSUE_KINDS: Array<{ match: RegExp; tone: PillTone; icon: string }> = [
 ];
 
 /**
- * The picture at a card's left (#work-feed): a small screenshot of the issue, its first image, when it has one;
- * otherwise a tile in the colour of the kind of issue its title's tag names, with an icon that stands for it.
+ * The picture at a card's left (#work-feed): the delivery's screenshot of how it looks now, when it was delivered
+ * (#delivery-screenshots); else a small screenshot of the issue, its first image; otherwise a tile in the colour of the
+ * kind of issue its title's tag names, with an icon that stands for it.
  */
-export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files"> }) {
+export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files"> & { screenshots?: string[] } }) {
   const image = item.files.find((file) => file.type.startsWith("image/"));
-  if (image) {
+  const src = item.screenshots?.[0] ?? (image ? `${BASE_PATH}/api/attachments/${image.id}` : null);
+  if (src) {
     return (
       <span aria-hidden="true" className="relative h-11 w-14 shrink-0 overflow-hidden rounded-[10px] border border-zk-border bg-zk-bg">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a small authenticated attachment, served as is */}
-        <img src={`${BASE_PATH}/api/attachments/${image.id}`} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- a small screenshot, from an attachment or the agent's link */}
+        <img src={src} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
       </span>
     );
   }
@@ -321,6 +325,7 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
   const [first, ...rest] = item.screenshots;
   return (
     <aside aria-label="Preview" className="min-w-0 pt-4">
+      {first && item.beforeScreenshots.length > 0 ? <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Now</p> : null}
       {first ? (
         <div className="flex flex-col gap-2">
           <a href={first} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
@@ -344,6 +349,20 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           <span className="text-[13px] text-zk-muted">No screenshots with this delivery</span>
         </div>
       )}
+      {/* How it looked when the work started, smaller, to compare. */}
+      {item.beforeScreenshots.length > 0 ? (
+        <div className="mt-3">
+          <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Before</p>
+          <div className="grid grid-cols-3 gap-2">
+            {item.beforeScreenshots.map((url, index) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
+                <img src={url} alt={`Before the work, screenshot ${index + 1}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {item.viewUrl ? (
         <a href={item.viewUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
           View what was delivered

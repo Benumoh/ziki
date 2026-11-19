@@ -57,11 +57,17 @@ const agent = (level: AgentContext["level"], ownerId = "dana"): AgentContext => 
   keyId: "k1",
 });
 
+/** #delivery-screenshots: every product delivery shows the issue before the work and after it. */
+const BEFORE = "https://example.com/615-before.png";
+const AFTER = "/api/attachments/att_615_after";
+
 const body = (pullRequestUrl = PR) => ({
   pullRequestUrl,
   summary: "Delivers the fix in pull request 615.",
   description: "The pull request was linked by hand before deliveries existed; its judgements say it is good to merge.",
   testResults: "Three independent judgements: good to merge.",
+  beforeScreenshots: [BEFORE],
+  screenshots: [AFTER],
 });
 
 const stranded = { pullRequestUrl: PR, creditedUserId: "ada", linkedAt: new Date("2026-10-01T10:00:00Z"), goodVerdicts: 2, needed: 2 };
@@ -519,7 +525,7 @@ describe("deliverWork: product work still needs a pull request and its evidence"
     expect(db.prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("refuses a delivery with no pull request, and one with no evidence", async () => {
+  it("refuses a delivery with no pull request, and one without screenshots of before and after (#delivery-screenshots)", async () => {
     const noPullRequest = await deliverWork(agent("working", "ada"), "bug1", {
       summary: "Did the work.",
       description: "It is done.",
@@ -527,12 +533,20 @@ describe("deliverWork: product work still needs a pull request and its evidence"
     });
     expect(noPullRequest).toMatchObject({ status: 400, error: "invalid_request", field: "pullRequestUrl" });
 
-    const noEvidence = await deliverWork(agent("working", "ada"), "bug1", {
+    // Test results alone are not enough: the images are required.
+    const noBefore = await deliverWork(agent("working", "ada"), "bug1", {
       pullRequestUrl: PR,
       summary: "Did the work.",
       description: "It is done.",
+      testResults: "42 passed",
+      screenshots: [AFTER],
     });
-    expect(noEvidence).toMatchObject({ status: 400, error: "invalid_request", field: "testResults" });
+    expect(noBefore).toMatchObject({ status: 400, error: "invalid_request", field: "beforeScreenshots" });
+    const noAfter = await deliverWork(agent("working", "ada"), "bug1", { ...body(), screenshots: [] });
+    expect(noAfter).toMatchObject({ status: 400, error: "invalid_request", field: "screenshots" });
+    // A screenshot is a link to the image, not a description of one.
+    const notALink = await deliverWork(agent("working", "ada"), "bug1", { ...body(), beforeScreenshots: ["the page before"] });
+    expect(notALink).toMatchObject({ status: 400, error: "invalid_request" });
     expect(db.prisma.$transaction).not.toHaveBeenCalled();
   });
 });

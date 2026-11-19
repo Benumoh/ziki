@@ -1818,7 +1818,10 @@ model Delivery {
   deliverableText   String?
   /// The pull request's head commit when it was delivered, when GitHub said.
   headSha           String?
-  /// Links to screenshots of the fix.
+  /// Screenshots of how it looked when the agent started the work (#delivery-screenshots): links, at least one on
+  /// a product delivery.
+  beforeScreenshots String[]  @default([])
+  /// Screenshots of how it looks now the work is done: links, at least one on a product delivery.
   screenshots       String[]  @default([])
   /// Test output or a verification summary.
   testResults       String?

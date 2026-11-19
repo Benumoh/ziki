@@ -153,11 +153,11 @@ const ERROR_STATUS = "error";
 const YOUR_CALL_STATUS = "your_call";
 /** Your Work: the issues assigned to you (a claim held or offered for you), a stage of its own shown only while there are any. */
 const YOUR_WORK_STATUS = "your_work";
-/** Project Overview's list tab: Work Feed (the default), `fixes`, `design` (Design Changes) or `delivered`. New Ideas sits after the Work Feed. */
+/** Project Overview's list tab: Work Feed (the default), `features` (New Features), `design` (Design Changes) or `delivered`. New Ideas sits after New Features. */
 const OVERVIEW_TAB_PARAM = "view";
 const OVERVIEW_TABS = [
   ["all", "Work Feed"],
-  ["fixes", "Fixes"],
+  ["features", "New Features"],
   ["design", "Design Changes"],
   ["delivered", "Delivered"],
 ] as const;
@@ -171,6 +171,10 @@ const DELIVERED_STATUSES = ["done", "merge", "resolved"] as const satisfies read
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
 type OverviewTab = (typeof OVERVIEW_TABS)[number][0];
+/** A delivery's screenshot links that a page can show (web links only), at most four. */
+function webLinks(urls: string[] | undefined): string[] {
+  return (urls ?? []).filter((url) => /^(https?:\/\/|\/)/i.test(url)).slice(0, 4);
+}
 /** An opened card's text (#work-feed): the description, trimmed for a quick glance; empty when there is none. */
 function feedBody(description: string | null | undefined): string {
   const text = description ?? "";
@@ -190,7 +194,8 @@ const OVERVIEW_TAB_ICONS: Record<OverviewTab | "new", string> = {
   // A light bulb: ideas.
   new: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z",
   // A wrench: fixes.
-  fixes: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z",
+  // A sparkle: something new being built.
+  features: "M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",
   // A pen nib: design.
   design: "M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.6 7.6M11 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
   // A box: delivered.
@@ -206,7 +211,7 @@ function TabIcon({ tab }: { tab: OverviewTab | "new" }) {
 /** What each Overview tab says while it is empty. */
 const OVERVIEW_EMPTY: Record<OverviewTab, { title: string; description: string }> = {
   all: { title: "No work yet", description: "Tell the agents what you want done in the box above: it shows up here as they take it on." },
-  fixes: { title: "No fixes under way", description: "Issues waiting for an agent or being worked on show up here until the work is delivered." },
+  features: { title: "Nothing being built right now", description: "Issues waiting for an agent or being worked on show up here until the work is delivered." },
   design: { title: "No designs waiting for you", description: "When an agent proposes a design for an issue, it shows up here for you to choose." },
   delivered: { title: "Nothing delivered yet", description: "When an agent delivers its work, it shows up here for you to view and approve." },
 };
@@ -526,8 +531,8 @@ export async function IssuesList({
     where.AND = [
       ...and,
       ...(isMyWorkTab ? [userId ? yourWorkWhere(userId) : { id: { in: [] } }] : []),
-      overviewTab === "fixes"
-          // Fixes: issues not delivered yet, waiting for an agent or being worked on, that aren't a design to choose.
+      overviewTab === "features"
+          // New Features: issues not delivered yet, waiting for an agent or being worked on, that aren't a design to choose.
           ? { status: { in: ["open", "in_progress"] as Status[] }, redesigns: { none: { status: "proposed" } } }
           : overviewTab === "design"
             // Design Changes: issues with a proposed design waiting for someone to choose.
@@ -597,7 +602,7 @@ export async function IssuesList({
           // else the pull request.
           substatus: true, pullRequestUrl: true,
           previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
-          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true } },
+          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true } },
         } satisfies Prisma.BugSelect;
         const page = Math.max(1, Number.parseInt(toSingleQueryParam(params.page) ?? "1", 10) || 1);
         // The Status filter narrows the tab to one status; the filter's counts are the tab's, by status.
@@ -654,7 +659,8 @@ export async function IssuesList({
             decision: feedDecision(kind, href),
             viewUrl: row.previewBuilds[0]?.url ?? row.deliveries[0]?.deliverableUrls[0] ?? row.deliveries[0]?.pullRequestUrl ?? row.pullRequestUrl ?? null,
             // The opened card's preview: the delivery's screenshots, web links only.
-            screenshots: (row.deliveries[0]?.screenshots ?? []).filter((url) => /^(https?:\/\/|\/)/i.test(url)).slice(0, 4),
+            screenshots: webLinks(row.deliveries[0]?.screenshots),
+            beforeScreenshots: webLinks(row.deliveries[0]?.beforeScreenshots),
             // Approve is the good-to-merge judgement, given while the work waits for it.
             canApprove: row.substatus === "requires_review",
             approved: row.substatus === "accepted" || row.substatus === "ready_to_merge" || row.substatus === "error",
@@ -681,7 +687,8 @@ export async function IssuesList({
           <TabIcon tab={tab} />
           {label}
         </Link>,
-        ...(tab === "all"
+        // New Ideas sits after New Features.
+        ...(tab === "features"
           ? [
               <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
                 <TabIcon tab="new" />

@@ -678,12 +678,12 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_deliver",
     summary:
-      "Deliver your work on an issue you hold the claim for: a summary of at most two sentences, a full description of what you did and how you checked it, and the evidence. Add a receipt: what you verified and how, what you did not verify and why, and what the reviewer should test; it is shown on the issue and handed to the testers. Product work sends the pull request, screenshots or test results, and its head commit (headSha) so judgements and the accept bind to it. Marketing work has no pull request: put the work itself in deliverableText as Markdown (shown as a file), and/or send deliverableUrls and attachmentIds (uploads from ziki_upload_attachment). Delivering again replaces it, so a revision sends the complete updated work. The issue moves to Delivered, where independent agents judge it: enough good judgements make it Done, enough not-good ones send it back. Delivering again replaces your delivery. Ziki doesn't ask GitHub: for product work, when an independent agent's latest report says the pull request is merged, closed or not found, it can't be delivered (422). A manager agent with no claim may deliver a stranded product issue (deliver_stranded in the work feed: In progress with a pull request linked over 2 hours ago, no delivery and enough good judgements) on the holder's behalf with that same pull request; 409 not_stranded otherwise.",
+      "Deliver your work on an issue you hold the claim for: a summary of at most two sentences, a full description of what you did and how you checked it, and the evidence. Add a receipt: what you verified and how, what you did not verify and why, and what the reviewer should test; it is shown on the issue and handed to the testers. Product work sends the pull request, beforeScreenshots (how it looked when you started: take it before you change anything) and screenshots (how it looks now), both required with at least one image link each, test results, and its head commit (headSha) so judgements and the accept bind to it. Marketing work has no pull request: put the work itself in deliverableText as Markdown (shown as a file), and/or send deliverableUrls and attachmentIds (uploads from ziki_upload_attachment). Delivering again replaces it, so a revision sends the complete updated work. The issue moves to Delivered, where independent agents judge it: enough good judgements make it Done, enough not-good ones send it back. Delivering again replaces your delivery. Ziki doesn't ask GitHub: for product work, when an independent agent's latest report says the pull request is merged, closed or not found, it can't be delivered (422). A manager agent with no claim may deliver a stranded product issue (deliver_stranded in the work feed: In progress with a pull request linked over 2 hours ago, no delivery and enough good judgements) on the holder's behalf with that same pull request; 409 not_stranded otherwise.",
     level: "working",
     method: "POST",
     route: "/issues/{id}/delivery",
     projectScoped: true,
-    body: ["pullRequestUrl", "summary", "description", "reason", "screenshots", "testResults", "receipt", "headSha", "deliverableText", "deliverableUrls", "attachmentIds"],
+    body: ["pullRequestUrl", "summary", "description", "reason", "beforeScreenshots", "screenshots", "testResults", "receipt", "headSha", "deliverableText", "deliverableUrls", "attachmentIds"],
     input: {
       id: issueId,
       projectId,
@@ -691,7 +691,8 @@ export const TOOLS: readonly ToolDef[] = [
       summary: z.string().trim().min(1).max(300).describe("What you did, in at most two sentences."),
       description: z.string().trim().min(1).max(10000).describe("What changed, how you checked it, and anything left open."),
       reason: z.string().trim().min(1).max(140).optional().describe("Optional short context for linking this pull request, at most 140 characters."),
-      screenshots: z.array(z.string().trim().min(1)).optional().describe("Links to screenshots of the fix."),
+      beforeScreenshots: z.array(z.string().trim().min(1)).optional().describe("Product work, required: links to screenshots of how it looked when you started (https://… or an upload's /api/attachments/{id})."),
+      screenshots: z.array(z.string().trim().min(1)).optional().describe("Product work, required: links to screenshots of how it looks now the work is done."),
       testResults: z.string().optional().describe("Product work: test output or a verification summary."),
       receipt: z
         .object({

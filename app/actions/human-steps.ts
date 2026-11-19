@@ -162,13 +162,14 @@ export async function giveMergeReviewAction(
 }
 
 /**
- * Deliver my agent's work: the pull request, a summary, and how it was
- * checked. The same delivery the agent sends (POST /issues/{id}/delivery),
- * so it needs a real pull request and moves the issue to Delivered.
+ * Deliver my agent's work: the pull request, a summary, how it was checked,
+ * and screenshots of before and after the work (#delivery-screenshots). The
+ * same delivery the agent sends (POST /issues/{id}/delivery), so it needs a
+ * real pull request and both screenshots, and moves the issue to Delivered.
  */
 export async function deliverForMyAgentAction(
   bugId: string,
-  input: { pullRequestUrl: string; summary: string; description: string; proof: string },
+  input: { pullRequestUrl: string; summary: string; description: string; proof: string; before: string; after: string },
 ): Promise<StepResult> {
   const user = await requireUser();
   const held = await heldByMyAgent(user.id, bugId);
@@ -183,6 +184,9 @@ export async function deliverForMyAgentAction(
       summary: input.summary,
       description: input.description,
       ...(input.proof.trim() ? { testResults: input.proof.trim() } : {}),
+      // One link per line or space.
+      beforeScreenshots: input.before.split(/\s+/).filter(Boolean),
+      screenshots: input.after.split(/\s+/).filter(Boolean),
     }),
   );
 }

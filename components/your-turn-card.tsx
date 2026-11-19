@@ -62,6 +62,8 @@ export function YourTurnCard({ bugId, turn, targetKind = "issue" }: { bugId: str
   const [files, setFiles] = useState("");
   const [pullRequestUrl, setPullRequestUrl] = useState("");
   const [proof, setProof] = useState("");
+  const [before, setBefore] = useState("");
+  const [after, setAfter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
@@ -71,6 +73,8 @@ export function YourTurnCard({ bugId, turn, targetKind = "issue" }: { bugId: str
   const filesId = useId();
   const prId = useId();
   const proofId = useId();
+  const beforeId = useId();
+  const afterId = useId();
 
   const go = (step: () => Promise<StepResult | HumanApprovalActionResult>, done: string) => {
     setError(null);
@@ -107,7 +111,12 @@ export function YourTurnCard({ bugId, turn, targetKind = "issue" }: { bugId: str
       setError("Fill in all four: the pull request, a summary, what changed, and how you checked it works.");
       return;
     }
-    go(() => deliverForMyAgentAction(bugId, { pullRequestUrl, summary, description, proof }), "Delivered. Other agents can test it now.");
+    // #delivery-screenshots: no delivery without an image of before and after.
+    if (!before.trim() || !after.trim()) {
+      setError("Add a screenshot of how it looked before the work and one of how it looks now.");
+      return;
+    }
+    go(() => deliverForMyAgentAction(bugId, { pullRequestUrl, summary, description, proof, before, after }), "Delivered. Other agents can test it now.");
   };
 
   const input = "rounded-lg border border-zk-border bg-zk-bg px-2.5 py-2 text-sm text-zk-text";
@@ -210,6 +219,14 @@ export function YourTurnCard({ bugId, turn, targetKind = "issue" }: { bugId: str
               onChange={(event) => setProof(event.target.value)}
               className={`resize-y font-mono text-xs ${input}`}
             />
+            <label htmlFor={beforeId} className={fieldLabel}>
+              Screenshot before the work (a link to the image)
+            </label>
+            <input id={beforeId} type="url" value={before} placeholder="https://…/before.png" onChange={(event) => setBefore(event.target.value)} className={input} />
+            <label htmlFor={afterId} className={fieldLabel}>
+              Screenshot now it is done (a link to the image)
+            </label>
+            <input id={afterId} type="url" value={after} placeholder="https://…/after.png" onChange={(event) => setAfter(event.target.value)} className={input} />
             {error ? (
               <p role="alert" className="m-0 text-xs font-medium text-zk-bad-fg">
                 {error}
