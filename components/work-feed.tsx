@@ -11,7 +11,6 @@ import { LocalTime } from "@/components/local-time";
 import { IDEA_ADDED_EVENT } from "@/lib/just-added";
 import { RichText } from "@/components/rich-text";
 import { BrokenShot, SafeImg } from "@/components/safe-img";
-import { ScreenshotPreview, type PreviewShot } from "@/components/screenshot-preview";
 import { BASE_PATH } from "@/lib/base-path";
 import { formatIssueNumber } from "@/lib/issue-number";
 import { cleanTitle } from "@/lib/issue-title";
@@ -444,23 +443,18 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
             <p className="m-0 mt-0.5 whitespace-pre-line">{item.mergeHold}</p>
           </div>
         ) : null}
-        {/* Only the summary, for a quick glance: the full description is on the issue's page. An issue without one
-            shows the description's first paragraph. */}
-        {item.summary ? (
+        {/* The full description (#work-feed); an issue without one shows its summary. */}
+        {item.body ? (
+          <RichText content={item.body} className="text-[14.5px] [&_h1]:!text-[15px] [&_h2]:!text-[15px] [&_h3]:!text-[15px]" />
+        ) : item.summary ? (
           <p className="m-0 whitespace-pre-line">{item.summary}</p>
-        ) : item.body ? (
-          <RichText content={firstParagraph(item.body)} className="text-[14.5px]" />
         ) : (
-          <p className="m-0 text-zk-muted">No summary.</p>
+          <p className="m-0 text-zk-muted">No description.</p>
         )}
       </div>
-      {/* The right column: the full issue's link on top, then, when stalled, what you can do to move it on, then the
-          preview of delivered work. */}
+      {/* The right column: when stalled, what you can do to move it on, then the preview of delivered work. */}
       {item.stallReason || item.kind === "delivered" || item.kind === "live" ? (
         <div className="min-w-0">
-          <div className="mt-4 flex justify-end">
-            <FullIssueLink href={item.href} />
-          </div>
           {item.stallReason ? <StalledFix item={item} /> : null}
           {item.kind === "delivered" || item.kind === "live" ? <DeliveryPreview item={item} /> : null}
         </div>
@@ -495,9 +489,9 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
           })}
         </ul>
       ) : null}
-      {/* At the bottom, on one line: who reported it on the left, the whole issue on the right. */}
+      {/* At the bottom, the whole issue; on delivered and live work, who reported it is in the preview card. */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        {item.reporter ? <p className="m-0 text-[13.5px] text-zk-muted">Reported by {item.reporter}</p> : <span aria-hidden="true" />}
+        {item.reporter && item.kind !== "delivered" && item.kind !== "live" ? <p className="m-0 text-[13.5px] text-zk-muted">Reported by {item.reporter}</p> : <span aria-hidden="true" />}
         <FullIssueLink href={item.href} />
       </div>
     </article>
@@ -699,7 +693,8 @@ function Timeline({ item }: { item: WorkFeedItem }) {
     : null;
   const rows: { label: string; value: React.ReactNode }[] = [
     // Exact times ("Nov 19, 2026, 2:02 PM"), not "yesterday": the timeline tells how long each step took.
-    { label: "Added", value: <LocalTime date={item.addedAt} absolute yearIfOld /> },
+    // Who reported it, and when (#preview-card).
+    { label: "Reported", value: <>{item.reporter ? <span className="font-medium text-zk-text">{item.reporter}</span> : null}{item.reporter ? <span className="text-zk-muted"> · </span> : null}<LocalTime date={item.addedAt} absolute yearIfOld /></> },
     { label: "Started", value: item.startedAt ? <LocalTime date={item.startedAt} absolute yearIfOld /> : "Not yet" },
     { label: "Delivered", value: item.deliveredAt ? <LocalTime date={item.deliveredAt} absolute yearIfOld /> : "Not yet" },
     // Merged (#work-feed): when its pull request was merged and by whom, once a report says so.
@@ -708,7 +703,7 @@ function Timeline({ item }: { item: WorkFeedItem }) {
       : item.deliveredAt ? [{ label: "Merged", value: "Not yet" }] : []),
   ];
   return (
-    <dl className="m-0 mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
+    <dl className="m-0 mt-2.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
       {rows.map((row) => (
         <div key={row.label} className="contents">
           <dt className="text-zk-muted">{row.label}</dt>
@@ -727,34 +722,31 @@ function Timeline({ item }: { item: WorkFeedItem }) {
 
 function DeliveryPreview({ item }: { item: WorkFeedItem }) {
   const [first, ...rest] = item.screenshots;
-  // Every screenshot, now then before, opens large in one preview that steps through them all (#screenshot-preview).
-  const shots: PreviewShot[] = [
-    ...item.screenshots.map((url, index) => ({ url, label: index === 0 ? `Delivered work for ${formatIssueNumber(item.number)}` : `Screenshot ${index + 1}` })),
-    ...item.beforeScreenshots.map((url, index) => ({ url, label: `Before the work, screenshot ${index + 1}` })),
-  ];
-  const [opened, setOpened] = useState<number | null>(null);
-  const before = item.screenshots.length;
   return (
     <aside aria-label="Preview" className="min-w-0 pt-4">
-      <ScreenshotPreview shots={shots} index={opened} onIndex={setOpened} onClose={() => setOpened(null)} />
+      {/* One card (#preview-card): a gray shell, the screenshots on a white card inside it, and the gray running on
+          below with the timeline and links. */}
+      <div className="rounded-[22px] border border-zk-border/70 bg-zk-bg p-1.5">
+      {/* The screenshots' card opens the full issue. */}
+      <Link href={item.href} aria-label={`Open the full issue ${formatIssueNumber(item.number)}`} className={`block rounded-[18px] border border-zk-border bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-zk-accent/50 hover:shadow-[0_2px_8px_rgba(16,24,40,0.08)] ${focus}`}>
       {first && item.beforeScreenshots.length > 0 ? <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Now</p> : null}
       {first ? (
         <div className="flex flex-col gap-2">
-          <button type="button" onClick={() => setOpened(0)} aria-label="Preview the screenshot" className={`block w-full cursor-zoom-in overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
+          <span className={`block w-full overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
             <SafeImg src={first} alt={`Screenshot of the delivered work for ${formatIssueNumber(item.number)}`} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
-          </button>
+          </span>
           {rest.length > 0 ? (
             <div className="grid grid-cols-3 gap-2">
               {rest.map((url, index) => (
-                <button key={url} type="button" onClick={() => setOpened(index + 1)} aria-label={`Preview screenshot ${index + 2}`} className={`block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
+                <span key={url} className={`block w-full overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
                   <SafeImg src={url} alt={`Screenshot ${index + 2}`} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
-                </button>
+                </span>
               ))}
             </div>
           ) : null}
         </div>
       ) : (
-        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-zk-border bg-zk-bg px-4 text-center">
+        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 rounded-xl bg-zk-bg px-4 text-center">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-zk-muted"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21" /></svg>
           <span className="text-[13px] text-zk-muted">No screenshots with this delivery</span>
         </div>
@@ -765,13 +757,15 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Before</p>
           <div className="grid grid-cols-3 gap-2">
             {item.beforeScreenshots.map((url, index) => (
-              <button key={url} type="button" onClick={() => setOpened(before + index)} aria-label={`Preview before screenshot ${index + 1}`} className={`block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
+              <span key={url} className={`block w-full overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
                 <SafeImg src={url} alt={`Before the work, screenshot ${index + 1}`} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
-              </button>
+              </span>
             ))}
           </div>
         </div>
       ) : null}
+      </Link>
+      <div className="px-3 pb-2.5 pt-1">
       <Timeline item={item} />
       {/* Where it runs and its pull request, as two links. Live work without a live link says so (#live-link). */}
       {item.liveUrl || item.pullRequestUrl || item.kind === "live" ? (
@@ -786,6 +780,8 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           {item.pullRequestUrl ? <OutLink href={item.pullRequestUrl} label="Pull request" /> : null}
         </div>
       ) : null}
+      </div>
+      </div>
     </aside>
   );
 }
@@ -1020,7 +1016,3 @@ function IdeaOkCard({ idea, flashing }: { idea: JustAddedIdea; flashing: boolean
   );
 }
 
-/** A description's first paragraph that isn't a heading: what an issue without a summary shows when opened. */
-function firstParagraph(body: string): string {
-  return body.split(/\n\s*\n/).map((part) => part.trim()).find((part) => part && !part.startsWith("#")) ?? body.trim();
-}

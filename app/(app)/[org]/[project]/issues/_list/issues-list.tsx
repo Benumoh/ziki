@@ -410,8 +410,8 @@ function issuesQueryError(reference: string, message?: string) {
  * route passes the organisation and project slugs and the list it names;
  * lib/project-route.ts resolves the project and checks access.
  */
-/** How much of an issue's description an opened Overview card shows (#work-feed); the full issue has the rest. */
-const FEED_BODY_LIMIT = 1200;
+/** How much of an issue's description an opened Overview card shows (#work-feed): all of it (descriptions are at most 5000 characters). */
+const FEED_BODY_LIMIT = 5000;
 
 /**
  * The decision an Overview card asks of you (#work-feed), and where you take it: the issue's simple view, at the

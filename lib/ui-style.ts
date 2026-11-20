@@ -19,9 +19,9 @@ export const PANEL = "rounded-xl border border-zk-border bg-zk-surface p-5";
 /** The space between blocks inside a panel, and between panels. */
 export const GAP = "gap-4";
 
-/** A toolbar control: a quiet white button with a thin line, an optional icon, and gray text. */
+/** A toolbar control: a white pill with a thin line, an optional icon, and dark text (#toolbar-pill). */
 export const TOOL_BUTTON =
-  "inline-flex h-8 shrink-0 cursor-pointer list-none items-center gap-1.5 rounded-[9px] border border-zk-border bg-zk-surface px-3 text-[14px] font-normal text-zk-text2 transition hover:bg-zk-chip [&::-webkit-details-marker]:hidden [&>svg]:text-[#6c6c6c]";
+  "inline-flex h-9 shrink-0 cursor-pointer list-none items-center gap-2 rounded-full border border-zk-border bg-zk-surface px-4 text-[14px] font-medium text-zk-text transition hover:bg-zk-chip [&::-webkit-details-marker]:hidden [&>svg]:text-zk-text2";
 
 /** A toolbar control while it is on (a filter is picked): the same, in the accent. */
 export const TOOL_BUTTON_ON = "border-zk-accent/40 bg-zk-tint text-zk-accent [&>svg]:text-zk-accent";
