@@ -77,7 +77,8 @@ jobs:
           AUTH_SECRET: "ci-build-secret-dummy-must-be-long-enough-32-chars"
           NEXTAUTH_URL: "http://localhost:3000"
           # The build runs near Node's default memory limit and sometimes fails with "JavaScript heap out of memory".
-          NODE_OPTIONS: "--max-old-space-size=6144"
+          # Each Node process (the build and its webpack worker) gets this limit; 6 GB each outgrew the runner's RAM.
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: pnpm build
 
   # The CLI scenarios (cli/tests) drive the real agent API through `pnpm ziki`.
@@ -240,7 +241,8 @@ jobs:
         env:
           SKIP_BUILD_TYPECHECK: "1"
           # The build ran out of memory on the runner ("JavaScript heap out of memory"), which skipped the deploy.
-          NODE_OPTIONS: "--max-old-space-size=6144"
+          # Each Node process (the build and its webpack worker) gets this limit; 6 GB each outgrew the runner's RAM.
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: pnpm build
 
       - name: Run end-to-end tests
