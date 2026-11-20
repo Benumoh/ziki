@@ -12,6 +12,9 @@ import { stripeConfigured } from "./stripe";
  */
 export const TEST_CURRENCY = "test";
 
+/** A pack bought this way has no Stripe session; it carries a stand-in id that starts with this (the database wants a source). */
+export const TEST_SESSION_PREFIX = "test_session_";
+
 /** A plan started this way has no Stripe subscription; its id starts with this. */
 export const TEST_SUBSCRIPTION_PREFIX = "test_sub_";
 

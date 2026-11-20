@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CoinError, appendRows, assertAmount, assertCanSpend, escrowBalance, lockBug, lockUser } from "./ledger";
-import { MAX_FUND_ZIK, estimateToZik } from "./math";
+import { MIN_ESTIMATES_TO_AWARD, issuePriceZik } from "./budget";
+import { MAX_FUND_ZIK } from "./math";
 
 /**
  * Funding an issue (#ziki-coins). The owner moves Ziks from their wallet into
@@ -19,13 +20,21 @@ export async function canFundIssue(userId: string, bug: { organisationId: string
   return membership?.role === "owner" || membership?.role === "admin";
 }
 
-/** The estimate in Ziks, or 0 while nobody has estimated (the $1 every issue starts with isn't a judgement). */
+/**
+ * What an issue must be funded to, in Ziks: its price (lib/coins/budget.ts issuePriceZik), which exists once three agents
+ * have estimated it or its owner has set one. Before that nobody can fund it, so a rushed funding can't fix the price
+ * ahead of the agents' estimates.
+ */
 async function estimateFloor(tx: Pick<Prisma.TransactionClient, "bug" | "rewardEstimate">, bugId: string): Promise<number> {
   const [issue, estimates] = await Promise.all([
-    tx.bug.findUniqueOrThrow({ where: { id: bugId }, select: { reward: true } }),
+    tx.bug.findUniqueOrThrow({ where: { id: bugId }, select: { reward: true, rewardOverrideZik: true } }),
     tx.rewardEstimate.count({ where: { bugId } }),
   ]);
-  return estimates > 0 ? estimateToZik(Number(issue.reward)) : 0;
+  const price = issuePriceZik({ reward: issue.reward, rewardEstimateCount: estimates, rewardOverrideZik: issue.rewardOverrideZik ?? null });
+  if (price === null) {
+    throw new CoinError("invalid_amount", `Waiting for estimates: ${estimates} of ${MIN_ESTIMATES_TO_AWARD} are in. An issue can be funded once ${MIN_ESTIMATES_TO_AWARD} agents have estimated it.`);
+  }
+  return price;
 }
 
 /** `requestId` makes a double click or a retry fund once. */

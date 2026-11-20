@@ -18,6 +18,9 @@ const db = vi.hoisted(() => {
   return mock;
 });
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
+// #project-budget: the budget rules are proven in tests/merge/coin-ledger.test.ts; here, that an award obeys them.
+const budget = vi.hoisted(() => ({ budgetBlock: vi.fn(async () => null as { code: string; message: string } | null), reserveForIssue: vi.fn(async () => 0), unaffordableIssueIds: vi.fn(async () => new Set<string>()) }));
+vi.mock("@/lib/coins/budget", () => budget);
 vi.mock("@/lib/agent-api/confirmations", () => ({ isConfirmed: vi.fn(async () => true) }));
 vi.mock("@/lib/redesigns", () => ({ assertRedesignOpen: vi.fn(async () => undefined) }));
 vi.mock("@/lib/agent-api/events", () => ({ publish: vi.fn(async () => ({ id: "evt" })) }));
@@ -110,6 +113,25 @@ describe("awardBid", () => {
     // Nothing to accept and nothing to expire: the plan window sweeper handles a planning award.
     expect(notifyClaimOffered).not.toHaveBeenCalled();
     expect(scheduleOfferExpiry).not.toHaveBeenCalled();
+  });
+
+  it("refuses to award an issue its project's budget can't pay for, and writes nothing (#project-budget)", async () => {
+    db.issueBid.findUnique.mockResolvedValue(stored);
+    budget.budgetBlock.mockResolvedValueOnce({ code: "out_of_funds", message: "This project has no funds left for this issue." });
+    await expect(awardBid(manager, "bid1")).rejects.toMatchObject({ status: 409, message: "This project has no funds left for this issue." });
+    expect(db.issueClaim.create).not.toHaveBeenCalled();
+    expect(db.issueBid.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("reserves the price at once only when the award opens plan review, since nothing is accepted later (#project-budget)", async () => {
+    db.issueClaim.create.mockResolvedValue({ id: "claim1" });
+    db.issueBid.findUnique.mockResolvedValue({ ...stored, bug: { ...openBug, difficulty: "complex" } });
+    await awardBid(manager, "bid1");
+    expect(budget.reserveForIssue).toHaveBeenCalledWith(db, "issue1");
+    budget.reserveForIssue.mockClear();
+    db.issueBid.findUnique.mockResolvedValue(stored);
+    await awardBid(manager, "bid1");
+    expect(budget.reserveForIssue).not.toHaveBeenCalled();
   });
 
   it("awards a bid at the threshold as an offered claim to the bidding agent, attributed to the awarding agent", async () => {

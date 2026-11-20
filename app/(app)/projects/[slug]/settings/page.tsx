@@ -5,7 +5,7 @@ import { organisationAccessFor } from "@/lib/organisation-access";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import type { AppRole } from "@/lib/roles";
 import Link from "next/link";
-import { issuesPath, orgPath, refOf } from "@/lib/project-paths";
+import { issuesPath, orgPath, projectPath, refOf } from "@/lib/project-paths";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationIdFor } from "@/lib/organisation-context";
@@ -181,6 +181,9 @@ export default async function ProjectSettingsPage({
           <CopyProjectIdButton projectId={project.id} />
           {project.archivedAt ? <span className="rounded-full bg-zk-warn-bg px-2 py-0.5 text-[11px] font-bold text-zk-warn-fg">Archived</span> : null}
         </div>
+        <Link href={projectPath(refOf(project), "/budget")} className="self-start text-sm font-semibold text-zk-accent hover:underline">
+          Fund this project with Ziks (budget)
+        </Link>
       </div>
 
       <div className="settings-layout">

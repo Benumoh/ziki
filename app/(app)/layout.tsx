@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { requireUser } from "@/lib/auth-helpers";
+import { hasEarnedZiks } from "@/lib/coins/ledger";
 import { isLinkPreviewBot } from "@/lib/link-preview";
 import { isPublicAgentPath } from "@/lib/public-agent-paths";
 import { projectOverviewSegments } from "@/lib/project-slug";
@@ -240,6 +241,8 @@ export default async function AppLayout({
   const routeSlug = requestPath.split("/").filter(Boolean)[0] ?? null;
   const earningsOrganisationId =
     (routeSlug ? externalProjects.find((project) => project.organisationSlug === routeSlug)?.organisationId : null) ?? organisationId;
+  // The account menu's Withdraw is only for people who have earned Ziks; a failed read hides it.
+  const showWithdraw = await hasEarnedZiks(prisma, user.id).catch(() => false);
   const earned = await headerEarnings(prisma, user.id, earningsOrganisationId).catch((error) => {
     console.error("[layout] earnings total failed", error);
     return null;
@@ -280,6 +283,7 @@ export default async function AppLayout({
           defaultProjectSlug={defaultProjectSlug}
           earned={earned}
           earningsOrganisationId={earningsOrganisationId}
+          showWithdraw={showWithdraw}
           version={appVersionLabel()}
         />
         <main

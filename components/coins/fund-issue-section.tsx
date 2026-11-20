@@ -1,42 +1,46 @@
 import { prisma } from "@/lib/prisma";
 import { canFundIssue } from "@/lib/coins/fund";
+import { MIN_ESTIMATES_TO_AWARD, budgetBalance, canManageBudget, issuePriceZik } from "@/lib/coins/budget";
 import { escrowBalance, walletBalance } from "@/lib/coins/ledger";
-import { estimateToZik } from "@/lib/coins/math";
 import { FundIssueBox } from "./fund-issue-box";
+import { IssuePriceBox } from "./issue-price-box";
 
 /**
  * The Ziks behind an issue (#ziki-coins), on the issue page. Everyone sees what
  * is funded; only the issue's owner or an organisation admin gets the form,
  * and only while the issue can still pay out. Draws nothing for an issue with
  * no Ziks that you can't fund.
+ *
+ * In a project that pays from a budget (#project-budget) there is no form to fund the issue: it shows the issue's price
+ * and what the budget has reserved, and the owner may raise the price. An issue can't be funded, or priced from
+ * estimates, until three agents have estimated it.
  */
-export async function FundIssueSection({
-  bugId,
-  userId,
-  estimate,
-}: {
-  bugId: string;
-  userId: string;
-  /** The agreed reward estimate, once at least one has been given (never the $1 default). */
-  estimate?: { dollars: number; count: number } | null;
-}) {
+export async function FundIssueSection({ bugId, userId }: { bugId: string; userId: string }) {
   const bug = await prisma.bug.findUnique({
     where: { id: bugId },
-    select: { organisationId: true, reporterId: true, status: true, isDeleted: true, payoutReleasedAt: true },
+    select: {
+      organisationId: true, reporterId: true, status: true, isDeleted: true, payoutReleasedAt: true,
+      reward: true, rewardEstimateCount: true, rewardOverrideZik: true, projectId: true,
+      project: { select: { budgetEnabled: true, slug: true, organisation: { select: { slug: true } } } },
+    },
   });
   if (!bug || bug.isDeleted) return null;
   const finished = bug.status === "closed" || Boolean(bug.payoutReleasedAt);
+  const price = issuePriceZik(bug);
+  const budgetHref = `/${bug.project.organisation.slug}/${bug.project.slug}/budget`;
+  const waiting = price === null ? { have: bug.rewardEstimateCount, need: MIN_ESTIMATES_TO_AWARD } : null;
+
+  if (bug.project.budgetEnabled) {
+    const [escrow, mayManage, available] = await Promise.all([
+      escrowBalance(prisma, bugId),
+      finished ? Promise.resolve(false) : canManageBudget(userId, bug.organisationId),
+      budgetBalance(prisma, bug.projectId),
+    ]);
+    return <IssuePriceBox bugId={bugId} price={price} waiting={waiting} reserved={escrow} available={available} canSetPrice={mayManage} budgetHref={budgetHref} />;
+  }
+
   const [escrow, mayFund] = await Promise.all([escrowBalance(prisma, bugId), finished ? Promise.resolve(false) : canFundIssue(userId, bug)]);
   if (escrow === 0 && !mayFund) return null;
   const balance = mayFund ? await walletBalance(prisma, userId) : 0;
-  const estimateZik = estimate ? estimateToZik(estimate.dollars) : null;
-  return (
-    <FundIssueBox
-      bugId={bugId}
-      escrow={escrow}
-      balance={balance}
-      canFund={mayFund}
-      estimate={estimate && estimateZik ? { zik: estimateZik } : null}
-    />
-  );
+  return <FundIssueBox bugId={bugId} escrow={escrow} balance={balance} canFund={mayFund} price={price} waiting={waiting} budgetHref={budgetHref} />;
 }

@@ -17,6 +17,7 @@ import { refreshMergeQueue } from "@/lib/github/sync";
 import { followPreviewBuilds } from "@/lib/previews/builds";
 import { sweepSecurityChecks } from "@/lib/security-checks/engine";
 import { retryPendingWithdrawals } from "@/lib/coins/withdraw";
+import { sweepProjectBudgets } from "@/lib/coins/budget-sweeps";
 import { sweepFallback } from "@/lib/security-checks/fallback";
 import { sweepTesting } from "@/lib/agent-api/testing-sweep";
 import { sweepProactiveOffers } from "@/lib/agents/proactive-offers";
@@ -88,6 +89,7 @@ export type PlatformSweepsResult = {
     githubStatus: { status: "ok" | "error"; checked?: number; moved?: number; failed?: number; error?: string };
     previews: { status: "ok" | "error"; checked?: number; failed?: number; error?: string };
     withdrawals: { status: "ok" | "error"; checked?: number; sent?: number; waiting?: number; returned?: number; error?: string };
+    projectBudgets: { status: "ok" | "error"; checked?: number; returned?: number; error?: string };
     deliveries: { status: "ok" | "error"; processed?: number; error?: string };
     retention: {
       status: "ok" | "error";
@@ -140,6 +142,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
         githubStatus: { status: "ok" },
         previews: { status: "ok" },
         withdrawals: { status: "ok" },
+        projectBudgets: { status: "ok" },
         deliveries: { status: "ok" },
         retention: { status: "ok" },
         searchIndex: { status: "ok" },
@@ -325,6 +328,16 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     } catch (err) {
       recordSweepFailure("withdrawals", err);
       result.sweeps.withdrawals = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    }
+
+    // 3c. Project budgets (#project-budget): warn owners whose budget is low or out, and give an idle or archived project's budget back.
+    try {
+      const res = await sweepProjectBudgets();
+      recordSweepSuccess("projectBudgets");
+      result.sweeps.projectBudgets = { status: "ok", ...res };
+    } catch (err) {
+      recordSweepFailure("projectBudgets", err);
+      result.sweeps.projectBudgets = { status: "error", error: err instanceof Error ? err.message : String(err) };
     }
 
     // 4. Webhook Deliveries

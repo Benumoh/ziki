@@ -17,7 +17,7 @@ export type CoinRow = Prisma.CoinEntryCreateManyInput;
 
 export class CoinError extends Error {
   constructor(
-    readonly code: "insufficient_ziks" | "invalid_amount" | "not_allowed" | "not_found" | "closed" | "payouts_not_ready" | "below_threshold" | "not_configured",
+    readonly code: "insufficient_ziks" | "invalid_amount" | "not_allowed" | "not_found" | "closed" | "payouts_not_ready" | "below_threshold" | "not_configured" | "out_of_funds" | "not_priced" | "paused",
     message: string,
   ) {
     super(message);
@@ -82,6 +82,14 @@ export async function earnedNet(db: Db, userId: string): Promise<number> {
     _sum: { amount: true },
   });
   return sum._sum.amount ?? 0;
+}
+
+/**
+ * Whether this person has ever been paid Ziks for solving an issue. Only they have anything to withdraw, so only they
+ * see Withdraw (someone who just posts issues never does). True even after they withdrew it all.
+ */
+export async function hasEarnedZiks(db: Db, userId: string): Promise<boolean> {
+  return (await db.coinEntry.count({ where: { account: "wallet", userId, kind: "release" }, take: 1 })) > 0;
 }
 
 export async function walletSummary(db: Db, userId: string) {
