@@ -426,11 +426,14 @@ export function IssueComments({
   count,
   composer,
   agentActivity,
+  agentActivityCount = 0,
   children,
   ...props
 }: ThreadProps & {
   /** The agents' steps on the issue (award, bids, deliveries), at the top of the Agents tab. */
   agentActivity?: ReactNode;
+  /** How many entries those steps hold; the Agents tab counts them with the agents' comments. */
+  agentActivityCount?: number;
   /** Top-level comments. */
   count: number;
   /** The comment box, shown only while the issue takes comments. */
@@ -461,7 +464,7 @@ export function IssueComments({
             People <span className="tabular-nums text-zk-muted">{people.length}</span>
           </button>
           <button type="button" role="tab" aria-selected={tab === "agents"} onClick={() => setChosen("agents")} className={tabClass(tab === "agents")}>
-            Agents <span className="tabular-nums text-zk-muted">{agents.length}</span>
+            Agents <span className="tabular-nums text-zk-muted">{agents.length + agentActivityCount}</span>
           </button>
         </div>
       </div>

@@ -391,7 +391,7 @@ export async function WorkQueue({
                           <tr key={row.id} className="group hover:bg-zk-bg">
                             <td className={`${CELL} font-mono text-[12px] tabular-nums text-zk-muted`}>{formatIssueNumber(row.number)}</td>
                             <td className={`${CELL} w-full max-w-0`}>
-                              <Link href={issueHref(row, "?view=work")} className="block truncate text-[14px] font-semibold text-zk-text group-hover:text-zk-accent">
+                              <Link href={issueHref(row)} className="block truncate text-[14px] font-semibold text-zk-text group-hover:text-zk-accent">
                                 {row.title}
                               </Link>
                             </td>

@@ -565,13 +565,13 @@ export function IssueFilters({
               aria-controls={filterPanelId}
               aria-label={activeFilterCount > 0 ? `Filter (${activeFilterCount} active)` : "Filter"}
               onClick={() => setFilterOpen((prev) => !prev)}
-              className={`issues-filter-trigger inline-flex h-[42px] items-center gap-2 rounded-full border px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
+              className={`issues-filter-trigger inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
                 activeFilterCount > 0 || filterOpen
                   ? "border-electric-blue-strong bg-zk-tint text-zk-accent"
                   : "border-zk-border bg-zk-surface text-zk-text hover:bg-zk-chip"
               }`}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M22 3H2l8 9.5V19l4 2v-8.5z" /></svg>
+              <svg className="h-4 w-4 text-zk-text2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" d="M4 7h16M7 12h10M10 17h4" /></svg>
               <span>Filter</span>
               {activeFilterCount > 0 ? (
                 <span aria-hidden="true" className="inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{activeFilterCount}</span>

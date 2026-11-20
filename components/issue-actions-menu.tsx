@@ -31,9 +31,15 @@ export function IssueActionsMenu({ children }: { children: ReactNode }) {
         buttonRef.current?.focus();
       }
     };
+    // Following a link in the menu (Activity) closes it.
+    const onClick = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest("a") && menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("click", onClick);
     return () => {
+      document.removeEventListener("click", onClick);
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
