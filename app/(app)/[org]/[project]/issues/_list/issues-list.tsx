@@ -28,7 +28,6 @@ import { IDEA_AUTHOR_PARAM, parseIdeaAuthorFilter } from "@/lib/idea-filters";
 import { MY_WORK_PARAM, TRACK_PARAM, myWorkWhere, parseMyWorkFilter, parseTrackFilter, trackWhere, yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
 import { WORK_CATEGORY_PARAM, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes } from "@/lib/work-category";
 import { WorkFeed, type JustAddedIdea, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
-import { statusLabel as STATUS_NAMES } from "@/lib/labels";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { WORK_TAG_TONE, whatsNext } from "@/lib/whats-next";
 import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } from "@/lib/list-sort";
@@ -901,6 +900,9 @@ export async function IssuesList({
   // An Overview tab's address, with the Status filter when one is picked.
   const overviewHref = (tab: OverviewTab, state: string | null, mine: boolean = isMyWorkTab, section: FeedSection | null = null) =>
     listHref(new URLSearchParams({ status: YOUR_WORK_STATUS, ...(tab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: tab }), ...(state ? { [OVERVIEW_STATE_PARAM]: state } : {}), ...(mine ? { [OVERVIEW_MINE_PARAM]: "1" } : {}), ...(section ? { [OVERVIEW_SECTION_PARAM]: section } : {}) }));
+  // The same Overview tab in another project, or every project.
+  const overviewProjectHref = (target: ProjectRef) =>
+    listHrefIn(target, new URLSearchParams({ status: YOUR_WORK_STATUS, ...(overviewTab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: overviewTab }), ...(overviewState ? { [OVERVIEW_STATE_PARAM]: overviewState } : {}), ...(isMyWorkTab ? { [OVERVIEW_MINE_PARAM]: "1" } : {}) }));
   // The Work Feed with one of its sections in full, or all three.
   const sectionHref = (section: FeedSection | null) => overviewHref("all", null, isMyWorkTab, section);
   // New ideas (`/new`) is one of the Overview's tabs (#work-feed): it has the Overview's top, chat box and tabs.
@@ -956,34 +958,20 @@ export async function IssuesList({
   const overviewToolbar = isYourWorkView ? (
     <>
       {overviewTabs}
-      <ToolbarFilterMenu
-        summary={[isMyWorkTab ? "Assigned to me" : "", overviewSection ? FEED_SECTIONS.find(({ key }) => key === overviewSection)!.title : "", overviewState ? STATUS_NAMES[overviewState] : ""].filter(Boolean).join(" · ")}
-        groups={[{
-          label: "Show",
-          options: [
-            { label: "Everyone's", href: overviewHref(overviewTab, overviewState, false), selected: !isMyWorkTab },
-            { label: "Assigned to me", href: overviewHref(overviewTab, overviewState, true), selected: isMyWorkTab },
-          ],
-        }, overviewTab === "all" ? {
-          // The Work Feed filters by its sections (#work-feed-sections).
-          label: "Section",
-          options: [
-            { label: "All sections", href: sectionHref(null), selected: !overviewSection },
-            ...FEED_SECTIONS.map(({ key, title }) => ({ label: title, count: feed.counts.get(key) ?? 0, href: sectionHref(key), selected: overviewSection === key })),
-          ],
-        } : {
-          label: "Status",
-          options: [
-            { label: "All", count: [...feed.counts.values()].reduce((sum, n) => sum + n, 0), href: overviewHref(overviewTab, null), selected: !overviewState },
-            ...OVERVIEW_STATES.filter((value) => (feed.counts.get(value) ?? 0) > 0 || value === overviewState).map((value) => ({
-              label: STATUS_NAMES[value],
-              count: feed.counts.get(value) ?? 0,
-              href: overviewHref(overviewTab, value),
-              selected: overviewState === value,
-            })),
-          ],
-        }]}
-      />
+      {/* The Filter picks the project only (#project-filter): every project, or one, keeping the tab. The tabs and
+          sections already say what kind of work and where it is, so the Filter doesn't repeat them. */}
+      {isOrgMember && orgProjects.length > 1 ? (
+        <ToolbarFilterMenu
+          summary={filterProject ? filterProject.name : ""}
+          groups={[{
+            label: "Project",
+            options: [
+              { label: "All projects", href: overviewProjectHref(orgRefOf(ref)), selected: !filterProject },
+              ...orgProjects.map((item) => ({ label: item.name, href: overviewProjectHref(refOf(item)), selected: filterProject?.id === item.id })),
+            ],
+          }]}
+        />
+      ) : null}
     </>
   ) : null;
   // The Overview shows the cards above, not the list: the list's count, rows and confirmations are skipped, which with
@@ -1251,7 +1239,7 @@ export async function IssuesList({
   const rejectedIdeaWhere: Prisma.IdeaWhereInput = { ...ideaWhere, status: { in: ["rejected", "archived"] } };
   // #project-links: the project's site and GitHub repository, and whether you can set them.
   const [projectLinks, canEditProjectLinks] = await Promise.all([
-    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, marketingUrl: true, repoUrl: true } }), null),
+    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true } }), null),
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
@@ -2227,15 +2215,10 @@ export async function IssuesList({
           <div className="min-w-0">
             <p className="m-0 truncate text-[15px] font-semibold text-zk-text">{project.name}</p>
             {/* Where it runs and where its code is, each with a pencil to edit it in place. */}
-            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} marketingUrl={projectLinks?.marketingUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
+            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isOrgAdmin ? (
-            <Link href={projectPath(ref, "/budget")} aria-label="Fund this project with Ziks" title="Fund this project with Ziks" className="inline-flex h-8 items-center rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue">
-              Budget
-            </Link>
-          ) : null}
           {canContribute ? <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? orgPath(ref, "invites") : undefined} /> : null}
           <ProjectIconLinks
             settingsHref={isOrgAdmin ? `/projects/${encodeURIComponent(slug)}/settings` : undefined}

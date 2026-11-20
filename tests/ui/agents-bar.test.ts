@@ -65,8 +65,6 @@ describe("dockVisibleOn: where the agents bar shows", () => {
     "/organisations",
     "/organisations/invite/abc",
     "/security",
-    "/points/disputes",
-    "/points/disputes/new",
   ])("hides on settings and admin: %s", (path) => {
     expect(dockVisibleOn(path, 2)).toBe(false);
   });

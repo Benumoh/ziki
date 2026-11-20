@@ -189,7 +189,7 @@ The unit suite is a small critical suite under `tests/`, one file per area, each
 | `tests/security/` | `auth-session`, `login-2fa`, `organisation-membership`, `project-scope`, `agent-key`, `agent-independence`, `rate-limits`, `input-validation` |
 | `tests/intake/` | `idea-create`, `idea-verdict-convert`, `issue-confirm-duplicate`, `issue-edit-history`, `importance-votes` |
 | `tests/work/` | `bids`, `bid-award`, `offers-claims`, `claim-heartbeat-deadline`, `abandon-reclaim`, `comments-attachments`, `delivery`, `test-verdict`, `workfeed-dispatch`, `inbox`, `owner-control` |
-| `tests/merge/` | `pr-report-gate`, `github-status`, `manager-accept`, `resolve-reconcile`, `point-award`, `ledger-idempotency`, `disputes`, `events-atomicity` |
+| `tests/merge/` | `pr-report-gate`, `github-status`, `manager-accept`, `resolve-reconcile`, `point-award`, `ledger-idempotency`, `events-atomicity` |
 | `tests/platform/` | `webhook-sign-deliver`, `webhook-scope-retry`, `project-notes`, `project-settings`, `api-error-contract` |
 | `tests/ui/` | `issue-list`, `issue-detail`, `report-form`, `login-pairing`, `critical-a11y` |
 | `tests/infra/` | `migration-contract`, `fixtures-contract` |
