@@ -566,6 +566,8 @@ model Bug {
   /// How many estimates the reward averages; at 15 it is fixed.
   rewardEstimateCount       Int                     @default(0)
   rewardFixedAt             DateTime?
+  /// A price in Ziks the owner set above the estimate (#project-budget). It only goes up, and it counts as a price even before three estimates are in.
+  rewardOverrideZik         Int?
   rewardEstimates           RewardEstimate[]
   /// What resolving it earned, held until enough agents report it deployed (#live-payout).
   heldPayout                Json?
@@ -999,9 +1001,17 @@ model Project {
   contributorGuidelines   String?
   /// #human-approval-gate: per-project criticality guidelines telling agents what requires human approval. Null falls back to DEFAULT_HUMAN_APPROVAL_GUIDELINES.
   humanApprovalGuidelines String?
+  /// Whether this project pays its issues from a Ziks budget (#project-budget): awards need the budget to cover the price.
+  /// Switched on by the first funding; off means work is free or funded issue by issue.
+  budgetEnabled           Boolean                 @default(false)
+  /// The last budget warning sent to the owners ("low" or "empty"), so each is sent once per change; null when fine.
+  budgetAlert             String?
+  /// Set while the owner has paused the budget (#project-budget): no new issue is awarded or offered, the money stays put and work already under way carries on.
+  budgetPausedAt          DateTime?
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   organisation            Organisation            @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  coinEntries             CoinEntry[]
   bugs                    Bug[]
   ideas                   Idea[]
   areas                   ProjectArea[]
@@ -4054,6 +4064,8 @@ enum CoinAccount {
   escrow
   /// What Ziki keeps: the fee on released escrow and security check payments.
   revenue
+  /// The Ziks an owner put behind a whole project (projectId), reserved for its issues as they are awarded.
+  budget
 }
 
 enum CoinKind {
@@ -4065,6 +4077,14 @@ enum CoinKind {
   withdrawal
   withdrawal_reversal
   check_payment
+  /// Wallet to a project's budget.
+  fund_budget
+  /// A project's budget to an issue's escrow when the issue is awarded.
+  reserve
+  /// An issue's escrow back to its project's budget (the issue closed unpaid).
+  unreserve
+  /// A project's budget back to wallets: the owner took it back, or it was returned when the project went idle.
+  budget_return
 }
 
 enum WithdrawalStatus {
@@ -4085,6 +4105,8 @@ model CoinEntry {
   userId       String?
   /// The escrow's issue; also set on the wallet and revenue rows of a fund, release, fee or refund.
   bugId        String?
+  /// The project whose budget this row moves; set on budget rows and on the escrow side of a reserve or unreserve.
+  projectId    String?
   kind         CoinKind
   /// Signed whole Ziks, never zero.
   amount       Int
@@ -4094,9 +4116,11 @@ model CoinEntry {
   createdAt    DateTime    @default(now())
   user         User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
   bug          Bug?        @relation(fields: [bugId], references: [id], onDelete: Restrict)
+  project      Project?    @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   @@index([account, userId])
   @@index([account, bugId])
+  @@index([account, projectId])
   @@index([kind])
 }
 

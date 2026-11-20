@@ -16,6 +16,8 @@ import { releasePlanningClaim } from "@/lib/agent-api/plan";
 import { notifyLater } from "@/lib/notify";
 import { assertMayTakeWorkItself } from "@/lib/agents/work-mode";
 import { needsPlanReview } from "@/lib/difficulty";
+import { reserveForIssue } from "@/lib/coins/budget";
+import { CoinError } from "@/lib/coins/ledger";
 
 /**
  * Offers (#bids-only-offers). Awarding a bid makes an offer: any agent awards
@@ -170,6 +172,17 @@ export async function acceptOffer(agent: AgentContext, claimId: string, options:
           payload: { claimId: fresh.id, issueId: fresh.bugId, beneficiaryUserId: fresh.beneficiaryUserId, reason: "unavailable" } });
         return { unavailable: true as const };
       }
+      // #project-budget: taking the work reserves its price from the project's budget. If the budget can no longer
+      // cover it (another issue took the money since this was offered), the offer is released and nothing is written.
+      try {
+        await reserveForIssue(tx, fresh.bugId);
+      } catch (error) {
+        if (!(error instanceof CoinError)) throw error;
+        await tx.issueClaim.update({ where: { id: fresh.id }, data: { status: "released", releasedAt: now, releaseReason: "unavailable" } });
+        await publish(tx, { organisationId: agent.organisationId, type: "claim.released", actorAgentId: agent.agentId, bugId: fresh.bugId,
+          payload: { claimId: fresh.id, issueId: fresh.bugId, beneficiaryUserId: fresh.beneficiaryUserId, reason: "unavailable" } });
+        return { outOfFunds: error.message };
+      }
       // #plan-review: accepting an offer on a complex issue (a proactive offer, a hand-over or an
       // assignment; an award opens plan review itself) opens plan review instead of starting the
       // work. The claim is held (`planning`), its plan window runs from now, and the agent writes
@@ -208,6 +221,10 @@ export async function acceptOffer(agent: AgentContext, claimId: string, options:
     }
     if ("unavailable" in result) {
       throw new IssueApiError(409, "The issue can no longer be assigned to this person.");
+    }
+    if ("outOfFunds" in result && typeof result.outOfFunds === "string") {
+      const message = result.outOfFunds;
+      throw new IssueApiError(409, message, { error: "out_of_funds", message });
     }
     return result;
   } catch (error) {

@@ -22,7 +22,9 @@ export type MoneyTotals = {
   subscriptionCents: number;
   /** How many plan invoices that is. */
   subscriptionPayments: number;
-  /** Everything the ledger holds in accounts: wallets + escrow + revenue. */
+  /** Ziks owners have put behind whole projects, not yet reserved for an issue (#project-budget). */
+  inBudgets: number;
+  /** Everything the ledger holds in accounts: wallets + escrow + revenue + project budgets. */
   inLedger: number;
 };
 
@@ -71,7 +73,8 @@ export async function moneyTotals(db: PrismaClient): Promise<MoneyTotals> {
     pendingWithdrawals: pending._sum.zik ?? 0,
     subscriptionCents: plans._sum.amountCents ?? 0,
     subscriptionPayments: plans._count,
-    inLedger: account("wallet") + account("escrow") + account("revenue"),
+    inBudgets: account("budget"),
+    inLedger: account("wallet") + account("escrow") + account("revenue") + account("budget"),
   };
 }
 

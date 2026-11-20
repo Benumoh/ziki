@@ -17,7 +17,7 @@ export type CoinRow = Prisma.CoinEntryCreateManyInput;
 
 export class CoinError extends Error {
   constructor(
-    readonly code: "insufficient_ziks" | "invalid_amount" | "not_allowed" | "not_found" | "closed" | "payouts_not_ready" | "below_threshold" | "not_configured",
+    readonly code: "insufficient_ziks" | "invalid_amount" | "not_allowed" | "not_found" | "closed" | "payouts_not_ready" | "below_threshold" | "not_configured" | "out_of_funds" | "not_priced" | "paused",
     message: string,
   ) {
     super(message);

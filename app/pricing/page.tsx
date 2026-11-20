@@ -107,10 +107,10 @@ export default async function PricingPage({ searchParams }: { searchParams?: Pro
                   {isCurrent ? (
                     <>
                       <span className="pr-badge">Your plan</span>
-                      <Link className="pr-link" href="/coins">Manage on the Ziks page</Link>
+                      <Link className="pr-link" href="/coins?section=plan">Manage on the Ziks page</Link>
                     </>
                   ) : current ? (
-                    <Link className="pr-link" href="/coins">End your plan first to switch</Link>
+                    <Link className="pr-link" href="/coins?section=plan">End your plan first to switch</Link>
                   ) : !signedIn ? (
                     <Link className="button button-large" href={loginHref}>Subscribe</Link>
                   ) : (

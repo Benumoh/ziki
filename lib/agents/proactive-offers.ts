@@ -10,6 +10,7 @@ import { workflowFor } from "@/lib/workflow";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { priorityNow, type PriorityNowIssue } from "@/lib/priority-now";
 import { WORK_ROW_SELECT, capReached, workCapUsage } from "@/lib/agents/work-mode";
+import { budgetBlock } from "@/lib/coins/budget";
 import { STALE_AFTER_MS, agentsLastSeen, isStale, seenRecentlyWhere } from "@/lib/agents/last-seen";
 
 /**
@@ -131,6 +132,8 @@ export async function offerIssue(
         select: { id: true },
       });
       if (!fresh) return null;
+      // #project-budget: a project that pays from a budget only offers issues with a price its budget covers.
+      if (await budgetBlock(tx, issue.id)) return null;
       const locked = await tx.$queryRaw<{ pausedAt: Date | null; revokedAt: Date | null }[]>`SELECT "pausedAt", "revokedAt" FROM "Agent" WHERE "id" = ${agent.id} FOR UPDATE`;
       if (!locked[0] || locked[0].pausedAt || locked[0].revokedAt) return null;
       // Capacity is the owner's, as for an award (#bidder-capacity).

@@ -1,3 +1,4 @@
+import { lockProject } from "./budget";
 import { appendRows, escrowBalance, lockBug, type Tx } from "./ledger";
 import { feePercent, planRelease, splitByWeight } from "./math";
 
@@ -61,11 +62,15 @@ export async function releaseEscrow(tx: Tx, bugId: string, awards: ReadonlyArray
  */
 export async function refundEscrow(tx: Tx, bugId: string): Promise<number> {
   await lockBug(tx, bugId);
-  const escrow = await escrowBalance(tx, bugId);
+  let escrow = await escrowBalance(tx, bugId);
   if (escrow <= 0) return 0;
+  // What a project's budget reserved for this issue goes back to that budget first (#project-budget); the rest to the people who funded the issue itself.
+  const toBudget = await returnReservedToBudget(tx, bugId, escrow);
+  escrow -= toBudget;
+  if (escrow <= 0) return toBudget;
   const funders = await contributions(tx, bugId);
   const shares = splitByWeight(escrow, funders);
-  if (shares.size === 0) return 0;
+  if (shares.size === 0) return toBudget;
   // A later refund after a re-open and re-close gets its own key from the escrow it empties.
   const generation = await tx.coinEntry.count({ where: { account: "escrow", bugId, kind: "refund" } });
   const rows: Parameters<typeof appendRows>[1] = [];
@@ -77,5 +82,22 @@ export async function refundEscrow(tx: Tx, bugId: string): Promise<number> {
     );
   }
   await appendRows(tx, rows);
-  return [...shares.values()].reduce((sum, share) => sum + share, 0);
+  return toBudget + [...shares.values()].reduce((sum, share) => sum + share, 0);
+}
+
+/** Puts back into the project's budget what it reserved for this issue and the issue still holds, up to `escrow`. Returns what it moved. */
+async function returnReservedToBudget(tx: Tx, bugId: string, escrow: number): Promise<number> {
+  const reserved = await tx.coinEntry.aggregate({ where: { account: "escrow", bugId, kind: { in: ["reserve", "unreserve"] } }, _sum: { amount: true } });
+  const amount = Math.min(escrow, Math.max(0, reserved._sum.amount ?? 0));
+  if (amount <= 0) return 0;
+  const bug = await tx.bug.findUniqueOrThrow({ where: { id: bugId }, select: { projectId: true } });
+  await lockProject(tx, bug.projectId);
+  // A later return after a re-open and re-close gets its own key from the returns already made.
+  const generation = await tx.coinEntry.count({ where: { account: "escrow", bugId, kind: "unreserve" } });
+  const key = `unreserve:${bugId}:${generation}`;
+  await appendRows(tx, [
+    { account: "escrow", bugId, projectId: bug.projectId, kind: "unreserve", amount: -amount, sourceKey: `${key}:escrow` },
+    { account: "budget", projectId: bug.projectId, bugId, kind: "unreserve", amount, sourceKey: `${key}:budget` },
+  ]);
+  return amount;
 }
