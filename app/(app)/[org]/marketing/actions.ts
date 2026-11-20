@@ -36,17 +36,18 @@ export async function saveMarketingSiteAction(
   const siteUrl = parsed.data.siteUrl;
   if (!siteUrl) return { error: "Enter your website's address." };
 
-  const project = await prisma.project.findUnique({ where: { id: context.project.id }, select: { siteUrl: true } });
-  if (project?.siteUrl !== siteUrl) {
+  // The marketing site (#marketing-url): apart from the app's address, which it also becomes when that isn't set yet.
+  const project = await prisma.project.findUnique({ where: { id: context.project.id }, select: { siteUrl: true, marketingUrl: true } });
+  if (project?.marketingUrl !== siteUrl) {
     await prisma.$transaction(async (tx) => {
-      await tx.project.update({ where: { id: context.project.id }, data: { siteUrl } });
+      await tx.project.update({ where: { id: context.project.id }, data: { marketingUrl: siteUrl, ...(project?.siteUrl ? {} : { siteUrl }) } });
       await tx.projectAuditEvent.create({
         data: {
           organisationId: context.organisationId,
           projectId: context.project.id,
           actorUserId: context.user.id,
           action: "settings.updated",
-          changes: { siteUrl: { from: project?.siteUrl ?? null, to: siteUrl } } as Prisma.InputJsonValue,
+          changes: { marketingUrl: { from: project?.marketingUrl ?? null, to: siteUrl }, ...(project?.siteUrl ? {} : { siteUrl: { from: null, to: siteUrl } }) } as Prisma.InputJsonValue,
         },
       });
     });
@@ -72,21 +73,23 @@ export async function askMarketingAssistantAction(slug: ProjectRef, history: unk
   if (turns.at(-1)?.role !== "user") return { ok: false, error: "Describe the marketing problem first." };
 
   const [project, taskTypes] = await Promise.all([
-    prisma.project.findUnique({ where: { id: context.project.id }, select: { name: true, siteUrl: true } }),
+    prisma.project.findUnique({ where: { id: context.project.id }, select: { name: true, siteUrl: true, marketingUrl: true } }),
     prisma.issueType.findMany({
       where: { organisationId: context.organisationId, ...MARKETING_TRACK, isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
   ]);
-  if (!project?.siteUrl) return { ok: false, error: "Add the project's website first." };
+  // The marketing site (#marketing-url), else the app's own address.
+  const site = project?.marketingUrl ?? project?.siteUrl;
+  if (!project || !site) return { ok: false, error: "Add the project's website first." };
 
   const limit = checkRateLimit(`marketing-assistant:${context.user.id}`, ASSISTANT_RATE_LIMIT);
   if (!limit.allowed) return { ok: false, error: RATE_LIMIT_MESSAGE };
 
   return askMarketingAssistant(turns, {
     name: project.name,
-    siteUrl: project.siteUrl,
+    siteUrl: site,
     organisationId: context.organisationId,
     projectId: context.project.id,
     taskTypes,

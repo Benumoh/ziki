@@ -3,14 +3,21 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { saveProjectLinksAction, type ProjectActionResult } from "@/app/(app)/projects/actions";
 
-type Field = "siteUrl" | "repoUrl";
+type Field = "siteUrl" | "marketingUrl" | "repoUrl";
 
 const FIELDS: Record<Field, { icon: string; empty: string; placeholder: string; label: string }> = {
   siteUrl: {
     icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20",
     empty: "No site yet",
     placeholder: "https://example.com",
-    label: "the site address",
+    label: "the app's address",
+  },
+  // The marketing site (#marketing-url), when it isn't the app itself.
+  marketingUrl: {
+    icon: "m3 11 18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6",
+    empty: "No marketing site",
+    placeholder: "https://yourproduct.com",
+    label: "the marketing site",
   },
   repoUrl: {
     icon: "m16 18 6-6-6-6M8 6l-6 6 6 6",
@@ -32,12 +39,12 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  * the organisation's owners and admins) that edits that address in place. Saving sends both, as the project's links
  * are saved together; the other stays as it was.
  */
-export function AppInfoLinks({ slug, siteUrl, repoUrl, canEdit }: { slug: string; siteUrl: string | null; repoUrl: string | null; canEdit: boolean }) {
+export function AppInfoLinks({ slug, siteUrl, marketingUrl, repoUrl, canEdit }: { slug: string; siteUrl: string | null; marketingUrl: string | null; repoUrl: string | null; canEdit: boolean }) {
   // The field being edited, and the save result it was opened after: a newer successful save closes it.
   const [opened, setOpened] = useState<{ field: Field; after: ProjectActionResult | undefined } | null>(null);
   const [result, action, pending] = useActionState<ProjectActionResult | undefined, FormData>(saveProjectLinksAction, undefined);
   const inputRef = useRef<HTMLInputElement>(null);
-  const values: Record<Field, string | null> = { siteUrl, repoUrl };
+  const values: Record<Field, string | null> = { siteUrl, marketingUrl, repoUrl };
 
   // Saved: the editor closes (the page's data refreshes with the new address).
   const saved = opened !== null && result !== opened.after && Boolean(result?.message) && !result?.error;

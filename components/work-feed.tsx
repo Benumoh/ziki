@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import type React from "react";
-import { useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { approveDeliveredWorkAction, confirmLiveWorkAction } from "@/app/actions/human-steps";
+import { CelebrationStyles, DancingAgent, Fireworks, Hearts } from "@/components/celebrate";
 import { LocalTime } from "@/components/local-time";
+import { IDEA_ADDED_EVENT } from "@/lib/just-added";
 import { RichText } from "@/components/rich-text";
 import { BASE_PATH } from "@/lib/base-path";
 import { formatIssueNumber } from "@/lib/issue-number";
@@ -62,6 +64,10 @@ export type WorkFeedItem = {
   startedAt: Date | null;
   /** In the Stalled section: since when it hasn't moved; null elsewhere. */
   stalledSince: Date | null;
+  /** Who delivered it: the person the delivering agent works for, or null. */
+  deliveredBy: string | null;
+  /** The newest delivery, at the top of Needs your OK: celebrated with a dancing agent and fireworks (#just-delivered). */
+  justDelivered: boolean;
   /** Whether an agent holds it now (an active claim). */
   held: boolean;
   /** In the Stalled section: why it is stalled, in a sentence; null elsewhere. */
@@ -128,8 +134,10 @@ export function StatusBadge({ substatus, className = "" }: { substatus: Substatu
  * last moved, and a pill on the right with its status, or Approve on delivered work. Clicking a card unfolds
  * it downwards, in place, as an opened email; clicking its head folds it.
  */
-export function WorkFeed({ items, groups, title, toolbar, empty, footer }: {
+export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdded = [] }: {
   items: WorkFeedItem[];
+  /** Ideas filed in the last day (#just-added), newest first, shown above the sections; the one just filed flashes. */
+  justAdded?: JustAddedIdea[];
   /**
    * The Work Feed's sections (#work-feed-sections), top to bottom: each its title, a line on what it holds, how many,
    * a few cards, and a link to all of it. Given instead of `items`.
@@ -145,6 +153,23 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer }: {
 }) {
   // The opened card, or null for none.
   const [openId, setOpenId] = useState<string | null>(null);
+  // The idea the chat just filed (#just-added): it flashes as it appears, for a few seconds.
+  const [flash, setFlash] = useState<number | null>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAdded = (event: Event) => {
+      const number = (event as CustomEvent<{ number: number }>).detail?.number;
+      if (!number) return;
+      setFlash(number);
+      clearTimeout(timer);
+      timer = setTimeout(() => setFlash(null), 6000);
+    };
+    window.addEventListener(IDEA_ADDED_EVENT, onAdded);
+    return () => {
+      window.removeEventListener(IDEA_ADDED_EVENT, onAdded);
+      clearTimeout(timer);
+    };
+  }, []);
 
   // A list of cards on the gray inset, as Marketing's are.
   const cards = (list: WorkFeedItem[], label: string) => (
@@ -157,7 +182,10 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer }: {
                   // Opened, the card unfolds into the whole of it, as an opened email.
                   <FeedCard item={item} id={`work-feed-detail-${item.id}`} onClose={() => setOpenId(null)} />
                 ) : (
-                  <div className="flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg">
+                  <div className={item.justDelivered ? "relative overflow-hidden rounded-2xl border border-[#efd9a6] bg-white shadow-[0_2px_10px_rgba(0,0,0,0.05)]" : ""}>
+                  {/* The newest delivery (#just-delivered): who delivered it, with a dancing agent and fireworks. */}
+                  {item.justDelivered ? <JustDelivered by={item.deliveredBy} /> : null}
+                  <div className={`flex items-center gap-4 bg-white px-5 py-4 transition hover:bg-zk-bg ${item.justDelivered ? "" : "rounded-2xl border border-zk-border"}`}>
                     <button
                       type="button"
                       aria-expanded={false}
@@ -188,6 +216,7 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer }: {
                       <StatusBadge substatus={item.substatus} className="max-sm:hidden" />
                     )}
                   </div>
+                  </div>
                 )}
               </li>
             );
@@ -199,6 +228,7 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer }: {
     <section aria-label={title}>
       {/* No title: the tabs on the left say which list this is, the Status filter is on the right. */}
       {toolbar ? <div className="mb-4 flex flex-wrap items-center justify-between gap-2">{toolbar}</div> : null}
+      {justAdded.length > 0 ? <JustAdded ideas={justAdded} flash={flash} /> : null}
       {groups ? (
         // The Work Feed's sections, each with its few newest cards and a link to all of them.
         <div className="flex flex-col gap-6">
@@ -769,6 +799,11 @@ function ConfirmLive({ item, className = "" }: { item: WorkFeedItem; className?:
   const [done, setDone] = useState(item.confirmed);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  // Approved just now, here: Send some Love shows, and the card stays until it is sent (then the feed refreshes and the
+  // work moves to Delivered).
+  const [justApproved, setJustApproved] = useState(false);
+  const [loving, setLoving] = useState(false);
+  const [cheering, setCheering] = useState(false);
   const confirm = () =>
     start(async () => {
       setError(null);
@@ -776,14 +811,36 @@ function ConfirmLive({ item, className = "" }: { item: WorkFeedItem; className?:
       if ("error" in result) setError(result.error);
       else {
         setDone(true);
-        router.refresh();
+        setJustApproved(true);
+        // Approved (#just-delivered): fireworks, once.
+        setCheering(true);
+        setTimeout(() => setCheering(false), 2400);
       }
     });
+  const sendLove = () => {
+    setLoving(true);
+    setTimeout(() => {
+      setLoving(false);
+      setJustApproved(false);
+      router.refresh();
+    }, 2600);
+  };
   const button = `${PILL} transition ${focus}`;
   return (
     <div className={`flex flex-col items-end gap-1 ${className}`}>
       <StateLine substatus={item.substatus} />
-      {done ? (
+      {done && justApproved ? (
+        // After Approve (#just-delivered): thank whoever delivered it, with fireworks and hearts.
+        <button
+          type="button"
+          onClick={sendLove}
+          disabled={loving}
+          className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md border border-[#e0335a] bg-[#ef4f6b] px-2 text-[11.5px] font-bold text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] transition hover:brightness-110 active:translate-y-px active:shadow-none disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+        >
+          <span aria-hidden="true">♥</span>
+          {loving ? "Love sent!" : "Send some Love"}
+        </button>
+      ) : done ? (
         <span className={button} style={PILL_TONES.green}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
           Confirmed
@@ -795,6 +852,31 @@ function ConfirmLive({ item, className = "" }: { item: WorkFeedItem; className?:
         </button>
       )}
       {error ? <p role="alert" className="m-0 max-w-[220px] text-[12px] text-zk-bad-fg">{error}</p> : null}
+      {loving || cheering ? (
+        <span aria-hidden="true" className="pointer-events-none fixed inset-0 z-50">
+          <CelebrationStyles />
+          <Fireworks />
+          {loving ? <Hearts /> : null}
+        </span>
+      ) : null}
+      <span aria-live="polite" className="sr-only">{loving ? "Love sent" : ""}</span>
+    </div>
+  );
+}
+
+/**
+ * The top of the newest delivery's card (#just-delivered): an agent dancing, "<name> just delivered this", and
+ * fireworks going off behind it.
+ */
+function JustDelivered({ by }: { by: string | null }) {
+  const name = by?.trim().split(/\s+/)[0] || "Your agent";
+  return (
+    <div className="relative flex items-center gap-2.5 overflow-hidden border-b border-[#f3e7c9] bg-gradient-to-r from-[#fffbf1] to-white px-5 py-2">
+      {/* Still until Approve: the fireworks go off when it is approved. */}
+      <DancingAgent size={28} still />
+      <p className="relative m-0 text-[13px] font-medium text-zk-text2">
+        {name} just delivered this <span aria-hidden="true">🎉</span>
+      </p>
     </div>
   );
 }
@@ -834,5 +916,47 @@ function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; classN
       </div>
       {error ? <p role="alert" className="m-0 max-w-[220px] text-[12px] text-red-600">{error}</p> : null}
     </div>
+  );
+}
+
+/** An idea filed in the last day, for the Work Feed's Just added (#just-added). */
+export type JustAddedIdea = { id: string; number: number; title: string; at: Date; by: string | null; href: string };
+
+/**
+ * Just added (#just-added): the ideas filed in the last day, above the Work Feed's sections. The one the chat has just
+ * filed flashes, so it is clear where it went: agents pick ideas up from here.
+ */
+function JustAdded({ ideas, flash }: { ideas: JustAddedIdea[]; flash: number | null }) {
+  return (
+    <section aria-labelledby="work-feed-just-added" className="mb-6">
+      <style>{`
+@keyframes zk-flash { 0%, 100% { background-color: #ffffff; box-shadow: 0 0 0 0 rgba(47,140,240,0) } 20%, 60% { background-color: #eaf3ff; box-shadow: 0 0 0 3px rgba(47,140,240,0.35) } }
+@media (prefers-reduced-motion: reduce) { .zk-flash { animation: none !important; box-shadow: 0 0 0 2px rgba(47,140,240,0.4) } }
+`}</style>
+      <h2 id="work-feed-just-added" className="m-0 mb-2 px-1 text-[15px] font-semibold text-zk-text">Just added</h2>
+      <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-4">
+        {ideas.map((idea) => {
+          const flashing = idea.number === flash;
+          return (
+            <li key={idea.id}>
+              <Link
+                href={idea.href}
+                className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-3.5 transition hover:bg-zk-bg ${flashing ? "zk-flash" : ""} ${focus}`}
+                style={flashing ? { animation: "zk-flash 1.6s ease-in-out 3" } : undefined}
+              >
+                <IssueThumb item={{ title: idea.title, files: [] }} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-zk-text">{cleanTitle(idea.title)}</span>
+                  <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
+                    Idea #{idea.number}{idea.by ? ` · ${idea.by}` : ""} · <LocalTime date={idea.at} />
+                  </span>
+                </span>
+                <span className={PILL} style={PILL_TONES[flashing ? "blue" : "grey"]}>{flashing ? "Just added" : "New idea"}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

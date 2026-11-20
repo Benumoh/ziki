@@ -98,7 +98,7 @@ import { parseTagFilter, serializeTags, tagTypeIds } from "@/lib/tag-filter";
 import { bugInOrganisation, isMissingOrganisationColumnError } from "@/lib/organisation-context";
 import { requireProject } from "@/lib/project-route";
 import { redirect } from "next/navigation";
-import { ideasPath, issuesPath, orgPath, orgRefOf, projectPath, refOf, type ProjectRef } from "@/lib/project-paths";
+import { ideaPath, ideasPath, issuesPath, orgPath, orgRefOf, projectPath, refOf, type ProjectRef } from "@/lib/project-paths";
 import { RichText } from "@/components/rich-text";
 import { isOrganisationAdmin } from "@/lib/organisation-role";
 import { cookies } from "next/headers";
@@ -683,6 +683,16 @@ export async function IssuesList({
   const overviewSection: FeedSection | null = overviewTab === "all" ? FEED_SECTIONS.find(({ key }) => key === sectionParam)?.key ?? null : null;
   type FeedGroup = { key: FeedSection; title: string; count: number; items: WorkFeedItem[] };
   const emptyFeed = { items: [] as WorkFeedItem[], groups: null as FeedGroup[] | null, total: 0, page: 1, counts: new Map<string, number>() };
+  // Just added (#just-added): this project's ideas filed in the last day, newest first, at the top of the Work Feed,
+  // where the one the chat just filed flashes. Ideas aren't issues, so they sit apart from the sections.
+  const justAdded = feedView && overviewTab === "all" && !toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]) && !allProjects
+    ? await loadOrEmpty("just added", () => prisma.idea.findMany({
+        where: { projectId: project.id, isDeleted: false, status: "open", createdAt: { gte: new Date(currentTime() - 24 * 60 * 60 * 1000) } },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 3,
+        select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } } },
+      }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(ref, row.number) }))), [])
+    : [];
   const feed = feedView
     ? await loadOrEmpty("work feed", async () => {
         const select = {
@@ -699,7 +709,7 @@ export async function IssuesList({
           // else the pull request.
           substatus: true, pullRequestUrl: true, liveConfirmedAt: true,
           previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
-          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true } },
+          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true, beneficiary: { select: { name: true } } } },
           // Why accepted work isn't merged yet (#work-feed-sections): the latest pull request report, when it says so.
           pullRequestReports: { orderBy: { createdAt: "desc" }, take: 1, select: { state: true, mergeable: true, checks: true, note: true } },
           // The live link (#live-link): the newest deployment report that gave one.
@@ -755,6 +765,9 @@ export async function IssuesList({
                 : row.updatedAt)
               : null,
             held: Boolean(claim),
+            // Who delivered it (#just-delivered): the person the delivering agent works for, else who solved it.
+            deliveredBy: row.deliveries[0]?.beneficiary?.name ?? row.assignee?.name ?? null,
+            justDelivered: false,
             stallReason: section === "stalled" ? stallReason(row.substatus, claim ? { agent: claim.agent?.name ?? null, due: claim.deliverBy, heartbeat: claim.lastHeartbeatAt } : null, currentTime()) : null,
             mergeHold: mergeHold(row.substatus, row.pullRequestReports[0] ?? null),
             // Opened (#work-feed): what it is, its files, and the decision it asks of you.
@@ -781,6 +794,27 @@ export async function IssuesList({
           };
         };
 
+        // A section's cards. Needs your OK puts the newest delivery first (#just-delivered): the work delivered last is
+        // the top card, then live work with no delivery on record, newest first. The others are newest first.
+        const sectionRows = async (key: FeedSection, sectionWhere: Prisma.BugWhereInput, skip: number, take: number) => {
+          if (key !== "needs") return prisma.bug.findMany({ where: sectionWhere, orderBy, skip, take, select });
+          const deliveredWhere: Prisma.BugWhereInput = { AND: [sectionWhere, { deliveries: { some: {} } }] };
+          const [latest, deliveredCount] = await Promise.all([
+            prisma.delivery.findMany({ where: { bug: deliveredWhere }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], distinct: ["bugId"], skip, take, select: { bugId: true } }),
+            prisma.bug.count({ where: deliveredWhere }),
+          ]);
+          const ids = latest.map((row) => row.bugId);
+          const delivered = ids.length ? await prisma.bug.findMany({ where: { id: { in: ids } }, select }) : [];
+          const byId = new Map(delivered.map((row) => [row.id, row]));
+          const rows = ids.flatMap((id) => byId.get(id) ?? []);
+          if (rows.length >= take) return rows;
+          const rest = await prisma.bug.findMany({
+            where: { AND: [sectionWhere, { deliveries: { none: {} } }] },
+            orderBy, skip: Math.max(0, skip - deliveredCount), take: take - rows.length, select,
+          });
+          return [...rows, ...rest];
+        };
+
         // The Work Feed (#work-feed-sections): its three sections, a few cards each, or one of them in full.
         if (overviewTab === "all") {
           const now = currentTime();
@@ -789,24 +823,29 @@ export async function IssuesList({
             const groups: FeedGroup[] = await Promise.all(FEED_SECTIONS.map(async ({ key, title }) => {
               const sectionWhere: Prisma.BugWhereInput = { AND: [where, feedSectionWhere(key, now)] };
               const [rows, count] = await Promise.all([
-                prisma.bug.findMany({ where: sectionWhere, orderBy, take: FEED_SECTION_SIZE, select }),
+                sectionRows(key, sectionWhere, 0, FEED_SECTION_SIZE),
                 prisma.bug.count({ where: sectionWhere }),
               ]);
               counts.set(key, count);
               const starts = await startsFor(rows);
-              return { key, title, count, items: rows.map((row) => toItem(row, key, starts)) };
+              const items = rows.map((row) => toItem(row, key, starts));
+              // The newest delivery tops Needs your OK, celebrated (#just-delivered).
+              if (key === "needs" && items[0]) items[0] = { ...items[0], justDelivered: true };
+              return { key, title, count, items };
             }));
             return { items: [], groups, total: 0, page: 1, counts };
           }
           const sectionWhere: Prisma.BugWhereInput = { AND: [where, feedSectionWhere(overviewSection, now)] };
           const [rows, total, ...sectionCounts] = await Promise.all([
-            prisma.bug.findMany({ where: sectionWhere, orderBy, skip: (page - 1) * FEED_PAGE_SIZE, take: FEED_PAGE_SIZE, select }),
+            sectionRows(overviewSection, sectionWhere, (page - 1) * FEED_PAGE_SIZE, FEED_PAGE_SIZE),
             prisma.bug.count({ where: sectionWhere }),
             ...FEED_SECTIONS.map(({ key }) => prisma.bug.count({ where: { AND: [where, feedSectionWhere(key, now)] } })),
           ]);
           FEED_SECTIONS.forEach(({ key }, index) => counts.set(key, sectionCounts[index]));
           const starts = await startsFor(rows);
-          return { items: rows.map((row) => toItem(row, overviewSection, starts)), groups: null, total, page, counts };
+          const items = rows.map((row) => toItem(row, overviewSection, starts));
+          if (overviewSection === "needs" && page === 1 && items[0]) items[0] = { ...items[0], justDelivered: true };
+          return { items, groups: null, total, page, counts };
         }
         // The other tabs: newest first; the Status filter narrows to one status, and its counts are the tab's.
         const feedWhere: Prisma.BugWhereInput = overviewState ? { AND: [where, { status: overviewState }] } : where;
@@ -832,6 +871,12 @@ export async function IssuesList({
     `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition ${
       current ? "bg-white font-semibold text-zk-accent shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
     }`;
+  // How much has been delivered (#live-confirmed), shown on the Delivered tab: live work someone confirmed.
+  const deliveredCount = withOverviewLook
+    ? await loadOrEmpty("delivered count", () => prisma.bug.count({
+        where: { ...(allProjects ? { organisationId } : { projectId: project.id }), isDeleted: false, status: "resolved", liveConfirmedAt: { not: null } },
+      }), 0)
+    : 0;
   // The Overview's tabs, as a segmented control: the Work Feed, New (the ideas), then the work's other lists.
   const overviewTabs = withOverviewLook ? (
     <nav aria-label="Overview lists" className="flex flex-wrap gap-0.5 rounded-2xl bg-zk-bg p-1 sm:rounded-full">
@@ -839,6 +884,9 @@ export async function IssuesList({
         <Link key={tab} href={overviewHref(tab, null)} aria-current={isYourWorkView && overviewTab === tab ? "page" : undefined} className={tabClass(isYourWorkView && overviewTab === tab)}>
           <TabIcon tab={tab} />
           {label}
+          {tab === "delivered" && deliveredCount > 0 ? (
+            <span className="ml-0.5 rounded-full bg-zk-chip px-1.5 py-px text-[11px] font-semibold tabular-nums text-zk-text2">{deliveredCount}</span>
+          ) : null}
         </Link>,
         // Fixes (the new ideas) sits after New Features.
         ...(tab === "features"
@@ -1151,7 +1199,7 @@ export async function IssuesList({
   const rejectedIdeaWhere: Prisma.IdeaWhereInput = { ...ideaWhere, status: { in: ["rejected", "archived"] } };
   // #project-links: the project's site and GitHub repository, and whether you can set them.
   const [projectLinks, canEditProjectLinks] = await Promise.all([
-    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true } }), null),
+    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, marketingUrl: true, repoUrl: true } }), null),
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
@@ -1782,6 +1830,7 @@ export async function IssuesList({
           <WorkFeed
             items={feed.items}
             groups={feed.groups?.map((group) => ({ ...group, moreHref: group.count > group.items.length ? sectionHref(group.key) : null }))}
+            justAdded={justAdded}
             title={OVERVIEW_TABS.find(([tab]) => tab === overviewTab)?.[1] ?? "Work Feed"}
             toolbar={overviewToolbar}
             empty={
@@ -2118,7 +2167,7 @@ export async function IssuesList({
           <div className="min-w-0">
             <p className="m-0 truncate text-[15px] font-semibold text-zk-text">{project.name}</p>
             {/* Where it runs and where its code is, each with a pencil to edit it in place. */}
-            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
+            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} marketingUrl={projectLinks?.marketingUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -2174,9 +2223,13 @@ export async function IssuesList({
         idea in this project for agents to take up, with files, a screen recording or a captured area. */}
     {withOverviewLook ? (
       <section aria-label="Tell the agents" className="mx-auto mb-4 w-full max-w-[920px]">
+        {/* The project chat (#project-chat): Ziki answers here, sets the product's basics as they're given, and
+            files the work people describe as ideas. */}
         <IdeaChat
           projectId={project.id}
           alwaysOpen
+          chatSlug={ref}
+          me={{ name: user.name ?? null, image: user.image ?? null }}
           placeholder="Tell the agents what you want done: a bug to fix, a change to make, a feature to add…"
         />
       </section>

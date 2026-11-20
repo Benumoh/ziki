@@ -14,6 +14,7 @@ import { isSuperAdmin, type AppRole } from "@/lib/roles";
 import {
   nextProjectSlug,
   projectLinksSchema,
+  siteUrlSchema,
   projectSettingsSchema,
   projectSlugBase,
   parseRewardConfigFromFormData,
@@ -188,17 +189,21 @@ export async function saveProjectLinksAction(
 
   const parsed = projectLinksSchema.safeParse({ siteUrl: formData.get("siteUrl") ?? "", repoUrl: formData.get("repoUrl") ?? "" });
   if (!parsed.success) return fromZodError(parsed.error, "Check the addresses.");
+  // The marketing site (#marketing-url) only when the form has it: forms without the field leave it as it is.
+  const marketing = formData.has("marketingUrl") ? siteUrlSchema.safeParse(formData.get("marketingUrl") ?? "") : null;
+  if (marketing && !marketing.success) return { error: marketing.error.issues[0]?.message ?? "Check the marketing site.", fieldErrors: { marketingUrl: marketing.error.issues[0]?.message ?? "" } };
+  const data: { siteUrl: string | null; repoUrl: string | null; marketingUrl?: string | null } = { ...parsed.data, ...(marketing?.success ? { marketingUrl: marketing.data } : {}) };
   const slug = String(formData.get("slug") ?? "").trim();
-  const project = await prisma.project.findFirst({ where: { organisationId, slug }, select: { id: true, siteUrl: true, repoUrl: true } });
+  const project = await prisma.project.findFirst({ where: { organisationId, slug }, select: { id: true, siteUrl: true, repoUrl: true, marketingUrl: true } });
   if (!project) return { error: "Project not found." };
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of ["siteUrl", "repoUrl"] as const) {
-    if (project[field] !== parsed.data[field]) changes[field] = { from: project[field], to: parsed.data[field] };
+  for (const field of ["siteUrl", "repoUrl", "marketingUrl"] as const) {
+    if (field in data && project[field] !== data[field]) changes[field] = { from: project[field], to: data[field] };
   }
   if (Object.keys(changes).length > 0) {
     await prisma.$transaction(async (tx) => {
-      await tx.project.update({ where: { id: project.id }, data: parsed.data });
+      await tx.project.update({ where: { id: project.id }, data });
       await tx.projectAuditEvent.create({
         data: { organisationId, projectId: project.id, actorUserId: user.id, action: "settings.updated", changes: changes as Prisma.InputJsonValue },
       });

@@ -60,8 +60,10 @@ export async function loadWorkOrganisations(db: PrismaClient, ownerId: string, n
     const existing = await db.organisation.findUnique({ where: { slug: ws.slug }, select: { id: true } });
     if (existing && existing.id !== organisationId) throw new Error(`A "${ws.slug}" organisation exists that the fixtures didn't make; not touching it.`);
     if (existing) {
-      // Issues restrict deleting the organisation; everything else cascades.
+      // Issues and ideas restrict deleting the organisation (one may have been filed here locally); everything else
+      // cascades.
       await db.bug.deleteMany({ where: { organisationId } });
+      await db.idea.deleteMany({ where: { organisationId } });
       await db.organisation.delete({ where: { id: organisationId } });
     }
     // #user-agents: the agent is the owner's and outlives the organisation; replace it too.
