@@ -736,7 +736,31 @@ export async function IssuesList({
           });
           return new Map(firsts.flatMap((first) => (first._min.claimedAt ? [[first.bugId, first._min.claimedAt] as const] : [])));
         };
-        const toItem = (row: Prisma.BugGetPayload<{ select: typeof select }>, section: FeedSection | null, starts: Map<string, Date>): WorkFeedItem => {
+        // When each issue's pull request was merged and by whom: the first report that says merged. Ziki's own GitHub
+        // reads carry GitHub's merge time and merger; an agent's report gives its time and the person it works for.
+        const mergesFor = async (rows: { id: string }[]) => {
+          const merges = new Map<string, { at: Date; by: string | null }>();
+          if (rows.length === 0) return merges;
+          const reports = await prisma.pullRequestReport.findMany({
+            where: { bugId: { in: rows.map((row) => row.id) }, state: "merged" },
+            orderBy: { createdAt: "asc" },
+            select: { bugId: true, createdAt: true, details: true, agent: { select: { name: true } }, onBehalfOf: { select: { name: true } } },
+          });
+          for (const report of reports) {
+            const details = (report.details ?? {}) as { mergedAt?: string | null; mergedBy?: string | null };
+            const fromGitHub = details.mergedAt ? { at: new Date(details.mergedAt), by: details.mergedBy ?? null } : null;
+            const known = merges.get(report.bugId);
+            if (fromGitHub && (!known || !known.by)) merges.set(report.bugId, { at: fromGitHub.at, by: fromGitHub.by ?? known?.by ?? null });
+            else if (!known) merges.set(report.bugId, { at: report.createdAt, by: report.onBehalfOf?.name ?? report.agent?.name ?? null });
+          }
+          return merges;
+        };
+        type Times = { starts: Map<string, Date>; merges: Map<string, { at: Date; by: string | null }> };
+        const timesFor = async (rows: { id: string }[]): Promise<Times> => {
+          const [starts, merges] = await Promise.all([startsFor(rows), mergesFor(rows)]);
+          return { starts, merges };
+        };
+        const toItem = (row: Prisma.BugGetPayload<{ select: typeof select }>, section: FeedSection | null, times: Times): WorkFeedItem => {
           const href = issueHref(row);
           // Work under way (#work-feed): how far through its time it is, from when the agent took it to when it is due.
           const claim = row.claims[0];
@@ -764,7 +788,8 @@ export async function IssuesList({
             deliveredAt: row.deliveries[0]?.updatedAt ?? null,
             // The opened card's timeline: when it was added and when an agent started on it.
             addedAt: row.createdAt,
-            startedAt: starts.get(row.id) ?? null,
+            startedAt: times.starts.get(row.id) ?? null,
+            merged: times.merges.get(row.id) ?? null,
             // Stalled (#work-feed-sections): since when it hasn't moved. Work in progress since its agent last checked
             // in; anything else since it last changed.
             stalledSince: section === "stalled"
@@ -835,8 +860,8 @@ export async function IssuesList({
                 prisma.bug.count({ where: sectionWhere }),
               ]);
               counts.set(key, count);
-              const starts = await startsFor(rows);
-              const items = rows.map((row) => toItem(row, key, starts));
+              const times = await timesFor(rows);
+              const items = rows.map((row) => toItem(row, key, times));
               // The newest delivery tops Needs your OK, celebrated (#just-delivered).
               if (key === "needs" && items[0]) items[0] = { ...items[0], justDelivered: true };
               return { key, title, count, items };
@@ -850,8 +875,8 @@ export async function IssuesList({
             ...FEED_SECTIONS.map(({ key }) => prisma.bug.count({ where: { AND: [where, feedSectionWhere(key, now)] } })),
           ]);
           FEED_SECTIONS.forEach(({ key }, index) => counts.set(key, sectionCounts[index]));
-          const starts = await startsFor(rows);
-          const items = rows.map((row) => toItem(row, overviewSection, starts));
+          const times = await timesFor(rows);
+          const items = rows.map((row) => toItem(row, overviewSection, times));
           if (overviewSection === "needs" && page === 1 && items[0]) items[0] = { ...items[0], justDelivered: true };
           return { items, groups: null, total, page, counts };
         }
@@ -863,8 +888,8 @@ export async function IssuesList({
           prisma.bug.groupBy({ by: ["status"], where, _count: { _all: true } }),
         ]);
         const counts = new Map(byStatus.map((group) => [group.status as string, group._count._all]));
-        const starts = await startsFor(rows);
-        return { items: rows.map((row) => toItem(row, null, starts)), groups: null, total, page, counts };
+        const times = await timesFor(rows);
+        return { items: rows.map((row) => toItem(row, null, times)), groups: null, total, page, counts };
       }, emptyFeed)
     : emptyFeed;
   // An Overview tab's address, with the Status filter when one is picked.

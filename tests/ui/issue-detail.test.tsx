@@ -3,10 +3,10 @@ import { MergerTransparencyCard } from "@/components/merger-transparency-card";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** The issue page's stage panels: bids with their votes and the Award control only where it may be used, confirmations and their banner, and judgements and merge reviews with their replies. */
-const mocks = vi.hoisted(() => ({ addComment: vi.fn(), requestRetest: vi.fn(), editPullRequestUrl: vi.fn(), switchWorkspace: vi.fn(), takeItBack: vi.fn() }));
+const mocks = vi.hoisted(() => ({ addComment: vi.fn(), editPullRequestUrl: vi.fn(), switchWorkspace: vi.fn(), takeItBack: vi.fn() }));
 vi.mock("@/app/(app)/organisations/issue-switch-action", () => ({ switchIssueWorkspaceAction: mocks.switchWorkspace }));
 vi.mock("@/app/actions/take-it-back", () => ({ takeItBackAction: mocks.takeItBack }));
 vi.mock("next/navigation", () => ({
@@ -17,7 +17,6 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/app/actions/issues", () => ({
   addCommentAction: mocks.addComment,
-  requestRetestAction: mocks.requestRetest,
   editPullRequestUrlAction: mocks.editPullRequestUrl,
 }));
 vi.mock("@/app/actions/issue-bids", () => ({ awardIssueBidAction: vi.fn() }));
@@ -31,7 +30,6 @@ import { MergeReviewsPanel, TestVerdictsPanel, type MergeReviewView, type TestVe
 import { IssueBidsPanel, type BidEntryView } from "@/components/issue-bids";
 import type { BidderRecordView } from "@/lib/bidder-record";
 import { IssueConfirmationsPanel, type ConfirmationEntryView, type ConfirmationsData } from "@/components/issue-confirmations";
-import { RetestRequest } from "@/components/retest-request";
 import { TakeItBackPanel } from "@/components/take-it-back";
 import { takeItBackReasonError, takeItBackState, type TakeItBackView } from "@/lib/take-it-back";
 import { IssueOrganisationSwitch } from "@/components/issue-organisation-hint";
@@ -148,54 +146,6 @@ describe("MergeReviewsPanel (#review-entries)", () => {
     await user.click(screen.getAllByRole("button", { name: "Reply" }).at(-1)!);
     await waitFor(() => expect(mocks.addComment).toHaveBeenCalledTimes(1));
     expect((mocks.addComment.mock.calls[0][1] as FormData).get("mergeReviewId")).toBe("mr1");
-  });
-});
-
-describe("RetestRequest", () => {
-  beforeAll(() => {
-    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
-      configurable: true,
-      value(this: HTMLDialogElement) { this.open = true; },
-    });
-    Object.defineProperty(HTMLDialogElement.prototype, "close", {
-      configurable: true,
-      value(this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event("close")); },
-    });
-  });
-
-  it("submits current details with an unknown version and links to the saved request", async () => {
-    mocks.requestRetest.mockResolvedValue({ ok: true, commentId: "comment123" });
-    const user = userEvent.setup();
-    render(<RetestRequest bugId="bug1" issueHref="/acme/project/12" issueLabel="#12 · Save still fails" />);
-    await user.click(screen.getByRole("button", { name: "Still having this problem?" }));
-    await user.selectOptions(screen.getByLabelText("Operating system"), "Not sure");
-    await user.type(screen.getByLabelText("Describe what happens now"), "The save button still does nothing after I restart.");
-    await user.click(screen.getByRole("button", { name: "Request a retest" }));
-
-    await waitFor(() => expect(mocks.requestRetest).toHaveBeenCalledTimes(1));
-    const [bugId, data] = mocks.requestRetest.mock.calls[0] as [string, FormData];
-    expect(bugId).toBe("bug1");
-    expect(data.get("operatingSystem")).toBe("Not sure");
-    expect(data.get("installedVersion")).toBe("");
-    expect(data.get("currentBehavior")).toBe("The save button still does nothing after I restart.");
-    expect(await screen.findByRole("status")).toHaveTextContent("Retest requested");
-    expect(screen.getByRole("link", { name: "View request" })).toHaveAttribute("href", "/acme/project/12#comment-comment123");
-    expect(screen.getByText(/won't reopen the issue/)).toBeInTheDocument();
-  });
-
-  it("keeps entered details and reports a save failure without showing success", async () => {
-    mocks.requestRetest.mockResolvedValue({ error: "Issue not found" });
-    const user = userEvent.setup();
-    render(<RetestRequest bugId="bug1" issueHref="/acme/project/12" issueLabel="#12 · Save still fails" />);
-    await user.click(screen.getByRole("button", { name: "Still having this problem?" }));
-    await user.selectOptions(screen.getByLabelText("Operating system"), "Windows");
-    const details = screen.getByLabelText("Describe what happens now") as HTMLTextAreaElement;
-    await user.type(details, "The save button still does nothing after I restart.");
-    await user.click(screen.getByRole("button", { name: "Request a retest" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Issue not found");
-    expect(details).toHaveValue("The save button still does nothing after I restart.");
-    expect(screen.queryByRole("status")).toBeNull();
   });
 });
 

@@ -2047,7 +2047,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                         />
                       </TimelineStep>
                     ) : null}
-                    {confirmationsCard ? (
+                    {confirmationsCard && !confirming ? (
                       <TimelineStep>{confirmationsCard}</TimelineStep>
                     ) : null}
                     {sourceIdea ? (
@@ -2408,6 +2408,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           ) : null}
 
 
+              {/* While it awaits confirmation, its confirmations are the decision being made: in view, not under a tab. */}
+              {confirming && confirmationsCard ? <div className="mb-4">{confirmationsCard}</div> : null}
               {/* Comments, with the agents' steps (bids, award, deliveries) under their Agents tab (#comment-tabs). */}
               {takesComments || commentCount > 0 || agentTimeline ? (
                 <section

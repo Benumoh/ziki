@@ -64,7 +64,7 @@ function Node({ state, label, caption, last }: { state: "done" | "now" | "warn" 
       <span className="min-w-0">
         <span className={`block text-[13px] leading-5 ${state === "todo" ? "font-medium text-zk-muted" : "font-semibold text-zk-text"}`}>
           {label}
-          {state === "now" ? <span className="font-semibold text-[#1f8a4c]"> (now)</span> : state === "warn" ? <span className="font-semibold text-zk-warn-fg"> (sent back)</span> : null}
+          {state === "now" ? <span className="font-semibold text-[#176b3b]"> (now)</span> : state === "warn" ? <span className="font-semibold text-zk-warn-fg"> (sent back)</span> : null}
         </span>
         {caption ? <span className="block text-[12px] leading-4 text-zk-muted">{caption}</span> : null}
       </span>

@@ -10,6 +10,7 @@ import { CelebrationStyles, DancingAgent, Fireworks, Hearts } from "@/components
 import { LocalTime } from "@/components/local-time";
 import { IDEA_ADDED_EVENT } from "@/lib/just-added";
 import { RichText } from "@/components/rich-text";
+import { ScreenshotPreview, type PreviewShot } from "@/components/screenshot-preview";
 import { BASE_PATH } from "@/lib/base-path";
 import { formatIssueNumber } from "@/lib/issue-number";
 import { cleanTitle } from "@/lib/issue-title";
@@ -67,6 +68,8 @@ export type WorkFeedItem = {
   stalledSince: Date | null;
   /** Who delivered it: the person the delivering agent works for, or null. */
   deliveredBy: string | null;
+  /** When its pull request was merged and who merged it (the GitHub account, else the reporting agent's person). */
+  merged?: { at: Date; by: string | null } | null;
   /** The newest delivery, at the top of Needs your OK: celebrated with a dancing agent and fireworks (#just-delivered). */
   justDelivered: boolean;
   /** Whether an agent holds it now (an active claim). */
@@ -422,7 +425,7 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
       <div className="min-w-0 pt-4 text-[14.5px] leading-relaxed text-zk-text2">
         {/* When it was delivered, and why it isn't merged yet when the latest pull request report says why. */}
         {item.deliveredAt ? (
-          <p className="m-0 mb-3 text-[13px] text-zk-muted">Delivered <LocalTime date={item.deliveredAt} absolute /></p>
+          <p className="m-0 mb-3 text-[13px] text-zk-muted">Delivered <LocalTime date={item.deliveredAt} absolute yearIfOld /></p>
         ) : null}
         {item.stallReason ? (
           <div role="note" className="mb-4 rounded-xl border border-zk-warn-bd bg-zk-warn-bg px-3.5 py-2.5 text-[13.5px] text-zk-warn-fg">
@@ -693,9 +696,13 @@ function Timeline({ item }: { item: WorkFeedItem }) {
     : null;
   const rows: { label: string; value: React.ReactNode }[] = [
     // Exact times ("Nov 19, 2026, 2:02 PM"), not "yesterday": the timeline tells how long each step took.
-    { label: "Added", value: <LocalTime date={item.addedAt} absolute /> },
-    { label: "Started", value: item.startedAt ? <LocalTime date={item.startedAt} absolute /> : "Not yet" },
-    { label: "Delivered", value: item.deliveredAt ? <LocalTime date={item.deliveredAt} absolute /> : "Not yet" },
+    { label: "Added", value: <LocalTime date={item.addedAt} absolute yearIfOld /> },
+    { label: "Started", value: item.startedAt ? <LocalTime date={item.startedAt} absolute yearIfOld /> : "Not yet" },
+    { label: "Delivered", value: item.deliveredAt ? <LocalTime date={item.deliveredAt} absolute yearIfOld /> : "Not yet" },
+    // Merged (#work-feed): when its pull request was merged and by whom, once a report says so.
+    ...(item.merged
+      ? [{ label: "Merged", value: <><LocalTime date={item.merged.at} absolute yearIfOld />{item.merged.by ? <span className="text-zk-muted"> by <span className="font-medium text-zk-text2">{item.merged.by}</span></span> : null}</> }]
+      : item.deliveredAt ? [{ label: "Merged", value: "Not yet" }] : []),
   ];
   return (
     <dl className="m-0 mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
@@ -717,22 +724,30 @@ function Timeline({ item }: { item: WorkFeedItem }) {
 
 function DeliveryPreview({ item }: { item: WorkFeedItem }) {
   const [first, ...rest] = item.screenshots;
+  // Every screenshot, now then before, opens large in one preview that steps through them all (#screenshot-preview).
+  const shots: PreviewShot[] = [
+    ...item.screenshots.map((url, index) => ({ url, label: index === 0 ? `Delivered work for ${formatIssueNumber(item.number)}` : `Screenshot ${index + 1}` })),
+    ...item.beforeScreenshots.map((url, index) => ({ url, label: `Before the work, screenshot ${index + 1}` })),
+  ];
+  const [opened, setOpened] = useState<number | null>(null);
+  const before = item.screenshots.length;
   return (
     <aside aria-label="Preview" className="min-w-0 pt-4">
+      <ScreenshotPreview shots={shots} index={opened} onIndex={setOpened} onClose={() => setOpened(null)} />
       {first && item.beforeScreenshots.length > 0 ? <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Now</p> : null}
       {first ? (
         <div className="flex flex-col gap-2">
-          <a href={first} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
+          <button type="button" onClick={() => setOpened(0)} aria-label="Preview the screenshot" className={`block w-full cursor-zoom-in overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
             {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
             <img src={first} alt={`Screenshot of the delivered work for ${formatIssueNumber(item.number)}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
-          </a>
+          </button>
           {rest.length > 0 ? (
             <div className="grid grid-cols-3 gap-2">
               {rest.map((url, index) => (
-                <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
+                <button key={url} type="button" onClick={() => setOpened(index + 1)} aria-label={`Preview screenshot ${index + 2}`} className={`block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
                   <img src={url} alt={`Screenshot ${index + 2}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
-                </a>
+                </button>
               ))}
             </div>
           ) : null}
@@ -749,10 +764,10 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Before</p>
           <div className="grid grid-cols-3 gap-2">
             {item.beforeScreenshots.map((url, index) => (
-              <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
+              <button key={url} type="button" onClick={() => setOpened(before + index)} aria-label={`Preview before screenshot ${index + 1}`} className={`block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
                 <img src={url} alt={`Before the work, screenshot ${index + 1}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
-              </a>
+              </button>
             ))}
           </div>
         </div>
