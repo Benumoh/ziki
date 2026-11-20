@@ -8,6 +8,12 @@ export const DELIVERY_TIMEOUT_MS = 10_000;
 export const MAX_ATTEMPTS = 5;
 export const BACKOFF_BASE_MS = 1_000;
 const LEASE_MS = 60_000;
+/**
+ * A delivery still waiting to go out (#501): `pending` before its first attempt
+ * (or after a manual retry), `failed` once an attempt failed and the next is
+ * scheduled. The dispatcher picks up both; `dead` means it gave up.
+ */
+const WAITING = { in: ["pending", "failed"] as ("pending" | "failed")[] };
 type DeliveryResult = { ok: true } | { ok: false; error: string };
 
 /** Pin DNS lookup while retaining the original Host and TLS certificate checks. */
@@ -75,7 +81,7 @@ export function webhookBody(event: {
 export async function processDelivery(deliveryId: string, now = new Date()): Promise<void> {
   const lease = new Date(now.getTime() + LEASE_MS);
   const claimed = await prisma.webhookDelivery.updateMany({
-    where: { id: deliveryId, status: "pending", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
+    where: { id: deliveryId, status: WAITING, OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
     data: { nextAttemptAt: lease },
   });
   if (!claimed.count) return;
@@ -103,8 +109,8 @@ export async function processDelivery(deliveryId: string, now = new Date()): Pro
   } catch { result = { ok: false, error: "Webhook signing configuration is invalid." }; }
   const attempts = delivery.attemptCount + 1;
   await prisma.$transaction(async (tx) => {
-    const owned = await tx.webhookDelivery.updateMany({ where: { id: deliveryId, status: "pending", nextAttemptAt: lease }, data: {
-      attemptCount: attempts, status: result.ok ? "delivered" : attempts >= MAX_ATTEMPTS ? "dead" : "pending",
+    const owned = await tx.webhookDelivery.updateMany({ where: { id: deliveryId, status: WAITING, nextAttemptAt: lease }, data: {
+      attemptCount: attempts, status: result.ok ? "delivered" : attempts >= MAX_ATTEMPTS ? "dead" : "failed",
       nextAttemptAt: result.ok || attempts >= MAX_ATTEMPTS ? null : new Date(Date.now() + BACKOFF_BASE_MS * 2 ** (attempts - 1)),
       deliveredAt: result.ok ? new Date() : null, lastError: result.ok ? null : result.error,
     } });
@@ -113,7 +119,7 @@ export async function processDelivery(deliveryId: string, now = new Date()): Pro
       data: { failureCount: result.ok ? 0 : { increment: 1 } }, select: { failureCount: true } });
     if (!result.ok && (attempts >= MAX_ATTEMPTS || updated.failureCount >= MAX_ATTEMPTS)) {
       await tx.webhookSubscription.update({ where: { id: subscription.id }, data: { enabled: false, disabledAt: new Date() } });
-      await tx.webhookDelivery.updateMany({ where: { subscriptionId: subscription.id, status: "pending" },
+      await tx.webhookDelivery.updateMany({ where: { subscriptionId: subscription.id, status: WAITING },
         data: { status: "dead", nextAttemptAt: null } });
     }
   });
@@ -122,7 +128,7 @@ export async function processDelivery(deliveryId: string, now = new Date()): Pro
 /** DB rows survive process restarts; call repeatedly from the authenticated scheduler. */
 export async function dispatchDueDeliveries() {
   const rows = await prisma.webhookDelivery.findMany({
-    where: { status: "pending", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }] },
+    where: { status: WAITING, OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }] },
     orderBy: [{ nextAttemptAt: "asc" }, { id: "asc" }], take: 10, select: { id: true },
   });
   for (let start = 0; start < rows.length; start += 5) {

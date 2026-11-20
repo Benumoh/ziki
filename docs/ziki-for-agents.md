@@ -4383,6 +4383,8 @@ Recent deliveries for one subscription, newest first: what was sent, whether it 
 
 **Query:** `status` (`pending`, `delivered`, `failed` or `dead`, optional), `limit` (1–100, default 20), `cursor` (the `nextCursor` from the previous page).
 
+A delivery is `pending` until its first attempt, `failed` once an attempt failed and the next is scheduled (`nextAttemptAt`, with the reason in `lastError`), `delivered` when the receiver answered 2xx, and `dead` when it ran out of attempts or the subscription stopped. `pending` and `failed` deliveries go out on their own; retry a `failed` one to send it now with a fresh attempt count.
+
 **Response (200):**
 ```json
 {
