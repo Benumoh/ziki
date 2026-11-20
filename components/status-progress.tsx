@@ -5,7 +5,7 @@ const MAX_NODES = 6;
 
 /**
  * The issue's progress in the side rail's Status card (#status-progress): the progress report, abridged to at most six
- * steps down a line. Earlier steps that are done fold into the first node ("Idea → Open, done"); the current step is
+ * steps down a line. Shown newest first. Earlier steps that are done fold into the last node ("Idea → Open, done"); the current step is
  * marked now (or set back, in amber); the next ones are hollow. Each step says how many entries it has.
  */
 export function StatusProgress({
@@ -27,31 +27,39 @@ export function StatusProgress({
   const shown = steps.slice(start, start + MAX_NODES);
   const folded = steps.slice(0, start);
 
+  // Newest first (#status-progress): the step it is at on top, the steps before it below, the folded ones last.
+  const nodes = shown.map((stage, index) => {
+    const at = start + index;
+    const state: NodeState = at < current ? "done" : at > current ? "todo" : setback ? "warn" : "now";
+    const count = entryCounts[stage];
+    const [one, many] = decisionStageInfo[stage].entry;
+    const caption = stage === "live" && live
+      ? live.caption
+      : count !== undefined && (state !== "todo" || count > 0) ? `${count} ${count === 1 ? one : many}` : null;
+    return { key: stage as string, state, label: decisionStageInfo[stage].label, caption };
+  });
+  if (folded.length > 0) {
+    nodes.unshift({ key: "folded", state: "done", label: `${decisionStageInfo[folded[0]].label} → ${decisionStageInfo[folded.at(-1)!].label}`, caption: "Done" });
+  }
+  nodes.reverse();
+
   return (
     <ol aria-label="Progress" className="m-0 mt-1 flex list-none flex-col p-0">
-      {folded.length > 0 ? (
-        <Node state="done" label={`${decisionStageInfo[folded[0]].label} → ${decisionStageInfo[folded.at(-1)!].label}`} caption="Done" last={false} />
-      ) : null}
-      {shown.map((stage, index) => {
-        const at = start + index;
-        const state = at < current ? "done" : at > current ? "todo" : setback ? "warn" : "now";
-        const count = entryCounts[stage];
-        const [one, many] = decisionStageInfo[stage].entry;
-        const caption = stage === "live" && live
-          ? live.caption
-          : count !== undefined && (state !== "todo" || count > 0) ? `${count} ${count === 1 ? one : many}` : null;
-        return <Node key={stage} state={state} label={decisionStageInfo[stage].label} caption={caption} last={index === shown.length - 1} />;
-      })}
+      {nodes.map((node, index) => (
+        <Node key={node.key} state={node.state} label={node.label} caption={node.caption} last={index === nodes.length - 1} />
+      ))}
     </ol>
   );
 }
 
-function Node({ state, label, caption, last }: { state: "done" | "now" | "warn" | "todo"; label: string; caption: string | null; last: boolean }) {
+type NodeState = "done" | "now" | "warn" | "todo";
+
+function Node({ state, label, caption, last }: { state: NodeState; label: string; caption: string | null; last: boolean }) {
   const ring = state === "now" ? "border-[#1f8a4c]" : state === "warn" ? "border-zk-warn-fg" : state === "done" ? "border-[#1f8a4c] bg-[#1f8a4c]" : "border-zk-border";
   return (
     <li className="relative flex gap-3 pb-3 last:pb-0">
-      {/* The line down to the next step. */}
-      {last ? null : <span aria-hidden="true" className={`absolute left-[8px] top-[18px] bottom-0 w-[2px] ${state === "done" ? "bg-[#1f8a4c]/40" : "bg-zk-border"}`} />}
+      {/* The line down to the step before it: green once this step is reached. */}
+      {last ? null : <span aria-hidden="true" className={`absolute left-[8px] top-[18px] bottom-0 w-[2px] ${state === "todo" ? "bg-zk-border" : "bg-[#1f8a4c]/40"}`} />}
       <span aria-hidden="true" className={`relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 bg-zk-surface ${ring}`}>
         {state === "done" ? (
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
