@@ -30,7 +30,7 @@ export default async function OrgMarketingPage({ params, searchParams }: Props) 
   const resolved = await requireOrgMarketing(org, queryOf(query));
   const context = await requireProject(resolved.org, resolved.project);
   const typeId = toSingleQueryParam(query.type) ?? null;
-  const project = await prisma.project.findUnique({ where: { id: context.project.id }, select: { siteUrl: true } });
+  const project = await prisma.project.findUnique({ where: { id: context.project.id }, select: { siteUrl: true, marketingUrl: true } });
   let data: MarketingHomeData;
   try {
     data = await readMarketingHome(context, typeId);
@@ -41,7 +41,7 @@ export default async function OrgMarketingPage({ params, searchParams }: Props) 
   // The chat, then the work, in one column like the main list.
   return (
     <div className="mx-auto w-full max-w-[920px]">
-      <MarketingChat slug={slug} projectId={context.project.id} siteUrl={project?.siteUrl ?? null} />
+      <MarketingChat slug={slug} projectId={context.project.id} siteUrl={project?.marketingUrl ?? project?.siteUrl ?? null} />
       <MarketingHome slug={slug} data={data} status={toSingleQueryParam(query.status) ?? null} />
     </div>
   );

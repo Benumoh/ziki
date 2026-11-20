@@ -14,13 +14,13 @@ export type AgentBrief = {
 export async function readProjectBrief(projectId: string): Promise<AgentBrief | null> {
   const [row, project] = await Promise.all([
     prisma.projectBrief.findUnique({ where: { projectId } }),
-    prisma.project.findUnique({ where: { id: projectId }, select: { siteUrl: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { siteUrl: true, marketingUrl: true } }),
   ]);
   const brief: AgentBrief = {
     product: row?.product ?? null,
     audience: row?.audience ?? null,
-    // The project's own site link (project settings) is the one site address.
-    website: project?.siteUrl ?? null,
+    // The marketing site (#marketing-url), else the app's own address.
+    website: project?.marketingUrl ?? project?.siteUrl ?? null,
     current_focus: row?.currentFocus ?? null,
     out_of_scope: row?.outOfScope ?? null,
   };

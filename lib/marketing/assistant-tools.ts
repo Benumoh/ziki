@@ -26,13 +26,19 @@ export type AssistantToolContext = {
 /** What a run collects besides the reply. */
 export type AssistantRun = { activity: string[]; drafts: MarketingDraft[] };
 
-export type AssistantTool = {
-  name: string;
-  description: string;
-  input: z.ZodObject;
+/** What the model is shown of a tool: its name, what it does, and its input schema. */
+export type ToolSpec = { name: string; description: string; input: z.ZodObject };
+
+/**
+ * A tool any assistant can offer (lib/marketing/assistant.ts `runAssistant`): `C` is what it runs for (the project the
+ * signed-in person opened), `R` what the run collects besides the reply.
+ */
+export type GenericTool<C, R> = ToolSpec & {
   /** The text the model reads back. Throw to tell the model it failed. */
-  run(input: unknown, context: AssistantToolContext, run: AssistantRun): Promise<string>;
+  run(input: unknown, context: C, run: R): Promise<string>;
 };
+
+export type AssistantTool = GenericTool<AssistantToolContext, AssistantRun>;
 
 function tool<Input extends z.ZodObject>(definition: {
   name: string;
@@ -156,7 +162,7 @@ export function assistantTools(context: AssistantToolContext): AssistantTool[] {
 }
 
 /** The tool's input schema, as the model sees it. */
-export function toolParameters(definition: AssistantTool): Record<string, unknown> {
+export function toolParameters(definition: ToolSpec): Record<string, unknown> {
   const { $schema: _schema, ...parameters } = z.toJSONSchema(definition.input) as Record<string, unknown>;
   void _schema;
   return parameters;

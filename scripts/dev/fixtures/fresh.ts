@@ -25,8 +25,12 @@ const SIGNUP_BONUS = 0.67;
 export async function loadFreshOrganisation(db: PrismaClient, passwordHash: string): Promise<void> {
   const existing = await db.organisation.findUnique({ where: { slug: SLUG }, select: { id: true } });
   if (existing && existing.id !== ORGANISATION_ID) throw new Error(`A "${SLUG}" organisation exists that the fixtures didn't make; not touching it.`);
-  // Everything in the organisation cascades from it, the signup bonus included.
-  if (existing) await db.organisation.delete({ where: { id: ORGANISATION_ID } });
+  // Issues and ideas filed here locally restrict deleting it; everything else cascades, the signup bonus included.
+  if (existing) {
+    await db.bug.deleteMany({ where: { organisationId: ORGANISATION_ID } });
+    await db.idea.deleteMany({ where: { organisationId: ORGANISATION_ID } });
+    await db.organisation.delete({ where: { id: ORGANISATION_ID } });
+  }
 
   const user = await db.user.upsert({
     where: { email: FRESH_LOGIN_EMAIL },

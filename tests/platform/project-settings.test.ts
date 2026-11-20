@@ -85,6 +85,7 @@ import {
   updateMarketingRevisionLimitAction,
 } from "@/app/(app)/[org]/marketing/settings/actions";
 import { askMarketingAssistantAction, saveMarketingSiteAction } from "@/app/(app)/[org]/marketing/actions";
+import { asAddress, missingBasics, PROJECT_CHAT_TOOLS, type ProjectChatContext } from "@/lib/project-chat/assistant";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import {
   DEFAULT_PROJECT_WORKFLOW,
@@ -671,7 +672,7 @@ describe("saveMarketingSiteAction (#marketing-home)", () => {
   it("lets a project member who is not an organisation admin set the site, for now (#marketing-agent-home)", async () => {
     requireProject.mockResolvedValue({ user: { id: "member" }, organisationId: "organisation-1", project: { id: "project-1" }, isOrgAdmin: false });
     await expect(saveMarketingSiteAction(slug, undefined, site("https://acme.dev"))).resolves.toEqual({ ok: true });
-    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { siteUrl: "https://acme.dev" } });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { marketingUrl: "https://acme.dev", siteUrl: "https://acme.dev" } });
   });
 
   it("refuses an empty, plain-http or example address", async () => {
@@ -693,9 +694,9 @@ describe("saveMarketingSiteAction (#marketing-home)", () => {
 
   it("sets the project's site and audits the change", async () => {
     await expect(saveMarketingSiteAction(slug, undefined, site("https://acme.dev"))).resolves.toEqual({ ok: true });
-    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { siteUrl: "https://acme.dev" } });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { marketingUrl: "https://acme.dev", siteUrl: "https://acme.dev" } });
     expect(auditCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({ projectId: "project-1", actorUserId: "admin", changes: { siteUrl: { from: null, to: "https://acme.dev" } } }),
+      data: expect.objectContaining({ projectId: "project-1", actorUserId: "admin", changes: { marketingUrl: { from: null, to: "https://acme.dev" }, siteUrl: { from: null, to: "https://acme.dev" } } }),
     });
   });
 });
@@ -786,5 +787,36 @@ describe("startPreviewBuildIfDue (#previews)", () => {
     installationIdForRepo.mockResolvedValueOnce(null);
     expect(await startPreviewBuildIfDue(trigger)).toBe("failed");
     expect(previewBuildUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) }));
+  });
+});
+
+describe("project chat basics (#project-chat)", () => {
+  const tool = (name: string) => PROJECT_CHAT_TOOLS.find((candidate) => candidate.name === name)!;
+  const context = (canEdit: boolean): ProjectChatContext => ({
+    organisationId: "org-1", projectId: "p-1", userId: "u-1", canEdit,
+    project: { name: "New product", siteUrl: null, marketingUrl: null, repoUrl: null },
+  });
+  const run = () => ({ activity: [], changed: [], idea: null });
+
+  it("turns what people type into an https address", () => {
+    expect(asAddress("hotels.ng")).toBe("https://hotels.ng");
+    expect(asAddress("http://hotels.ng.")).toBe("https://hotels.ng");
+    expect(asAddress("https://app.acme.io")).toBe("https://app.acme.io");
+  });
+
+  it("refuses to change the basics for someone who isn't an owner or admin, and saves nothing", async () => {
+    projectUpdate.mockClear();
+    await expect(tool("set_app_url").run({ url: "hotels.ng" }, context(false), run())).rejects.toThrow(/owners and admins/);
+    expect(projectUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses an address that isn't a real https site or GitHub repository", async () => {
+    await expect(tool("set_app_url").run({ url: "https://example.com" }, context(true), run())).rejects.toThrow();
+    await expect(tool("set_github_url").run({ url: "https://gitlab.com/acme/app" }, context(true), run())).rejects.toThrow();
+  });
+
+  it("asks for the marketing site until it is set, and 'same as the app' needs the app's address first", async () => {
+    expect(missingBasics(context(true).project)).toEqual(["the app's address", "the marketing site (or that it is the app's address)", "the GitHub repository"]);
+    await expect(tool("set_marketing_url").run({ sameAsApp: true }, context(true), run())).rejects.toThrow(/app's address/);
   });
 });

@@ -5,16 +5,20 @@ export function getDefaultTimeZone(): string {
 export const defaultTz =
   process.env.TZ || process.env.DEFAULT_TIMEZONE || "Africa/Lagos";
 
-export function formatDate(value: Date | string, timeZone?: string) {
+export function formatDate(value: Date | string, timeZone?: string, options: { yearIfOld?: boolean; now?: Date } = {}) {
   const date = typeof value === "string" ? new Date(value) : value;
+  const zone = timeZone || getDefaultTimeZone();
+  // `yearIfOld`: "Nov 19, 2:02 PM" this year, "Nov 19, 2025, 2:02 PM" for an older one.
+  const yearOf = (d: Date) => new Intl.DateTimeFormat("en-US", { year: "numeric", timeZone: zone }).format(d);
+  const showYear = !options.yearIfOld || isNaN(date.getTime()) || yearOf(date) !== yearOf(options.now ?? new Date());
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    ...(showYear ? { year: "numeric" as const } : {}),
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-    timeZone: timeZone || getDefaultTimeZone(),
+    timeZone: zone,
   }).format(date);
 }
 

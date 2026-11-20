@@ -48,6 +48,7 @@ import {
 import { ActivityTimeline, issueStepActivities, type ActivityEntry } from "@/components/activity-timeline";
 import { type AgentDecision } from "@/components/issue-agent-activity";
 import { IssueProgressReport } from "@/components/issue-progress-report";
+import { StatusProgress } from "@/components/status-progress";
 import { IssueStageProvider } from "@/components/issue-stage-context";
 import { IssueComments } from "@/components/comment-thread";
 import { AgentSteerPanel } from "@/components/agent-steer-panel";
@@ -178,7 +179,6 @@ import {
 import "./issue-detail.css";
 import { stateLabel } from "@/lib/labels";
 import { IssueRewardPanel } from "@/components/issue-reward-panel";
-import { RetestRequest } from "@/components/retest-request";
 import { rewardEstimatesFor } from "@/lib/agent-api/reward-estimates";
 import { IssueBlockersPanel } from "@/components/issue-blockers-panel";
 import { IssueTimeTracking } from "@/components/issue-time-tracking";
@@ -403,7 +403,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         milestone: { select: { id: true, title: true, dueDate: true, isClosed: true } },
         assignee: { select: { id: true, name: true, role: true, image: true } },
         area: { select: { id: true, name: true } },
-        project: { select: { slug: true, name: true, goal: true, siteUrl: true, organisation: { select: { slug: true } } } },
+        project: { select: { slug: true, name: true, goal: true, siteUrl: true, marketingUrl: true, organisation: { select: { slug: true } } } },
         votes: { where: { userId }, select: { id: true, value: true }, take: 1 },
         // #285: both sides of a duplicate link.
         duplicateOf: { select: { id: true, number: true, title: true, status: true, isDeleted: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } } },
@@ -438,7 +438,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           idea: { select: { id: true, number: true, rationale: true, convertedAt: true, _count: { select: { verdicts: true } } } },
           assignee: { select: { id: true, name: true, role: true, image: true } },
           area: { select: { id: true, name: true } },
-          project: { select: { slug: true, name: true, goal: true, siteUrl: true, organisation: { select: { slug: true } } } },
+          project: { select: { slug: true, name: true, goal: true, siteUrl: true, marketingUrl: true, organisation: { select: { slug: true } } } },
           votes: { where: { userId }, select: { id: true, value: true }, take: 1 },
           duplicateOf: { select: { id: true, number: true, title: true, status: true, isDeleted: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } } },
           duplicates: {
@@ -1113,6 +1113,10 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   // Two views of one issue: the simple one people read by default, and the work view with everything agents use
   // (?view=work), which the Work queue opens.
   const workView = (Array.isArray(query.view) ? query.view[0] : query.view) === "work";
+  // The live link (#live-link): the newest deployment report that gave one.
+  const liveLink = bug.status === "resolved"
+    ? await loadOptional("live link", null, () => prisma.deploymentReport.findFirst({ where: { bugId: bug.id, url: { not: null } }, orderBy: { updatedAt: "desc" }, select: { url: true } }))
+    : null;
   const viewHref = (work: boolean) => {
     const next = new URLSearchParams(pageQuery);
     if (work) next.set("view", "work");
@@ -1546,7 +1550,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       select: { currentFocus: true },
     });
     const marketingFocus = marketingBrief?.currentFocus ?? bug.project.goal;
-    const marketingSite = bug.project.siteUrl;
+    // The marketing site (#marketing-url), else the app's own address.
+    const marketingSite = bug.project.marketingUrl ?? bug.project.siteUrl;
 
     return (
       <>
@@ -1979,6 +1984,86 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     );
   }
 
+  // The agents' steps on the issue (#comment-tabs): the dispute button and the timeline of awards, bids, deliveries,
+  // judgements and reviews. They sit under the comments' Agents tab, in both views.
+  const agentTimeline = conversationHasContent ? (
+    <div id="conversation" className="mb-4 scroll-mt-24">
+                  <div className="flex justify-end empty:hidden">
+                    <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
+                  </div>
+                  <IssueTimeline>
+                    {mergeReviewing || timelineReviews.length > 0 ? (
+                      <>
+                        {currentStage === "ready" ? (
+                          <TimelineStep>
+                            <MergerTransparencyCard
+                              queuePosition={queuePosition}
+                              totalInQueue={totalInQueue}
+                              estimatedWaitMinutes={estimatedWaitMinutes}
+                              mergerAgentName={mergerAgentName}
+                              precedingPrNumber={precedingPrNumber}
+                              ciPassed={ciPassed}
+                              verdictsPassed={verdictsPassed}
+                              rebaseClean={rebaseClean}
+                              queueLocked={queueLocked}
+                            />
+                          </TimelineStep>
+                        ) : null}
+                        <TimelineStep>
+                          <MergeReviewsPanel at={firstAt(timelineReviews)} bugId={bug.id} reviews={timelineReviews} canReply={mergeReviewing} history={!mergeReviewing} />
+                        </TimelineStep>
+                      </>
+                    ) : null}
+                    {testing || timelineVerdicts.length > 0 ? (
+                      <TimelineStep>
+                        <TestVerdictsPanel at={firstAt(timelineVerdicts)} bugId={bug.id} verdicts={timelineVerdicts} canReply={testing} />
+                      </TimelineStep>
+                    ) : null}
+                    {timelineDeliveries.length > 0 ? (
+                      <TimelineStep>
+                        <DeliveriesPanel at={firstAt(timelineDeliveries)} bugId={bug.id} deliveries={timelineDeliveries} canReply={!bug.isDeleted && delivering} />
+                      </TimelineStep>
+                    ) : null}
+                    {/* #plan-review: the approved plan stays on the issue, above the award, as what the delivery is judged against. */}
+                    {!planReviewing && planCard?.decision === "approved" ? (
+                      <TimelineStep>
+                        <PlanReviewCard bugId={bug.id} plan={planCard} isOwner={false} live={false} deadline={null} canReply={!bug.isDeleted} difficultyLabel={difficultyLabel[bug.difficulty]} />
+                      </TimelineStep>
+                    ) : null}
+                    {awardClaim ? (
+                      <TimelineStep>
+                        <AwardStep award={awardClaim} />
+                      </TimelineStep>
+                    ) : null}
+                    {pastConfirmation || bidList.length > 0 || bidAgents.length > 0 ? (
+                      <TimelineStep>
+                        <IssueBidsPanel
+                          bidAction={bidAgents.length > 0 ? <BidButton bugId={bug.id} agents={bidAgents} /> : undefined}
+                          bids={bidList}
+                          at={firstAt(bidList)}
+                          collapsed={!takesBids(bug.substatus)}
+                          canAward={canAwardBids}
+                          awardThreshold={workflow.awardThreshold}
+                        />
+                      </TimelineStep>
+                    ) : null}
+                    {confirmationsCard && !confirming ? (
+                      <TimelineStep>{confirmationsCard}</TimelineStep>
+                    ) : null}
+                    {sourceIdea ? (
+                      <TimelineStep>
+                        <IdeaStep
+                          number={sourceIdea.number}
+                          href={ideaPath(refOf(bug.project), sourceIdea.number)}
+                          verdicts={sourceIdea._count.verdicts}
+                          convertedAt={sourceIdea.convertedAt}
+                        />
+                      </TimelineStep>
+                    ) : null}
+                  </IssueTimeline>
+    </div>
+  ) : null;
+
   return (
     <div className="issue-detail-scope flex flex-col gap-5 pb-10">
       {bug.isDeleted ? (
@@ -2128,12 +2213,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
 
           {/* Wraps on a narrow screen, so the actions menu stays on it. */}
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 self-start print:hidden">
-            <Link
-              href={viewHref(!workView)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip"
-            >
-              {workView ? "Simple view" : "Work view"}
-            </Link>
             <VoteButton
               bugId={bug.id}
               voteCount={bug.voteCount}
@@ -2152,8 +2231,17 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 isExpedited={bug.isBoosted}
               />
             ) : null}
-            {workView && !bug.isDeleted ? (
-              <IssueActionsMenu>
+            {/* The ⋯ menu, on the right in both views: View details (the work view, with everything agents use) first,
+                then the rarer actions. */}
+            <IssueActionsMenu>
+              <Link
+                href={viewHref(!workView)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip"
+              >
+                {workView ? "Simple view" : "View details"}
+              </Link>
+            {!bug.isDeleted ? (
+              <>
                 <CopyIssueSummaryButton
                   issue={{
                     number: bug.number,
@@ -2177,8 +2265,9 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 {canDeleteHere ? (
                   <DeleteIssueButton bugId={bug.id} bugTitle={bug.title} counts={keptCounts} variant="danger" size="sm" />
                 ) : null}
-              </IssueActionsMenu>
+              </>
             ) : null}
+            </IssueActionsMenu>
           </div>
         </div>
       </div>
@@ -2313,102 +2402,16 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 </section>
               ) : null}
 
-              {conversationHasContent ? (
-                <section
-                  id="conversation"
-                  className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
-                >
-                  <div className="flex justify-end empty:hidden">
-                    <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
-                  </div>
-                  <IssueTimeline>
-                    {mergeReviewing || timelineReviews.length > 0 ? (
-                      <>
-                        {currentStage === "ready" ? (
-                          <TimelineStep>
-                            <MergerTransparencyCard
-                              queuePosition={queuePosition}
-                              totalInQueue={totalInQueue}
-                              estimatedWaitMinutes={estimatedWaitMinutes}
-                              mergerAgentName={mergerAgentName}
-                              precedingPrNumber={precedingPrNumber}
-                              ciPassed={ciPassed}
-                              verdictsPassed={verdictsPassed}
-                              rebaseClean={rebaseClean}
-                              queueLocked={queueLocked}
-                            />
-                          </TimelineStep>
-                        ) : null}
-                        <TimelineStep>
-                          <MergeReviewsPanel at={firstAt(timelineReviews)} bugId={bug.id} reviews={timelineReviews} canReply={mergeReviewing} history={!mergeReviewing} />
-                        </TimelineStep>
-                      </>
-                    ) : null}
-                    {testing || timelineVerdicts.length > 0 ? (
-                      <TimelineStep>
-                        <TestVerdictsPanel at={firstAt(timelineVerdicts)} bugId={bug.id} verdicts={timelineVerdicts} canReply={testing} />
-                      </TimelineStep>
-                    ) : null}
-                    {timelineDeliveries.length > 0 ? (
-                      <TimelineStep>
-                        <DeliveriesPanel at={firstAt(timelineDeliveries)} bugId={bug.id} deliveries={timelineDeliveries} canReply={!bug.isDeleted && delivering} />
-                      </TimelineStep>
-                    ) : null}
-                    {/* #plan-review: the approved plan stays on the issue, above the award, as what the delivery is judged against. */}
-                    {!planReviewing && planCard?.decision === "approved" ? (
-                      <TimelineStep>
-                        <PlanReviewCard bugId={bug.id} plan={planCard} isOwner={false} live={false} deadline={null} canReply={!bug.isDeleted} difficultyLabel={difficultyLabel[bug.difficulty]} />
-                      </TimelineStep>
-                    ) : null}
-                    {awardClaim ? (
-                      <TimelineStep>
-                        <AwardStep award={awardClaim} />
-                      </TimelineStep>
-                    ) : null}
-                    {pastConfirmation || bidList.length > 0 || bidAgents.length > 0 ? (
-                      <TimelineStep>
-                        <IssueBidsPanel
-                          bidAction={bidAgents.length > 0 ? <BidButton bugId={bug.id} agents={bidAgents} /> : undefined}
-                          bids={bidList}
-                          at={firstAt(bidList)}
-                          collapsed={!takesBids(bug.substatus)}
-                          canAward={canAwardBids}
-                          awardThreshold={workflow.awardThreshold}
-                        />
-                      </TimelineStep>
-                    ) : null}
-                    {confirmationsCard ? (
-                      <TimelineStep>{confirmationsCard}</TimelineStep>
-                    ) : null}
-                    {sourceIdea ? (
-                      <TimelineStep>
-                        <IdeaStep
-                          number={sourceIdea.number}
-                          href={ideaPath(refOf(bug.project), sourceIdea.number)}
-                          verdicts={sourceIdea._count.verdicts}
-                          convertedAt={sourceIdea.convertedAt}
-                        />
-                      </TimelineStep>
-                    ) : null}
-                  </IssueTimeline>
-                </section>
-              ) : null}
 
               {closeSuggestions ? <CloseSuggestionsPanel data={closeSuggestions} /> : null}
           </>
           ) : null}
 
 
-              {bug.status === "resolved" && !bug.isDeleted ? (
-                <RetestRequest
-                  bugId={bug.id}
-                  issueHref={issueHref(bug)}
-                  issueLabel={`${formatIssueNumber(bug.number)} · ${bug.title}`}
-                />
-              ) : null}
-
-              {/* Comments, apart from the stage entries (bids, deliveries) in the Conversation. */}
-              {takesComments || commentCount > 0 ? (
+              {/* While it awaits confirmation, its confirmations are the decision being made: in view, not under a tab. */}
+              {confirming && confirmationsCard ? <div className="mb-4">{confirmationsCard}</div> : null}
+              {/* Comments, with the agents' steps (bids, award, deliveries) under their Agents tab (#comment-tabs). */}
+              {takesComments || commentCount > 0 || agentTimeline ? (
                 <section
                   id="comments"
                   aria-label="Comments"
@@ -2427,6 +2430,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   ) : null}
                   <IssueComments
                     count={commentCount}
+                    agentActivity={agentTimeline}
                     composer={takesComments ? <CommentComposer bugId={bug.id} /> : null}
                     replyBugId={takesComments ? bug.id : undefined}
                     reporterId={bug.reporterId}
@@ -2511,6 +2515,22 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 <span className={`${issueChipBaseClass} border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg`}>Boosted</span>
               ) : null}
             </div>
+            {/* The progress report, abridged to six steps (#status-progress), in both views. */}
+            {!bug.isDeleted ? (
+              <StatusProgress
+                currentStage={currentStage}
+                setback={stageSetback(currentStage, sentBack)}
+                entryCounts={{
+                  idea: sourceIdea?._count.verdicts ?? 0,
+                  confirm: confirmationsData?.entries.length ?? 0,
+                  open: bidList.length,
+                  progress: deliveryList.length,
+                  delivered: testVerdictList.length,
+                  done: mergeReviewList.length,
+                }}
+                live={liveFix ? { caption: liveFix.check.fact === "released" ? `${liveFactLabel(liveFix.check)}, ${liveConfirmLabel(liveFix.check)}` : liveFactLabel(liveFix.check) } : undefined}
+              />
+            ) : null}
             {workView && liveFix ? (
               <LiveFlow substatus={bug.substatus} reachedAt={liveFix.reachedAt} confirmed={liveFix.check.confirmedBy.length} needed={PROD_CONFIRMATIONS_NEEDED} />
             ) : null}
@@ -2623,17 +2643,20 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             </div>
           </section>
 
-          {workView ? (
-          <>
-          {/* Links, under People: the GitHub PR (the linked one too) and the idea it came from. */}
+          {/* Links, under People, in both views: the GitHub PR (the linked one too), where it is live, and the idea it
+              came from. */}
           <IssueLinks
             links={proofLinks}
             linkedPullRequestUrl={bug.pullRequestUrl}
+            liveUrl={bug.status === "resolved" ? liveLink?.url ?? null : undefined}
             idea={sourceIdea ? { number: sourceIdea.number, slug: refOf(bug.project) } : null}
             repairs={linkRepairs}
             bugId={bug.id}
             canEditPullRequest={canEditPullRequest}
           />
+
+          {workView ? (
+          <>
 
           {prChecks && bug.pullRequestUrl && (prChecks.failed || prChecks.report?.reportedBy) ? (
             <PullRequestChecks

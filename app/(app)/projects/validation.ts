@@ -28,7 +28,7 @@ const isGitHubRepoUrl = (url: URL) =>
   /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(url.pathname) && !url.search && !url.hash &&
   !/^\/owner\/repository(?:\.git)?\/?$/i.test(url.pathname);
 const GITHUB_REPO_URL_MESSAGE = "Enter your GitHub repository's URL, such as https://github.com/your-org/your-repo.";
-const repoUrlSchema = optionalUrl(isGitHubRepoUrl, GITHUB_REPO_URL_MESSAGE);
+export const repoUrlSchema = optionalUrl(isGitHubRepoUrl, GITHUB_REPO_URL_MESSAGE);
 
 /** How many repositories a project can list besides its main one (#2). */
 export const PROJECT_EXTRA_REPOSITORIES_MAX = 10;
@@ -51,7 +51,7 @@ export const projectRepositorySchema = z.object({
 });
 
 /** The product's live site (#project-links). The example domains (example.com and the like) are not real sites. */
-const siteUrlSchema = optionalUrl((url) => url.protocol === "https:" && !url.username && !url.password &&
+export const siteUrlSchema = optionalUrl((url) => url.protocol === "https:" && !url.username && !url.password &&
   !/(^|\.)example\.(com|org|net)$/i.test(url.hostname),
   "Enter your site's HTTPS address, such as https://yourproduct.com.");
 
