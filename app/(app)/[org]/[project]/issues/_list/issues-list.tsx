@@ -169,13 +169,15 @@ const OVERVIEW_STATES = ["open", "in_progress", "done", "merge", "resolved"] as 
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
 /**
- * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (delivered work to approve, live
- * work to confirm), what is being worked on right now, and what looks stalled. `?section=` shows one of them in full.
+ * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (new ideas, live work to confirm),
+ * what is being worked on right now, what is waiting for an agent (open, nobody on it yet), and what looks stalled. `?section=` shows one of them in full.
  */
 const OVERVIEW_SECTION_PARAM = "section";
 const FEED_SECTIONS = [
   { key: "needs", title: "Needs your OK" },
   { key: "active", title: "Being worked on" },
+  // Open issues nobody holds yet: waiting to be confirmed or for an agent's bid (#work-feed-waiting).
+  { key: "waiting", title: "Waiting for an agent" },
   { key: "stalled", title: "Stalled" },
 ] as const;
 type FeedSection = (typeof FEED_SECTIONS)[number]["key"];
@@ -202,6 +204,9 @@ function feedSectionWhere(section: FeedSection, now: number): Prisma.BugWhereInp
   }
   if (section === "active") {
     return { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, heartbeat] };
+  }
+  if (section === "waiting") {
+    return { substatus: { in: ["requires_confirmation", "open"] } };
   }
   return { OR: [
     { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, { NOT: heartbeat }] },
@@ -686,18 +691,19 @@ export async function IssuesList({
   // New ideas that need your OK (#just-added): this project's open ideas you haven't given a verdict on, newest first.
   // They top Needs your OK with Approve (your good verdict), and the one the chat just filed flashes there.
   const ideaSection = toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]);
+  // On the organisation-wide list (every project), every project's ideas, as the Fixes tab lists them.
   const ideasToOkWhere: Prisma.IdeaWhereInput = {
-    projectId: project.id, isDeleted: false, status: "open", track: "product",
+    ...(allProjects ? { organisationId: organisationId ?? "" } : { projectId: project.id }), isDeleted: false, status: "open", track: "product",
     ...(userId ? { verdicts: { none: { onBehalfOfUserId: userId } } } : {}),
   };
-  const [justAdded, ideasToOkCount] = feedView && overviewTab === "all" && (!ideaSection || ideaSection === "needs") && !allProjects
+  const [justAdded, ideasToOkCount] = feedView && overviewTab === "all" && (!ideaSection || ideaSection === "needs")
     ? await loadOrEmpty("ideas to approve", () => Promise.all([
         prisma.idea.findMany({
           where: ideasToOkWhere,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: ideaSection === "needs" ? 30 : 3,
-          select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } } },
-        }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(ref, row.number) }))),
+          select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } }, project: { select: { slug: true, organisation: { select: { slug: true } } } } },
+        }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(refOf(row.project), row.number) }))),
         prisma.idea.count({ where: ideasToOkWhere }),
       ]), [[], 0] as [JustAddedIdea[], number])
     : [[] as JustAddedIdea[], 0];
