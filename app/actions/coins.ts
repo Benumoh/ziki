@@ -11,6 +11,7 @@ import { refreshBudgetAlert } from "@/lib/coins/budget-sweeps";
 import { createPackCheckout, createTestPurchase } from "@/lib/coins/purchase";
 import { createSubscriptionCheckout, setSubscriptionEnding, startTestSubscription, subscribeFrom } from "@/lib/coins/subscription";
 import { testPayments } from "@/lib/coins/test-mode";
+import { syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { startPayoutOnboarding, syncPayoutsEnabled, withdrawEarned } from "@/lib/coins/withdraw";
 
 /**
@@ -95,6 +96,8 @@ export async function keepSubscriptionAction(): Promise<void> {
 export async function fundIssueAction(bugId: string, amount: number, requestId: string): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
+    // What they just earned is spendable at once (#earnings-in-ziks), not only after the next sweep.
+    await syncEarnedZiks(user.id);
     const result = await fundIssue(user.id, bugId, Math.trunc(Number(amount)), requestId);
     revalidatePath("/", "layout");
     return { ok: true, message: result.funded ? `Funded. ${result.escrow.toLocaleString("en-US")} Ziks are now behind this issue.` : "Already funded." };
@@ -107,6 +110,7 @@ export async function fundIssueAction(bugId: string, amount: number, requestId: 
 export async function fundBudgetAction(projectId: string, amount: number, requestId: string): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
+    await syncEarnedZiks(user.id);
     const result = await fundBudget(user.id, projectId, Math.trunc(Number(amount)), requestId);
     revalidatePath("/", "layout");
     await refreshBudgetAlert(projectId).catch(() => null);
@@ -182,6 +186,7 @@ export async function refreshPayoutsAction(): Promise<boolean> {
 export async function withdrawZiksAction(): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
+    await syncEarnedZiks(user.id);
     const outcome = await withdrawEarned(user.id);
     revalidatePath("/coins");
     revalidatePath("/coins/payouts");

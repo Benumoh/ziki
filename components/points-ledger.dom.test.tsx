@@ -63,10 +63,10 @@ describe("PointsLedger", () => {
 
   it("renders the summary cards with earned, deductions, and net balance", () => {
     render(<PointsLedger entries={mockEntries} summary={mockSummary} />);
-    expect(screen.getByText("+$65")).toBeInTheDocument();
-    expect(screen.getAllByText("-$15").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("$50")).toBeInTheDocument();
-    expect(screen.getByText("$ history · Itemized Points Ledger")).toBeInTheDocument();
+    expect(screen.getByText("+650 Ziks")).toBeInTheDocument();
+    expect(screen.getAllByText("-150 Ziks").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("500 Ziks")).toBeInTheDocument();
+    expect(screen.getByText("Ziks history · Itemized Points Ledger")).toBeInTheDocument();
   });
 
   it("renders each itemized entry with task details, role badges, and point deltas", () => {
@@ -74,9 +74,9 @@ describe("PointsLedger", () => {
     expect(screen.getAllByText("#101").length).toBe(2);
     expect(screen.getByText("#102")).toBeInTheDocument();
     expect(screen.getAllByText("Fix authentication redirect loop").length).toBe(2);
-    expect(screen.getByText("+$40")).toBeInTheDocument();
-    expect(screen.getByText("+$10")).toBeInTheDocument();
-    expect(screen.getAllByText("-$15").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("+400 Ziks")).toBeInTheDocument();
+    expect(screen.getByText("+100 Ziks")).toBeInTheDocument();
+    expect(screen.getAllByText("-150 Ziks").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Corrected")).toBeInTheDocument();
   });
 
@@ -91,14 +91,14 @@ describe("PointsLedger", () => {
     fireEvent.click(reviewerTab);
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByText("#102")).toBeInTheDocument();
-    expect(screen.queryByText("+$40")).not.toBeInTheDocument();
+    expect(screen.queryByText("+400 Ziks")).not.toBeInTheDocument();
 
     // Click 'Adjustments' tab
     const adjustmentsTab = screen.getByRole("tab", { name: "Adjustments" });
     fireEvent.click(adjustmentsTab);
     const listItems = screen.getAllByRole("listitem");
     expect(listItems).toHaveLength(1);
-    expect(within(listItems[0]).getByText("-$15")).toBeInTheDocument();
+    expect(within(listItems[0]).getByText("-150 Ziks")).toBeInTheDocument();
   });
 
   it("renders a clean empty state when no entries match or exist", () => {

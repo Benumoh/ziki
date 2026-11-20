@@ -94,7 +94,7 @@ export function ProjectRewardRulesSection({
               id="rewardGuidelines"
               name="rewardGuidelines"
               rows={2}
-              placeholder="e.g. Extra $0.50 bonus for full end-to-end regression tests."
+              placeholder="e.g. Extra 5 Ziks for full end-to-end regression tests."
               defaultValue={initialConfig?.guidelines ?? ""}
               maxLength={2000}
               disabled={disabled}

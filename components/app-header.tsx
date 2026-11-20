@@ -213,7 +213,6 @@ export function AppHeader({
   reportFormUrl,
   defaultProjectSlug = null,
   earned = null,
-  earningsOrganisationId = null,
   version,
   showWithdraw = false,
 }: {
@@ -221,10 +220,8 @@ export function AppHeader({
   showWithdraw?: boolean;
   /** The running version (package version), shown with Cookie settings at the foot of the account menu. */
   version?: string;
-  /** Earnings (#earnings): what the person earned in the workspace they're in, shown with Withdraw on every page; null when unknown. */
+  /** Earnings (#earnings-in-ziks): everything the person earned, every workspace together, shown with Withdraw on every page; null hides it. */
   earned?: number | null;
-  /** The workspace the $ and Withdraw are for (#earnings): the one the person is in. */
-  earningsOrganisationId?: string | null;
   /** The first project in the current organisation, for pages whose URL names none yet. */
   defaultProjectSlug?: ProjectRef | null;
   userName?: string | null;
@@ -262,7 +259,6 @@ export function AppHeader({
   const roleAccess = roleAccessFor(organisationRole, realRole);
   // There is no request form yet: the members page names the admins who can change a role.
   const requestAccessHref = projectSlug ? orgPath(projectSlug, "members") : "/organisations";
-  const earningsWorkspaceName = organisationOptions.find((organisation) => organisation.id === earningsOrganisationId)?.name ?? null;
 
   return (
     // Sticky only from lg: on phones and tablets the toolbar wraps onto rows,
@@ -299,13 +295,13 @@ export function AppHeader({
               <Link
                 href={projectSlug ? `/earnings?in=${projectSlug}` : "/earnings"}
                 aria-current={isNavItemActive(pathname, "/earnings") ? "page" : undefined}
-                title={earningsWorkspaceName ? `Earned in ${earningsWorkspaceName}. Your earnings adds up every workspace.` : undefined}
+                title="Everything you earned, in every workspace. Your earnings shows how it adds up."
                 className={`rounded-full px-2.5 py-1 text-sm font-bold tabular-nums text-zk-text hover:bg-zk-chip ${linkFocus}`}
               >
                 {formatZ(earned)}
-                <span className="sr-only"> earned{earningsWorkspaceName ? ` in ${earningsWorkspaceName}` : ""}: Your earnings</span>
+                <span className="sr-only"> earned in every workspace: Your earnings</span>
               </Link>
-              <WithdrawWindow earned={earned} organisationId={earningsOrganisationId} className={`inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 max-sm:h-8 max-sm:w-8 max-sm:p-0 ${linkFocus}`}>
+              <WithdrawWindow className={`inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 max-sm:h-8 max-sm:w-8 max-sm:p-0 ${linkFocus}`}>
                 {/* Phones: a wallet icon; tablets and up: the word. Either way it is called Withdraw. */}
                 <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] sm:hidden" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v3" />

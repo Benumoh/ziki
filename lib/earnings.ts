@@ -1,6 +1,7 @@
 import { Prisma, type PointRole, type PrismaClient } from "@prisma/client";
 import { pointsNumber } from "@/lib/points/rules";
 import { issueHref } from "@/lib/issue-ref";
+import { ZIKS_PER_DOLLAR } from "@/lib/coins/math";
 
 /**
  * Earnings (#earnings): what a person and their agents have earned on every project they work on, read straight off
@@ -50,11 +51,14 @@ export function weeklyGoalState(earnedThisWeek: number, goal: number, now = new 
   };
 }
 
-/** Reads the weekly goal a person typed: a positive amount of dollars, at most two decimals. Null when it isn't one. */
+/**
+ * Reads the weekly goal a person typed, in Ziks (#earnings-in-ziks): a positive amount, at most one decimal, with or
+ * without "Ziks" after it. Returns the dollars it is stored in, or null when it isn't one.
+ */
 export function parseWeeklyGoal(raw: unknown): number | null {
-  const text = typeof raw === "string" ? raw.trim().replace(/^\$/, "").replace(/,/g, "") : "";
-  if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
-  const value = Number(text);
+  const text = typeof raw === "string" ? raw.trim().replace(/\s*ziks?$/i, "").replace(/,/g, "") : "";
+  if (!/^\d+(\.\d)?$/.test(text)) return null;
+  const value = Number(text) / ZIKS_PER_DOLLAR;
   return value > 0 && value <= MAX_WEEKLY_GOAL ? value : null;
 }
 

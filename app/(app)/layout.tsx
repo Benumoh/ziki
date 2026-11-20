@@ -235,18 +235,16 @@ export default async function AppLayout({
     }
   }
 
-  // Earnings (#earnings): what this person has earned in the workspace they're in, shown with Withdraw on every page
-  // to anyone who works on projects (not to people who only post them). The workspace is the one in the address
-  // (one they belong to, or one they joined a project of), else their active one. A failed read hides it.
-  const routeSlug = requestPath.split("/").filter(Boolean)[0] ?? null;
-  const earningsOrganisationId =
-    (routeSlug ? externalProjects.find((project) => project.organisationSlug === routeSlug)?.organisationId : null) ?? organisationId;
-  // The account menu's Withdraw is only for people who have earned Ziks; a failed read hides it.
-  const showWithdraw = await hasEarnedZiks(prisma, user.id).catch(() => false);
-  const earned = await headerEarnings(prisma, user.id, earningsOrganisationId).catch((error) => {
+  // Earnings (#earnings-in-ziks): everything this person has earned, every workspace together, shown with Withdraw on
+  // every page to anyone who works on projects (not to people who only post them). Your earnings shows how it adds
+  // up. A failed read hides it.
+  const earned = await headerEarnings(prisma, user.id).catch((error) => {
     console.error("[layout] earnings total failed", error);
     return null;
   });
+  // The account menu's Withdraw is only for people who have earned Ziks; a failed read hides it. Earnings move into
+  // the wallet on the next sweep (#earnings-in-ziks), so money earned here shows it straight away too.
+  const showWithdraw = (earned !== null && earned > 0) || (await hasEarnedZiks(prisma, user.id).catch(() => false));
 
   // #287 and #active-agents: one primary-key read; a failure leaves both on, the defaults.
   let shortcutsEnabled = true;
@@ -282,7 +280,6 @@ export default async function AppLayout({
           organisationRole={organisationRole}
           defaultProjectSlug={defaultProjectSlug}
           earned={earned}
-          earningsOrganisationId={earningsOrganisationId}
           showWithdraw={showWithdraw}
           version={appVersionLabel()}
         />

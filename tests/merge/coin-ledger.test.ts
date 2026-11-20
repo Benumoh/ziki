@@ -29,11 +29,14 @@ const world = vi.hoisted(() => ({
   project: { id: "proj", organisationId: "org", archivedAt: null as Date | null, budgetEnabled: false, budgetAlert: null as string | null, budgetPausedAt: null as Date | null },
   /** How many planning-poker estimates the issue has; an issue has no price, and can't be funded, before three. */
   estimates: 3,
+  /** The points ledger (PointEntry, dollars), which earnings move into the wallet from (#earnings-in-ziks). */
+  points: [] as Array<{ id: string; userId: string; points: number }>,
 }));
 
 function matches(row: Record<string, unknown>, where: Where = {}): boolean {
   return Object.entries(where).every(([key, want]) => {
     if (want && typeof want === "object" && "in" in (want as object)) return ((want as { in: unknown[] }).in).includes(row[key]);
+    if (want && typeof want === "object" && "gt" in (want as object)) return (row[key] as number) > (want as { gt: number }).gt;
     return row[key] === want;
   });
 }
@@ -67,6 +70,7 @@ const db = vi.hoisted(() => {
         return [...groups.values()].map((g) => ({ ...g.key, _sum: { amount: g.sum } }));
       },
       findUnique: async ({ where }: { where: { sourceKey: string } }) => world.rows.find((r) => r.sourceKey === where.sourceKey) ?? null,
+      findMany: async ({ where }: { where: Where }) => world.rows.filter((r) => matches(r, where)),
       count: async ({ where }: { where: Where }) => world.rows.filter((r) => matches(r, where)).length,
     },
     bug: {
@@ -80,6 +84,19 @@ const db = vi.hoisted(() => {
       update: async ({ data }: { data: Record<string, unknown> }) => Object.assign(world.project, data),
     },
     rewardEstimate: { count: async () => world.estimates },
+    pointEntry: {
+      // In the order they were earned, as the real query sorts them.
+      findMany: async ({ where }: { where: { userId: string } }) => world.points.filter((p) => p.userId === where.userId).map(({ id, points }) => ({ id, points })),
+      aggregate: async ({ where }: { where: { userId: string } }) => {
+        const found = world.points.filter((p) => p.userId === where.userId);
+        return { _sum: { points: found.length ? found.reduce((s, p) => s + p.points, 0) : null } };
+      },
+      groupBy: async () => {
+        const sums = new Map<string, number>();
+        for (const p of world.points) sums.set(p.userId, (sums.get(p.userId) ?? 0) + p.points);
+        return [...sums].map(([userId, points]) => ({ userId, _sum: { points } }));
+      },
+    },
     // "budget-owner" is an owner of the organisation (#project-budget); anyone else is no member.
     membership: { findUnique: async ({ where }: { where: { organisationId_userId: { userId: string } } }) => (where.organisationId_userId.userId === "budget-owner" ? { role: "owner" } : null) },
     user: {
@@ -189,6 +206,7 @@ import { refundEscrow, releaseEscrow } from "@/lib/coins/escrow";
 import { escrowBalance, escrowByBug, hasEarnedZiks, walletBalance, walletSummary } from "@/lib/coins/ledger";
 import { dollarsToZiks, estimateToZik, feeOf, planRelease, splitByWeight, ziksToDollars } from "@/lib/coins/math";
 import { ledgerBalances } from "@/lib/coins/money";
+import { earnedZiksFor, earningRows, sweepEarnedZiks, syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { createPackCheckout, createTestPurchase, recordPurchase } from "@/lib/coins/purchase";
 import { testPayments } from "@/lib/coins/test-mode";
 import { discountedCents, planBreakEvenCents, ZIK_PLANS } from "@/lib/coins/plans";
@@ -209,6 +227,7 @@ beforeEach(() => {
   world.withdrawals.length = 0;
   world.transfer.create = async () => ({ id: "tr_default" });
   world.estimates = 3;
+  world.points.length = 0;
   Object.assign(world.bug, { status: "open", payoutReleasedAt: null, reward: 1, rewardOverrideZik: null, assigneeId: null });
   Object.assign(world.project, { budgetEnabled: false, budgetAlert: null, archivedAt: null, budgetPausedAt: null });
 });
@@ -312,7 +331,7 @@ describe("releasing and refunding escrow", () => {
     expect(await escrowBalance(db as never, "bug")).toBe(0);
     expect(world.rows.filter((r) => r.account === "revenue").reduce((s, r) => s + r.amount, 0)).toBe(10);
     expect(total()).toBe(100);
-    expect(ledgerBalances({ bought: 100, withdrawn: 0, inLedger: total() }).difference).toBe(0);
+    expect(ledgerBalances({ bought: 100, fromEarnings: 0, withdrawn: 0, inLedger: total() }).difference).toBe(0);
 
     // The same release again finds the escrow empty and pays nothing more.
     expect(await releaseEscrow(db as never, "bug", awards)).toBeNull();
@@ -340,6 +359,63 @@ describe("who sees Withdraw", () => {
   });
 });
 
+describe("earnings in Ziks (#earnings-in-ziks)", () => {
+  it("moves each earning into the wallet at 10 Ziks a dollar, to a tenth, once", async () => {
+    expect(earnedZiksFor(12.67)).toBe(126.7);
+    world.points.push({ id: "p1", userId: "earner", points: 12.67 });
+
+    expect(await syncEarnedZiks("earner")).toBe(126.7);
+    expect(await syncEarnedZiks("earner")).toBe(0);
+    expect(await walletSummary(db as never, "earner")).toEqual({ balance: 126.7, earned: 126.7, withdrawable: 126.7 });
+    expect(await hasEarnedZiks(db as never, "earner")).toBe(true);
+
+    // The welcome bonus moves in as its own 6.7, not rounded to a whole Zik.
+    world.points.push({ id: "p2", userId: "earner", points: 0.67 });
+    expect(await syncEarnedZiks("earner")).toBe(6.7);
+    expect(world.rows.filter((r) => r.kind === "earning").map((r) => [r.sourceKey, r.amount])).toEqual([["earning:p1", 126.7], ["earning:p2", 6.7]]);
+    expect(ledgerBalances({ bought: 0, fromEarnings: 133.4, withdrawn: 0, inLedger: total() }).difference).toBe(0);
+  });
+
+  it("adds up to exactly the points total even when entries are smaller than a tenth", () => {
+    const entries = [
+      { id: "bonus", points: 0.67 },
+      { id: "c1", points: 0.1125 },
+      { id: "c2", points: 0.1125 },
+    ];
+    const rows = earningRows("u", entries, new Set(), 0, 0);
+    expect(rows.map((row) => row.sourceKey)).toEqual(["earning:bonus", "earning:c1", "earning:c2"]);
+    expect(rows.reduce((sum, row) => sum + Number(row.amount), 0)).toBeCloseTo(earnedZiksFor(0.895), 6);
+  });
+
+  it("takes back what a correction takes off the points ledger, and never lets bought Ziks be withdrawn", async () => {
+    await buy("earner", 50, "e-buy");
+    world.points.push({ id: "p1", userId: "earner", points: 10 });
+    await syncEarnedZiks("earner");
+    expect(await walletSummary(db as never, "earner")).toEqual({ balance: 150, earned: 100, withdrawable: 100 });
+
+    world.points.push({ id: "p2", userId: "earner", points: -4 });
+    expect(await syncEarnedZiks("earner")).toBe(-40);
+    expect(await walletSummary(db as never, "earner")).toEqual({ balance: 110, earned: 60, withdrawable: 60 });
+  });
+
+  it("lets earned Ziks fund a project, and a take-back makes them withdrawable again", async () => {
+    world.project.budgetEnabled = true;
+    world.points.push({ id: "p1", userId: "budget-owner", points: 20 });
+    await syncEarnedZiks("budget-owner");
+    expect(await fundBudget("budget-owner", "proj", 150, "earned-fund-1")).toMatchObject({ funded: true, balance: 150 });
+    expect(await walletSummary(db as never, "budget-owner")).toEqual({ balance: 50, earned: 200, withdrawable: 50 });
+    await takeBackBudget("budget-owner", "proj");
+    expect(await walletSummary(db as never, "budget-owner")).toEqual({ balance: 200, earned: 200, withdrawable: 200 });
+  });
+
+  it("brings everyone who is behind up to date in the sweep, and leaves those who aren't alone", async () => {
+    world.points.push({ id: "a1", userId: "a", points: 3 }, { id: "b1", userId: "b", points: 0.05 });
+    expect(await sweepEarnedZiks()).toEqual({ checked: 2, moved: 30.5 });
+    expect(await walletBalance(db as never, "b")).toBe(0.5);
+    expect(await sweepEarnedZiks()).toEqual({ checked: 0, moved: 0 });
+  });
+});
+
 describe("project budgets (#project-budget)", () => {
   const OWNER = "budget-owner";
   const fund = async (amount: number, request: string) => {
@@ -359,7 +435,7 @@ describe("project budgets (#project-budget)", () => {
     await expect(fundBudget("stranger", "proj", 10, "request-b003")).rejects.toMatchObject({ code: "not_allowed" });
     // Everything bought (the owner's 300 and the stranger's 50) is still in the ledger, with 200 of it in the budget.
     expect(total()).toBe(350);
-    expect(ledgerBalances({ bought: 350, withdrawn: 0, inLedger: total() }).difference).toBe(0);
+    expect(ledgerBalances({ bought: 350, fromEarnings: 0, withdrawn: 0, inLedger: total() }).difference).toBe(0);
   });
 
   it("prices an issue from three estimates, or from its owner's price, and from nothing before that", () => {

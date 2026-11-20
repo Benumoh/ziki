@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { WITHDRAW_THRESHOLD } from "@/lib/earnings-threshold";
 import { absoluteUrl } from "@/lib/site-url";
-import { CoinError, appendRows, lockUser, walletSummary } from "./ledger";
+import { CoinError, appendRows, lockUser, walletSummary, zikOf } from "./ledger";
 import { zikToCents } from "./math";
 import { getStripe } from "./stripe";
 
@@ -99,7 +99,7 @@ export async function withdrawEarned(userId: string): Promise<WithdrawOutcome> {
     if (!user.stripeAccountId || !user.payoutsEnabled) throw new CoinError("payouts_not_ready", "Set up payouts first.");
     const { withdrawable } = await walletSummary(tx, userId);
     if (withdrawable < WITHDRAW_MIN_ZIK) {
-      throw new CoinError("below_threshold", `Withdrawals open at $${WITHDRAW_THRESHOLD} of earned Ziks.`);
+      throw new CoinError("below_threshold", `Withdrawals open at ${WITHDRAW_MIN_ZIK} earned Ziks.`);
     }
     const amountCents = zikToCents(withdrawable);
     const withdrawal = await tx.withdrawal.create({
@@ -113,7 +113,7 @@ export async function withdrawEarned(userId: string): Promise<WithdrawOutcome> {
 
 /** Asks Stripe to move the money for a withdrawal already debited. Retrying with the same row reuses its idempotency key. */
 export async function sendTransfer(
-  withdrawal: { id: string; userId: string; zik: number; amountCents: number; idempotencyKey: string },
+  withdrawal: { id: string; userId: string; zik: { toString(): string } | number; amountCents: number; idempotencyKey: string },
   destination: string,
 ): Promise<WithdrawOutcome> {
   try {
@@ -128,12 +128,12 @@ export async function sendTransfer(
       { idempotencyKey: withdrawal.idempotencyKey },
     );
     await prisma.withdrawal.updateMany({ where: { id: withdrawal.id, stripeTransferId: null }, data: { stripeTransferId: transfer.id } });
-    return { withdrawalId: withdrawal.id, zik: withdrawal.zik, amountCents: withdrawal.amountCents, status: "pending" };
+    return { withdrawalId: withdrawal.id, zik: zikOf(withdrawal.zik), amountCents: withdrawal.amountCents, status: "pending" };
   } catch (error) {
     // A dropped connection could mean Stripe did move the money: leave it pending (a retry with the same key is safe)
     // rather than put the Ziks back. Anything else is a definite refusal.
     if (error instanceof Stripe.errors.StripeConnectionError) {
-      return { withdrawalId: withdrawal.id, zik: withdrawal.zik, amountCents: withdrawal.amountCents, status: "pending" };
+      return { withdrawalId: withdrawal.id, zik: zikOf(withdrawal.zik), amountCents: withdrawal.amountCents, status: "pending" };
     }
     // Card payments are held by Stripe for a few days before they can be sent on. That is a delay, not a refusal:
     // the Ziks stay reserved and the sweep tries again. Nothing was created, so the next try takes a fresh key
@@ -143,10 +143,10 @@ export async function sendTransfer(
         where: { id: withdrawal.id, status: "pending", stripeTransferId: null, idempotencyKey: withdrawal.idempotencyKey },
         data: { idempotencyKey: `ziki-withdrawal-${crypto.randomUUID()}`, failureReason: "Waiting for Stripe to release funds." },
       });
-      return { withdrawalId: withdrawal.id, zik: withdrawal.zik, amountCents: withdrawal.amountCents, status: "pending", waiting: true };
+      return { withdrawalId: withdrawal.id, zik: zikOf(withdrawal.zik), amountCents: withdrawal.amountCents, status: "pending", waiting: true };
     }
     await failWithdrawal(withdrawal.id, error instanceof Error ? error.message : "The transfer failed.");
-    return { withdrawalId: withdrawal.id, zik: withdrawal.zik, amountCents: withdrawal.amountCents, status: "failed" };
+    return { withdrawalId: withdrawal.id, zik: zikOf(withdrawal.zik), amountCents: withdrawal.amountCents, status: "failed" };
   }
 }
 

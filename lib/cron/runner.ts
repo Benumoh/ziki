@@ -18,6 +18,7 @@ import { followPreviewBuilds } from "@/lib/previews/builds";
 import { sweepSecurityChecks } from "@/lib/security-checks/engine";
 import { retryPendingWithdrawals } from "@/lib/coins/withdraw";
 import { sweepProjectBudgets } from "@/lib/coins/budget-sweeps";
+import { sweepEarnedZiks } from "@/lib/coins/earnings-sync";
 import { sweepFallback } from "@/lib/security-checks/fallback";
 import { sweepTesting } from "@/lib/agent-api/testing-sweep";
 import { sweepProactiveOffers } from "@/lib/agents/proactive-offers";
@@ -90,6 +91,7 @@ export type PlatformSweepsResult = {
     previews: { status: "ok" | "error"; checked?: number; failed?: number; error?: string };
     withdrawals: { status: "ok" | "error"; checked?: number; sent?: number; waiting?: number; returned?: number; error?: string };
     projectBudgets: { status: "ok" | "error"; checked?: number; returned?: number; error?: string };
+    earnedZiks: { status: "ok" | "error"; checked?: number; moved?: number; error?: string };
     deliveries: { status: "ok" | "error"; processed?: number; error?: string };
     retention: {
       status: "ok" | "error";
@@ -143,6 +145,7 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
         previews: { status: "ok" },
         withdrawals: { status: "ok" },
         projectBudgets: { status: "ok" },
+        earnedZiks: { status: "ok" },
         deliveries: { status: "ok" },
         retention: { status: "ok" },
         searchIndex: { status: "ok" },
@@ -338,6 +341,16 @@ export async function runPlatformSweeps(): Promise<PlatformSweepsResult | { skip
     } catch (err) {
       recordSweepFailure("projectBudgets", err);
       result.sweeps.projectBudgets = { status: "error", error: err instanceof Error ? err.message : String(err) };
+    }
+
+    // 3d. Earnings in Ziks (#earnings-in-ziks): move what people earned on the points ledger into their Ziks wallets.
+    try {
+      const res = await sweepEarnedZiks();
+      recordSweepSuccess("earnedZiks");
+      result.sweeps.earnedZiks = { status: "ok", ...res };
+    } catch (err) {
+      recordSweepFailure("earnedZiks", err);
+      result.sweeps.earnedZiks = { status: "error", error: err instanceof Error ? err.message : String(err) };
     }
 
     // 4. Webhook Deliveries

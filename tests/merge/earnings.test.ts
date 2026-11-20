@@ -32,10 +32,10 @@ describe("weekly earnings goal (#earnings)", () => {
     expect(state).toMatchObject({ left: 80, daysLeft: 4, perDay: 20, reached: false });
   });
 
-  it("accepts a positive dollar amount and refuses anything else", () => {
-    expect(parseWeeklyGoal("1,000")).toBe(1000);
-    expect(parseWeeklyGoal("$75.50")).toBe(75.5);
-    for (const bad of ["0", "-5", "abc", "1.234", "", null]) expect(parseWeeklyGoal(bad)).toBeNull();
+  it("accepts a positive amount of Ziks, stored as dollars, and refuses anything else", () => {
+    expect(parseWeeklyGoal("1,000")).toBe(100);
+    expect(parseWeeklyGoal("755 Ziks")).toBe(75.5);
+    for (const bad of ["0", "-5", "abc", "1.23", "$75", "", null]) expect(parseWeeklyGoal(bad)).toBeNull();
   });
 });
 

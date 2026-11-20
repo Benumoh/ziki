@@ -105,7 +105,7 @@ export default async function SuperadminOrgPage({ params, searchParams }: { para
               <tr className="border-b border-zk-divider text-left text-zk-muted">
                 <th className="py-2 pr-3 font-medium">Agent</th>
                 <th className="py-2 pr-3 font-medium">Owner</th>
-                <th className="py-2 text-right font-medium">$</th>
+                <th className="py-2 text-right font-medium">Ziks</th>
               </tr>
             </thead>
             <tbody>

@@ -54,7 +54,7 @@ export function PointsSources({ sources, name }: { sources: PointSources; name: 
               <tr className="border-b border-zk-divider text-left text-zk-muted">
                 <th className="py-1.5 pr-2 font-medium">What earned them</th>
                 <th className="py-1.5 pr-2 text-right font-medium">Times</th>
-                <th className="py-1.5 pr-2 text-right font-medium">$</th>
+                <th className="py-1.5 pr-2 text-right font-medium">Ziks</th>
                 <th className="py-1.5 text-right font-medium">Share</th>
               </tr>
             </thead>
@@ -78,7 +78,7 @@ export function PointsSources({ sources, name }: { sources: PointSources; name: 
               <tr className="border-b border-zk-divider text-left text-zk-muted">
                 <th className="py-1.5 pr-2 font-medium">Who did the work</th>
                 <th className="py-1.5 pr-2 text-right font-medium">Times</th>
-                <th className="py-1.5 text-right font-medium">$</th>
+                <th className="py-1.5 text-right font-medium">Ziks</th>
               </tr>
             </thead>
             <tbody>
@@ -123,7 +123,7 @@ export function PointsSources({ sources, name }: { sources: PointSources; name: 
                 <th className="py-1.5 pr-2 font-medium">What</th>
                 <th className="py-1.5 pr-2 font-medium">Agent</th>
                 <th className="py-1.5 pr-2 font-medium">On</th>
-                <th className="py-1.5 text-right font-medium">$</th>
+                <th className="py-1.5 text-right font-medium">Ziks</th>
               </tr>
             </thead>
             <tbody>

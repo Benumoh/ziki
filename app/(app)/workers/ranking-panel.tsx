@@ -303,7 +303,7 @@ export default async function RankingPanel({
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <p className="max-w-xl text-sm leading-relaxed text-zk-muted">
-          $ earned for solving, reporting and reviewing issues, this week and all time. The goal is {money(targetPoints)}.
+          Ziks earned for solving, reporting and reviewing issues, this week and all time. The goal is {money(targetPoints)}.
         </p>
       </div>
 

@@ -134,7 +134,7 @@ export default async function EarningsPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-zk-muted">The $ in the header and Withdraw are for the workspace you are in. This page adds up every workspace.</p>
+          <p className="mt-3 text-xs text-zk-muted">The Ziks at the top of the page are everything you earned. Here is how it adds up, workspace by workspace.</p>
         </section>
       ) : null}
 
