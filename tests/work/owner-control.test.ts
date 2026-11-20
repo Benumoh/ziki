@@ -21,6 +21,7 @@ const webAgentFor = vi.hoisted(() => vi.fn());
 const checkPostForSecrets = vi.hoisted(() => vi.fn());
 const heldByMyAgent = vi.hoisted(() => vi.fn());
 const deliverWork = vi.hoisted(() => vi.fn());
+const membershipFindFirst = vi.hoisted(() => vi.fn());
 
 const tx = {
   $queryRaw: vi.fn(),
@@ -31,8 +32,9 @@ const tx = {
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    bug: { findUnique: bugFindUnique, findFirst: bugFindFirst },
+    bug: { findUnique: bugFindUnique, findFirst: bugFindFirst, update: bugUpdate },
     idea: { findFirst: ideaFindFirst },
+    membership: { findFirst: membershipFindFirst },
     $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
   },
 }));
@@ -52,7 +54,7 @@ vi.mock("@/lib/security/secret-guard", () => ({ checkPostForSecrets }));
 
 import { ownerMove } from "@/lib/owner-moves";
 import { ownerAcceptIdeaAction, ownerMoveIssueAction } from "@/app/actions/owner-moves";
-import { deliverForMyAgentAction, giveTestVerdictAction } from "@/app/actions/human-steps";
+import { confirmLiveWorkAction, deliverForMyAgentAction, giveTestVerdictAction } from "@/app/actions/human-steps";
 
 const inProgress = {
   id: "bug-1",
@@ -148,7 +150,7 @@ describe("acting through your agent (#owner-control)", () => {
   });
 
   it("delivers only while my agent holds the work, with the agent's own checks", async () => {
-    const work = { pullRequestUrl: "https://github.com/emerjent/ziki/pull/1", summary: "Done.", description: "Changed it.", proof: "Tests pass." };
+    const work = { pullRequestUrl: "https://github.com/emerjent/ziki/pull/1", summary: "Done.", description: "Changed it.", proof: "Tests pass.", before: "https://example.com/before.png", after: "https://example.com/after.png" };
     heldByMyAgent.mockResolvedValue(null);
     expect("error" in (await deliverForMyAgentAction("bug-1", work))).toBe(true);
     expect(deliverWork).not.toHaveBeenCalled();
@@ -159,6 +161,31 @@ describe("acting through your agent (#owner-control)", () => {
     checkPostForSecrets.mockResolvedValue({ ok: true });
     deliverWork.mockResolvedValue({ status: 400, error: "invalid_request", message: "That is not a GitHub pull request URL." });
     expect(await deliverForMyAgentAction("bug-1", work)).toEqual({ error: "That is not a GitHub pull request URL." });
-    expect(deliverWork).toHaveBeenCalledWith(agent, "bug-1", expect.objectContaining({ pullRequestUrl: work.pullRequestUrl, testResults: "Tests pass." }));
+    expect(deliverWork).toHaveBeenCalledWith(agent, "bug-1", expect.objectContaining({ pullRequestUrl: work.pullRequestUrl, testResults: "Tests pass.", beforeScreenshots: [work.before], screenshots: [work.after] }));
+  });
+});
+
+describe("Live · Confirmed (#live-confirmed)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const live = { id: "bug-1", organisationId: "org-1", status: "resolved", substatus: "on_prod", liveConfirmedAt: null };
+
+  it("lets only a member of the organisation confirm live work, and records who and when", async () => {
+    bugFindFirst.mockResolvedValue(live);
+    membershipFindFirst.mockResolvedValue(null);
+    expect("error" in (await confirmLiveWorkAction("bug-1"))).toBe(true);
+    expect(bugUpdate).not.toHaveBeenCalled();
+
+    membershipFindFirst.mockResolvedValue({ id: "m-1" });
+    expect(await confirmLiveWorkAction("bug-1")).toEqual({ ok: true });
+    expect(bugUpdate).toHaveBeenCalledWith({ where: { id: "bug-1" }, data: { liveConfirmedAt: expect.any(Date), liveConfirmedById: "user-1" } });
+  });
+
+  it("refuses work that isn't live, or is live but broken", async () => {
+    membershipFindFirst.mockResolvedValue({ id: "m-1" });
+    bugFindFirst.mockResolvedValue({ ...live, status: "merge", substatus: "ready_to_merge" });
+    expect("error" in (await confirmLiveWorkAction("bug-1"))).toBe(true);
+    bugFindFirst.mockResolvedValue({ ...live, substatus: "merged_broken" });
+    expect("error" in (await confirmLiveWorkAction("bug-1"))).toBe(true);
+    expect(bugUpdate).not.toHaveBeenCalled();
   });
 });

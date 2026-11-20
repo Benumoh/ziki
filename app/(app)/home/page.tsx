@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrgPathFor, firstProjectRefFor } from "@/lib/project-route";
-import { ideasPath } from "@/lib/project-paths";
+import { issuesPath, orgRefOf } from "@/lib/project-paths";
 
 /**
  * `/home`: where Ziki sends you when no project is named (after sign-in, from
@@ -13,6 +13,7 @@ import { ideasPath } from "@/lib/project-paths";
 export default async function HomePage() {
   const user = await requireUser();
   const slug = await firstProjectRefFor(user.id);
-  if (slug) redirect(ideasPath(slug));
+  // The organisation-wide list; someone outside the organisation is sent on to the project's own.
+  if (slug) redirect(issuesPath(orgRefOf(slug), "your_work"));
   redirect((await currentOrgPathFor(user.id)) ?? "/organisations");
 }

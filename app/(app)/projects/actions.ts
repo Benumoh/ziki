@@ -105,6 +105,7 @@ export async function updateProjectAction(
   const acceptsGuestIdeas = visibility === "public" && (formData.get("acceptsGuestIdeas") === "true" || formData.get("acceptsGuestIdeas") === "on");
   // The schema trims it and turns an empty box into null; it must be given a string.
   const contributorGuidelines = (formData.get("contributorGuidelines") as string | null) ?? "";
+  const humanApprovalGuidelines = (formData.get("humanApprovalGuidelines") as string | null) ?? "";
 
   const parsed = projectSettingsSchema.safeParse({
     name: formData.get("name"),
@@ -116,12 +117,13 @@ export async function updateProjectAction(
     isOpenForContributors,
     acceptsGuestIdeas,
     contributorGuidelines,
+    humanApprovalGuidelines,
   });
   if (!parsed.success) return fromZodError(parsed.error, "Check the project settings.");
   const slug = String(formData.get("slug") ?? "").trim();
   const project = await prisma.project.findFirst({
     where: { organisationId, slug },
-    select: { id: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, rewardConfig: true },
+    select: { id: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, humanApprovalGuidelines: true, rewardConfig: true },
   });
   if (!project) return { error: "Project not found." };
 
@@ -134,6 +136,9 @@ export async function updateProjectAction(
     if (project[field] !== parsed.data[field]) {
       changes[field] = { from: project[field], to: parsed.data[field] };
     }
+  }
+  if ((project.humanApprovalGuidelines ?? null) !== (parsed.data.humanApprovalGuidelines ?? null)) {
+    changes.humanApprovalGuidelines = { from: project.humanApprovalGuidelines ?? null, to: parsed.data.humanApprovalGuidelines ?? null };
   }
   if (rewardConfig !== undefined && JSON.stringify(project.rewardConfig) !== JSON.stringify(rewardConfig)) {
     changes.rewardConfig = { from: project.rewardConfig, to: rewardConfig };

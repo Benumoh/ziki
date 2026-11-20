@@ -24,8 +24,15 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
-// The signed-in app's typeface (globals.css switches to it under the app
-// shell). Loaded here so dialogs and toasts, which render on <body>, get it too.
+// The app's typeface: Geist, quiet and even at small sizes. Loaded here so dialogs and toasts, which render on
+// <body>, get it too. Inter stays for the public homepage (components/homepage).
+const geist = localFont({
+  src: "./fonts/geist-latin.woff2",
+  variable: "--font-geist",
+  weight: "100 900",
+  display: "swap",
+});
+
 const inter = localFont({
   src: "./fonts/inter-latin.woff2",
   variable: "--font-inter",
@@ -95,7 +102,7 @@ export default async function RootLayout({
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Integration Documentation" />
       </head>
       <body
-        className={`${geistMono.variable} ${inter.variable} min-h-screen overflow-x-clip antialiased`}
+        className={`${geistMono.variable} ${geist.variable} ${inter.variable} min-h-screen overflow-x-clip antialiased`}
       >
         {/*
           Both live at the root rather than in (app) so every route — including

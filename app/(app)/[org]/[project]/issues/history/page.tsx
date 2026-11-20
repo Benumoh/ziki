@@ -191,7 +191,7 @@ export default async function MergeHistoryPage({ params: routeParams, searchPara
         </div>
 
         {rows.length === 0 || (releaseView && releases.length === 0) ? (
-          <p className="mx-6 mb-6 rounded-[14px] border border-zk-divider px-5 py-10 text-center text-sm text-zk-muted max-sm:mx-4">
+          <p className="mx-6 mb-6 rounded-xl border border-zk-divider px-5 py-10 text-center text-sm text-zk-muted max-sm:mx-4">
             {bucket === "staging" || bucket === "production"
               ? "Nothing recorded here yet. Staging and production show up once the merger agent records those merges."
               : rows.length === 0
@@ -201,7 +201,7 @@ export default async function MergeHistoryPage({ params: routeParams, searchPara
         ) : releaseView ? (
           <div className="mx-6 mb-6 flex flex-col gap-3 max-sm:mx-4">
             {releases.map(({ movement, rows: carried }) => (
-              <section key={`${movement.repo}#${movement.prNumber}`} aria-label={`PR #${movement.prNumber}`} className="overflow-hidden rounded-[14px] border border-zk-divider">
+              <section key={`${movement.repo}#${movement.prNumber}`} aria-label={`PR #${movement.prNumber}`} className="overflow-hidden rounded-xl border border-zk-divider">
                 <div className="flex flex-wrap items-center gap-2.5 bg-zk-bg px-[18px] py-3.5">
                   <MovementIcon movement={movement} size={26} />
                   <PrLink movement={movement} className="text-[14.5px] font-semibold" />
@@ -226,7 +226,7 @@ export default async function MergeHistoryPage({ params: routeParams, searchPara
             ))}
           </div>
         ) : (
-          <div className="mx-6 overflow-hidden rounded-[14px] border border-zk-divider max-sm:mx-4">
+          <div className="mx-6 overflow-hidden rounded-xl border border-zk-divider max-sm:mx-4">
             <div className="merge-row merge-head bg-zk-bg text-[13.5px] text-zk-text2" aria-hidden="true">
               <span>Completed issue</span><span>Path</span><span>Latest movement</span><span />
             </div>

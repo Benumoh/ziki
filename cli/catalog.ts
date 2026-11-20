@@ -7,9 +7,9 @@ import { TOOLS, type ToolDef } from "../packages/mcp-server/src/tools";
  * the same shape. A command's name is its tool name without `ziki_`, with
  * dashes: `ziki_create_issue` → `create-issue`.
  *
- * Not offered on purpose: approving or rejecting a redesign
+ * Not offered on purpose: choosing or rejecting a redesign
  * (`POST /redesigns/{id}/decision`). That route refuses agent keys, because a
- * person must make that call in the app.
+ * person must make that call on the issue's page in the app.
  */
 export type CliTool = Omit<ToolDef, "method"> & { method: ToolDef["method"] | "PUT" | "PATCH" };
 

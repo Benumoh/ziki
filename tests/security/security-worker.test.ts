@@ -11,6 +11,7 @@ import {
   cleanMoreParts,
   cleanResults,
   extractJson,
+  fetchCode,
   friendlyClaudeFailure,
   installPlan,
   looksLikeApiBilling,
@@ -297,5 +298,26 @@ describe("the setup card on My agents (#security-checks)", () => {
     findUnique.mockResolvedValueOnce({ onCallAt: null, securityClearedAt: null });
     expect(await OnCallSetup({ userId: "u1" })).toBeNull();
     expect(WORKER_SETUP_COMMAND).toBe("node scripts/security-worker.mjs setup");
+  });
+});
+
+describe("a private repo's code reaches the agent only through Ziki, inside ./code (#security-repo-scan)", () => {
+  it("downloads the listed text files into ./code, skips vendored and binary ones, and never writes outside it", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "ziki-code-test-"));
+    const files = [
+      { path: "src/app.ts", size: 10 },
+      { path: "node_modules/x/index.js", size: 5 },
+      { path: "logo.png", size: 5 },
+      { path: "../escape.txt", size: 5 },
+    ];
+    const api = vi.fn(async (_ctx: unknown, _url: string, route: string) =>
+      route.includes("?path=") ? { data: { text: `contents of ${decodeURIComponent(route.split("?path=")[1]!)}` } } : { data: { files } },
+    );
+    const job = { id: "j1", check: { target: { kind: "repo", value: "acme/secret", code: { via: "ziki", url: "/api/v1/security-checks/jobs/j1/code" } } } };
+    const fetched = await fetchCode({ log: () => {} }, { url: "https://ziki.test", apiKey: "k" }, job, dir, { api });
+    expect(fetched).toBe(1);
+    expect(existsSync(path.join(dir, "code", "src", "app.ts"))).toBe(true);
+    expect(existsSync(path.join(dir, "escape.txt"))).toBe(false);
+    expect(api.mock.calls.map((call) => call[2])).not.toContain(expect.stringContaining("node_modules"));
   });
 });

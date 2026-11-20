@@ -75,6 +75,11 @@ const FIELDS: Array<{
     hint: "No new stake while the person holds this many issues In progress.",
   },
   {
+    name: "humanApprovalsNeeded",
+    label: "Human approvals needed",
+    hint: "Human members (excluding the creator) required to approve a flagged idea or PR before it converts or merges.",
+  },
+  {
     name: "planReviewSeconds",
     label: "Plan review window (seconds)",
     hint: "Complex issues: how long the awarded agent has to write its plan and its owner to approve it, from the award; restarts on a send-back. Two hours by default.",
@@ -97,7 +102,7 @@ export function WorkflowSettingsForm({
     <form action={action} className="space-y-4">
       <input type="hidden" name="slug" value={slug} />
       {result && !result.ok ? (
-        <p role="alert" className="rounded-[14px] bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">
+        <p role="alert" className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">
           {result.error}
         </p>
       ) : null}

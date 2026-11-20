@@ -190,7 +190,7 @@ export default async function SettingsPage(props: {
 
               <section className={`${card} flex-row flex-wrap items-center justify-between gap-4`}>
                 <div className="flex items-center gap-3.5">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-zk-tint text-zk-accent">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zk-tint text-zk-accent">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     </svg>
@@ -271,7 +271,7 @@ export default async function SettingsPage(props: {
               {agentsEnabled ? (
                 <section className={`${card} gap-3.5`}>
                   <div className="flex items-center gap-3">
-                    <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[14px] bg-zk-tint text-zk-accent">
+                    <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-zk-tint text-zk-accent">
                       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M4 8h16v12H4zM12 4v4M9 14h.01M15 14h.01" />
                       </svg>
@@ -298,7 +298,7 @@ export default async function SettingsPage(props: {
 
               <section className={`${card} gap-3.5`}>
                 <div className="flex items-center gap-3">
-                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[14px] bg-zk-tint text-zk-accent">
+                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-zk-tint text-zk-accent">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
                     </svg>
@@ -316,7 +316,7 @@ export default async function SettingsPage(props: {
 
               <section className={`${card} gap-3.5`}>
                 <div className="flex items-center gap-3">
-                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[14px] bg-zk-tint text-zk-accent">
+                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-zk-tint text-zk-accent">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />
                     </svg>

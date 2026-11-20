@@ -7,6 +7,7 @@ import { pickAgentFor, type CandidateAgent } from "./assign";
 import { quickScanForAgents, type QuickScanLine } from "./preview-summary";
 import { fixBucketOf, type FixSource } from "./fix-bucket";
 import { realNetwork } from "./ownership";
+import { codeRoute } from "./repo-access";
 
 /**
  * The security check engine (#security-checks, 12 Nov plan H1).
@@ -65,7 +66,7 @@ export const PART_JOB_POINTS = 3;
 
 export class SecurityJobError extends Error {
   constructor(
-    readonly status: 400 | 403 | 404 | 409,
+    readonly status: 400 | 403 | 404 | 409 | 413 | 429,
     readonly code: string,
     message: string,
   ) {
@@ -454,7 +455,7 @@ export type SecurityJob = {
   assignedAt: Date | null;
   reportBy: Date | null;
   /** `quickScan`: what Ziki's quick code scan already found on this site (short titles only). Those are already in the report's list (18 Nov): don't report them again; a result repeating one is refused (`already_known`). */
-  check: { id: string; target: { kind: string; value: string; quickScan: QuickScanLine[] } };
+  check: { id: string; target: { kind: string; value: string; quickScan: QuickScanLine[]; code?: { via: "ziki" | "clone"; url: string } } };
   /**
    * A rescan's recheck part (#security-rescan): the earlier findings to look at again. Answer each with
    * `rechecks` in the report, `still_there` or `fixed`. Empty on every other part.
@@ -473,14 +474,29 @@ export async function listAgentJobs(db: Db, agentId: string, now = new Date()): 
       title: true,
       instructions: true,
       assignedAt: true,
-      check: { select: { id: true, target: { select: { kind: true, value: true, previewSummary: true } } } },
+      check: { select: { id: true, organisationId: true, target: { select: { kind: true, value: true, previewSummary: true } } } },
       recheckResults: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, severity: true, title: true, description: true } },
     },
   });
+  // A repo's parts say how to reach its code (#security-repo-scan): through Ziki's /code API when the workspace
+  // connected it through the GitHub App (private repos), else a public clone.
+  const routes = new Map<string, "ziki" | "clone">();
+  for (const { check } of items) {
+    const key = `${check.organisationId}:${check.target.value}`;
+    if (check.target.kind === "repo" && !routes.has(key)) routes.set(key, await codeRoute(db, check.organisationId, check.target.value));
+  }
   return items.map(({ check, recheckResults, ...item }) => ({
     ...item,
     recheck: recheckResults,
-    check: { id: check.id, target: { kind: check.target.kind, value: check.target.value, quickScan: quickScanForAgents(check.target.previewSummary) } },
+    check: {
+      id: check.id,
+      target: {
+        kind: check.target.kind,
+        value: check.target.value,
+        quickScan: quickScanForAgents(check.target.previewSummary),
+        ...(check.target.kind === "repo" ? { code: { via: routes.get(`${check.organisationId}:${check.target.value}`) ?? "clone", url: `/api/v1/security-checks/jobs/${item.id}/code` } } : {}),
+      },
+    },
     kind: "check" as const,
     reportBy: item.assignedAt ? new Date(item.assignedAt.getTime() + JOB_TIMEOUT_MINUTES * 60_000) : null,
   }));

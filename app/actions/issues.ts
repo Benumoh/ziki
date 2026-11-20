@@ -34,6 +34,7 @@ import {
   normalizeMentions,
 } from "@/lib/mentions";
 import { resolveOrganisationMentions, organisationMemberWhere } from "@/lib/organisation-mentions";
+import { assetForWork } from "@/lib/marketing/assets";
 import { parseIdeaTrack, typeFitsTrack } from "@/lib/marketing/idea-track";
 import { structureIdea } from "@/lib/idea-structuring";
 import {
@@ -318,6 +319,15 @@ export async function createBugAction(
   const areaId = parsed.data.areaId && parsed.data.areaId.length > 0
     ? parsed.data.areaId
     : null;
+
+  // The marketing asset it is on (#marketing-assets): one of this organisation's, under the idea's type.
+  const assetRaw = formData.get("assetId");
+  let assetId: string | null = null;
+  try {
+    assetId = await assetForWork(prisma, organisationId, typeof assetRaw === "string" ? assetRaw.trim() : null, track, typeId, parsed.data.title);
+  } catch {
+    return fieldError("typeId", "That page or asset isn't one of this type's. Please pick another.");
+  }
   // #security-findings: a private security report. Its details go to SecurityFinding and
   // the idea keeps a placeholder, so nothing else in Ziki can show them before the fix is live.
   const security = formData.get("security") === "on" || formData.get("security") === "true";
@@ -360,6 +370,7 @@ export async function createBugAction(
           track,
           rationale,
           typeId,
+          assetId,
           // Proof links can point at the exploit, so a private finding keeps them in its description.
           proofLinks: severity ? [] : parsed.data.proofLinks,
           areaId,

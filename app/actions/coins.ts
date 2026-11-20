@@ -6,8 +6,9 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { CoinError } from "@/lib/coins/ledger";
 import { fundIssue } from "@/lib/coins/fund";
-import { createPackCheckout } from "@/lib/coins/purchase";
-import { createSubscriptionCheckout, setSubscriptionEnding, subscribeFrom } from "@/lib/coins/subscription";
+import { createPackCheckout, createTestPurchase } from "@/lib/coins/purchase";
+import { createSubscriptionCheckout, setSubscriptionEnding, startTestSubscription, subscribeFrom } from "@/lib/coins/subscription";
+import { testPayments } from "@/lib/coins/test-mode";
 import { startPayoutOnboarding, syncPayoutsEnabled, withdrawEarned } from "@/lib/coins/withdraw";
 
 /**
@@ -35,7 +36,10 @@ export async function buyZiksAction(formData: FormData): Promise<void> {
   let url: string;
   try {
     // From a scan's checkout (#deeper-scan-gate): Stripe sends them back to that scan. Checked again in createPackCheckout.
-    url = await createPackCheckout(user.id, user.email ?? undefined, String(formData.get("packId") ?? ""), formData.get("returnTo"));
+    const packId = String(formData.get("packId") ?? "");
+    url = testPayments()
+      ? await createTestPurchase(user.id, packId, formData.get("returnTo"))
+      : await createPackCheckout(user.id, user.email ?? undefined, packId, formData.get("returnTo"));
   } catch (error) {
     const message = failure(error);
     redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
@@ -49,7 +53,13 @@ export async function subscribeAction(formData: FormData): Promise<void> {
   const from = subscribeFrom(formData.get("from"));
   let url: string;
   try {
-    url = await createSubscriptionCheckout(user.id, user.email ?? undefined, String(formData.get("planId") ?? ""), from);
+    const planId = String(formData.get("planId") ?? "");
+    if (testPayments()) {
+      await startTestSubscription(user.id, planId);
+      url = "/coins?subscribed=1";
+    } else {
+      url = await createSubscriptionCheckout(user.id, user.email ?? undefined, planId, from);
+    }
   } catch (error) {
     const message = failure(error);
     redirect(`/${from}?error=${encodeURIComponent(message.ok ? "" : message.error)}`);

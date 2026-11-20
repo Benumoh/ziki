@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { LocalTime } from "@/components/local-time";
-import { projectPath, projectRef } from "@/lib/project-paths";
+import { issuesPath, projectRef } from "@/lib/project-paths";
 import { removeProjectMemberAction } from "@/app/actions/project-join-requests";
 import { orgListCard, orgListHeading } from "../org-ui";
 
@@ -64,7 +64,7 @@ export function ProjectCollaboratorsSection({
                     <span className="truncate text-sm font-medium text-zk-text">
                       {c.userName || c.userEmail}
                     </span>
-                    <Link href={projectPath(projectRef(c.orgSlug, c.projectSlug))}>
+                    <Link href={issuesPath(projectRef(c.orgSlug, c.projectSlug), "your_work")}>
                       <Badge className="rounded-full border border-zk-border bg-zk-chip text-[11px] font-medium text-zk-accent hover:border-zk-accent">
                         {c.projectName}
                       </Badge>

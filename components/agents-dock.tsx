@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { agentEditHref, agentPageHref, LEADERBOARD_HREF } from "@/lib/header-nav";
 import { AGENTS_DOCK_HEIGHT, dockVisibleOn, leaderboardVisible } from "@/lib/agents-dock";
 import { PAGE_CONTAINER_CLASS } from "@/components/page-container";
-import { projectPath, type ProjectRef } from "@/lib/project-paths";
+import { orgRefOf, projectPath, queuePath, type ProjectRef } from "@/lib/project-paths";
 import { useProjectRef } from "@/lib/use-project-ref";
 import { formatZ } from "@/lib/points/rules";
 import { updateMood } from "@/components/agent-robots/moods";
@@ -94,8 +94,6 @@ const LOW_FLOOR_H = 74;
 /** A face, avatar or plain light: its size and how far its foot is from the floor, so it sits in the strip's middle. */
 const FIGURE = 30;
 const FIGURE_LIFT = (LOW_FLOOR_H - FIGURE) / 2;
-/** How long the agents stay opened up after the cursor leaves the strip. */
-const LABELS_LINGER = 350;
 /** Until a nameplate has measured itself: its name and status, and with what it has earned. */
 const GUESS = { text: 110, full: 180 };
 
@@ -163,18 +161,15 @@ export function AgentsDock({
   const measurePlate = (id: string, text: number, full: number) =>
     setPlates((all) => (all[id]?.text === text && all[id]?.full === full ? all : { ...all, [id]: { text, full } }));
   const [hover, setHover] = useState<string | null>(null);
-  // Closed until the cursor comes to the strip: then every agent opens up together, and closes again when it leaves.
-  const [hovering, setLabels] = useState(false);
-  const labels = hovering;
+  // The nameplates stay as they are: hovering the strip doesn't open them up.
+  const labels = false;
   // Another page opens with the agents closed up again, even if the cursor left the strip by clicking through it.
   const [page, setPage] = useState(pathname);
   if (page !== pathname) {
     setPage(pathname);
-    setLabels(false);
     setHover(null);
   }
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const labelTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const canvas = useRef<HTMLCanvasElement>(null);
   const runtimes = useRef(new Map<string, Bot>());
   const view = useRef<FloorMode>(null); // which floor the robots were last placed on
@@ -327,7 +322,6 @@ export function AgentsDock({
   useEffect(() => {
     return () => {
       clearTimeout(timer.current);
-      clearTimeout(labelTimer.current);
     };
   }, []);
 
@@ -359,15 +353,6 @@ export function AgentsDock({
   // The leaderboard is in the Agents menu; nobody to rank against in an organisation of one.
   const leaderboard = leaderboardVisible(memberCount);
 
-  const showLabels = () => {
-    clearTimeout(labelTimer.current);
-    setLabels(true);
-  };
-  const fadeLabels = () => {
-    clearTimeout(labelTimer.current);
-    labelTimer.current = setTimeout(() => setLabels(false), LABELS_LINGER);
-  };
-
   const close = () => {
     clearTimeout(timer.current);
     setHover(null);
@@ -397,10 +382,6 @@ export function AgentsDock({
     <div
       className="pointer-events-auto relative"
       style={{ height: floorHeight }}
-      onMouseEnter={showLabels}
-      onMouseLeave={fadeLabels}
-      onFocus={showLabels}
-      onBlur={fadeLabels}
     >
       {pixelOnFloor ? (
         <canvas ref={canvas} height={CANVAS_H} aria-hidden="true" className="absolute inset-0" style={{ width: "100%", height: floorHeight }} />
@@ -438,6 +419,20 @@ export function AgentsDock({
           </li>
         ))}
       </ul>
+      {/* The work queue (#work-queue), just after the last agent: the same tickets as the lists, laid out for working through them. */}
+      {workstreamRef && agents.length ? (
+        <Link
+          href={queuePath(orgRefOf(workstreamRef))}
+          aria-label="Open the work queue"
+          title="Work queue"
+          className="absolute flex h-8 w-8 items-center justify-center rounded-full border border-zk-border bg-zk-surface text-zk-text2 shadow-sm transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-electric-blue"
+          style={{ left: first + total + 16, top: "50%", transform: "translateY(-50%)" }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </Link>
+      ) : null}
     </div>
   ) : null;
 

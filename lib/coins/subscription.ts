@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/site-url";
 import { CoinError, lockUser } from "./ledger";
 import { DISCOUNT_SUBSCRIPTION_STATUSES, LIVE_SUBSCRIPTION_STATUSES, findPlan } from "./plans";
+import { randomUUID } from "node:crypto";
 import { getStripe } from "./stripe";
+import { TEST_SUBSCRIPTION_PREFIX, isTestSubscription } from "./test-mode";
 
 /**
  * Ziki plans (#ziki-coins). An owner subscribes through Stripe Checkout and Stripe charges the monthly fee. While the
@@ -81,6 +83,24 @@ export async function createSubscriptionCheckout(userId: string, email: string |
   });
   if (!session.url) throw new CoinError("not_configured", "Stripe didn't return a checkout page.");
   return session.url;
+}
+
+/** Test mode (./test-mode.ts): starts the plan at once with no payment. It stays on until the person ends it. */
+export async function startTestSubscription(userId: string, planId: string): Promise<void> {
+  const plan = findPlan(planId);
+  if (!plan) throw new CoinError("invalid_amount", "Choose one of the plans.");
+  if (await liveSubscriptionOf(userId)) {
+    throw new CoinError("not_allowed", "You already have a monthly plan. End it first to choose a different one.");
+  }
+  await prisma.coinSubscription.create({
+    data: {
+      userId,
+      stripeSubscriptionId: `${TEST_SUBSCRIPTION_PREFIX}${randomUUID()}`,
+      planId: plan.id,
+      status: "active",
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
+  });
 }
 
 /** Stripe's processing fee on an invoice's payment, in cents, when it can be read. Only for the money page's check. */
@@ -199,6 +219,11 @@ export async function syncUserSubscriptions(userId: string): Promise<void> {
 export async function setSubscriptionEnding(userId: string, ending: boolean): Promise<void> {
   const subscription = await liveSubscriptionOf(userId);
   if (!subscription) throw new CoinError("not_found", "You don't have a monthly plan.");
+  if (isTestSubscription(subscription.stripeSubscriptionId)) {
+    // A test plan has nothing at Stripe to update; ending it is only ours to record.
+    await prisma.coinSubscription.update({ where: { id: subscription.id }, data: { cancelAtPeriodEnd: ending } });
+    return;
+  }
   const updated = await getStripe().subscriptions.update(subscription.stripeSubscriptionId, { cancel_at_period_end: ending });
   await applySubscription(updated);
 }

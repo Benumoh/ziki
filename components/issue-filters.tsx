@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, useTransition, type ReactN
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ideasPath, issuesPath, statusFromSegment, type ProjectRef } from "@/lib/project-paths";
-import { useProjectRef } from "@/lib/use-project-ref";
+import { useListRef } from "@/lib/use-project-ref";
 import { statuses } from "@/lib/validations/issue";
 import { statusLabel } from "@/lib/labels";
 import { FINISHED_STATUS_FILTER, statusFilterLabel } from "@/lib/issue-state";
@@ -135,14 +135,16 @@ export function IssueFilters({
   compact?: boolean;
 }) {
   const router = useRouter();
-  const slug = useProjectRef()!;
+  const slug = useListRef()!;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // The list is in the path; the filters read it as if it were `?status=`.
+  // `/<org>/<project>/issues/<status>` or, for every project, `/<org>/issues/<status>` (and the same for ideas, at `new`).
   const segments = pathname?.split("/").filter(Boolean) ?? [];
-  const pathStatus = segments[1] === "ideas"
-    ? (segments[2] === "rejected" ? REJECTED_IDEAS_STATUS : IDEAS_STATUS)
-    : statusFromSegment(segments[2] ?? "") ?? "all";
+  const listAt = segments.findIndex((segment) => segment === "issues" || segment === "new");
+  const pathStatus = segments[listAt] === "new"
+    ? (segments[listAt + 1] === "rejected" ? REJECTED_IDEAS_STATUS : IDEAS_STATUS)
+    : statusFromSegment(segments[listAt + 1] ?? "") ?? "all";
   const params = useMemo(() => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
     next.delete("status");

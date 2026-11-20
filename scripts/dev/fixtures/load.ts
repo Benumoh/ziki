@@ -122,6 +122,8 @@ export async function loadFixtures(options: { db?: PrismaClient; addExistingUser
     });
 
     await db.issueType.createMany({ data: fx.issueTypes.map((t) => ({ ...t, organisationId: ORGANISATION_ID })) as never });
+    // Marketing's assets (#marketing-assets), before the issues and ideas that sit on them.
+    await db.marketingAsset.createMany({ data: (fx.marketingAssets ?? []).map((a) => ({ ...a, organisationId: ORGANISATION_ID })) as never });
 
     const scoped = { organisationId: ORGANISATION_ID, projectId: PROJECT_ID };
     // Issues first (ideas point at them), without links to other issues until every issue exists.

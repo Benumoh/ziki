@@ -17,7 +17,7 @@ const styles = {
   avatar: "grid size-[30px] shrink-0 place-items-center rounded-lg bg-zk-chip text-[13px] font-bold text-zk-text2",
   target: "!border-zk-accent !bg-zk-info-bg [&_small]:!text-zk-info-fg [&>span]:bg-zk-surface [&>span]:text-zk-info-fg",
   arrow: "text-2xl text-zk-muted max-[560px]:rotate-90 max-[560px]:justify-self-center",
-  preview: "flex flex-col gap-2 rounded-[14px] border border-zk-border bg-zk-bg px-[18px] py-4 break-words [&>strong]:text-[15px] [&>strong]:font-semibold [&>small]:text-xs [&>small]:text-zk-muted",
+  preview: "flex flex-col gap-2 rounded-xl border border-zk-border bg-zk-bg px-[18px] py-4 break-words [&>strong]:text-[15px] [&>strong]:font-semibold [&>small]:text-xs [&>small]:text-zk-muted",
   metadata: "flex flex-wrap items-center gap-2 text-xs text-zk-text2",
   status: "rounded-full bg-zk-chip px-[9px] py-[3px] text-[11px] font-semibold text-zk-text2",
   actions: "flex flex-wrap gap-2.5",

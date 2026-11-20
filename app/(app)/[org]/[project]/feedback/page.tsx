@@ -1,8 +1,12 @@
+import type { FeedbackSearch } from "@/components/project-feedback-portal";
+import { PublicProductOverview } from "@/components/public-product-overview";
+import { optionalUser } from "@/lib/auth-helpers";
+import { PublicFeedbackIdeaDetail } from "@/components/public-feedback-idea-detail";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { findFeedbackProject } from "@/lib/public-projects";
-import { publicOrgFeedbackPath } from "@/lib/public-project-paths";
+import { publicFeedbackPath } from "@/lib/public-project-paths";
 import { PublicContributorForm } from "@/components/public-contributor-form";
 import { NOINDEX } from "@/lib/seo/site";
 
@@ -14,17 +18,20 @@ export default async function ProjectFeedbackPortalPage({
   searchParams,
 }: {
   params: Promise<{ org: string; project: string }>;
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<FeedbackSearch & { type?: string; idea?: string }>;
 }) {
   const [{ org, project: projectSlug }, query] = await Promise.all([params, searchParams]);
   const ref = { orgSlug: org, projectSlug };
   const project = await findFeedbackProject(ref);
   if (!project) notFound();
 
-  const orgFeedbackHref = publicOrgFeedbackPath(project.organisation.slug);
+  if (query.idea !== undefined) return <PublicFeedbackIdeaDetail project={ref} number={Number(query.idea)} />;
+  if (query.type !== "problem" && query.type !== "improvement") return <PublicProductOverview product={project} />;
+  const user = await optionalUser();
+  const orgFeedbackHref = publicFeedbackPath(ref);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-2 pb-10 sm:px-4">
+    <div className="mx-auto w-full max-w-[920px] pb-10">
       <div className="mb-3">
         <Link
           href={orgFeedbackHref}
@@ -43,10 +50,11 @@ export default async function ProjectFeedbackPortalPage({
           >
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
-          {project.organisation.name}
+          {project.name} product
         </Link>
       </div>
       <PublicContributorForm
+        signedIn={Boolean(user)}
         project={project}
         orgSlug={project.organisation.slug}
         projectSlug={project.slug}

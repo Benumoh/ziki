@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ProjectRewardRulesSection } from "@/components/project-reward-rules-section";
 import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
 import { copyText } from "@/lib/clipboard";
+import { DEFAULT_HUMAN_APPROVAL_GUIDELINES } from "@/lib/human-approval-defaults";
 
 type Project = {
   slug: string;
@@ -21,6 +22,7 @@ type Project = {
   isOpenForContributors?: boolean;
   acceptsGuestIdeas?: boolean;
   contributorGuidelines?: string | null;
+  humanApprovalGuidelines?: string | null;
   rewardConfig?: unknown;
   organisation?: { slug: string };
 };
@@ -47,7 +49,7 @@ export function ProjectSettingsForm({
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="slug" value={project.slug} />
-      {result?.error ? <p role="alert" className="rounded-[14px] bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">{result.error}</p> : null}
+      {result?.error ? <p role="alert" className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">{result.error}</p> : null}
       <label htmlFor="project-name" className="block space-y-1 text-sm font-medium text-zk-text">Project name
         <Input id="project-name" name="name" defaultValue={project.name} minLength={2} maxLength={60} required />
         {result?.field === "name" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.name ?? result.error}</span> : null}
@@ -55,6 +57,10 @@ export function ProjectSettingsForm({
       <label htmlFor="project-goal" className="block space-y-1 text-sm font-medium text-zk-text">Project Brief &amp; Context for Agents
         <Textarea id="project-goal" name="goal" defaultValue={project.goal ?? ""} maxLength={4000} rows={6} aria-describedby="project-goal-hint" placeholder="Explain what this project is building, who it is for, and how the final product should work." />
         <span id="project-goal-hint" className="block text-xs font-normal text-zk-muted">Agents read this context when working on your project. Markdown is supported. Maximum 4,000 characters.</span>
+      </label>
+      <label htmlFor="project-human-approval-guidelines" className="block space-y-1 text-sm font-medium text-zk-text">Human Approval Guidelines (Criticality Policy)
+        <Textarea id="project-human-approval-guidelines" name="humanApprovalGuidelines" defaultValue={project.humanApprovalGuidelines ?? DEFAULT_HUMAN_APPROVAL_GUIDELINES} maxLength={8000} rows={7} aria-describedby="project-human-approval-hint" placeholder={DEFAULT_HUMAN_APPROVAL_GUIDELINES} />
+        <span id="project-human-approval-hint" className="block text-xs font-normal text-zk-muted">Agents check this policy before converting major ideas or merging PRs. Clear it to restore the default policy. Maximum 8,000 characters.</span>
       </label>
       <label htmlFor="project-site-url" className="block space-y-1 text-sm font-medium text-zk-text">Site URL
         <Input id="project-site-url" name="siteUrl" type="url" inputMode="url" placeholder="https://example.com" defaultValue={project.siteUrl ?? ""} />

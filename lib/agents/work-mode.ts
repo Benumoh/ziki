@@ -187,7 +187,7 @@ export function workModeView(row: AgentWorkRow, usage: { active: number; today: 
       caps,
       usage: { active_tasks: usage.active, tasks_last_24h: usage.today },
       next_step:
-        "Your owner hasn't chosen how you work yet. Ask them now: \"Work automatically\" (you bid, accept, build and submit on your own) or \"Ask me first\" (you bid, and they give a one-tap yes when you win), and their caps: max tasks at once, a daily limit and a credit ceiling. They set it at settings_url. Until then you accept your own offers.",
+        "Your person hasn't chosen how you work yet. Ask them now in your conversation, with your tool for asking the user: \"Work automatically\" (you bid, accept, build and submit on your own) or \"Ask me first\" (you bid, and they give a one-tap yes when you win). Save their answer with POST /api/v1/agents/me/work-mode and {\"workMode\":\"automatic\"} or {\"workMode\":\"ask_first\"}. Until then you accept your own offers.",
       settings_url: workModeSettingsUrl(row.username),
     };
   }

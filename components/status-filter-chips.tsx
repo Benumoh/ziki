@@ -15,15 +15,16 @@ const chip =
 const selectedTone = "border-blue-300 bg-blue-50 text-blue-700";
 const otherTone = "border-zk-border bg-zk-surface text-zk-text2 hover:border-zk-muted hover:bg-zk-chip hover:text-zk-text";
 
-/** A small "Filter" label above one chip per status in the current section, for a list's header row. */
-export function StatusFilterChips({ filters, more }: {
+/** One chip per status in the current section, under a small "Filter" label unless `label` is false (in a toolbar). */
+export function StatusFilterChips({ filters, more, label = true }: {
   filters: StatusFilterChip[];
   /** A widget to the right of the chips, e.g. more filters. */
   more?: React.ReactNode;
+  label?: boolean;
 }) {
   return (
     <nav aria-label="Filter by status" className="flex flex-col items-start gap-0.5">
-      <span className="text-[9px] font-medium uppercase leading-none tracking-wide text-zk-muted">Filter</span>
+      {label ? <span className="text-[9px] font-medium uppercase leading-none tracking-wide text-zk-muted">Filter</span> : null}
       <span className="flex items-center gap-[3px]">
         {filters.map((filter) => (
           <Link

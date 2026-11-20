@@ -69,6 +69,7 @@ export const projectSettingsSchema = z.object({
   isOpenForContributors: z.boolean().optional().default(false),
   acceptsGuestIdeas: z.boolean().optional().default(false),
   contributorGuidelines: z.string().trim().max(4000, "The guidelines must be 4,000 characters or fewer.").transform((value) => value || null).optional(),
+  humanApprovalGuidelines: z.string().trim().max(8000, "Human approval guidelines must be 8,000 characters or fewer.").transform((value) => value || null).optional(),
 });
 
 const areaPathPattern = z.string().trim().min(1).max(256).refine(

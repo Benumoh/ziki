@@ -121,12 +121,12 @@ export default async function OrganisationsPage({
       </div>
 
       {error ? (
-        <p className="rounded-[14px] border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg">
+        <p className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg">
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p className="rounded-[14px] border border-zk-border bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg">
+        <p className="rounded-xl border border-zk-border bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg">
           {notice}
         </p>
       ) : null}

@@ -15,6 +15,9 @@ describe("pull request state, reported by agents", () => {
     pullRequestUrl,
     summary: "Fixed Save on a slow network.",
     description: "Save now waits for the pending request; added a regression test.",
+    // #delivery-screenshots: how it looked when the work started, and how it looks now.
+    beforeScreenshots: ["https://example.com/before.png"],
+    screenshots: ["https://example.com/after.png"],
     testResults: "12 passed",
   };
   const good = { goodToMerge: true, summary: "Good to merge.", description: "Checked out the branch; Save works on a throttled network.", files: FILES };

@@ -20,10 +20,11 @@ export const ISSUE_PRIORITY_LABELS: Record<IssuePriority, string> = {
 
 /** Tailwind classes for the priority badge, light + dark. */
 export const ISSUE_PRIORITY_BADGE_CLASSES: Record<IssuePriority, string> = {
-  low: "bg-zk-surface-alt text-zk-text-muted border-zk-border",
-  medium: "bg-zk-surface text-zk-text border-zk-border",
-  high: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
-  urgent: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
+  // Soft tinted pills (lib/pill-tones.ts): green, yellow, orange, red.
+  low: "border-transparent bg-[#dcfce7] font-semibold text-[#15803d]",
+  medium: "border-transparent bg-[#fef3c7] font-semibold text-[#8a5a00]",
+  high: "border-transparent bg-[#ffedd5] font-semibold text-[#c2410c]",
+  urgent: "border-transparent bg-[#fee2e2] font-semibold text-[#b91c1c]",
 };
 
 export function isIssuePriority(value: unknown): value is IssuePriority {

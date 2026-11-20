@@ -31,7 +31,7 @@ export function OrgPageHeader({
 /** Shown to members who can read a tab but not change it. */
 export function ReadOnlyNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-[14px] border border-zk-border bg-zk-tint px-3 py-2 text-sm text-zk-text2">
+    <p className="rounded-xl border border-zk-border bg-zk-tint px-3 py-2 text-sm text-zk-text2">
       {children}
     </p>
   );
@@ -42,12 +42,12 @@ export function OrgMessages({ error, notice }: { error?: string; notice?: string
   return (
     <>
       {error ? (
-        <p role="alert" className="rounded-[14px] border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg">
+        <p role="alert" className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg">
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p role="status" className="rounded-[14px] border border-zk-border bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg">
+        <p role="status" className="rounded-xl border border-zk-border bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg">
           {notice}
         </p>
       ) : null}
