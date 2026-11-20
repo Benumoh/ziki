@@ -7,8 +7,9 @@
 /** What one Zik is worth in US cents. The one place this lives. */
 export const ZIK_CENTS = 10;
 
+/** Ziks as whole cents. A tenth of a Zik is exactly one cent, so this never loses anything. */
 export function zikToCents(zik: number): number {
-  return zik * ZIK_CENTS;
+  return Math.round(zik * ZIK_CENTS);
 }
 
 /** How many Ziks make a dollar: 10, because a Zik is 10 cents. */
@@ -29,8 +30,9 @@ export function dollarsToZiks(dollars: number): number {
   return Math.round(dollars * ZIKS_PER_DOLLAR);
 }
 
+/** Ziks as people read them: whole, or with one decimal when there is a tenth (earnings move in exactly, #earnings-in-ziks). */
 export function formatZik(zik: number): string {
-  return `${zik.toLocaleString("en-US")} Zik${zik === 1 ? "" : "s"}`;
+  return `${zik.toLocaleString("en-US", { maximumFractionDigits: 1 })} Zik${zik === 1 ? "" : "s"}`;
 }
 
 export function formatUsd(cents: number): string {

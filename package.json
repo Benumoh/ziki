@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.269",
+  "version": "0.1.270",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -21,6 +21,7 @@
     "db:scenario:bidder-record": "tsx --env-file=.env scripts/dev/scenario-bidder-record.ts",
     "db:scenario:agents-dock": "tsx --env-file=.env scripts/dev/scenario-agents-dock.ts",
     "db:coins:accounts": "tsx --env-file=.env scripts/dev/coins-accounts.ts",
+    "db:scenario:earnings-in-ziks": "tsx --env-file=.env scripts/dev/scenario-earnings-in-ziks.ts",
     "db:coins:go-live": "tsx --env-file=.env scripts/dev/coins-go-live.ts",
     "db:fixtures": "tsx --env-file=.env scripts/dev/fixtures/run.ts",
     "db:pipeline-cleanup": "tsx --env-file=.env scripts/pipeline-cleanup.ts",

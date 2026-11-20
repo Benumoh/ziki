@@ -61,7 +61,7 @@ export function PointsSummary({
         {progress.targetMet ? " · Goal reached" : ""}
       </p>
       <div className="mt-4">
-        <ProgressRow label="$" value={points} target={targetPoints} percent={progress.pointsPercent} />
+        <ProgressRow label="Ziks"value={points} target={targetPoints} percent={progress.pointsPercent} />
       </div>
     </section>
   );

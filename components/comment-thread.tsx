@@ -141,7 +141,7 @@ function CommentUpvote({
   const label = `${votes} ${votes === 1 ? "upvote" : "upvotes"}`;
   if (!canVote || own) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[13px] tabular-nums text-zk-text2" title={own ? "Others upvote your comment; each upvote earns you $0.01." : label}>
+      <span className="inline-flex items-center gap-1.5 text-[13px] tabular-nums text-zk-text2" title={own ? "Others upvote your comment; each upvote earns you 0.1 Zik." : label}>
         <UpArrow filled={false} />
         <span>{votes}</span>
         <span className="sr-only">{votes === 1 ? " upvote" : " upvotes"}</span>
@@ -154,7 +154,7 @@ function CommentUpvote({
       disabled={pending || voted}
       aria-pressed={voted}
       aria-label={voted ? `You upvoted this comment, ${label}` : `Upvote this comment, ${label}`}
-      title={voted ? "You upvoted this comment" : "Upvote a helpful comment: its author earns $0.01"}
+      title={voted ? "You upvoted this comment" : "Upvote a helpful comment: its author earns 0.1 Zik"}
       onClick={() => {
         startTransition(async () => {
           const result = await upvoteCommentAction(commentId);

@@ -1,46 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const totalEarned = vi.hoisted(() => vi.fn());
+const walletSummary = vi.hoisted(() => vi.fn());
 const beingChecked = vi.hoisted(() => vi.fn());
-const organisationFindFirst = vi.hoisted(() => vi.fn());
+const syncEarnedZiks = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth-helpers", () => ({ requireUser: vi.fn(async () => ({ id: "earner" })) }));
-vi.mock("@/lib/earnings", () => ({ totalEarned, beingChecked }));
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    organisation: { findFirst: organisationFindFirst },
-    user: { findUnique: vi.fn(async () => ({ walletAddress: null })) },
-  },
-}));
+vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+vi.mock("@/lib/earnings", () => ({ beingChecked }));
+vi.mock("@/lib/coins/ledger", async (actual) => ({ ...(await actual<typeof import("@/lib/coins/ledger")>()), walletSummary }));
+vi.mock("@/lib/coins/earnings-sync", async (actual) => ({ ...(await actual<typeof import("@/lib/coins/earnings-sync")>()), syncEarnedZiks }));
 
 import { withdrawDetailsAction } from "@/app/(app)/earnings/withdraw-actions";
 
-/** The Withdraw window (#earnings) shows the same money as the header's $. */
+/** The Withdraw window (#earnings-in-ziks) shows the same money as the Withdraw page: the wallet, in every workspace. */
 describe("Withdraw details", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    totalEarned.mockResolvedValue(0.67);
-    beingChecked.mockResolvedValue(0);
+    syncEarnedZiks.mockResolvedValue(0);
+    walletSummary.mockResolvedValue({ balance: 500.4, earned: 440.4, withdrawable: 440.4 });
+    beingChecked.mockResolvedValue(3.25);
   });
 
-  it("counts all your money when you're in no workspace (you only joined projects), as the header does", async () => {
-    const details = await withdrawDetailsAction(null);
-    expect(details.available).toBe(0.67);
-    expect(totalEarned).toHaveBeenCalledWith(expect.anything(), "earner");
-    expect(organisationFindFirst).not.toHaveBeenCalled();
+  it("moves what was just earned in first, then shows the wallet's withdrawable Ziks and what is being checked in Ziks", async () => {
+    expect(await withdrawDetailsAction()).toEqual({ available: 440.4, checking: 32.5 });
+    expect(syncEarnedZiks).toHaveBeenCalledWith("earner");
+    expect(syncEarnedZiks.mock.invocationCallOrder[0]).toBeLessThan(walletSummary.mock.invocationCallOrder[0]);
   });
 
-  it("counts only the workspace you're in when there is one", async () => {
-    organisationFindFirst.mockResolvedValue({ id: "org-ziki", name: "Ziki", slug: "ziki" });
-    const details = await withdrawDetailsAction("org-ziki");
-    expect(details).toMatchObject({ available: 0.67, workspace: "Ziki" });
-    expect(totalEarned).toHaveBeenCalledWith(expect.anything(), "earner", "org-ziki");
-  });
-
-  it("shows nothing for a workspace that isn't yours", async () => {
-    organisationFindFirst.mockResolvedValue(null);
-    const details = await withdrawDetailsAction("someone-elses");
-    expect(details.available).toBe(0);
-    expect(totalEarned).not.toHaveBeenCalled();
+  it("still answers when moving earnings in fails; the sweep will catch up", async () => {
+    syncEarnedZiks.mockRejectedValue(new Error("busy"));
+    expect((await withdrawDetailsAction()).available).toBe(440.4);
   });
 });

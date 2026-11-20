@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { priorityNow } from "@/lib/priority-now";
 import { workflowFor } from "@/lib/workflow";
 import { budgetBalance, issuePriceZik } from "./budget";
+import { zikOf } from "./ledger";
 import { BUDGET_FILTERS, budgetStatusOf, classifyIssues, type BudgetFilterId, type BudgetIssueState, type BudgetSort, type BudgetStatus } from "./budget-states";
 
 /**
@@ -36,9 +37,9 @@ export async function budgetOverview(projectId: string): Promise<BudgetOverview>
   ]);
   return {
     available,
-    reserved: Math.max(0, reserved._sum.amount ?? 0),
+    reserved: Math.max(0, zikOf(reserved._sum.amount)),
     // Releases leave escrow, so they are negative there.
-    paidOut: Math.max(0, -(paid._sum.amount ?? 0)),
+    paidOut: Math.max(0, -zikOf(paid._sum.amount)),
     enabled: project.budgetEnabled,
     paused: Boolean(project.budgetPausedAt),
     alert: project.budgetAlert === "low" || project.budgetAlert === "empty" ? project.budgetAlert : null,
@@ -94,7 +95,7 @@ export async function budgetIssueList(
   }
 
   const held = await prisma.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: ordered.map((bug) => bug.id) } }, _sum: { amount: true } });
-  const heldBy = new Map(held.map((row) => [row.bugId, Math.max(0, row._sum.amount ?? 0)]));
+  const heldBy = new Map(held.map((row) => [row.bugId, Math.max(0, zikOf(row._sum.amount))]));
 
   const inputs = ordered.map((bug) => ({
     id: bug.id,
@@ -151,7 +152,7 @@ export async function ownedProjectBudgets(userId: string, limit = 8): Promise<{ 
   });
   const shown = projects.slice(0, limit);
   const balances = await prisma.coinEntry.groupBy({ by: ["projectId"], where: { account: "budget", projectId: { in: shown.map((project) => project.id) } }, _sum: { amount: true } });
-  const balanceOf = new Map(balances.map((row) => [row.projectId, row._sum.amount ?? 0]));
+  const balanceOf = new Map(balances.map((row) => [row.projectId, zikOf(row._sum.amount)]));
   return {
     projects: shown.map((project) => ({
       id: project.id,
@@ -187,7 +188,7 @@ export async function budgetMovements(projectId: string, take = 12): Promise<Bud
   });
   return rows.flatMap((row) =>
     row.kind === "fund_budget" || row.kind === "reserve" || row.kind === "unreserve" || row.kind === "budget_return"
-      ? [{ id: row.id, kind: row.kind, amount: row.amount, createdAt: row.createdAt, issue: row.bug }]
+      ? [{ id: row.id, kind: row.kind, amount: zikOf(row.amount), createdAt: row.createdAt, issue: row.bug }]
       : [],
   );
 }

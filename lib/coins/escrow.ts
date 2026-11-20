@@ -1,5 +1,5 @@
 import { lockProject } from "./budget";
-import { appendRows, escrowBalance, lockBug, type Tx } from "./ledger";
+import { appendRows, escrowBalance, lockBug, zikOf, type Tx } from "./ledger";
 import { feePercent, planRelease, splitByWeight } from "./math";
 
 /**
@@ -17,7 +17,7 @@ async function contributions(tx: Tx, bugId: string): Promise<Map<string, number>
     _sum: { amount: true },
   });
   // Funding is negative on the wallet, a refund positive: what is still theirs behind the issue.
-  return new Map(rows.filter((row) => row.userId).map((row) => [row.userId as string, -(row._sum.amount ?? 0)]));
+  return new Map(rows.filter((row) => row.userId).map((row) => [row.userId as string, -zikOf(row._sum.amount)]));
 }
 
 /** What was paid out, for the payout event and the tests. */
@@ -88,7 +88,7 @@ export async function refundEscrow(tx: Tx, bugId: string): Promise<number> {
 /** Puts back into the project's budget what it reserved for this issue and the issue still holds, up to `escrow`. Returns what it moved. */
 async function returnReservedToBudget(tx: Tx, bugId: string, escrow: number): Promise<number> {
   const reserved = await tx.coinEntry.aggregate({ where: { account: "escrow", bugId, kind: { in: ["reserve", "unreserve"] } }, _sum: { amount: true } });
-  const amount = Math.min(escrow, Math.max(0, reserved._sum.amount ?? 0));
+  const amount = Math.min(escrow, Math.max(0, zikOf(reserved._sum.amount)));
   if (amount <= 0) return 0;
   const bug = await tx.bug.findUniqueOrThrow({ where: { id: bugId }, select: { projectId: true } });
   await lockProject(tx, bug.projectId);

@@ -136,7 +136,7 @@ export function PointsLedger({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="ledger-heading" className="text-base font-semibold text-zk-text">
-            $ history · Itemized Points Ledger
+            Ziks history · Itemized Points Ledger
           </h2>
           <p className="mt-0.5 text-xs text-zk-text2">
             Your workspace ledger showing verified task bounties, review rewards, and adjustments.
@@ -166,7 +166,7 @@ export function PointsLedger({
             Adjustments
           </span>
           <p className="mt-1 text-lg font-bold tabular-nums text-rose-600 dark:text-rose-400">
-            {summary.totalDeductions > 0 ? `-${formatZ(summary.totalDeductions)}` : "$0"}
+            {summary.totalDeductions > 0 ? `-${formatZ(summary.totalDeductions)}` : formatZ(0)}
           </p>
         </div>
         <div className="col-span-2 rounded-xl border border-zk-border bg-zk-chip/40 p-3 sm:col-span-1">
