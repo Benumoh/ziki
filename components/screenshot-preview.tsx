@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { BrokenShot, SafeImg } from "@/components/safe-img";
 
 export type PreviewShot = { url: string; label: string };
 
@@ -75,8 +76,7 @@ export function ScreenshotPreview({
             </div>
           </div>
           <div className="relative flex min-h-0 flex-1 items-center justify-center bg-zk-bg">
-            {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
-            <img src={shot.url} alt={shot.label} className="max-h-[calc(92vh-52px)] w-auto max-w-full object-contain" />
+            <SafeImg src={shot.url} alt={shot.label} loading="eager" className="max-h-[calc(92vh-52px)] w-auto max-w-full object-contain" fallback={<BrokenShot className="min-h-[240px] text-[13px]" />} />
             {many ? (
               <>
                 <button type="button" onClick={() => step(-1)} aria-label="Previous screenshot" className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/75">

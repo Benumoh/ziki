@@ -209,12 +209,13 @@ export function IdeaChat({
   // closes with ×.
   const conversation = chatSlug && turns.length ? (
     <div
-      className="zk-paper relative mx-4 -mb-3 rounded-t-xl border border-b-0 border-zk-border bg-white pb-5 shadow-[0_-4px_14px_rgba(0,0,0,0.06),0_1px_0_rgba(0,0,0,0.03)_inset]"
+      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-[24px] bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
       style={{ animation: "zk-sheet 0.45s ease-out both" }}
     >
       <style>{`
-@keyframes zk-sheet { from { clip-path: inset(100% 0 0 0); transform: translateY(14px) } to { clip-path: inset(0 0 0 0); transform: translateY(0) } }
-@keyframes zk-paper { from { clip-path: inset(0 0 100% 0); transform: translateY(-6px) } to { clip-path: inset(0 0 0 0); transform: translateY(0) } }
+/* The clips end past the edges, so they never cut off the drop shadows. */
+@keyframes zk-sheet { from { clip-path: inset(100% -80px -80px -80px); transform: translateY(14px) } to { clip-path: inset(-80px -80px -80px -80px); transform: translateY(0) } }
+@keyframes zk-paper { from { clip-path: inset(-40px -40px 100% -40px); transform: translateY(-6px) } to { clip-path: inset(-40px -40px -40px -40px); transform: translateY(0) } }
 @keyframes zk-caret { 50% { opacity: 0 } }
 @media (prefers-reduced-motion: reduce) { .zk-paper { animation: none !important } }
 `}</style>
@@ -227,22 +228,22 @@ export function IdeaChat({
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
       </button>
-      <div ref={scrollRef} className="max-h-[360px] overflow-y-auto px-4 pb-2 pt-4">
-    <ol ref={listRef} aria-label="Conversation with Ziki" aria-live="polite" className="m-0 flex list-none flex-col gap-3 p-0 pr-6">
+      <div ref={scrollRef} className="max-h-[300px] overflow-y-auto px-5 pb-4 pt-4">
+    <ol ref={listRef} aria-label="Conversation with Ziki" aria-live="polite" className="m-0 flex list-none flex-col gap-2.5 p-0 pr-6">
       {turns.map((turn, index) => {
         const mine = turn.role === "user";
         const newest = index === turns.length - 1;
         return (
-          <li key={index} className={`flex items-end gap-2.5 ${mine ? "flex-row-reverse" : ""}`}>
+          <li key={index} className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
             {mine ? (
-              <Avatar name={me?.name ?? "You"} image={me?.image ?? null} size="sm" className="mb-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.15)]" />
+              <Avatar name={me?.name ?? "You"} image={me?.image ?? null} size="sm" className="mb-0.5 !h-6 !w-6 shadow-[0_2px_6px_rgba(16,24,40,0.18)]" />
             ) : (
-              <span aria-hidden="true" className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zk-text text-zk-surface shadow-[0_1px_3px_rgba(0,0,0,0.2)]">
-                <ZikiMark className="h-3.5 w-auto" />
+              <span aria-hidden="true" className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zk-text text-zk-surface shadow-[0_2px_6px_rgba(16,24,40,0.22)]">
+                <ZikiMark className="h-3 w-auto" />
               </span>
             )}
             <div
-              className={`zk-paper relative max-w-[78%] px-3.5 py-2 text-[13.5px] leading-relaxed shadow-[0_2px_6px_rgba(0,0,0,0.08),0_1px_1px_rgba(0,0,0,0.04)] ${mine
+              className={`zk-paper relative max-w-[75%] px-3 py-1.5 text-[13px] leading-relaxed shadow-[0_8px_18px_-6px_rgba(16,24,40,0.22),0_2px_4px_-1px_rgba(16,24,40,0.10)] ${mine
                 ? "rounded-2xl rounded-br-[4px] bg-zk-text text-zk-surface"
                 : "rounded-2xl rounded-bl-[4px] bg-[#f1f3f6] text-zk-text"}`}
               style={!mine && newest ? { animation: "zk-paper 0.5s ease-out both" } : undefined}
@@ -288,7 +289,7 @@ export function IdeaChat({
               event.preventDefault();
               boxRef.current?.focus();
             }}
-            className="relative z-[1] cursor-text rounded-[22px] border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50"
+            className="relative z-[1] cursor-text rounded-[22px] border border-black/[0.06] bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_14px_34px_rgba(16,24,40,0.10),0_3px_8px_rgba(16,24,40,0.06)] focus-within:border-electric-blue-strong/50"
           >
             <label htmlFor={boxId} className="sr-only">Your idea</label>
             <textarea
