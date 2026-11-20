@@ -46,6 +46,9 @@ jobs:
 
       - name: Type check
         run: pnpm exec tsc --noEmit
+        # The app's types outgrew tsc's default 2 GB heap on the runner.
+        env:
+          NODE_OPTIONS: "--max-old-space-size=6144"
 
       - name: Test
         run: pnpm test

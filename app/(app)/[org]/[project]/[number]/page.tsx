@@ -1324,7 +1324,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const timelineReviews = newestFirst(mergeReviewList);
 
   // The Conversation card shows only when it has entries in it: no empty boxes.
-  // Its Dispute award button alone is not enough (nothing to dispute before an award).
   const conversationHasContent =
     Boolean(sourceIdea) ||
     Boolean(awardClaim) ||
