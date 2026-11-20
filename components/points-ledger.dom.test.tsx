@@ -30,7 +30,6 @@ describe("PointsLedger", () => {
         title: "Fix authentication redirect loop",
         status: "resolved",
       },
-      disputes: [],
     },
     {
       id: "entry-2",
@@ -45,7 +44,6 @@ describe("PointsLedger", () => {
         title: "Improve avatar upload validation",
         status: "resolved",
       },
-      disputes: [],
     },
     {
       id: "entry-3",
@@ -60,7 +58,6 @@ describe("PointsLedger", () => {
         title: "Fix authentication redirect loop",
         status: "resolved",
       },
-      disputes: [],
     },
   ];
 
@@ -112,15 +109,5 @@ describe("PointsLedger", () => {
       />
     );
     expect(screen.getByText("No ledger entries found")).toBeInTheDocument();
-  });
-
-  it("shows dispute buttons only when canDispute is true and entry is not corrected", () => {
-    render(<PointsLedger entries={mockEntries} summary={mockSummary} canDispute={true} />);
-    const disputeLinks = screen.getAllByRole("link", { name: "Dispute" });
-    expect(disputeLinks).toHaveLength(2);
-    expect(disputeLinks[0]).toHaveAttribute(
-      "href",
-      "/points/disputes/new?bug=101&pointEntryId=entry-1"
-    );
   });
 });

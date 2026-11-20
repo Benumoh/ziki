@@ -48,9 +48,7 @@ export type HistoricalBug = {
 /** Solver points are earned on `resolved` only — the same eligibility the
  * live award path (app/actions/issues.ts) and the bulk edit path
  * (lib/points/bulk-award.ts) use. A `closed` issue may still be a duplicate,
- * cancellation or won't-fix outcome, which must never pay a solver (#656);
- * a genuinely completed closed ticket can be credited through a missing-award
- * dispute, which is the audited path for that case.
+ * cancellation or won't-fix outcome, which must never pay a solver (#656).
  */
 const SOLVER_ELIGIBLE: ReadonlySet<Status> = new Set<Status>(["resolved"]);
 

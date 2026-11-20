@@ -82,7 +82,6 @@ import { Badge } from "@/components/ui/badge";
 import { VoteButton } from "@/components/vote-button";
 import { IssueConfirmationsPanel, type ConfirmationBlock, type ConfirmationsData } from "@/components/issue-confirmations";
 import { CONFIRMATION_SUMMARY_MAX_CHARS, listConfirmations, takesConfirmations } from "@/lib/agent-api/confirmations";
-import { DisputeAwardDialog, type DisputeRole } from "@/components/dispute-award-dialog";
 import { TakeItBackPanel } from "@/components/take-it-back";
 import { takeItBackViewFor } from "@/lib/take-it-back-server";
 import { AttachmentList, type AttachmentView } from "@/components/attachment-list";
@@ -1186,15 +1185,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     ciPassed = bug.substatus !== "error";
     rebaseClean = bug.substatus !== "error";
   }
-  // "Dispute award", for the issue's reporter and assignee: its own button now
-  // that issues take no free-standing comments (#entry-replies-only).
-  const disputeRoles: DisputeRole[] = bug.isDeleted
-    ? []
-    : [
-        ...(userId && bug.assigneeId === userId ? (["solver"] as const) : []),
-        ...(userId && bug.reporterId === userId ? (["reporter"] as const) : []),
-      ];
-
   // Less common actions sit behind one icon at the top right: Mark as
   // duplicate and Delete. "Assign to me" lives in the People panel.
   const canMarkDuplicate = canTriage && !bug.isDeleted && !bug.duplicateOf;
@@ -1334,7 +1324,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const timelineReviews = newestFirst(mergeReviewList);
 
   // The Conversation card shows only when it has entries in it: no empty boxes.
-  // Its Dispute award button alone is not enough (nothing to dispute before an award).
   const conversationHasContent =
     Boolean(sourceIdea) ||
     Boolean(awardClaim) ||
@@ -1518,11 +1507,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               canReply={mergeReviewing}
               history={!mergeReviewing}
             />
-          ) : null
-        }
-        disputeSlot={
-          disputeRoles.length > 0 ? (
-            <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
           ) : null
         }
         escalationsSlot={<IssueEscalations escalations={escalations} />}
@@ -1908,13 +1892,10 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       + (awardClaim ? 1 : 0)
       + bidList.length
       + (confirmationsCard && !confirming ? confirmationsData?.entries.length ?? 0 : 0);
-  // The agents' steps on the issue (#comment-tabs): the dispute button and the timeline of awards, bids, deliveries,
+  // The agents' steps on the issue (#comment-tabs): the timeline of awards, bids, deliveries,
   // judgements and reviews. They sit under the comments' Agents tab.
   const agentTimeline = conversationHasContent ? (
     <div id="conversation" className="mb-4 scroll-mt-24">
-                  <div className="flex justify-end empty:hidden">
-                    <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
-                  </div>
                   <IssueTimeline>
                     {mergeReviewing || timelineReviews.length > 0 ? (
                       <>

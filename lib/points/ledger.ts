@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient, PointRole, DisputeStatus } from "@prisma/client";
+import type { Prisma, PrismaClient, PointRole } from "@prisma/client";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -15,11 +15,6 @@ export type DetailedPointEntry = {
     title: string;
     status: string;
   } | null;
-  disputes: Array<{
-    id: string;
-    status: DisputeStatus;
-    reason: string;
-  }>;
 };
 
 export type PointLedgerSummary = {
@@ -38,7 +33,7 @@ function toNumber(val: unknown): number {
 }
 
 /**
- * Loads a member's itemized point ledger entries with task details and disputes.
+ * Loads a member's itemized point ledger entries with task details.
  * Supports filtering by role and pagination.
  */
 export async function getDetailedPointLedger(
@@ -84,13 +79,6 @@ export async function getDetailedPointLedger(
             status: true,
           },
         },
-        disputes: {
-          select: {
-            id: true,
-            status: true,
-            reason: true,
-          },
-        },
       },
     }),
     db.pointEntry.findMany({
@@ -119,7 +107,6 @@ export async function getDetailedPointLedger(
     correctedAt: row.correctedAt,
     createdAt: row.createdAt,
     bug: row.bug,
-    disputes: row.disputes,
   }));
 
   const summary: PointLedgerSummary = {

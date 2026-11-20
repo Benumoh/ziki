@@ -72,9 +72,6 @@ vi.mock("@/app/actions/idea-verdicts", () => ({
 }));
 vi.mock("@/app/(app)/[org]/[project]/notes/actions", () => ({ voteNoteCommentAction: vi.fn() }));
 
-vi.mock("@/app/(app)/points/disputes/actions", () => ({
-  openDisputeAction: vi.fn(),
-}));
 
 vi.mock("@/app/(app)/questions/actions", () => ({
   answerQuestionAction: vi.fn(),

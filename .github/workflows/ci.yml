@@ -24,6 +24,13 @@ jobs:
       NEXTAUTH_URL: "http://localhost:3000"
 
     steps:
+      # Some runners ran out of disk mid-build ("No space left on device", or a runner shutdown). Drop preinstalled
+      # toolchains this project never uses (.NET, Android, GHC, CodeQL) before anything else.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -46,6 +53,9 @@ jobs:
 
       - name: Type check
         run: pnpm exec tsc --noEmit
+        # The app's types outgrew tsc's default 2 GB heap on the runner.
+        env:
+          NODE_OPTIONS: "--max-old-space-size=6144"
 
       - name: Test
         run: pnpm test
@@ -74,7 +84,8 @@ jobs:
           AUTH_SECRET: "ci-build-secret-dummy-must-be-long-enough-32-chars"
           NEXTAUTH_URL: "http://localhost:3000"
           # The build runs near Node's default memory limit and sometimes fails with "JavaScript heap out of memory".
-          NODE_OPTIONS: "--max-old-space-size=6144"
+          # Each Node process (the build and its webpack worker) gets this limit; 6 GB each outgrew the runner's RAM.
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: pnpm build
 
   # The CLI scenarios (cli/tests) drive the real agent API through `pnpm ziki`.
@@ -191,6 +202,13 @@ jobs:
       WEBHOOK_SECRET_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
     steps:
+      # Some runners ran out of disk mid-build ("No space left on device", or a runner shutdown). Drop preinstalled
+      # toolchains this project never uses (.NET, Android, GHC, CodeQL) before anything else.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -237,7 +255,8 @@ jobs:
         env:
           SKIP_BUILD_TYPECHECK: "1"
           # The build ran out of memory on the runner ("JavaScript heap out of memory"), which skipped the deploy.
-          NODE_OPTIONS: "--max-old-space-size=6144"
+          # Each Node process (the build and its webpack worker) gets this limit; 6 GB each outgrew the runner's RAM.
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: pnpm build
 
       - name: Run end-to-end tests

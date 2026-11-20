@@ -21,7 +21,6 @@ export type PointsLedgerProps = {
   error?: boolean;
   entries?: DetailedPointEntry[];
   summary?: PointLedgerSummary;
-  canDispute?: boolean;
 };
 
 const roleBadgeClasses: Record<string, string> = {
@@ -41,7 +40,6 @@ export function PointsLedger({
   error,
   entries,
   summary: externalSummary,
-  canDispute = true,
 }: PointsLedgerProps) {
   const [selectedRole, setSelectedRole] = useState<string>("all");
 
@@ -60,7 +58,6 @@ export function PointsLedger({
     correctedAt?: Date | null;
     issue?: { id: string; number: number; title: string; path?: string } | null;
     idea?: { id: string; number: number; title: string; path: string } | null;
-    disputes?: Array<{ id: string; status: string; reason?: string }>;
     description?: string;
   };
 
@@ -81,7 +78,6 @@ export function PointsLedger({
               path: `/issues/${e.bug.id}`,
             }
           : null,
-        disputes: e.disputes,
         description: pointRoleDescription(e.role, e.points),
       }));
     }
@@ -142,13 +138,6 @@ export function PointsLedger({
             Your workspace ledger showing verified task bounties, review rewards, and adjustments.
           </p>
         </div>
-        <Link
-          href="/points/disputes"
-          className="inline-flex items-center gap-1.5 rounded-full border border-zk-border bg-zk-chip px-3 py-1 text-xs font-medium text-zk-text hover:bg-zk-border transition-colors"
-        >
-          <span>Disputes</span>
-          <span aria-hidden="true">→</span>
-        </Link>
       </div>
 
       {/* Summary Cards */}
@@ -264,7 +253,6 @@ export function PointsLedger({
           {filteredItems.map((entry) => {
             const isNegative = entry.points < 0;
             const isCorrected = Boolean(entry.correctedAt);
-            const activeDispute = entry.disputes?.find((d) => d.status === "open");
 
             return (
               <li
@@ -310,11 +298,6 @@ export function PointsLedger({
                       </span>
                     )}
 
-                    {activeDispute && (
-                      <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-2xs font-medium text-amber-600 dark:text-amber-400">
-                        Under Dispute
-                      </span>
-                    )}
                   </div>
 
                   {entry.description ? (
@@ -326,7 +309,7 @@ export function PointsLedger({
                   </div>
                 </div>
 
-                {/* Right: Point Value & Dispute Action */}
+                {/* Right: the point value */}
                 <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
                   <div className="text-right">
                     <span
@@ -340,15 +323,6 @@ export function PointsLedger({
                     </span>
                   </div>
 
-                  {canDispute && entry.issue && !isCorrected && !activeDispute ? (
-                    <Link
-                      href={`/points/disputes/new?bug=${entry.issue.number}&pointEntryId=${entry.id}`}
-                      className="rounded-lg border border-zk-border bg-zk-chip px-2.5 py-1 text-xs font-medium text-zk-text hover:bg-zk-border transition-colors"
-                      title="Dispute this award"
-                    >
-                      Dispute
-                    </Link>
-                  ) : null}
                 </div>
               </li>
             );
