@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
-import { walletSummary } from "@/lib/coins/ledger";
+import { hasEarnedZiks, walletSummary } from "@/lib/coins/ledger";
 import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
@@ -78,7 +78,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
   if (query.subscribed === "1" && stripeConfigured()) await syncUserSubscriptions(user.id).catch(() => undefined);
   const [subscription, discountPercent] = await Promise.all([liveSubscriptionOf(user.id), discountPercentFor(user.id)]);
 
-  const [wallet, entries, budgets] = await Promise.all([
+  const [wallet, entries, budgets, earner] = await Promise.all([
     walletSummary(prisma, user.id),
     prisma.coinEntry.findMany({
       // Buying and spending only; what was earned and withdrawn is on the Withdraw page.
@@ -89,6 +89,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
     }),
     // The projects this person can fund; a failed read just leaves them out.
     ownedProjectBudgets(user.id).catch(() => ({ projects: [], more: 0 })),
+    hasEarnedZiks(prisma, user.id).catch(() => false),
   ]);
   const configured = paymentsAvailable();
   const justCredited = hasRecentPurchase(entries);
@@ -150,7 +151,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
           <Link href="/coins?section=buy" className={quick}>Buy</Link>
           {ownsProjects ? <Link href="/coins?section=budgets" className={quick}>Fund a project</Link> : null}
           {/* Only for people who have earned Ziks: someone who just posts issues never withdraws. */}
-          {wallet.earned > 0 ? <Link href="/coins/payouts" className={quick}>Withdraw</Link> : null}
+          {earner ? <Link href="/coins/payouts" className={quick}>Withdraw</Link> : null}
         </nav>
       </section>
 

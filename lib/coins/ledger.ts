@@ -84,6 +84,14 @@ export async function earnedNet(db: Db, userId: string): Promise<number> {
   return sum._sum.amount ?? 0;
 }
 
+/**
+ * Whether this person has ever been paid Ziks for solving an issue. Only they have anything to withdraw, so only they
+ * see Withdraw (someone who just posts issues never does). True even after they withdrew it all.
+ */
+export async function hasEarnedZiks(db: Db, userId: string): Promise<boolean> {
+  return (await db.coinEntry.count({ where: { account: "wallet", userId, kind: "release" }, take: 1 })) > 0;
+}
+
 export async function walletSummary(db: Db, userId: string) {
   const [balance, earned] = await Promise.all([walletBalance(db, userId), earnedNet(db, userId)]);
   return { balance, earned, withdrawable: withdrawableOf(balance, earned) };

@@ -215,7 +215,10 @@ export function AppHeader({
   earned = null,
   earningsOrganisationId = null,
   version,
+  showWithdraw = false,
 }: {
+  /** Whether the account menu shows Withdraw: only for people who have earned Ziks (lib/coins/ledger.ts hasEarnedZiks). */
+  showWithdraw?: boolean;
   /** The running version (package version), shown with Cookie settings at the foot of the account menu. */
   version?: string;
   /** Earnings (#earnings): what the person earned in the workspace they're in, shown with Withdraw on every page; null when unknown. */
@@ -377,10 +380,12 @@ export function AppHeader({
                 <MenuLink href="/pricing" active={pathname === "/pricing"}>
                   Pricing
                 </MenuLink>
-                {/* What you earned and how to take it out (#ziki-coins), apart from buying Ziks. */}
-                <MenuLink href="/coins/payouts" active={Boolean(pathname?.startsWith("/coins/payouts"))}>
-                  Withdraw
-                </MenuLink>
+                {/* What you earned and how to take it out (#ziki-coins), apart from buying Ziks. Only for people who have earned. */}
+                {showWithdraw ? (
+                  <MenuLink href="/coins/payouts" active={Boolean(pathname?.startsWith("/coins/payouts"))}>
+                    Withdraw
+                  </MenuLink>
+                ) : null}
                 <MenuLink href="/settings" active={isNavItemActive(pathname, "/settings")}>
                   Settings
                 </MenuLink>

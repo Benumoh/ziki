@@ -186,7 +186,7 @@ import { budgetBalance, budgetBlock, fundBudget, issuePriceZik, raiseIssuePrice,
 import { budgetStatusOf, classifyIssues } from "@/lib/coins/budget-states";
 import { budgetAlertState } from "@/lib/coins/budget-sweeps";
 import { refundEscrow, releaseEscrow } from "@/lib/coins/escrow";
-import { escrowBalance, escrowByBug, walletBalance, walletSummary } from "@/lib/coins/ledger";
+import { escrowBalance, escrowByBug, hasEarnedZiks, walletBalance, walletSummary } from "@/lib/coins/ledger";
 import { dollarsToZiks, estimateToZik, feeOf, planRelease, splitByWeight, ziksToDollars } from "@/lib/coins/math";
 import { ledgerBalances } from "@/lib/coins/money";
 import { createPackCheckout, createTestPurchase, recordPurchase } from "@/lib/coins/purchase";
@@ -326,6 +326,17 @@ describe("releasing and refunding escrow", () => {
     expect(await walletBalance(db as never, "owner")).toBe(100);
     expect(await escrowBalance(db as never, "bug")).toBe(0);
     expect(await refundEscrow(db as never, "bug")).toBe(0);
+  });
+});
+
+describe("who sees Withdraw", () => {
+  it("is only someone who has been paid Ziks for an issue, and still them after they withdrew it all", async () => {
+    await buy("buyer", 100, "w-buy");
+    expect(await hasEarnedZiks(db as never, "buyer")).toBe(false);
+    world.rows.push({ account: "wallet", userId: "fixer", bugId: "bug", kind: "release", amount: 300, sourceKey: "w-release" });
+    expect(await hasEarnedZiks(db as never, "fixer")).toBe(true);
+    world.rows.push({ account: "wallet", userId: "fixer", bugId: null, kind: "withdrawal", amount: -300, sourceKey: "w-out" });
+    expect(await hasEarnedZiks(db as never, "fixer")).toBe(true);
   });
 });
 
