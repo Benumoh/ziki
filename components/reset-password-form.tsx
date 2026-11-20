@@ -20,6 +20,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
   return (
     <form
+      // POST, so a submit before hydration never puts the password in the URL.
+      method="post"
       ref={formRef}
       className="flex flex-col gap-4"
       onSubmit={(event) => {
