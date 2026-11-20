@@ -1683,6 +1683,8 @@ model DeploymentReport {
   /// dev, staging or prod.
   environment      String
   note             String
+  /// The live link (#live-link): the address where the merged work can be seen running, or null when none was given.
+  url              String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   bug              Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)

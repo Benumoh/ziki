@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type React from "react";
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { approveDeliveredWorkAction, confirmLiveWorkAction } from "@/app/actions/human-steps";
 import { LocalTime } from "@/components/local-time";
@@ -33,8 +33,10 @@ export type WorkFeedItem = {
   body: string;
   files: { id: string; name: string; type: string; size: number }[];
   decision: { label: string; href: string };
-  /** Delivered work: where it was delivered (its preview, else its link or pull request), and whether it awaits approval. */
-  viewUrl: string | null;
+  /** Delivered work: where it can be seen running (its preview, else the delivery's link), or null. */
+  liveUrl: string | null;
+  /** Its pull request, kept apart from where it runs. */
+  pullRequestUrl: string | null;
   /** Delivered work: the delivery's screenshots (links) of how it looks now, shown as a preview when the card is opened. */
   screenshots: string[];
   /** And of how it looked when the work started (#delivery-screenshots). */
@@ -60,6 +62,10 @@ export type WorkFeedItem = {
   startedAt: Date | null;
   /** In the Stalled section: since when it hasn't moved; null elsewhere. */
   stalledSince: Date | null;
+  /** Whether an agent holds it now (an active claim). */
+  held: boolean;
+  /** In the Stalled section: why it is stalled, in a sentence; null elsewhere. */
+  stallReason: string | null;
   /** Why it isn't merged yet, from the latest pull request report, or null when nothing is in the way. */
   mergeHold: string | null;
 };
@@ -344,14 +350,13 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
     <article id={id} aria-labelledby={`${id}-title`} className="my-1 rounded-2xl border border-zk-border bg-white px-5 pb-5 pt-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
       <div className="flex flex-wrap items-center gap-3 border-b border-zk-divider pb-4">
         <button type="button" aria-expanded={true} aria-controls={id} onClick={onClose} className={`flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left ${focus}`}>
-          <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[item.who ? toneForName(item.who) : "grey"]}>
-            {who.charAt(0).toUpperCase()}
-          </span>
+          <IssueThumb item={item} />
           <span className="min-w-0">
-            <span className={`block truncate text-[15px] font-semibold ${item.who ? "text-zk-text" : "text-zk-muted"}`}>{who}</span>
-            <span className="block truncate text-[13px] text-zk-muted">
+            {/* The issue's title heads the card; who is on it goes in the line under it. */}
+            <span id={`${id}-title`} className="block text-[16px] font-semibold leading-snug text-zk-text">{cleanTitle(item.title)}</span>
+            <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
               <span style={{ color: tone.color }}>{kind.label}</span> · <span className="tabular-nums">{formatIssueNumber(item.number)}</span>
-              {item.projectName ? ` · ${item.projectName}` : ""} · <LocalTime date={item.at} />
+              {item.projectName ? ` · ${item.projectName}` : ""} · {who} · <LocalTime date={item.at} />
             </span>
           </span>
         </button>
@@ -376,12 +381,19 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
         )}
       </div>
       {/* Delivered and live work: what it says on the left, a preview of what was delivered on the right (under it on a phone). */}
-      <div className={item.kind === "delivered" || item.kind === "live" ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,320px)]" : ""}>
+      <div className={item.kind === "delivered" || item.kind === "live" || item.stallReason ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,340px)]" : ""}>
       <div className="min-w-0 pt-4 text-[14.5px] leading-relaxed text-zk-text2">
-        <h2 id={`${id}-title`} className="m-0 mb-3 text-[16px] font-semibold leading-snug text-zk-text">{cleanTitle(item.title)}</h2>
         {/* When it was delivered, and why it isn't merged yet when the latest pull request report says why. */}
         {item.deliveredAt ? (
-          <p className="m-0 mb-3 text-[13px] text-zk-muted">Delivered <LocalTime date={item.deliveredAt} /></p>
+          <p className="m-0 mb-3 text-[13px] text-zk-muted">Delivered <LocalTime date={item.deliveredAt} absolute /></p>
+        ) : null}
+        {item.stallReason ? (
+          <div role="note" className="mb-4 rounded-xl border border-zk-warn-bd bg-zk-warn-bg px-3.5 py-2.5 text-[13.5px] text-zk-warn-fg">
+            <p className="m-0 font-semibold">
+              Why it&apos;s stalled{item.stalledSince ? <span className="font-normal" suppressHydrationWarning> · no movement for {since(item.stalledSince)}</span> : null}
+            </p>
+            <p className="m-0 mt-0.5">{item.stallReason}</p>
+          </div>
         ) : null}
         {item.mergeHold ? (
           <div role="note" className="mb-4 rounded-xl border border-zk-warn-bd bg-zk-warn-bg px-3.5 py-2.5 text-[13.5px] text-zk-warn-fg">
@@ -397,9 +409,18 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
         ) : item.summary ? null : (
           <p className="m-0 text-zk-muted">No description.</p>
         )}
-        {item.reporter ? <p className="m-0 mt-4 text-[13.5px] text-zk-muted">Reported by {item.reporter}</p> : null}
       </div>
-      {item.kind === "delivered" || item.kind === "live" ? <DeliveryPreview item={item} /> : null}
+      {/* The right column: the full issue's link on top, then, when stalled, what you can do to move it on, then the
+          preview of delivered work. */}
+      {item.stallReason || item.kind === "delivered" || item.kind === "live" ? (
+        <div className="min-w-0">
+          <div className="mt-4 flex justify-end">
+            <FullIssueLink href={item.href} />
+          </div>
+          {item.stallReason ? <StalledFix item={item} /> : null}
+          {item.kind === "delivered" || item.kind === "live" ? <DeliveryPreview item={item} /> : null}
+        </div>
+      ) : null}
       </div>
       {item.files.length > 0 ? (
         <ul aria-label="Files" className="m-0 mt-5 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2">
@@ -430,12 +451,22 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
           })}
         </ul>
       ) : null}
-      {/* At the bottom: the whole issue. */}
-      <Link href={item.href} className={`mt-5 inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
-        Open the full issue
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-      </Link>
+      {/* At the bottom, on one line: who reported it on the left, the whole issue on the right. */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {item.reporter ? <p className="m-0 text-[13.5px] text-zk-muted">Reported by {item.reporter}</p> : <span aria-hidden="true" />}
+        <FullIssueLink href={item.href} />
+      </div>
     </article>
+  );
+}
+
+/** The link to the whole issue. */
+function FullIssueLink({ href }: { href: string }) {
+  return (
+    <Link href={href} className={`inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
+      Open the full issue
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+    </Link>
   );
 }
 
@@ -459,12 +490,155 @@ function since(date: Date): string {
  */
 function StalledLabel({ item, className = "" }: { item: WorkFeedItem; className?: string }) {
   return (
-    <span className={`flex shrink-0 flex-col items-end gap-1 ${className}`}>
+    <span title={item.stallReason ?? undefined} className={`flex shrink-0 flex-col items-end gap-1 ${className}`}>
       <StatusBadge substatus={item.substatus} />
       {item.stalledSince ? (
         <span className="text-[11.5px] tabular-nums text-zk-muted" suppressHydrationWarning>{since(item.stalledSince)}</span>
       ) : null}
     </span>
+  );
+}
+
+/** What a person can do about stalled work (#stalled-fix): by themself, and what to ask their agent. */
+type Fix = {
+  /** The heading: what has to happen. */
+  title: string;
+  /** What you can do yourself, in a sentence. */
+  you: string;
+  /** The button for it: a link (the issue page, where the step is, or the pull request). */
+  action: { label: string; href: string; external?: boolean } | null;
+  /** Approve here, for delivered work waiting for its judgement. */
+  approve?: boolean;
+  /** What to paste to your agent, given the issue's full address. */
+  prompt: (url: string) => string;
+};
+
+function fixFor(item: WorkFeedItem): Fix {
+  const ref = `Ziki issue ${formatIssueNumber(item.number)}`;
+  const pr = item.pullRequestUrl;
+  const prLine = pr ? ` The pull request is ${pr}.` : "";
+  switch (item.substatus) {
+    case "in_progress":
+    case "plan_review":
+      if (!item.held) {
+        return {
+          title: "Get an agent on it again",
+          you: "Nobody holds it now. Open the issue to award an open bid, or assign it to your agent.",
+          action: { label: "Award or assign", href: item.href },
+          prompt: (url) => `${ref} (${url}) was let go and nobody is working on it. Read it, check the project's mistake registry, and bid on it with a short plan so it can be awarded to you.`,
+        };
+      }
+      return {
+        title: "Wake the agent or hand it on",
+        you: `${item.who ?? "The agent"} stopped checking in. If it's your agent, ask it to carry on. Otherwise, on the issue page the ⋯ menu gives it more time or stops it so the work can go to another agent.`,
+        action: { label: "Open the issue", href: item.href },
+        prompt: (url) => `Check ${ref} (${url}). If you hold the claim, carry on with the work and send a heartbeat now, or deliver what you have; if you can't finish it, release the claim so another agent can take it. If you don't hold it, bid on it so it can be handed to you.`,
+      };
+    case "requires_review":
+      return {
+        title: "Judge the delivery",
+        you: "Look at what was delivered and approve it if it works. Your approval counts as a test verdict.",
+        action: pr ? { label: "Look at the pull request", href: pr, external: true } : { label: "Open the issue", href: item.href },
+        approve: item.canApprove,
+        prompt: (url) => `Test the delivery on ${ref} (${url}).${prLine} Check out the change, run it, try what the issue describes, and post your verdict (good to merge or not) with a summary and screenshots as a test result.`,
+      };
+    case "accepted":
+      return {
+        title: "Give it a manager review",
+        you: "It needs a manager's review. If you're an owner or admin, give the merge review from the issue page, or ask your manager agent to.",
+        action: { label: "Review it", href: item.href },
+        prompt: (url) => `As a manager agent, review the pull request for ${ref} (${url}).${prLine} Read the diff against the issue and the mistake registry, then post a merge review: accept, or reject with the feedback the author should act on.`,
+      };
+    case "ready_to_merge":
+      return {
+        title: "Merge the pull request",
+        you: "It's accepted and only needs merging. Merge it from the issue's GitHub panel or on GitHub once its checks are green, or ask your merger agent.",
+        action: pr ? { label: "Merge on GitHub", href: pr, external: true } : { label: "Open the issue", href: item.href },
+        prompt: (url) => `As a merger agent, merge the pull request for ${ref} (${url}).${prLine} Check that it is mergeable and every check is green, merge it on GitHub, then report it merged and resolve the issue.`,
+      };
+    case "error":
+      return {
+        title: "Fix the pull request",
+        you: "The pull request can't merge. From the issue's GitHub panel you can update the branch, re-run failed checks or send it back to the agent that wrote it.",
+        action: { label: "Open the GitHub panel", href: item.href },
+        prompt: (url) => `The pull request for ${ref} (${url}) can't be merged.${prLine}${item.mergeHold ? ` Reason: ${item.mergeHold}` : ""} Bring the branch up to date with main, fix conflicts or failing checks, push, and report the pull request status when it can merge.`,
+      };
+    case "merged_broken":
+      return {
+        title: "Get it fixed",
+        you: "It was merged and judged broken. It takes bids for a fix: award one on the issue page, or have your agent bid.",
+        action: { label: "Open the issue", href: item.href },
+        prompt: (url) => `${ref} (${url}) was force-merged and judged broken.${prLine} Read the judgements on it, find what is wrong, and bid to fix it with a short plan.`,
+      };
+    default:
+      return {
+        title: "Move it on",
+        you: "Open the issue to see what step it waits for.",
+        action: { label: "Open the issue", href: item.href },
+        prompt: (url) => `Check ${ref} (${url}): it hasn't moved for a while. Find what step it waits for and take it if you can.`,
+      };
+  }
+}
+
+const noSubscribe = () => () => {};
+
+/**
+ * An opened stalled card's right (#stalled-fix): what has to happen, what you can do yourself with one button, and a
+ * message to copy and paste to your agent.
+ */
+function StalledFix({ item }: { item: WorkFeedItem }) {
+  const fix = fixFor(item);
+  // The issue's full address, for the agent; only known in the browser.
+  const origin = useSyncExternalStore(noSubscribe, () => window.location.origin, () => "");
+  const prompt = fix.prompt(`${origin}${item.href}`);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <aside aria-label="How to fix it" className="min-w-0 pt-4">
+      <div className="rounded-xl border border-zk-border bg-zk-bg p-4">
+        <p className="m-0 text-[14px] font-semibold text-zk-text">{fix.title}</p>
+        <p className="m-0 mt-1 text-[13px] leading-relaxed text-zk-text2">{fix.you}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {fix.approve ? <DeliveredActions item={item} /> : null}
+          {fix.action ? (
+            fix.action.external ? (
+              <a href={fix.action.href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-8 items-center gap-1 rounded-[9px] bg-electric-blue-strong px-3 text-[13px] font-semibold text-white transition hover:opacity-90 ${focus}`}>
+                {fix.action.label}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
+              </a>
+            ) : (
+              <Link href={fix.action.href} className={`inline-flex min-h-8 items-center gap-1 rounded-[9px] bg-electric-blue-strong px-3 text-[13px] font-semibold text-white transition hover:opacity-90 ${focus}`}>
+                {fix.action.label}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </Link>
+            )
+          ) : null}
+        </div>
+        <div className="mt-4 border-t border-zk-divider pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="m-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Or ask your agent</p>
+            <button type="button" onClick={() => void copy()} className={`inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-zk-border bg-white px-2 text-[12px] font-semibold text-zk-text transition hover:bg-zk-chip ${focus}`}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {copied ? <path d="m5 12 5 5 9-10" /> : <path d="M9 9h10v10H9zM5 15V5h10" />}
+              </svg>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="m-0 mt-2 whitespace-pre-wrap break-words rounded-lg border border-zk-border bg-white px-3 py-2 font-mono text-[12px] leading-relaxed text-zk-text2" suppressHydrationWarning>
+            {prompt}
+          </p>
+          <span aria-live="polite" className="sr-only">{copied ? "Copied to the clipboard" : ""}</span>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -480,9 +654,10 @@ function Timeline({ item }: { item: WorkFeedItem }) {
     ? { label: WAITING_FOR_MERGE.has(item.substatus) ? "Waiting for merge" : "Waiting for review", value: since(item.deliveredAt) }
     : null;
   const rows: { label: string; value: React.ReactNode }[] = [
-    { label: "Added", value: <LocalTime date={item.addedAt} /> },
-    { label: "Started", value: item.startedAt ? <LocalTime date={item.startedAt} /> : "Not yet" },
-    { label: "Delivered", value: item.deliveredAt ? <LocalTime date={item.deliveredAt} /> : "Not yet" },
+    // Exact times ("Nov 19, 2026, 2:02 PM"), not "yesterday": the timeline tells how long each step took.
+    { label: "Added", value: <LocalTime date={item.addedAt} absolute /> },
+    { label: "Started", value: item.startedAt ? <LocalTime date={item.startedAt} absolute /> : "Not yet" },
+    { label: "Delivered", value: item.deliveredAt ? <LocalTime date={item.deliveredAt} absolute /> : "Not yet" },
   ];
   return (
     <dl className="m-0 mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
@@ -545,13 +720,43 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
         </div>
       ) : null}
       <Timeline item={item} />
-      {item.viewUrl ? (
-        <a href={item.viewUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
-          View what was delivered
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
-        </a>
+      {/* Where it runs and its pull request, as two links. Live work without a live link says so (#live-link). */}
+      {item.liveUrl || item.pullRequestUrl || item.kind === "live" ? (
+        <div className="mt-3 flex flex-col gap-1.5">
+          {item.liveUrl ? (
+            <OutLink href={item.liveUrl} label={item.kind === "live" ? "See it live" : "See it running"} />
+          ) : item.kind === "live" ? (
+            <p className="m-0 text-[13px] text-zk-muted">
+              <span className="font-medium text-zk-text2">No live link added yet.</span> The merger agent is asked to add one.
+            </p>
+          ) : null}
+          {item.pullRequestUrl ? <OutLink href={item.pullRequestUrl} label="Pull request" /> : null}
+        </div>
       ) : null}
     </aside>
+  );
+}
+
+/** A link out of Ziki, with the arrow that says so. */
+function OutLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 text-[13.5px] font-medium text-zk-accent hover:underline ${focus}`}>
+      {label}
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
+    </a>
+  );
+}
+
+/** Above an Approve: the one-word state the work is in, small, in its colour and with its icon. */
+function StateLine({ substatus }: { substatus: Substatus }) {
+  const badge = STATUS_BADGE[substatus];
+  return (
+    <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold leading-none" style={{ color: PILL_TONES[badge.tone].color }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+        <path d={badge.icon} />
+      </svg>
+      {badge.label}
+    </span>
   );
 }
 
@@ -577,6 +782,7 @@ function ConfirmLive({ item, className = "" }: { item: WorkFeedItem; className?:
   const button = `${PILL} transition ${focus}`;
   return (
     <div className={`flex flex-col items-end gap-1 ${className}`}>
+      <StateLine substatus={item.substatus} />
       {done ? (
         <span className={button} style={PILL_TONES.green}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
@@ -611,7 +817,8 @@ function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; classN
       else setDone(true);
     });
   return (
-    <div className={`flex flex-col gap-1 ${className}`}>
+    <div className={`flex flex-col items-end gap-1 ${className}`}>
+      <StateLine substatus={item.substatus} />
       <div className="flex items-center gap-1.5">
         {done ? (
           <span className={button} style={PILL_TONES.green}>
