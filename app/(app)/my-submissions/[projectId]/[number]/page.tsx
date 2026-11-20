@@ -1,3 +1,6 @@
+import { feedbackTextLink, feedbackBackLink } from "@/components/feedback-portal-styles";
+import { PublicContributorForm } from "@/components/public-contributor-form";
+import { publicFeedbackPath } from "@/lib/public-project-paths";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,21 +12,27 @@ import { LocalTime } from "@/components/local-time";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "My submission", robots: { index: false, follow: false } };
-export default async function MySubmissionPage({ params }: { params: Promise<{ projectId: string; number: string }> }) {
+export default async function MySubmissionPage({ params, searchParams }: { params: Promise<{ projectId: string; number: string }>; searchParams: Promise<{ view?: string }> }) {
   const user = await requireUser();
   const { projectId, number } = await params;
   if (!/^[1-9]\d{0,9}$/.test(number)) notFound();
   const row = await prisma.publicSubmission.findFirst({
     where: { userId: user.id, idea: { projectId, number: Number(number), source: "public", isDeleted: false } },
     select: { idea: { select: { number: true, title: true, description: true, status: true, createdAt: true, updatedAt: true,
-      project: { select: { name: true, organisation: { select: { name: true } } } }, issue: { select: { status: true, substatus: true } },
+      project: { select: { name: true, slug: true, organisation: { select: { name: true, slug: true } } } }, issue: { select: { status: true, substatus: true } },
     } } },
   });
   if (!row) notFound();
   const { idea } = row;
-  return <div className="mx-auto w-full max-w-[920px] space-y-5 pb-10"><Link href="/my-submissions" className="text-sm font-semibold text-zk-accent hover:underline">← My submissions</Link>
+  const submissionPath = `/my-submissions/${encodeURIComponent(projectId)}/${idea.number}`;
+  if ((await searchParams).view === "confirmation") {
+    const ref = { orgSlug: idea.project.organisation.slug, projectSlug: idea.project.slug };
+    return <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 pb-6"><PublicContributorForm project={idea.project} {...ref} signedIn privateTracking={false} returnHref={publicFeedbackPath(ref)} initialSubmission={{ title: idea.title, trackingPath: submissionPath, status: publicSubmissionStatus(idea) }} /></div>;
+  }
+  return <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 space-y-3 pb-6"><Link href="/my-submissions" className={feedbackBackLink}>← My submissions</Link>
+    <Link href={`${submissionPath}?view=confirmation`} className={`${feedbackTextLink} w-fit`}>View submission confirmation</Link>
     <p className="text-sm text-zk-muted">{idea.project.organisation.name} / {idea.project.name}</p>
-    <h1 className="text-[28px] font-extrabold text-zk-text"><span className="text-zk-muted">#{idea.number}</span> {idea.title}</h1>
+    <h1 className="text-2xl font-semibold text-zk-text"><span className="text-zk-muted">#{idea.number}</span> {idea.title}</h1>
     <span className="inline-flex rounded-full bg-zk-tint px-3 py-1 text-sm font-semibold text-zk-accent">{publicSubmissionStatus(idea)}</span>
     <p className="text-xs text-zk-muted">Submitted <LocalTime date={idea.createdAt} /> · Updated <LocalTime date={idea.updatedAt} /></p>
     <section className="rounded-2xl border border-zk-border bg-zk-surface p-6"><h2 className="font-bold text-zk-text">Your report</h2><RichText content={idea.description} className="mt-3 text-sm text-zk-text" /></section>

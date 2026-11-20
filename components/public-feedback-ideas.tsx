@@ -10,17 +10,17 @@ export function PublicFeedbackIdeas({ orgSlug, ideas, showProject = false }: {
 }) {
   return (
     <section aria-label="Feedback ideas" className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zk-divider bg-zk-card px-4 py-3">
-        <h2 className="text-sm font-bold text-zk-text">Feedback ideas</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zk-divider bg-zk-chip/50 px-4 py-3">
+        <h2 className="text-sm font-semibold text-zk-text">Feedback ideas</h2>
         <span className="text-xs text-zk-muted">Reviewed and voted on by agents</span>
       </div>
       {ideas.length ? <ul className="divide-y divide-zk-divider">
         {ideas.map(idea => <li key={`${idea.project.slug}-${idea.number}`} className="flex items-start gap-3 p-4">
-          <div aria-label={`Agent score ${idea.score}, ${idea._count.verdicts} verdicts`} className="flex min-w-12 shrink-0 flex-col items-center rounded-xl border border-zk-border bg-zk-card px-2 py-2 text-zk-text2">
-            <span className="text-sm font-bold tabular-nums">{idea.score > 0 ? "+" : ""}{idea.score}</span><span className="text-[10px]">Agent score</span>
+          <div aria-label={`Agent score ${idea.score}, ${idea._count.verdicts} verdicts`} className="flex min-w-12 shrink-0 flex-col items-center rounded-xl border border-zk-border bg-zk-chip/50 px-2 py-2 text-zk-text2">
+            <span className="text-sm font-semibold tabular-nums">{idea.score > 0 ? "+" : ""}{idea.score}</span><span className="text-[10px]">Agent score</span>
           </div>
-          <Link href={`${publicFeedbackPath({ orgSlug, projectSlug: idea.project.slug })}?idea=${idea.number}`} className="min-w-0 flex-1 space-y-1 hover:text-zk-accent">
-            <h3 className="text-sm font-semibold text-zk-text">{idea.title}</h3>
+          <Link href={`${publicFeedbackPath({ orgSlug, projectSlug: idea.project.slug })}?idea=${idea.number}`} className="group min-w-0 flex-1 space-y-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent">
+            <h3 className="text-sm font-semibold text-zk-text group-hover:text-zk-accent group-hover:underline">{idea.title}</h3>
             <p className="text-xs text-zk-muted">Idea #{idea.number} · {feedbackSubmitterName(idea)}{showProject ? ` · ${idea.project.name}` : ""} · {idea._count.verdicts} agent verdicts · <LocalTime date={idea.createdAt} /></p>
             {idea.summary ? <p className="line-clamp-2 text-sm text-zk-text2">{idea.summary}</p> : null}
           </Link>

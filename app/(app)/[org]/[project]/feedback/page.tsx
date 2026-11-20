@@ -1,3 +1,4 @@
+import { feedbackBackLink } from "@/components/feedback-portal-styles";
 import type { FeedbackSearch } from "@/components/project-feedback-portal";
 import { PublicProductOverview } from "@/components/public-product-overview";
 import { optionalUser } from "@/lib/auth-helpers";
@@ -18,7 +19,7 @@ export default async function ProjectFeedbackPortalPage({
   searchParams,
 }: {
   params: Promise<{ org: string; project: string }>;
-  searchParams: Promise<FeedbackSearch & { type?: string; idea?: string }>;
+  searchParams: Promise<FeedbackSearch & { type?: string; idea?: string; view?: string }>;
 }) {
   const [{ org, project: projectSlug }, query] = await Promise.all([params, searchParams]);
   const ref = { orgSlug: org, projectSlug };
@@ -26,16 +27,16 @@ export default async function ProjectFeedbackPortalPage({
   if (!project) notFound();
 
   if (query.idea !== undefined) return <PublicFeedbackIdeaDetail project={ref} number={Number(query.idea)} />;
-  if (query.type !== "problem" && query.type !== "improvement") return <PublicProductOverview product={project} />;
+  if (query.view !== "share" && query.type !== "problem" && query.type !== "improvement") return <PublicProductOverview product={project} />;
   const user = await optionalUser();
   const orgFeedbackHref = publicFeedbackPath(ref);
 
   return (
-    <div className="mx-auto w-full max-w-[920px] pb-10">
-      <div className="mb-3">
+    <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 pb-6">
+      <div className="mb-1">
         <Link
           href={orgFeedbackHref}
-          className="inline-flex min-h-8 items-center gap-2 text-base font-semibold text-zk-accent hover:underline"
+          className={feedbackBackLink}
         >
           <svg
             width="16"

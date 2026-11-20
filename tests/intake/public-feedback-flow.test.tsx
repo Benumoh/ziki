@@ -43,6 +43,14 @@ describe("external feedback flow", () => {
     expect(html).toContain(type);
   });
 
+  it("opens unified feedback without requiring sign-in", async () => {
+    const page = await FeedbackPage({ params: Promise.resolve({ org: "team", project: "desktop" }), searchParams: Promise.resolve({ view: "share" }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain("Continue as guest");
+    expect(html).toContain('href="/team/desktop/feedback"');
+    expect(html).not.toContain("About Desktop");
+  });
+
   it("opens a submitted idea in the selected project's feedback flow", async () => {
     const page = await FeedbackPage({ params: Promise.resolve({ org: "team", project: "mobile" }), searchParams: Promise.resolve({ idea: "42" }) });
     expect(renderToStaticMarkup(page)).toContain("mobile feedback idea 42");

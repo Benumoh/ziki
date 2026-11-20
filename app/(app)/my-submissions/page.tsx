@@ -1,3 +1,6 @@
+import { FeedbackPageHeader } from "@/components/feedback-page-header";
+import { ToolbarFilterMenu } from "@/components/toolbar-filter-menu";
+import { feedbackBackLink } from "@/components/feedback-portal-styles";
 import { PortalSearch } from "@/components/portal-search";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -32,18 +35,31 @@ export default async function MySubmissionsPage({ searchParams }: { searchParams
     where: { ideas: { some: { publicSubmission: { is: { userId: user.id } }, isDeleted: false, source: "public" } } },
     select: { id: true, name: true, organisation: { select: { name: true } } }, orderBy: { name: "asc" },
   });
-  return <div className="mx-auto w-full max-w-[920px] space-y-6 pb-10">
-    <Link href="/home" className="inline-flex min-h-8 items-center text-sm font-semibold text-zk-accent hover:underline">← Back to your app</Link>
-    <div><h1 className="text-[28px] font-extrabold tracking-tight text-zk-text">My submissions</h1><p className="mt-2 text-sm text-zk-text2">Feedback you have shared across projects.</p></div>
+  const submissionFilterHref = (id?: string) => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (id) params.set("project", id);
+    return params.size ? `/my-submissions?${params}` : "/my-submissions";
+  };
+  const selectedProject = projects.find(project => project.id === projectId);
+  return <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 space-y-3 pb-6">
+    <Link href="/home" className={feedbackBackLink}>← Back to your app</Link>
+    <FeedbackPageHeader title="My submissions" identity={user.name ?? "My submissions"} description="View and track the feedback you have shared across projects." />
     <PublicSubmissionsSync />
-    <form method="get" className="flex flex-wrap items-center justify-between gap-3">
-      <PortalSearch label="Search your submissions" defaultValue={query} />
-      <select name="project" aria-label="Filter by project" defaultValue={projectId} className="rounded-xl border border-zk-border bg-zk-surface px-3 py-2 text-sm text-zk-text"><option value="">All projects</option>{projects.map(project => <option key={project.id} value={project.id}>{project.organisation.name} / {project.name}</option>)}</select>
-      <button type="submit" className="inline-flex h-8 items-center rounded-lg border border-zk-border bg-zk-surface px-3 text-xs font-semibold text-zk-text hover:bg-zk-chip">Apply filters</button>
-    </form>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <form method="get" action="/my-submissions" className="flex min-w-0 flex-1 items-center">
+        {projectId ? <input type="hidden" name="project" value={projectId} /> : null}
+        <PortalSearch label="Search your submissions" placeholder="Search your feedback…" defaultValue={query} muted />
+        <button type="submit" className="sr-only">Search submissions</button>
+      </form>
+      <ToolbarFilterMenu summary={selectedProject?.name} groups={[{ label: "Project", options: [
+        { label: "All projects", href: submissionFilterHref(), selected: !projectId },
+        ...projects.map(project => ({ label: `${project.organisation.name} / ${project.name}`, href: submissionFilterHref(project.id), selected: project.id === projectId })),
+      ] }]} />
+    </div>
     {rows.length ? <div className="overflow-x-auto rounded-2xl border border-zk-border bg-zk-surface"><table className="w-full text-left text-sm"><thead className="border-b border-zk-border bg-zk-chip text-zk-muted"><tr>{["Feedback", "Project", "Status", "Submitted"].map(label => <th key={label} scope="col" className="px-5 py-3 font-semibold">{label}</th>)}</tr></thead><tbody className="divide-y divide-zk-divider">{rows.map(({ idea }) => {
       const ref = { orgSlug: idea.project.organisation.slug, projectSlug: idea.project.slug };
-      return <tr key={`${idea.project.id}-${idea.number}`}><td className="px-5 py-4"><Link href={`/my-submissions/${idea.project.id}/${idea.number}`} className="font-semibold text-zk-text hover:text-zk-accent hover:underline"><span className="mr-2 text-zk-muted">#{idea.number}</span>{idea.title}</Link></td><td className="px-5 py-4 text-zk-text2">{idea.project.organisation.name} / {idea.project.name}</td><td className="px-5 py-4"><span className="inline-flex rounded-full bg-zk-tint px-2.5 py-1 text-xs font-semibold text-zk-accent">{publicSubmissionStatus(idea)}</span>{idea.issue && idea.project.visibility === "public" ? <Link href={publicIssueDetailPath(ref, idea.issue.number)} className="mt-1 block text-xs text-zk-accent hover:underline">Issue #{idea.issue.number}</Link> : null}</td><td className="whitespace-nowrap px-5 py-4 text-zk-muted"><LocalTime date={idea.createdAt} /></td></tr>;
+      return <tr key={`${idea.project.id}-${idea.number}`}><td className="px-5 py-4"><Link href={`/my-submissions/${idea.project.id}/${idea.number}`} className="font-semibold text-zk-text hover:text-zk-accent hover:underline"><span className="mr-2 text-zk-muted">#{idea.number}</span>{idea.title}</Link><Link href={`/my-submissions/${idea.project.id}/${idea.number}?view=confirmation`} className="mt-2 block text-xs text-zk-accent hover:underline">View submission confirmation</Link></td><td className="px-5 py-4 text-zk-text2">{idea.project.organisation.name} / {idea.project.name}</td><td className="px-5 py-4"><span className="inline-flex rounded-full bg-zk-tint px-2.5 py-1 text-xs font-semibold text-zk-accent">{publicSubmissionStatus(idea)}</span>{idea.issue && idea.project.visibility === "public" ? <Link href={publicIssueDetailPath(ref, idea.issue.number)} className="mt-1 block text-xs text-zk-accent hover:underline">Issue #{idea.issue.number}</Link> : null}</td><td className="whitespace-nowrap px-5 py-4 text-zk-muted"><LocalTime date={idea.createdAt} /></td></tr>;
     })}</tbody></table></div> : <div className="rounded-2xl border border-zk-border bg-zk-surface px-6 py-14 text-center"><h2 className="font-bold text-zk-text">{query || projectId ? "No matching submissions" : "No submissions yet"}</h2><p className="mx-auto mt-2 max-w-lg text-sm text-zk-text2">{query || projectId ? "Try a different search or choose all projects." : "Reports submitted while signed in appear here. Reports saved in this browser can also be added when you sign in. Keep your private tracking links for reports from other browsers."}</p></div>}
   </div>;
 }

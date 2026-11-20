@@ -1,3 +1,8 @@
+import { FeedbackPageHeader } from "@/components/feedback-page-header";
+import { feedbackTextLink, feedbackBackLink } from "@/components/feedback-portal-styles";
+import { PublicContributorForm } from "@/components/public-contributor-form";
+import { optionalUser } from "@/lib/auth-helpers";
+import { publicSubmissionStatus } from "@/lib/public-submission-status";
 import type { IdeaStatus } from "@prisma/client";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -19,7 +24,7 @@ const ideaStatusLabel: Record<IdeaStatus, string> = {
   archived: "Archived",
 };
 
-export default async function PublicTrackingPage({ params }: { params: Promise<{ org: string; project: string; token: string }> }) {
+export default async function PublicTrackingPage({ params, searchParams }: { params: Promise<{ org: string; project: string; token: string }>; searchParams: Promise<{ view?: string }> }) {
   const { org, project: projectSlug, token } = await params;
   if (!/^[A-Za-z0-9_-]{32,200}$/.test(token)) notFound();
   const ref = { orgSlug: org, projectSlug };
@@ -42,16 +47,23 @@ export default async function PublicTrackingPage({ params }: { params: Promise<{
     },
   });
   if (!idea) notFound();
+  const trackingPath = `/${encodeURIComponent(org)}/${encodeURIComponent(projectSlug)}/track/${encodeURIComponent(token)}`;
+  if ((await searchParams).view === "confirmation") {
+    const user = await optionalUser();
+    return <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 pb-6"><PublicContributorForm project={project} orgSlug={org} projectSlug={projectSlug} signedIn={Boolean(user)} returnHref={backHref} initialSubmission={{ title: idea.title, trackingPath, status: publicSubmissionStatus(idea) }} /></div>;
+  }
   const state = idea.issue
     ? `Issue #${idea.issue.number} · ${idea.issue.substatus ? stateLabel(idea.issue.substatus) : statusLabel[idea.issue.status]}`
     : ideaStatusLabel[idea.status];
   return (
-    <div className="mx-auto w-full max-w-[920px] space-y-5 pb-10">
-      <Link href={backHref} className="text-sm font-semibold text-zk-accent hover:underline">← Back to {project.name} product</Link>
-      <h1 className="text-[28px] font-extrabold tracking-tight text-zk-text">Track your report</h1>
-      <p className="text-sm text-zk-text2">Submitted by {feedbackSubmitterName(idea)}</p>
+    <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 space-y-3 pb-6">
+      <nav aria-label="Report navigation" className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+        <Link href={backHref} className={feedbackBackLink}>← Back to {project.name} product</Link>
+        <Link href={`${trackingPath}?view=confirmation`} className={feedbackTextLink}>View submission confirmation →</Link>
+      </nav>
+      <FeedbackPageHeader title="Track your report" identity={project.name} description={`Submitted by ${feedbackSubmitterName(idea)}`} />
       <PublicReportProgress title={idea.title} number={`Idea #${idea.number}`} state={state} summary={idea.summary} description={idea.description} createdAt={idea.createdAt} updatedAt={idea.issue?.updatedAt ?? idea.updatedAt} issue={idea.issue} inactive={idea.status === "rejected" || idea.status === "archived"} />
-      {idea.issue && project.visibility === "public" ? <Link href={publicIssueDetailPath(ref, idea.issue.number)} className="block text-sm font-semibold text-zk-accent hover:underline">View issue #{idea.issue.number}</Link> : null}
+      {idea.issue && project.visibility === "public" ? <Link href={publicIssueDetailPath(ref, idea.issue.number)} className={`${feedbackTextLink} w-fit`}>View issue #{idea.issue.number}</Link> : null}
       <p className="text-center text-sm text-zk-muted">Keep your private tracking link to return to this page without signing in.</p>
     </div>
   );

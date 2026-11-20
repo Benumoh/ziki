@@ -1,3 +1,5 @@
+import { FeedbackPageHeader } from "@/components/feedback-page-header";
+import { feedbackBackLink } from "@/components/feedback-portal-styles";
 import { PortalSearch } from "@/components/portal-search";
 import { FEEDBACK_PLATFORMS } from "@/lib/feedback-product-info";
 import Link from "next/link";
@@ -11,7 +13,7 @@ import { listOrgFeedbackProjects } from "@/lib/public-projects";
 import { NOINDEX } from "@/lib/seo/site";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Share feedback", robots: NOINDEX };
+export const metadata: Metadata = { title: "Feedback portal", robots: NOINDEX };
 
 export default async function OrganisationFeedbackPage({
   params,
@@ -30,17 +32,17 @@ export default async function OrganisationFeedbackPage({
     const projectSlugs = platform ? data.projects.filter(item => item.platforms.includes(platform.slug)).map(item => item.slug) : undefined;
     const ideas = await listPublicFeedbackIdeas(data.organisation.slug, { projectSlug: selected?.slug, projectSlugs, query: (query.q ?? "").trim().slice(0, 200) });
     const portalHref = `/${encodeURIComponent(data.organisation.slug)}/feedback`;
-    return <div className="mx-auto w-full max-w-[920px] space-y-6 pb-10">
-      <Link href={portalHref} className="inline-flex min-h-8 items-center text-sm font-semibold text-zk-accent hover:underline">← Project portal</Link>
-      <header className="space-y-2"><h1 className="text-3xl font-extrabold tracking-tight text-zk-text">{selected ? `${selected.name} feedback ideas` : platform ? `${platform.name} feedback ideas` : "All feedback ideas"}</h1><p className="text-sm text-zk-text2">Feedback submitted across {data.organisation.name} projects, reviewed and voted on by agents.</p></header>
+    return <div className="mx-auto -mt-1 w-full max-w-[920px] sm:-mt-4 space-y-3 pb-6">
+      <Link href={portalHref} className={feedbackBackLink}>← Feedback portal</Link>
+      <FeedbackPageHeader title={selected ? `${selected.name} feedback ideas` : platform ? `${platform.name} feedback ideas` : "All feedback ideas"} identity={selected?.name ?? data.organisation.name} description={`Feedback submitted across ${data.organisation.name} projects, reviewed and voted on by agents.`} />
       <div className="flex flex-wrap items-center justify-between gap-3">
-      <nav aria-label="Filter feedback by project" className="flex flex-wrap gap-2">
+      <nav aria-label="Filter feedback by project" className="flex flex-wrap gap-1 rounded-full bg-zk-seg p-1">
         {[{ slug: "", name: "All feedback" }, ...FEEDBACK_PLATFORMS].map(project => {
           const params = new URLSearchParams({ view: "ideas" });
           if (project.slug) params.set("platform", project.slug);
           if (query.q) params.set("q", query.q);
           const active = !selected && (platform ? platform.slug === project.slug : project.slug === "");
-          return <Link key={project.slug} href={`${portalHref}?${params}`} aria-current={active ? "page" : undefined} className={`rounded-xl border px-4 py-2 text-sm font-semibold ${active ? "border-zk-accent bg-zk-tint text-zk-accent" : "border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip"}`}>{project.name}</Link>;
+          return <Link key={project.slug} href={`${portalHref}?${params}`} aria-current={active ? "page" : undefined} className={`rounded-full px-3 py-1.5 text-sm font-medium ${active ? "bg-zk-surface text-zk-accent" : "text-zk-text2 hover:bg-zk-surface"}`}>{project.name}</Link>;
         })}
       </nav>
       <form action={portalHref} method="get" className="flex max-w-full items-center justify-end gap-2">

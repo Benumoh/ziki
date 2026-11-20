@@ -13,9 +13,9 @@ export function PublicReportProgress({ title, number, state, summary, descriptio
   const current = resolved ? 2 : issue || inactive ? 1 : 0;
   const steps = ["Received", inactive ? state : "Under review", "Resolved"];
   return (
-    <div className="space-y-5">
-      <section aria-label="Report progress" className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-7">
-        <h2 className="text-xl font-bold text-zk-text"><span className="text-zk-muted">{number}</span> {title}</h2>
+    <div className="space-y-3">
+      <section aria-label="Report progress" className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-6">
+        <h2 className="text-lg font-semibold text-zk-text"><span className="text-zk-muted">{number}</span> {title}</h2>
         <p className="mt-3 text-sm text-zk-text2"><span className="rounded-full bg-zk-tint px-3 py-1 font-semibold text-zk-accent">{state}</span><span className="ml-3">Submitted <LocalTime date={createdAt} /></span></p>
         <ol className="mt-8 flex" aria-label="Report timeline">
           {steps.map((label, index) => (
@@ -27,11 +27,11 @@ export function PublicReportProgress({ title, number, state, summary, descriptio
           ))}
         </ol>
       </section>
-      <section className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-7">
+      <section className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-6">
         <h2 className="font-bold text-zk-text">Latest update</h2>
         <div className="mt-3 flex flex-wrap justify-between gap-2 text-sm text-zk-text2"><p>{resolved ? "The project reports that this change is live in production." : issue ? `Current project status: ${state}.` : inactive ? `This report is ${state.toLowerCase()}.` : "Your report has been received and is awaiting review."}</p><LocalTime date={updatedAt} /></div>
       </section>
-      <section className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-7">
+      <section className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-6">
         <h2 className="font-bold text-zk-text">Your report</h2>
         {summary ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zk-text2">{summary}</p> : null}
         {description ? <details className="mt-4 border-t border-zk-divider pt-4"><summary className="cursor-pointer text-sm font-semibold text-zk-text">Steps and details</summary><RichText content={description} className="mt-3 text-sm text-zk-text" /></details> : null}
