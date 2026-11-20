@@ -335,6 +335,8 @@ export type ProjectWork = {
     confirmedBy: string[];
     /** The solver: their reports don't count (#live-payout). */
     solverUserId: string | null;
+    /** Whether any report gave a live link (#live-link): merger agents are asked to add one while none has. */
+    hasLiveLink: boolean;
   })[];
   /** Issues whose reward is not fixed yet (#rewards), with who already estimated each. */
   rewards: (IssueRef & { reward: number; estimates: number; estimators: string[] })[];
@@ -529,6 +531,7 @@ async function deploymentWork(organisationId: string, projectId: string, now = D
   const select = {
     id: true, number: true, title: true, substatus: true, assigneeId: true,
     deploymentReports: { where: { environment: "prod" }, select: { onBehalfOfUserId: true } },
+    _count: { select: { deploymentReports: { where: { url: { not: null } } } } },
   } as const;
   const [moving, onProd] = await Promise.all([
     prisma.bug.findMany({
@@ -547,9 +550,9 @@ async function deploymentWork(organisationId: string, projectId: string, now = D
   ]);
   // The solver's own reports don't count (#live-payout).
   const withReporters = (bug: (typeof moving)[number]) => {
-    const { deploymentReports, assigneeId, ...issue } = bug;
+    const { deploymentReports, assigneeId, _count, ...issue } = bug;
     const confirmedBy = [...new Set(deploymentReports.map((report) => report.onBehalfOfUserId))].filter((userId) => userId !== assigneeId);
-    return { ...issue, confirmedBy, solverUserId: assigneeId };
+    return { ...issue, confirmedBy, solverUserId: assigneeId, hasLiveLink: _count.deploymentReports > 0 };
   };
   const unconfirmed = onProd.map(withReporters).filter((bug) => bug.confirmedBy.length < PROD_CONFIRMATIONS_NEEDED).slice(0, UNCONFIRMED_PROD_PER_FEED);
   return [...moving.map(withReporters), ...unconfirmed];
@@ -1329,11 +1332,12 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "report_deployment",
       key: `report_deployment:${issue.id}:${issue.substatus}:${confirmed}`,
       title: issue.substatus === "on_prod" ? `Check #${issue.number} is really on prod` : `Report where #${issue.number} is deployed`,
-      detail: `${where} Open the production app yourself and check its fix is there, then report where it is running (dev, staging or prod) with what you saw (the URL, version or commit). It shows On prod once ${PROD_CONFIRMATIONS_NEEDED} different people other than the solver have reported prod.`,
+      // #live-link: while nobody has given the address where it runs, merger agents especially are asked to add it.
+      detail: `${where} Open the production app yourself and check its fix is there, then report where it is running (dev, staging or prod) with what you saw (the URL, version or commit). It shows On prod once ${PROD_CONFIRMATIONS_NEEDED} different people other than the solver have reported prod.${issue.hasLiveLink ? "" : " It has no live link yet: give `url`, the address where the fix can be seen running (merger agents are asked to add it)."}`,
       minimumRole: "working",
       canAct: true,
       issue: issueRef(issue),
-      actions: [{ name: "report_deployment", minimumRole: "working", method: "POST", path: apiPath(issue.id, "deployment", pid), cli: `report-deployment --id ${issue.id} --environment dev|staging|prod --note <what you checked>` }],
+      actions: [{ name: "report_deployment", minimumRole: "working", method: "POST", path: apiPath(issue.id, "deployment", pid), cli: `report-deployment --id ${issue.id} --environment dev|staging|prod --note <what you checked>${issue.hasLiveLink ? "" : " --url <where it runs>"}` }],
     });
   }
 

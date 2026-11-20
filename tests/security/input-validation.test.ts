@@ -7,6 +7,7 @@ import { agentProfileUpdateSchema, agentSkillsReplaceSchema } from "@/lib/valida
 import { agentCommentSchema } from "@/lib/agent-api/issues";
 import { bidSchema } from "@/lib/agent-api/bid";
 import { deliveryBodySchema } from "@/lib/agent-api/delivery";
+import { deploymentSchema } from "@/lib/agent-api/deployment";
 import { testVerdictBodySchema } from "@/lib/agent-api/test-verdict";
 import { addRowsSchema } from "@/lib/proof";
 import { isScanned, preflight, scanFile } from "@/lib/security/preflight-scan";
@@ -331,6 +332,17 @@ describe("the Marketing assistant's website reader (#marketing-assistant)", () =
       "file:///etc/passwd",
     ]) {
       expect(sitePageUrl(site, path)).toBeNull();
+    }
+  });
+});
+
+describe("deployment report live link (#live-link)", () => {
+  it("takes an http(s) live link, keeps it optional, and refuses anything else", () => {
+    const base = { environment: "prod", note: "Saw the merge commit on /api/health." };
+    expect(deploymentSchema.safeParse(base).success).toBe(true);
+    expect(deploymentSchema.safeParse({ ...base, url: "https://app.example.com/disputes" }).data?.url).toBe("https://app.example.com/disputes");
+    for (const url of ["javascript:alert(1)", "app.example.com", "https://has space.com", "ftp://example.com"]) {
+      expect(deploymentSchema.safeParse({ ...base, url }).success).toBe(false);
     }
   });
 });

@@ -183,8 +183,6 @@ type FeedSection = (typeof FEED_SECTIONS)[number]["key"];
 const FEED_SECTION_SIZE = 6;
 /** In progress counts as being worked on while its agent checked in this recently (heartbeats come every 15 minutes). */
 const ACTIVE_HEARTBEAT_MS = 30 * 60 * 1000;
-/** Review and merge count as moving while they changed this recently; after that they look stalled. */
-const MOVING_MS = 24 * 60 * 60 * 1000;
 
 /** The time now, read when the feed is loaded on the server, not while rendering. */
 function currentTime(): number {
@@ -194,30 +192,61 @@ function currentTime(): number {
 /** Which issues one Work Feed section holds (#work-feed-sections), as of now. */
 function feedSectionWhere(section: FeedSection, now: number): Prisma.BugWhereInput {
   const fresh = new Date(now - ACTIVE_HEARTBEAT_MS);
-  const moving = new Date(now - MOVING_MS);
   // An agent holds it and checked in lately (or took it lately and hasn't had to check in yet).
   const heartbeat: Prisma.BugWhereInput = {
     claims: { some: { status: { in: ["active", "planning"] }, releasedAt: null, OR: [{ lastHeartbeatAt: { gte: fresh } }, { lastHeartbeatAt: null, claimedAt: { gte: fresh } }] } },
   };
   if (section === "needs") {
-    return { OR: [{ substatus: "requires_review" }, { status: "resolved", substatus: { not: "merged_broken" }, liveConfirmedAt: null }] };
+    // Only live work waits for a person: delivered work that isn't merged yet waits on agents, so it is Stalled.
+    return { status: "resolved", substatus: { not: "merged_broken" }, liveConfirmedAt: null };
   }
   if (section === "active") {
-    return { OR: [
-      { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, heartbeat] },
-      { substatus: { in: ["accepted", "ready_to_merge"] }, updatedAt: { gte: moving } },
-    ] };
+    return { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, heartbeat] };
   }
   return { OR: [
     { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, { NOT: heartbeat }] },
-    { substatus: { in: ["error", "merged_broken"] } },
-    { substatus: { in: ["accepted", "ready_to_merge"] }, updatedAt: { lt: moving } },
+    // Delivered but not merged: waiting on agents to judge, review or merge it.
+    { substatus: { in: ["requires_review", "accepted", "ready_to_merge", "error", "merged_broken"] } },
   ] };
 }
 type OverviewTab = (typeof OVERVIEW_TABS)[number][0];
 /** A delivery's screenshot links that a page can show (web links only), at most four. */
 function webLinks(urls: string[] | undefined): string[] {
   return (urls ?? []).filter((url) => /^(https?:\/\/|\/)/i.test(url)).slice(0, 4);
+}
+/**
+ * Why a Stalled card is stalled (#work-feed-sections), in a sentence: what it is waiting for and who should act.
+ * `claim` is the agent holding it, or null when nobody does.
+ */
+function stallReason(
+  substatus: string,
+  claim: { agent: string | null; due: Date | null; heartbeat: Date | null } | null,
+  now: number,
+): string {
+  const agent = claim?.agent ?? "The agent";
+  switch (substatus) {
+    case "in_progress":
+    case "plan_review": {
+      if (!claim) return "No agent holds it any more: the work was let go and nobody has taken it up again.";
+      const overdue = claim.due && claim.due.getTime() < now ? " It is also past the time it was due." : "";
+      const step = substatus === "plan_review" ? "writes its plan" : "works";
+      return claim.heartbeat
+        ? `${agent} stopped checking in. An agent checks in every 15 minutes while it ${step}, and this one hasn't for over 30 minutes.${overdue}`
+        : `${agent} took it but never checked in.${overdue}`;
+    }
+    case "requires_review":
+      return "Delivered, but not merged: it is waiting for testers to judge whether it is good to merge.";
+    case "accepted":
+      return "Judged good to merge, but not merged: it is waiting for a manager agent's review.";
+    case "ready_to_merge":
+      return "Reviewed and accepted, but not merged: it is waiting for a merger agent to merge the pull request.";
+    case "error":
+      return "The pull request can't be merged as it is: it needs a fix before a merger agent can merge it.";
+    case "merged_broken":
+      return "It was merged without Ziki's checks and judged broken: it needs a fix.";
+    default:
+      return "It hasn't moved for a while.";
+  }
 }
 /** An opened card's text (#work-feed): the description, trimmed for a quick glance; empty when there is none. */
 function feedBody(description: string | null | undefined): string {
@@ -673,6 +702,8 @@ export async function IssuesList({
           deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true } },
           // Why accepted work isn't merged yet (#work-feed-sections): the latest pull request report, when it says so.
           pullRequestReports: { orderBy: { createdAt: "desc" }, take: 1, select: { state: true, mergeable: true, checks: true, note: true } },
+          // The live link (#live-link): the newest deployment report that gave one.
+          deploymentReports: { where: { url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
         } satisfies Prisma.BugSelect;
         const page = Math.max(1, Number.parseInt(toSingleQueryParam(params.page) ?? "1", 10) || 1);
         const orderBy: Prisma.BugOrderByWithRelationInput[] = [{ updatedAt: "desc" }, { id: "desc" }];
@@ -723,6 +754,8 @@ export async function IssuesList({
                 ? claim?.lastHeartbeatAt ?? claim?.claimedAt ?? row.updatedAt
                 : row.updatedAt)
               : null,
+            held: Boolean(claim),
+            stallReason: section === "stalled" ? stallReason(row.substatus, claim ? { agent: claim.agent?.name ?? null, due: claim.deliverBy, heartbeat: claim.lastHeartbeatAt } : null, currentTime()) : null,
             mergeHold: mergeHold(row.substatus, row.pullRequestReports[0] ?? null),
             // Opened (#work-feed): what it is, its files, and the decision it asks of you.
             reporter: row.reporter?.name ?? null,
@@ -730,7 +763,12 @@ export async function IssuesList({
             body: row.description.length > FEED_BODY_LIMIT ? `${row.description.slice(0, FEED_BODY_LIMIT).trimEnd()}…` : row.description,
             files: row.attachments.map((file) => ({ id: file.id, name: file.filename, type: file.contentType, size: file.size })),
             decision: feedDecision(kind, href),
-            viewUrl: row.previewBuilds[0]?.url ?? row.deliveries[0]?.deliverableUrls[0] ?? row.deliveries[0]?.pullRequestUrl ?? row.pullRequestUrl ?? null,
+            // Where it can be seen running (its preview, else the delivery's link), apart from its pull request.
+            // Live work: its live link from a deployment report (#live-link); before that, its preview or the delivery's link.
+            liveUrl: row.status === "resolved"
+              ? row.deploymentReports[0]?.url ?? null
+              : row.previewBuilds[0]?.url ?? row.deliveries[0]?.deliverableUrls[0] ?? null,
+            pullRequestUrl: row.deliveries[0]?.pullRequestUrl ?? row.pullRequestUrl ?? null,
             // The opened card's preview: the delivery's screenshots, web links only.
             screenshots: webLinks(row.deliveries[0]?.screenshots),
             beforeScreenshots: webLinks(row.deliveries[0]?.beforeScreenshots),

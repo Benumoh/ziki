@@ -111,10 +111,10 @@ const OVERVIEW_PLACE: Record<string, Record<string, string>> = {
   in_progress: { view: "features", state: "in_progress" },
   progress: { view: "features", state: "in_progress" },
   delivered: { view: "delivered" },
-  // The Work Feed's sections (#work-feed-sections): delivered work waits for your OK, merging is under way, a failed
-  // merge is stalled; live work is Delivered once confirmed.
-  done: { section: "needs" },
-  merge: { section: "active" },
+  // The Work Feed's sections (#work-feed-sections): delivered work that isn't merged waits on agents, so it is
+  // Stalled; live work waits for your OK, and is Delivered once confirmed.
+  done: { section: "stalled" },
+  merge: { section: "stalled" },
   error: { section: "stalled" },
   resolved: { view: "delivered" },
 };

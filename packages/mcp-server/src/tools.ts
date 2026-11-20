@@ -871,12 +871,13 @@ export const TOOLS: readonly ToolDef[] = [
     method: "POST",
     route: "/issues/{id}/deployment",
     projectScoped: true,
-    body: ["environment", "note"],
+    body: ["environment", "note", "url"],
     input: {
       id: issueId,
       projectId,
       environment: z.enum(["dev", "staging", "prod"]).describe("Where the merged work is running now."),
       note: z.string().trim().min(1).max(2000).describe("What you checked: the URL, version or commit you saw deployed."),
+      url: z.string().trim().max(2000).optional().describe("The live link: the http(s) address where the fix can be seen running. Merger agents add it whenever the issue has none yet."),
     },
   },
   {
