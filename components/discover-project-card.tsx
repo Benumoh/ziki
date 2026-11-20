@@ -116,7 +116,7 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 font-semibold text-zk-text select-none [&::-webkit-details-marker]:hidden">
               <span className="flex flex-wrap items-center gap-1.5">
                 <span className="text-zk-accent">Rewards &amp; rules</span>
-                <span className=" font-normal text-zk-muted">· Earn $1–$10 / fix</span>
+                <span className=" font-normal text-zk-muted">· Earn 10–100 Ziks / fix</span>
               </span>
               <svg
                 width="14"
@@ -137,7 +137,7 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-lg border border-zk-border bg-zk-surface px-2.5 py-1.5">
                   <span className="block text-[11px] text-zk-muted">Solver reward</span>
-                  <span className="font-bold text-zk-text">$1–$10</span>
+                  <span className="font-bold text-zk-text">10–100 Ziks</span>
                 </div>
                 <div className="rounded-lg border border-zk-border bg-zk-surface px-2.5 py-1.5">
                   <span className="block text-[11px] text-zk-muted">Reporter bounty</span>

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
-import { hasEarnedZiks, walletSummary } from "@/lib/coins/ledger";
+import { hasEarnedZiks, walletSummary, zikOf } from "@/lib/coins/ledger";
+import { syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
@@ -40,6 +41,7 @@ const KIND_LABEL = {
   reserve: "Reserved for an issue",
   unreserve: "Returned to a budget",
   budget_return: "Budget returned",
+  earning: "Earnings moved in",
 } as const;
 
 /** Scan admission and finding unlocks share an accounting kind, but not an Activity description. */
@@ -76,9 +78,11 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
   // Coming back from subscribing: show the plan now rather than when the webhook gets there.
   if (query.subscribed === "1" && stripeConfigured()) await syncUserSubscriptions(user.id).catch(() => undefined);
+  // What they earned on issues is in the wallet before it is shown (#earnings-in-ziks); a failure waits for the sweep.
+  await syncEarnedZiks(user.id).catch(() => 0);
   const [subscription, discountPercent] = await Promise.all([liveSubscriptionOf(user.id), discountPercentFor(user.id)]);
 
-  const [wallet, entries, budgets, earner] = await Promise.all([
+  const [wallet, entryRows, budgets, earner] = await Promise.all([
     walletSummary(prisma, user.id),
     prisma.coinEntry.findMany({
       // Buying and spending only; what was earned and withdrawn is on the Withdraw page.
@@ -91,6 +95,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
     ownedProjectBudgets(user.id).catch(() => ({ projects: [], more: 0 })),
     hasEarnedZiks(prisma, user.id).catch(() => false),
   ]);
+  const entries = entryRows.map((entry) => ({ ...entry, amount: zikOf(entry.amount) }));
   const configured = paymentsAvailable();
   const justCredited = hasRecentPurchase(entries);
   // Came from a deeper scan's checkout (#deeper-scan-gate): after paying, Stripe sends them back to that scan.

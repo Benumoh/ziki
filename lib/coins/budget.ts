@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { REWARD_ZIK_MIN } from "@/lib/points/rules";
-import { CoinError, appendRows, assertAmount, assertCanSpend, escrowBalance, lockBug, lockUser, type Tx } from "./ledger";
+import { CoinError, appendRows, assertAmount, assertCanSpend, escrowBalance, lockBug, lockUser, zikOf, type Tx } from "./ledger";
 import { MAX_FUND_ZIK, dollarsToZiks, splitByWeight } from "./math";
 
 /**
@@ -30,7 +30,7 @@ export async function lockProject(tx: Tx, projectId: string): Promise<void> {
 /** The Ziks the project's budget holds, not yet reserved for an issue. */
 export async function budgetBalance(db: Db, projectId: string): Promise<number> {
   const sum = await db.coinEntry.aggregate({ where: { account: "budget", projectId }, _sum: { amount: true } });
-  return sum._sum.amount ?? 0;
+  return zikOf(sum._sum.amount);
 }
 
 export type PricedIssue = { reward: Prisma.Decimal | number | string; rewardEstimateCount: number; rewardOverrideZik: number | null };
@@ -102,7 +102,7 @@ export async function returnUnusedBudget(tx: Tx, projectId: string): Promise<num
     _sum: { amount: true },
   });
   // Funding is negative on the wallet, a return positive: what is still theirs behind the project.
-  const funders = new Map(rows.filter((row) => row.userId).map((row) => [row.userId as string, -(row._sum.amount ?? 0)]));
+  const funders = new Map(rows.filter((row) => row.userId).map((row) => [row.userId as string, -zikOf(row._sum.amount)]));
   const shares = splitByWeight(balance, funders);
   if (shares.size === 0) return 0;
   const generation = await tx.coinEntry.count({ where: { account: "budget", projectId, kind: "budget_return" } });
@@ -177,7 +177,7 @@ export async function unaffordableIssueIds(db: Db, projectId: string, bugIds: st
     db.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: bugIds } }, _sum: { amount: true } }),
     budgetBalance(db, projectId),
   ]);
-  const heldBy = new Map(held.map((row) => [row.bugId, row._sum.amount ?? 0]));
+  const heldBy = new Map(held.map((row) => [row.bugId, zikOf(row._sum.amount)]));
   const blocked = new Set<string>();
   for (const bug of bugs) {
     const price = issuePriceZik(bug);

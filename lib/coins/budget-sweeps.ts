@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notifyLater } from "@/lib/notify";
 import { IDLE_RETURN_DAYS, LOW_BUDGET_ISSUES, budgetBalance, issuePriceZik, returnUnusedBudget } from "./budget";
+import { zikOf } from "./ledger";
 
 /**
  * What runs around project budgets (#project-budget): warning the owners when the budget can't cover what is waiting,
@@ -41,7 +42,7 @@ export async function refreshBudgetAlert(projectId: string): Promise<BudgetAlert
       select: { id: true, reward: true, rewardEstimateCount: true, rewardOverrideZik: true },
     });
     const held = await prisma.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: waiting.map((bug) => bug.id) } }, _sum: { amount: true } });
-    const heldBy = new Map(held.map((row) => [row.bugId, row._sum.amount ?? 0]));
+    const heldBy = new Map(held.map((row) => [row.bugId, zikOf(row._sum.amount)]));
     const needs = waiting.flatMap((bug) => {
       const price = issuePriceZik(bug);
       return price === null ? [] : [Math.max(0, price - (heldBy.get(bug.id) ?? 0))];

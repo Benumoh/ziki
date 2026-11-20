@@ -11,7 +11,7 @@ export default function WithdrawingPage() {
       href="/docs/users/withdrawing"
       inShort={
         <>
-          Once you have earned $30 in an organisation, you can withdraw it to your bank account. Add your bank account
+          Once you have earned 300 Ziks, you can withdraw them to your bank account. Add your bank account
           through Stripe once, then press <UiLabel>Withdraw</UiLabel>. The money usually arrives within a few days.
         </>
       }
@@ -24,7 +24,7 @@ export default function WithdrawingPage() {
       <DocsBlock title="Before you start">
         <DocsList>
           <li>
-            <UiLabel>Withdrawals open at $30.</UiLabel> Until then, <UiLabel>Withdraw</UiLabel> shows how much you have
+            <UiLabel>Withdrawals open at 300 Ziks.</UiLabel> Until then, <UiLabel>Withdraw</UiLabel> shows how much you have
             and how much is still to go.
           </li>
           <li>
@@ -32,8 +32,11 @@ export default function WithdrawingPage() {
             confirmed live yet) can&apos;t be withdrawn until it is paid.
           </li>
           <li>
-            The <UiLabel>$</UiLabel> amount and <UiLabel>Withdraw</UiLabel> at the top of the page are for the
-            organisation you are in. Your earnings page adds up every organisation.
+            The <UiLabel>Ziks</UiLabel> amount at the top of the page is everything you earned, in every
+            organisation. It all comes into one Ziks wallet, and you withdraw from that.
+          </li>
+          <li>
+            Only earned Ziks can be withdrawn. Ziks you bought are for funding work. Spending uses bought Ziks first.
           </li>
         </DocsList>
       </DocsBlock>
@@ -60,12 +63,12 @@ export default function WithdrawingPage() {
       <DocsBlock title="2. Withdraw">
         <DocsSteps>
           <li>
-            Press <UiLabel>Withdraw</UiLabel> next to the <UiLabel>$</UiLabel> amount at the top of any page. Once you have
-            reached $30, the window says <UiLabel>Withdraw is open</UiLabel>.
+            Press <UiLabel>Withdraw</UiLabel> next to the <UiLabel>Ziks</UiLabel> amount at the top of any page, or in
+            your menu. Once you have reached 300 Ziks, the window says <UiLabel>Withdraw is open</UiLabel>.
           </li>
           <li>
-            Press <UiLabel>Withdraw</UiLabel> in the window. It takes you to <UiLabel>Your Ziks</UiLabel>, which shows
-            how much you can withdraw.
+            Press <UiLabel>Withdraw</UiLabel> in the window. It takes you to the <UiLabel>Withdraw</UiLabel> page,
+            which shows how many Ziks you can withdraw.
           </li>
           <li>
             Press <UiLabel>Withdraw</UiLabel> there to send it to your bank account.
@@ -77,7 +80,7 @@ export default function WithdrawingPage() {
         </DocsP>
       </DocsBlock>
 
-      <DocsBlock title="Not at $30 yet?">
+      <DocsBlock title="Not at 300 Ziks yet?">
         <DocsP>
           The Withdraw window has <UiLabel>Find more tasks</UiLabel>, and your{" "}
           <DocsLink href="/earnings">earnings page</DocsLink> lists the open tasks that pay the most. See{" "}

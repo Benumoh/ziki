@@ -3,7 +3,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { WITHDRAW_THRESHOLD } from "@/lib/earnings-threshold";
-import { walletSummary } from "@/lib/coins/ledger";
+import { EARNED_KINDS, walletSummary, zikOf } from "@/lib/coins/ledger";
+import { earningLabels, syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { feePercent, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
 import { WITHDRAW_MIN_ZIK, syncPayoutsEnabled } from "@/lib/coins/withdraw";
@@ -44,18 +45,24 @@ export default async function PayoutsPage({ searchParams }: { searchParams?: Pro
   const configured = stripeConfigured();
   // Coming back from Stripe's onboarding page: read the account now rather than wait for its webhook.
   if (query.payouts === "return" && configured) await syncPayoutsEnabled(user.id).catch(() => false);
+  // What they earned on issues is in the wallet before it is shown (#earnings-in-ziks); a failure waits for the sweep.
+  await syncEarnedZiks(user.id).catch(() => 0);
 
-  const [wallet, account, withdrawals, earnings] = await Promise.all([
+  const [wallet, account, withdrawalRows, earnedRows] = await Promise.all([
     walletSummary(prisma, user.id),
     prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { stripeAccountId: true, payoutsEnabled: true } }),
     prisma.withdrawal.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 30, select: { id: true, zik: true, amountCents: true, status: true, stripeTransferId: true, createdAt: true } }),
     prisma.coinEntry.findMany({
-      where: { account: "wallet", userId: user.id, kind: "release" },
+      where: { account: "wallet", userId: user.id, kind: { in: [...EARNED_KINDS] } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 30,
-      select: { id: true, amount: true, createdAt: true, bug: { select: { number: true, title: true } } },
+      select: { id: true, kind: true, amount: true, sourceKey: true, createdAt: true, bug: { select: { number: true, title: true } } },
     }),
   ]);
+  // What each moved-in earning was for (#earnings-in-ziks): "Welcome bonus · PayScan".
+  const labels = await earningLabels(earnedRows.map((row) => row.sourceKey));
+  const earnings = earnedRows.map((row) => ({ ...row, amount: zikOf(row.amount), label: labels.get(row.sourceKey) ?? null }));
+  const withdrawals = withdrawalRows.map((row) => ({ ...row, zik: zikOf(row.zik) }));
   // A withdrawal that is debited but not yet paid: either still waiting for Stripe's funds, or sent and on its way.
   const open = withdrawals.find((withdrawal) => withdrawal.status === "pending");
   const canWithdraw = wallet.withdrawable >= WITHDRAW_MIN_ZIK;
@@ -138,8 +145,8 @@ export default async function PayoutsPage({ searchParams }: { searchParams?: Pro
                 </div>
                 <p className="m-0 mt-2 text-xs text-zk-muted">
                   {canWithdraw
-                    ? `You've passed the ${WITHDRAW_MIN_ZIK.toLocaleString("en-US")}-Zik minimum ($${WITHDRAW_THRESHOLD}).`
-                    : `${wallet.withdrawable.toLocaleString("en-US")} of ${WITHDRAW_MIN_ZIK.toLocaleString("en-US")} Ziks: ${toGo.toLocaleString("en-US")} more to go before you can withdraw ($${WITHDRAW_THRESHOLD} minimum).`}
+                    ? `You've passed the ${WITHDRAW_MIN_ZIK.toLocaleString("en-US")}-Zik minimum.`
+                    : `${wallet.withdrawable.toLocaleString("en-US")} of ${WITHDRAW_MIN_ZIK.toLocaleString("en-US")} Ziks: ${toGo.toLocaleString("en-US")} more to go before you can withdraw.`}
                 </p>
               </div>
               <div className="border-t border-zk-divider pt-4">
@@ -164,7 +171,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams?: Pro
             <section className={card}>
               <div className="flex flex-col gap-1">
                 <h2 className="m-0 text-lg font-bold text-zk-text">Earnings</h2>
-                <span className="text-[13px] text-zk-muted">Every issue you were paid for, newest first. You are paid when an issue you solved goes live.</span>
+                <span className="text-[13px] text-zk-muted">Everything you earned, newest first. What you earn on issues comes into your wallet as Ziks.</span>
               </div>
               {earnings.length === 0 ? (
                 <p className="m-0 rounded-xl border border-dashed border-zk-border px-5 py-8 text-center text-sm text-zk-muted">Nothing earned yet. You are paid in Ziks when an issue you solved goes live.</p>
@@ -173,10 +180,19 @@ export default async function PayoutsPage({ searchParams }: { searchParams?: Pro
                   {earnings.map((entry) => (
                     <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm text-zk-text">
                       <span className="flex-1">
-                        {entry.bug ? <><span className="text-zk-muted">#{entry.bug.number}</span> {entry.bug.title}</> : "Earned from an issue"}
+                        {entry.bug ? (
+                          <><span className="text-zk-muted">#{entry.bug.number}</span> {entry.bug.title}</>
+                        ) : entry.kind === "earning" ? (
+                          entry.label ?? "Earnings"
+                        ) : (
+                          "Earned from an issue"
+                        )}
                         <span className="block text-xs text-zk-muted"><LocalTime date={entry.createdAt} /></span>
                       </span>
-                      <span className="font-mono font-bold tabular-nums text-zk-ok-fg">+{formatZik(entry.amount)}</span>
+                      <span className={`font-mono font-bold tabular-nums ${entry.amount < 0 ? "text-zk-warn-fg" : "text-zk-ok-fg"}`}>
+                        {entry.amount < 0 ? "-" : "+"}
+                        {formatZik(Math.abs(entry.amount))}
+                      </span>
                     </li>
                   ))}
                 </ul>

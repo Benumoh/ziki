@@ -4088,6 +4088,9 @@ enum CoinKind {
   unreserve
   /// A project's budget back to wallets: the owner took it back, or it was returned when the project went idle.
   budget_return
+  /// What a person earned on the points ledger (PointEntry, dollars), moved into their wallet at 10 Ziks a dollar
+  /// (lib/coins/earnings-sync.ts). Negative when a correction took earnings back.
+  earning
 }
 
 enum WithdrawalStatus {
@@ -4111,8 +4114,9 @@ model CoinEntry {
   /// The project whose budget this row moves; set on budget rows and on the escrow side of a reserve or unreserve.
   projectId    String?
   kind         CoinKind
-  /// Signed whole Ziks, never zero.
-  amount       Int
+  /// Signed Ziks, never zero. Whole except earnings moved in from the points ledger, which keep one decimal
+  /// (#earnings-in-ziks), so balances and withdrawals may carry a tenth.
+  amount       Decimal     @db.Decimal(14, 1)
   sourceKey    String      @unique
   purchaseId   String?
   withdrawalId String?
@@ -4182,7 +4186,8 @@ model CoinSubscription {
 model Withdrawal {
   id               String           @id @default(cuid())
   userId           String
-  zik              Int
+  /// Ziks to one decimal: a withdrawal takes everything withdrawable, earnings' tenths included (#earnings-in-ziks).
+  zik              Decimal          @db.Decimal(14, 1)
   amountCents      Int
   status           WithdrawalStatus @default(pending)
   /// Sent to Stripe as the Transfer's idempotency key, so a retry never pays twice.
