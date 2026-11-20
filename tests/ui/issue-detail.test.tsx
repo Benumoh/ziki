@@ -849,3 +849,20 @@ describe("TakeItBackPanel (#851)", () => {
   });
 });
 
+
+import { IssueDates } from "@/components/issue-dates";
+
+describe("IssueDates (#456)", () => {
+  afterEach(cleanup);
+
+  it("says when the issue was opened, and adds when it was updated only once it changed after filing", () => {
+    const openedAt = new Date("2026-11-01T10:00:00Z");
+    const { rerender } = render(<IssueDates openedAt={openedAt} updatedAt={new Date("2026-11-01T10:00:30Z")} />);
+    expect(screen.getByText("Opened")).toBeInTheDocument();
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+
+    rerender(<IssueDates openedAt={openedAt} updatedAt={new Date("2026-11-03T09:00:00Z")} />);
+    expect(screen.getByText("Opened")).toBeInTheDocument();
+    expect(screen.getByText("Updated")).toBeInTheDocument();
+  });
+});

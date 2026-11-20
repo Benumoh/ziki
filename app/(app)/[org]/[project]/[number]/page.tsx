@@ -21,6 +21,7 @@ import { takesBids } from "@/lib/issue-substatus";
 import { findProjectIssue, parseIssueNumber } from "@/lib/project-issue";
 import { resolveSessionUserId } from "@/lib/session-user";
 import { LocalTime } from "@/components/local-time";
+import { IssueDates } from "@/components/issue-dates";
 import { IssuePrioritySelect } from "@/components/issue-priority-select";
 import { ClearDuplicateButton, MarkDuplicateButton } from "@/components/duplicate-controls";
 import { currentResolution, isFinishedStatus, type StatusChangeActivity } from "@/lib/resolution-note";
@@ -1863,6 +1864,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   <span className={`${issueChipBaseClass} border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg`}>Boosted</span>
                 ) : null}
               </div>
+              <IssueDates openedAt={bug.createdAt} updatedAt={bug.updatedAt} />
               {statusFlags.length > 0 ? (
                 <ul data-testid="status-flags" className="m-0 flex list-none flex-col gap-1 p-0">
                   {statusFlags.map((flag) => (
@@ -2511,6 +2513,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 <span className={`${issueChipBaseClass} border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg`}>Boosted</span>
               ) : null}
             </div>
+            <IssueDates openedAt={bug.createdAt} updatedAt={bug.updatedAt} />
             {workView && liveFix ? (
               <LiveFlow substatus={bug.substatus} reachedAt={liveFix.reachedAt} confirmed={liveFix.check.confirmedBy.length} needed={PROD_CONFIRMATIONS_NEEDED} />
             ) : null}
