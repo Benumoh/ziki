@@ -169,13 +169,15 @@ const OVERVIEW_STATES = ["open", "in_progress", "done", "merge", "resolved"] as 
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
 /**
- * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (delivered work to approve, live
- * work to confirm), what is being worked on right now, and what looks stalled. `?section=` shows one of them in full.
+ * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (new ideas, live work to confirm),
+ * what is being worked on right now, what is waiting for an agent (open, nobody on it yet), and what looks stalled. `?section=` shows one of them in full.
  */
 const OVERVIEW_SECTION_PARAM = "section";
 const FEED_SECTIONS = [
   { key: "needs", title: "Needs your OK" },
   { key: "active", title: "Being worked on" },
+  // Open issues nobody holds yet: waiting to be confirmed or for an agent's bid (#work-feed-waiting).
+  { key: "waiting", title: "Waiting for an agent" },
   { key: "stalled", title: "Stalled" },
 ] as const;
 type FeedSection = (typeof FEED_SECTIONS)[number]["key"];
@@ -202,6 +204,9 @@ function feedSectionWhere(section: FeedSection, now: number): Prisma.BugWhereInp
   }
   if (section === "active") {
     return { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, heartbeat] };
+  }
+  if (section === "waiting") {
+    return { substatus: { in: ["requires_confirmation", "open"] } };
   }
   return { OR: [
     { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, { NOT: heartbeat }] },
@@ -405,8 +410,8 @@ function issuesQueryError(reference: string, message?: string) {
  * route passes the organisation and project slugs and the list it names;
  * lib/project-route.ts resolves the project and checks access.
  */
-/** How much of an issue's description an opened Overview card shows (#work-feed); the full issue has the rest. */
-const FEED_BODY_LIMIT = 1200;
+/** How much of an issue's description an opened Overview card shows (#work-feed): all of it (descriptions are at most 5000 characters). */
+const FEED_BODY_LIMIT = 5000;
 
 /**
  * The decision an Overview card asks of you (#work-feed), and where you take it: the issue's simple view, at the
@@ -686,18 +691,19 @@ export async function IssuesList({
   // New ideas that need your OK (#just-added): this project's open ideas you haven't given a verdict on, newest first.
   // They top Needs your OK with Approve (your good verdict), and the one the chat just filed flashes there.
   const ideaSection = toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]);
+  // On the organisation-wide list (every project), every project's ideas, as the Fixes tab lists them.
   const ideasToOkWhere: Prisma.IdeaWhereInput = {
-    projectId: project.id, isDeleted: false, status: "open", track: "product",
+    ...(allProjects ? { organisationId: organisationId ?? "" } : { projectId: project.id }), isDeleted: false, status: "open", track: "product",
     ...(userId ? { verdicts: { none: { onBehalfOfUserId: userId } } } : {}),
   };
-  const [justAdded, ideasToOkCount] = feedView && overviewTab === "all" && (!ideaSection || ideaSection === "needs") && !allProjects
+  const [justAdded, ideasToOkCount] = feedView && overviewTab === "all" && (!ideaSection || ideaSection === "needs")
     ? await loadOrEmpty("ideas to approve", () => Promise.all([
         prisma.idea.findMany({
           where: ideasToOkWhere,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: ideaSection === "needs" ? 30 : 3,
-          select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } } },
-        }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(ref, row.number) }))),
+          select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } }, project: { select: { slug: true, organisation: { select: { slug: true } } } } },
+        }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(refOf(row.project), row.number) }))),
         prisma.idea.count({ where: ideasToOkWhere }),
       ]), [[], 0] as [JustAddedIdea[], number])
     : [[] as JustAddedIdea[], 0];
@@ -921,9 +927,22 @@ export async function IssuesList({
             <span className="ml-0.5 rounded-full bg-zk-chip px-1.5 py-px text-[11px] font-semibold tabular-nums text-zk-text2">{deliveredCount}</span>
           ) : null}
         </Link>,
-        // Fixes (the new ideas) sits after New Features.
+        // Fixes (the new ideas) sits after New Features, with a small + before it to plan a new feature (#add-feature).
         ...(tab === "features"
           ? [
+              ...(everyProject
+                ? []
+                : [
+                    <Link
+                      key="add-feature"
+                      href={projectPath(ref, "/features/new")}
+                      aria-label="Add a new feature"
+                      title="Add a new feature"
+                      className="-ml-1 inline-flex h-8 w-8 items-center justify-center self-center rounded-full text-zk-muted transition hover:bg-white hover:text-zk-accent hover:shadow-[0_1px_2px_rgba(16,24,40,0.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    </Link>,
+                  ]),
               <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
                 <TabIcon tab="new" />
                 Fixes

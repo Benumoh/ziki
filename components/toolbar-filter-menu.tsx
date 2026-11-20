@@ -61,7 +61,7 @@ export function ToolbarFilterMenu({ groups, summary }: {
         }}
         className={`${TOOL_BUTTON} ${summary ? TOOL_BUTTON_ON : ""} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue`}
       >
-        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" /></svg>
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M7 12h10M10 17h4" /></svg>
         {summary ? `Filter: ${summary}` : "Filter"}
         <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
       </button>
