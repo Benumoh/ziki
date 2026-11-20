@@ -12,10 +12,10 @@ export default function SettingsLoading() {
         <div className="flex flex-wrap items-start gap-6">
           <div className="w-full rounded-[20px] border border-zk-border bg-zk-surface p-3 sm:max-w-[280px]">
             <div className="space-y-2">
-              <Bar className="h-12 w-full rounded-[14px]" />
-              <Bar className="h-12 w-full rounded-[14px]" />
-              <Bar className="h-12 w-full rounded-[14px]" />
-              <Bar className="h-12 w-full rounded-[14px]" />
+              <Bar className="h-12 w-full rounded-xl" />
+              <Bar className="h-12 w-full rounded-xl" />
+              <Bar className="h-12 w-full rounded-xl" />
+              <Bar className="h-12 w-full rounded-xl" />
             </div>
           </div>
           <div className="min-w-0 flex-1 space-y-4">

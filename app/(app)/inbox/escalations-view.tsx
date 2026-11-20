@@ -80,7 +80,8 @@ export async function EscalationsView({
       waiting: p.status === "proposed",
       answer: null,
       bug: p.bug,
-      href: `/redesigns/${p.id}`,
+      // Designs are compared and chosen on their issue's page.
+      href: p.bug ? issueHref(p.bug, "#redesigns") : "/inbox?tab=escalations",
     })),
   ]
     .filter((row) => escalationOnTrack(row.bug, track))

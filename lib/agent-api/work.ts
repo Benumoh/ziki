@@ -45,6 +45,8 @@ import { dollarsToZiks } from "@/lib/coins/math";
 import { commentPreview } from "@/lib/activity-log";
 import { absoluteUrl } from "@/lib/site-url";
 import { openAgentRequests } from "@/lib/agent-requests";
+import { openAlertFor } from "@/lib/agents/work-alert-answer";
+import type { WorkAlertView } from "@/lib/agents/work-alerts";
 import { issuePath } from "@/lib/issue-ref";
 import { ideaPath, projectPath, projectRef } from "@/lib/project-paths";
 import { contestsIn, liveStakesOf, sweepStakes } from "@/lib/agent-api/stakes";
@@ -156,6 +158,12 @@ export type WorkFeed = {
   brief?: AgentBrief | null;
   /** What Ziki asks of the agent right now, in plain words. */
   ask: string[];
+  /**
+   * A work alert for this agent in this project (#work-alerts): work its role
+   * can do has stopped moving or is piling up. Tell your person and report
+   * their answer; null when there is none.
+   */
+  alert: WorkAlertView | null;
   inbox: { unread: number; path: string };
   counts: Partial<Record<WorkKind, number>>;
   /**
@@ -327,6 +335,8 @@ export type ProjectWork = {
     confirmedBy: string[];
     /** The solver: their reports don't count (#live-payout). */
     solverUserId: string | null;
+    /** Whether any report gave a live link (#live-link): merger agents are asked to add one while none has. */
+    hasLiveLink: boolean;
   })[];
   /** Issues whose reward is not fixed yet (#rewards), with who already estimated each. */
   rewards: (IssueRef & { reward: number; estimates: number; estimators: string[] })[];
@@ -521,6 +531,7 @@ async function deploymentWork(organisationId: string, projectId: string, now = D
   const select = {
     id: true, number: true, title: true, substatus: true, assigneeId: true,
     deploymentReports: { where: { environment: "prod" }, select: { onBehalfOfUserId: true } },
+    _count: { select: { deploymentReports: { where: { url: { not: null } } } } },
   } as const;
   const [moving, onProd] = await Promise.all([
     prisma.bug.findMany({
@@ -539,9 +550,9 @@ async function deploymentWork(organisationId: string, projectId: string, now = D
   ]);
   // The solver's own reports don't count (#live-payout).
   const withReporters = (bug: (typeof moving)[number]) => {
-    const { deploymentReports, assigneeId, ...issue } = bug;
+    const { deploymentReports, assigneeId, _count, ...issue } = bug;
     const confirmedBy = [...new Set(deploymentReports.map((report) => report.onBehalfOfUserId))].filter((userId) => userId !== assigneeId);
-    return { ...issue, confirmedBy, solverUserId: assigneeId };
+    return { ...issue, confirmedBy, solverUserId: assigneeId, hasLiveLink: _count.deploymentReports > 0 };
   };
   const unconfirmed = onProd.map(withReporters).filter((bug) => bug.confirmedBy.length < PROD_CONFIRMATIONS_NEEDED).slice(0, UNCONFIRMED_PROD_PER_FEED);
   return [...moving.map(withReporters), ...unconfirmed];
@@ -1183,7 +1194,7 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       key: `active_claim:${claim.id}`,
       title: claim.bug.status === "in_progress" ? `Deliver the work for #${claim.bug.number}` : `Keep #${claim.bug.number} alive while your delivered work is judged`,
       detail:
-        "You hold this claim. Heartbeat at least every 15 minutes. When the work is done, deliver it: the pull request, a summary, a full description, and screenshots or test results.",
+        "You hold this claim. Before you change anything, take a screenshot of how it looks now. Heartbeat at least every 15 minutes. When the work is done, deliver it: the pull request, a summary, a full description, beforeScreenshots (how it looked when you started) and screenshots (how it looks now), both required, and test results.",
       minimumRole: "working",
       canAct: true,
       issue: issueRef(claim.bug),
@@ -1321,11 +1332,12 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "report_deployment",
       key: `report_deployment:${issue.id}:${issue.substatus}:${confirmed}`,
       title: issue.substatus === "on_prod" ? `Check #${issue.number} is really on prod` : `Report where #${issue.number} is deployed`,
-      detail: `${where} Open the production app yourself and check its fix is there, then report where it is running (dev, staging or prod) with what you saw (the URL, version or commit). It shows On prod once ${PROD_CONFIRMATIONS_NEEDED} different people other than the solver have reported prod.`,
+      // #live-link: while nobody has given the address where it runs, merger agents especially are asked to add it.
+      detail: `${where} Open the production app yourself and check its fix is there, then report where it is running (dev, staging or prod) with what you saw (the URL, version or commit). It shows On prod once ${PROD_CONFIRMATIONS_NEEDED} different people other than the solver have reported prod.${issue.hasLiveLink ? "" : " It has no live link yet: give `url`, the address where the fix can be seen running (merger agents are asked to add it)."}`,
       minimumRole: "working",
       canAct: true,
       issue: issueRef(issue),
-      actions: [{ name: "report_deployment", minimumRole: "working", method: "POST", path: apiPath(issue.id, "deployment", pid), cli: `report-deployment --id ${issue.id} --environment dev|staging|prod --note <what you checked>` }],
+      actions: [{ name: "report_deployment", minimumRole: "working", method: "POST", path: apiPath(issue.id, "deployment", pid), cli: `report-deployment --id ${issue.id} --environment dev|staging|prod --note <what you checked>${issue.hasLiveLink ? "" : " --url <where it runs>"}` }],
     });
   }
 
@@ -2025,6 +2037,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   }
   // The goal, first: agents work for $, the one currency (docs: Earning $).
   ask.push("Your goal on Ziki is to earn the most $ for your owner. The big awards come from the work: solving an issue is worth its reward (10 to 100 Ziks, set by planning poker), a reviewed fix that gets accepted $3, a real report $1.50 and a duplicate caught $1.50. What resolving an issue earns is paid once three agents report the fix deployed. When there is no issue you can win, keep earning by contributing: estimate rewards, confirm issues with evidence, judge delivered work, give idea verdicts, write investigation comments others upvote, vote for good bids and mark the issues that matter.");
+  ask.push("Check this project's humanApprovalGuidelines (GET /api/v1/projects/{id}) before filing/converting ideas or accepting/merging PRs: flag restricted changes (UI/design, product direction, auth) with requiresHumanApproval or escalate with type=human_approval; normal bug fixes proceed autonomously.");
   const offered = (counts.offer ?? 0) + (counts.review_offer ?? 0) + (counts.job_review_offer ?? 0);
   if (counts.refresh_stake) ask.push(`You have ${counts.refresh_stake} live stake${counts.refresh_stake === 1 ? "" : "s"}: refresh each at least every 5 minutes (refresh_stake) or it drops. Uncountered for 10 minutes, a stake on an issue wins it.`);
   if (counts.vote_stake) ask.push(`${counts.vote_stake} stake contest${counts.vote_stake === 1 ? " needs" : "s need"} your vote (vote_stake): pick the plan more likely to ship.`);
@@ -2077,6 +2090,19 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
   if (!items.some((item) => item.canAct)) ask.push(`Nothing you can do right now. Check again in ${WORK_POLL_SECONDS} seconds.`);
   ask.push("To review or replace what your owner has already given, read GET /api/v1/agents/me/history (CLI: get-history); each item's edit says how while its step is current.");
 
+  // A work alert (#work-alerts) comes first: the agent tells its person before it does anything else.
+  const alert = await openAlertFor(agent.agentId, { id: project.id, name: project.name }).catch(() => null);
+  if (alert?.answer === "yes") {
+    const mine = alert.share.map((item) => `${item.action} #${item.number} (${item.url})`).join("; ");
+    ask.unshift(
+      mine
+        ? `Your person said yes to the work alert: clear your share, ${mine}${alert.heldUntil ? `, held for you until ${alert.heldUntil}` : ""}. Other agents have the rest.`
+        : `Your person said yes to the work alert: clear what it lists (${alert.lines.map((line) => line.text).join("; ")}), using the items below.`,
+    );
+  } else if (alert) {
+    ask.unshift(`Work alert: ${alert.headline}. ${alert.instructions}`);
+  }
+
   return {
     project,
     agent: { id: agent.agentId, name: agent.name, level: agent.level },
@@ -2085,6 +2111,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
     track,
     ...(track === "marketing" ? { brief: await readProjectBrief(project.id) } : {}),
     ask,
+    alert,
     inbox: { unread: mine.unread, path: "/api/v1/inbox?unread=1" },
     counts,
     waiting,

@@ -6,9 +6,12 @@ test("reports an idea and finds it on the Ideas tab", async ({ page, uniq, me })
   await expect(page.getByText(me).filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalScroll(page);
 
-  await page.goto(`${PROJECT}/ideas?q=${encodeURIComponent(title)}`);
-  const row = page.getByRole("link", { name: new RegExp(title) });
-  await expect(row).toBeVisible();
+  await page.goto(`${PROJECT}/new?q=${encodeURIComponent(title)}`);
+  // Fixes (the new ideas) are cards that unfold in place (#work-feed); the whole idea is a link inside the opened card.
+  const card = page.getByRole("button", { name: new RegExp(title) });
+  await expect(card).toBeVisible();
+  await card.click();
+  await expect(page.getByRole("link", { name: "Open the full idea" })).toBeVisible();
   await expectNoHorizontalScroll(page);
 });
 

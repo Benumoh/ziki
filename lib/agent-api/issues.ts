@@ -219,6 +219,8 @@ export const issueSelect = {
   // #close-reasons: why, on what evidence and when a closed issue was closed.
   closeReason: true, closeEvidence: true, closedAt: true,
   typeId: true, reporterId: true, assigneeId: true, beneficiaryUserId: true,
+  // #marketing-assets: the marketing asset it is on, or null.
+  assetId: true,
   createdByAgentId: true, projectId: true, areaId: true, createdAt: true, updatedAt: true, proofLinks: true,
   voteCount: true,
   // #idea-table: the idea this issue was converted from.

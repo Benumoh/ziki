@@ -14,6 +14,8 @@ import { parsePullRequestUrl } from "@/lib/github/pull-request-url";
 import { repoForPullRequest } from "@/lib/github/project-repositories";
 import { prGate } from "@/lib/agent-api/pr-gate";
 import { gateReport, latestPullRequestReport, pullRequestStateView, type PullRequestStateView } from "@/lib/agent-api/pull-request-report";
+import { assertHumanApprovalSatisfied } from "@/lib/human-approval";
+import { IssueApiError } from "@/lib/agent-api/errors";
 
 /**
  * A manager resolves merged work (#reconcile-merged, #pr-reports).
@@ -62,7 +64,8 @@ export type ReconcileError =
   | "awaiting_release"
   | "pr_broken"
   | "not_merged"
-  | "status_changed";
+  | "status_changed"
+  | "human_approval_required";
 
 export type ReconcileResult =
   | {
@@ -117,6 +120,12 @@ export async function reconcileMergedWork(
   const previousStatus = bug.status;
   if (!(RECONCILABLE_STATUSES as readonly Status[]).includes(previousStatus)) {
     return fail(409, "not_in_review", "Only in-progress, delivered, done or ready-to-merge work can be resolved with a merged pull request.");
+  }
+  try {
+    await assertHumanApprovalSatisfied(prisma, { kind: "issue", id: bug.id });
+  } catch (error) {
+    if (error instanceof IssueApiError) return fail(409, "human_approval_required", error.message);
+    throw error;
   }
   if (!bug.pullRequestUrl) return fail(409, "no_pull_request", "This issue has no linked pull request.");
   if (pullRequestUrl !== undefined && pullRequestUrl !== bug.pullRequestUrl) {

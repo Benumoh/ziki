@@ -9,6 +9,7 @@ import {
 } from "@/lib/points/platform-rewards";
 import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
 import { workflowValues } from "@/lib/workflow-config";
+import { effectiveHumanApprovalGuidelines } from "@/lib/human-approval";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -25,7 +26,7 @@ import type { Prisma } from "@prisma/client";
  * not selected — it is deployment configuration, not agent-visible data.
  */
 const projectSelect = {
-  id: true, slug: true, name: true, goal: true, repoUrl: true, stagingUrl: true, rewardConfig: true,
+  id: true, slug: true, name: true, goal: true, humanApprovalGuidelines: true, repoUrl: true, stagingUrl: true, rewardConfig: true,
   workflow: true,
   repositories: {
     select: { url: true, label: true, branch: true },
@@ -78,6 +79,7 @@ export async function listAgentProjects(organisationId: string) {
   const openByProject = new Map(openCounts.map((row) => [row.projectId, row._count._all]));
   return projects.map((project) => ({
     ...project,
+    humanApprovalGuidelines: effectiveHumanApprovalGuidelines(project.humanApprovalGuidelines),
     repositories: agentRepositories(project),
     workUrl: absoluteUrl(projectPath(projectRef(orgSlug, project.slug), "/work")),
     notesUrl: `/api/v1/projects/${project.id}/notes`,
@@ -104,6 +106,7 @@ export async function getAgentProject(organisationId: string, projectId: string)
   });
   return {
     ...project,
+    humanApprovalGuidelines: effectiveHumanApprovalGuidelines(project.humanApprovalGuidelines),
     repositories: agentRepositories(project),
     workUrl: absoluteUrl(projectPath(projectRef(orgSlug, project.slug), "/work")),
     notesUrl: `/api/v1/projects/${project.id}/notes`,

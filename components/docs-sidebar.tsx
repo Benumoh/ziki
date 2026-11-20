@@ -28,7 +28,7 @@ export function DocsSidebar() {
             key={item.href}
             href={item.href}
             aria-current={current ? "page" : undefined}
-            className={`flex min-h-16 w-full items-center gap-2 rounded-[14px] p-2 text-left text-zk-text transition sm:min-h-[72px] sm:gap-3 sm:p-3 ${
+            className={`flex min-h-16 w-full items-center gap-2 rounded-xl p-2 text-left text-zk-text transition sm:min-h-[72px] sm:gap-3 sm:p-3 ${
               on ? "bg-zk-tint" : "bg-transparent hover:bg-zk-chip"
             }`}
           >

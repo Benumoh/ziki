@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!organisationId) return NextResponse.json({ error: "Organisation membership required." }, { status: 403, headers });
   try {
     const parsed = redesignDecisionSchema.safeParse(await issueJson(request));
-    if (!parsed.success) return NextResponse.json({ error: "Choose approved or rejected." }, { status: 400, headers });
+    if (!parsed.success) return NextResponse.json({ error: "Choose chosen or rejected." }, { status: 400, headers });
     const { id } = await context.params;
     return NextResponse.json({ proposal: await decideRedesign(session.userId, organisationId, id, parsed.data.decision) }, { headers });
   } catch (error) {

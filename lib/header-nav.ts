@@ -51,9 +51,7 @@ export function isNavItemActive(pathname: string | null, href: string): boolean 
       path === "/inbox" ||
       path.startsWith("/inbox/") ||
       path === "/questions" ||
-      path.startsWith("/questions/") ||
-      path === "/redesigns" ||
-      path.startsWith("/redesigns/")
+      path.startsWith("/questions/")
     );
   }
   // Site admin covers every page under /superadmin, not only the users list it opens on.

@@ -1,4 +1,5 @@
 import type { IssueStage } from "@/lib/issue-stage";
+import { PILL_TONES } from "@/lib/pill-tones";
 import type { MergePath } from "@/lib/merge-history";
 import { MergePathChips } from "@/components/merge-path";
 import { ElapsedTime } from "@/components/elapsed-time";
@@ -53,6 +54,10 @@ export type IssueRowWork = {
   since: Date | null;
 };
 
+/** The row's status as a soft, tinted pill (lib/pill-tones.ts). */
+const PILL = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold leading-4";
+const TONE = PILL_TONES;
+
 /**
  * One line saying where an issue stands: Idea (with its score), Requires confirmation
  * (bots), Ready for bids, who is working on it and for how long, Delivered, Done, Ready to merge,
@@ -95,14 +100,14 @@ export function IssueRowStatus({
   }
   if (finished) {
     return (
-      <span className={`issue-row-status inline-flex items-center gap-1 ${live ? "text-zk-ok-fg" : "text-zk-muted"}`}>
+      <span className={`issue-row-status ${PILL}`} style={live ? TONE.green : TONE.grey}>
         <CheckIcon /> {live ? substatusLabel[substatus as Substatus] : closedLabel(closeReason)}
       </span>
     );
   }
   if (substatus === "requires_review") {
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-medium text-purple-700 dark:text-purple-300">
+      <span className={`issue-row-status ${PILL}`} style={TONE.purple}>
         <CheckIcon /> Requires review
       </span>
     );
@@ -110,7 +115,7 @@ export function IssueRowStatus({
   if (substatus === "plan_review") {
     return (
       <span className="issue-row-status inline-flex min-w-0 flex-col items-start gap-0.5" data-testid="row-plan-review">
-        <span className="inline-flex items-center gap-1 font-medium text-zk-warn-fg">
+        <span className={PILL} style={TONE.yellow}>
           <ClockIcon /> Plan review
         </span>
         {planReviewFor ? <span className="max-w-[10rem] truncate pl-4 text-[10.5px] text-zk-muted">{planReviewFor}</span> : null}
@@ -119,14 +124,14 @@ export function IssueRowStatus({
   }
   if (substatus === "accepted") {
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-medium text-sky-600 dark:text-sky-400">
+      <span className={`issue-row-status ${PILL}`} style={TONE.cyan}>
         <CheckIcon /> Accepted
       </span>
     );
   }
   if (substatus === "ready_to_merge") {
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+      <span className={`issue-row-status ${PILL}`} style={TONE.green}>
         <CheckIcon /> Ready to merge
       </span>
     );
@@ -134,21 +139,21 @@ export function IssueRowStatus({
   // #force-merge: merged by its author without Ziki's checks, waiting for judgements; or judged faulty, needing a fix.
   if (substatus === "force_merged") {
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-medium text-zk-warn-fg">
+      <span className={`issue-row-status ${PILL}`} style={TONE.yellow}>
         <CheckIcon /> Force-merged
       </span>
     );
   }
   if (substatus === "merged_broken") {
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-medium text-zk-bad-fg">
+      <span className={`issue-row-status ${PILL}`} style={TONE.red}>
         Broken{bids ? ` · ${bids} ${bids === 1 ? "bid" : "bids"}` : ""}
       </span>
     );
   }
   if (substatus === "error") {
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 font-medium text-zk-bad-fg">
+      <span className={`issue-row-status ${PILL}`} style={TONE.red}>
         Error
       </span>
     );
@@ -157,9 +162,9 @@ export function IssueRowStatus({
     // Two lines: a working hammer and who, then how long.
     return (
       <span className="issue-row-status inline-flex min-w-0 flex-col items-start gap-0.5">
-        <span className="inline-flex min-w-0 items-center gap-1.5">
-          <span className="text-zk-ok-fg"><HammeringIcon /></span>
-          <span className="max-w-[9rem] truncate text-zk-text2">{work.person ?? "Someone"}</span>
+        <span className={`${PILL} min-w-0 max-w-[11rem]`} style={TONE.teal}>
+          <HammeringIcon />
+          <span className="truncate">{work.person ?? "Someone"}</span>
           <span className="sr-only">is working on it</span>
         </span>
         {work.since ? (
@@ -174,8 +179,8 @@ export function IssueRowStatus({
   if (substatus === "open" && offeredTo) {
     return (
       <span className="issue-row-status inline-flex min-w-0 flex-col items-start gap-0.5">
-        <span className="inline-flex items-center gap-1 font-medium text-zk-warn-fg">
-          <ClockIcon /> <span className="max-w-[10rem] truncate">Offered to {offeredTo}</span>
+        <span className={`${PILL} min-w-0 max-w-[12rem]`} style={TONE.yellow}>
+          <ClockIcon /> <span className="truncate">Offered to {offeredTo}</span>
         </span>
       </span>
     );
@@ -183,7 +188,7 @@ export function IssueRowStatus({
   if (stage === "ready") {
     return (
       // With bids it says how many ("2 bids"); without, that it is waiting for them.
-      <span className="issue-row-status inline-flex items-center gap-1 text-zk-ok-fg" data-testid="row-bid-status">
+      <span className={`issue-row-status ${PILL}`} style={TONE.green} data-testid="row-bid-status">
         <BidIcon /> {bids ? `${bids} bid${bids === 1 ? "" : "s"}` : "Ready for bids"}
       </span>
     );
@@ -192,7 +197,7 @@ export function IssueRowStatus({
     // Enough people confirmed it; it moves to Open as the agents carry on.
     const bots = `${botConfirmations} ${botConfirmations === 1 ? "person" : "people"}`;
     return (
-      <span className="issue-row-status inline-flex items-center gap-1 text-zk-ok-fg" title={`Confirmed by ${bots}`}>
+      <span className={`issue-row-status ${PILL}`} style={TONE.green} title={`Confirmed by ${bots}`}>
         <CheckIcon /> Confirmed
       </span>
     );
@@ -202,16 +207,17 @@ export function IssueRowStatus({
     const bots = `${botConfirmations} ${botConfirmations === 1 ? "person" : "people"}`;
     return (
       <span
-        className="issue-row-status inline-flex items-center gap-1 text-zk-text2"
+        className={`issue-row-status ${PILL}`}
+        style={TONE.blue}
         title={`Confirmed by ${bots} so far`}
       >
-        <span className="text-zk-accent"><BotIcon /></span>
+        <BotIcon />
         <span>Awaiting Confirmation</span>
         <span className="sr-only"> Confirmed by {bots}.</span>
       </span>
     );
   }
-  return <span className="issue-row-status inline-flex items-center gap-1 text-zk-text2">Open</span>;
+  return <span className={`issue-row-status ${PILL}`} style={TONE.grey}>Open</span>;
 }
 
 /**

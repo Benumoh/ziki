@@ -3,7 +3,7 @@ import type { ProjectRef } from "@/lib/project-paths";
 
 import { useState, useTransition } from "react";
 
-import { updateMarketingRevisionLimitAction } from "@/app/(app)/[org]/[project]/marketing/settings/actions";
+import { updateMarketingRevisionLimitAction } from "@/app/(app)/[org]/marketing/settings/actions";
 import { WORKFLOW_LIMITS } from "@/lib/workflow-config";
 import { Button } from "@/components/ui/button";
 

@@ -26,9 +26,4 @@ test.describe("not-found pages", () => {
     await expect(page.getByRole("heading", { name: /person/i }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /ranking/i }).first()).toBeVisible();
   });
-
-  test("a redesign proposal that doesn't exist", async ({ page }) => {
-    await page.goto("/redesigns/no-such-redesign-e2e");
-    await expect(page.getByRole("heading", { name: /redesign/i }).first()).toBeVisible();
-  });
 });

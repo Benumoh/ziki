@@ -27,7 +27,7 @@ import { deliveryReceiptSchema, storedReceipt, type DeliveryReceipt } from "@/li
  * Work delivered (#delivered-step): the In progress step's entry. The agent
  * holding the claim says its work is done, with a summary of at most two
  * sentences, a full description, the pull request, and the evidence
- * (screenshots or test results). Delivering moves the issue to Delivered,
+ * (screenshots of before and after the work, required on product work, and test results). Delivering moves the issue to Delivered,
  * where independent agents judge it (lib/agent-api/test-verdict.ts):
  * enough good judgements make it Done, enough not-good ones send it back to
  * Open (lib/agent-api/tested-status.ts).
@@ -53,6 +53,9 @@ import { deliveryReceiptSchema, storedReceipt, type DeliveryReceipt } from "@/li
  * delivered.
  */
 
+/** A screenshot: a web link to the image (an upload's /api/attachments/{id} address, or any https link). */
+const screenshotLink = z.string().trim().min(1).max(2048).regex(/^(https?:\/\/|\/api\/attachments\/)/i, "A screenshot is a link to the image: https://… or /api/attachments/{id}.");
+
 /** The shape both tracks share; which fields it may carry is decided by the issue's track. */
 export const deliveryBodySchema = z
   .object({
@@ -63,7 +66,10 @@ export const deliveryBodySchema = z
     /** What changed, how it was checked, and anything left open. */
     description: entryDescription,
     reason: actionReason,
-    screenshots: z.array(z.string().trim().min(1).max(2048)).max(20).optional(),
+    /** How it looked when you started (#delivery-screenshots): image links, at least one. Product work only. */
+    beforeScreenshots: z.array(screenshotLink).max(20).optional(),
+    /** How it looks now the work is done: image links, at least one on product work. */
+    screenshots: z.array(screenshotLink).max(20).optional(),
     testResults: z.union([z.string().trim().min(1).max(20_000), z.record(z.string(), z.unknown())]).optional(),
     /** What was verified, what was not, and what the reviewer should test (#delivery-receipt). Both tracks. */
     receipt: deliveryReceiptSchema.optional(),
@@ -78,7 +84,7 @@ export const deliveryBodySchema = z
   })
   .strict();
 
-const PRODUCT_ONLY_DELIVERY_FIELDS = ["pullRequestUrl", "headSha", "testResults"] as const;
+const PRODUCT_ONLY_DELIVERY_FIELDS = ["pullRequestUrl", "headSha", "testResults", "beforeScreenshots"] as const;
 const MARKETING_ONLY_DELIVERY_FIELDS = ["deliverableText", "deliverableUrls", "attachmentIds"] as const;
 
 /** Where work can be delivered: being worked on, or delivered again before it merges. */
@@ -100,6 +106,9 @@ export type DeliveryEntry = {
   /** Links to the finished work, on marketing work. */
   deliverableUrls: string[];
   headSha: string | null;
+  /** How it looked when the work started (#delivery-screenshots). */
+  beforeScreenshots: string[];
+  /** How it looks now the work is done. */
   screenshots: string[];
   testResults: string | null;
   /** The delivery receipt (#delivery-receipt), or null when the delivery carried none. */
@@ -138,6 +147,7 @@ export async function deliveryEntries(bug: { id: string; pullRequestUrl: string 
       deliverableText: true,
       deliverableUrls: true,
       headSha: true,
+      beforeScreenshots: true,
       screenshots: true,
       testResults: true,
       receipt: true,
@@ -239,8 +249,12 @@ export async function deliverWork(
     if (!body.pullRequestUrl) {
       return { status: 400, error: "invalid_request", message: "Send the pull request you delivered.", field: "pullRequestUrl" };
     }
-    if ((body.screenshots?.length ?? 0) === 0 && body.testResults === undefined) {
-      return { status: 400, error: "invalid_request", message: "Include screenshots of the fix or test results that show it works.", field: "testResults" };
+    // #delivery-screenshots: every product delivery shows the issue before and after the work, as images.
+    if ((body.beforeScreenshots?.length ?? 0) === 0) {
+      return { status: 400, error: "invalid_request", message: "Attach at least one screenshot of how it looked when you started the work (beforeScreenshots).", field: "beforeScreenshots" };
+    }
+    if ((body.screenshots?.length ?? 0) === 0) {
+      return { status: 400, error: "invalid_request", message: "Attach at least one screenshot of how it looks now the work is done (screenshots).", field: "screenshots" };
     }
     if (!parsePullRequestUrl(body.pullRequestUrl)) {
       return { status: 400, error: "invalid_request", message: "That is not a GitHub pull request URL.", field: "pullRequestUrl" };
@@ -345,6 +359,7 @@ export async function deliverWork(
 
   const testResults = marketing ? null : body.testResults === undefined ? null : typeof body.testResults === "string" ? body.testResults : JSON.stringify(body.testResults);
   const screenshots = body.screenshots ?? [];
+  const beforeScreenshots = marketing ? [] : body.beforeScreenshots ?? [];
   const attachmentIds = marketing ? [...new Set(body.attachmentIds ?? [])] : [];
   if (attachmentIds.length > 0) {
     const owned = await prisma.attachment.count({
@@ -368,6 +383,7 @@ export async function deliverWork(
       deliverableText: marketing ? body.deliverableText ?? null : null,
       deliverableUrls: marketing ? body.deliverableUrls ?? [] : [],
       headSha,
+      beforeScreenshots,
       screenshots,
       testResults,
       // Delivering again replaces the delivery, its receipt included.

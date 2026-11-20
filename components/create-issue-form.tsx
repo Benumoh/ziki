@@ -59,6 +59,7 @@ export function CreateIssueForm({
   onCancel,
   onDirtyChange,
   defaultSecurity = false,
+  defaultTypeId: requestedTypeId,
 }: {
   users: UserOption[];
   assigneeUsers?: UserOption[];
@@ -81,9 +82,12 @@ export function CreateIssueForm({
   onDirtyChange?: (dirty: boolean) => void;
   /** Open with "This is a security vulnerability" ticked (the Security page's report button). */
   defaultSecurity?: boolean;
+  /** The type to start at, e.g. from a section's Add Feature button; otherwise Fix. */
+  defaultTypeId?: string;
 }) {
   const inModal = variant === "modal";
   const defaultTypeId =
+    (requestedTypeId && types.some((t) => t.id === requestedTypeId) ? requestedTypeId : null) ??
     types.find((t) => t.name.toLowerCase() === "fix")?.id ?? types[0]?.id ?? "";
   const templateOf = (id: string) => types.find((t) => t.id === id)?.template ?? null;
   const confirm = useConfirm();

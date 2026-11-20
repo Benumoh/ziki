@@ -186,12 +186,12 @@ function OnScreenGuideContent() {
     () => false,
   );
   return (
-    // Above the support link (a small line at the bottom right), and above the agents bar where it is drawn
-    // (#agents-dock, 76px tall), so the chat never sits behind either. Decided in CSS, not at render, so the
-    // server and the browser draw the same thing.
+    // Above the support link (a small line at the bottom right). Where the agents bar is drawn (#agents-dock,
+    // 76px tall) the bot sits inside it, at its right end, and its chat opens upward from there. Decided in CSS,
+    // not at render, so the server and the browser draw the same thing.
     <aside
       aria-label="Customer Support Guide"
-      className="fixed bottom-14 right-4 z-50 flex flex-col items-end pointer-events-none select-none sm:right-6 lg:[body:has([data-dock-strip])_&]:bottom-[88px]"
+      className="fixed bottom-14 right-4 z-50 flex flex-col items-end pointer-events-none select-none sm:right-6 lg:[body:has([data-dock-strip])_&]:bottom-[10px]"
     >
       {/* ---------------- STATE 3: INTERACTIVE SUPPORT DRAWER / CHAT ---------------- */}
       {mode === "chat" && (

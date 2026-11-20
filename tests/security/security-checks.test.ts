@@ -6,6 +6,9 @@ const db = vi.hoisted(() => {
   const fake = {
     securityCheck: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     securityCheckResult: { findMany: vi.fn(), findUnique: vi.fn() },
+    // Connect code (#security-code-scan): projects with GitHub, and the repo stored as a target.
+    project: { findMany: vi.fn() },
+    securityTarget: { upsert: vi.fn() },
     $transaction: vi.fn(),
   };
   fake.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(fake));
@@ -40,6 +43,7 @@ vi.mock("next/navigation", () => ({
 
 import { fixOf, loadCheckReport } from "@/lib/security-checks/report";
 import { deeperScanQuote, payAndStartDeeperScan } from "@/lib/security-checks/deeper-scan";
+import { codeScanQuote, startCodeScan } from "@/lib/security-checks/code-scan";
 import { RESCAN_PRICE_ZIKS, startRescan } from "@/lib/security-checks/rescan";
 import { GET as downloadReportPdf } from "@/app/(app)/security/checks/[id]/report.pdf/route";
 import {
@@ -624,4 +628,77 @@ describe("first deeper scan payment", () => {
   });
 });
 
+});
+
+describe("Connect code: paying for a code scan (#security-code-scan, 18 Nov)", () => {
+  const site = { id: "c1", target: { value: "shop.test" }, codeScan: null as { id: string } | null };
+  beforeEach(() => {
+    vi.resetAllMocks();
+    site.codeScan = null;
+    db.securityCheck.findFirst.mockResolvedValue(site);
+    db.project.findMany.mockResolvedValue([
+      { id: "p1", name: "Shop", repoUrl: "https://github.com/acme/shop" },
+      { id: "p2", name: "Odd", repoUrl: "not a repo" },
+    ]);
+    db.securityTarget.upsert.mockResolvedValue({ id: "t-repo", verifiedAt: null });
+    db.securityCheck.create.mockResolvedValue({ id: "code1" });
+    coins.walletBalance.mockResolvedValue(70);
+    coins.loanState.mockResolvedValue({ canBorrow: false });
+    coins.appendRows.mockResolvedValue(true);
+    db.$transaction.mockImplementation((run: (tx: unknown) => unknown) => run(db));
+  });
+
+  it("quotes 50 Ziks and the projects with GitHub connected, charging nothing", async () => {
+    expect(await codeScanQuote("org", "user", "c1")).toEqual({ ok: true, site: "shop.test", price: 50, balance: 70, canBorrow: false, projects: [{ id: "p1", name: "Shop", repo: "acme/shop" }] });
+    expect(db.project.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organisationId: "org", githubInstallationId: { not: null } }) }));
+    expect(coins.appendRows).not.toHaveBeenCalled();
+  });
+
+  it("read-only: pays 50 Ziks and opens the repo's paid scan, linked to the website scan, in one transaction", async () => {
+    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "https://github.com/Acme/Web.git" })).toEqual({ ok: true, checkId: "code1" });
+    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 50);
+    expect(db.securityTarget.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { organisationId_kind_value: { organisationId: "org", kind: "repo", value: "acme/web" } } }));
+    expect(db.securityCheck.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ targetId: "t-repo", requestedById: "user", codeScanForId: "c1", projectId: null, free: false, priceCoins: 50, paidAt: expect.any(Date), status: "queued" }),
+      select: { id: true },
+    });
+    expect(coins.appendRows).toHaveBeenCalledWith(expect.anything(), [
+      expect.objectContaining({ account: "wallet", userId: "user", amount: -50, sourceKey: "code-scan:code1:wallet" }),
+      expect.objectContaining({ account: "revenue", amount: 50, sourceKey: "code-scan:code1:revenue" }),
+    ]);
+  });
+
+  it("Connect GitHub: scans the chosen project's repo and sends its findings to that project; a project without GitHub is refused", async () => {
+    expect(await startCodeScan("org", "user", "c1", { kind: "project", projectId: "p1" })).toEqual({ ok: true, checkId: "code1" });
+    expect(db.securityCheck.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: "p1" }) }));
+    vi.mocked(db.securityCheck.create).mockClear();
+    vi.mocked(coins.appendRows).mockClear();
+    expect(await startCodeScan("org", "user", "c1", { kind: "project", projectId: "p2" })).toMatchObject({ ok: false, reason: "no_github" });
+    expect(db.securityCheck.create).not.toHaveBeenCalled();
+    expect(coins.appendRows).not.toHaveBeenCalled();
+  });
+
+  it("charges nothing for a link that isn't a GitHub repo, a short wallet, someone else's scan, or a scan whose code is already being scanned", async () => {
+    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "https://example.com" })).toMatchObject({ reason: "bad_repo" });
+
+    coins.assertCanSpendOnSecurity.mockRejectedValueOnce(new coins.CoinError("insufficient_ziks", "Not enough"));
+    coins.walletBalance.mockResolvedValue(10);
+    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ reason: "insufficient_ziks", needed: 50, balance: 10 });
+
+    db.securityCheck.findFirst.mockResolvedValueOnce(null);
+    expect(await startCodeScan("other-org", "stranger", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ reason: "not_found" });
+    expect(db.securityCheck.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "c1", organisationId: "other-org", requestedById: "stranger" }) }));
+
+    site.codeScan = { id: "code0" };
+    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ reason: "already_started", checkId: "code0" });
+
+    expect(db.securityCheck.create).not.toHaveBeenCalled();
+    expect(coins.appendRows).not.toHaveBeenCalled();
+  });
+
+  it("a second click that loses the race pays nothing and finds the first one", async () => {
+    db.securityCheck.create.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "test" }));
+    db.securityCheck.findFirst.mockResolvedValueOnce(site).mockResolvedValueOnce({ id: "code1" });
+    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ ok: false, reason: "already_started", checkId: "code1" });
+  });
 });

@@ -31,7 +31,7 @@ export function FlashNote({ children }: { children: React.ReactNode }) {
   return (
     <p
       role="status"
-      className={`mx-4 my-3 rounded-[14px] border border-zk-border bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg transition-opacity duration-[400ms] motion-reduce:transition-none sm:mx-6 ${phase === "fading" ? "opacity-0" : "opacity-100"}`}
+      className={`mx-4 my-3 rounded-xl border border-zk-border bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg transition-opacity duration-[400ms] motion-reduce:transition-none sm:mx-6 ${phase === "fading" ? "opacity-0" : "opacity-100"}`}
     >
       {children}
     </p>

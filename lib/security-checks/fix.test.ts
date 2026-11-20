@@ -81,11 +81,12 @@ describe("Fix on Ziki", () => {
 
   it("offers projects for a posted report", async () => {
     const lookup = {
-      securityCheck: { findFirst: vi.fn().mockResolvedValue({ postedAt: new Date(), projectId: null }) },
-      project: { findMany: vi.fn().mockResolvedValue([{ id: "p1", name: "Web" }]) },
+      securityCheck: { findFirst: vi.fn().mockResolvedValue({ postedAt: new Date(), projectId: null, target: { value: "hotels.ng" } }) },
+      project: { findMany: vi.fn().mockResolvedValue([{ id: "p1", name: "Web", siteUrl: "https://ziki.dev", stagingUrl: null }]) },
     };
+    // Not the workspace's own site: no project is matched, so the panel suggests a new one named after it.
     await expect(listFixProjects(client, "c1", lookup as never)).resolves.toEqual({
-      projectId: null, projects: [{ id: "p1", name: "Web" }],
+      projectId: null, projects: [{ id: "p1", name: "Web" }], site: "hotels.ng", match: null,
     });
     expect(lookup.securityCheck.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "c1", requestedById: "u1", organisationId: "o1" },
@@ -101,10 +102,11 @@ describe("Fix on Ziki", () => {
 
   it("lists projects before the report is posted, so ready findings can be sent", async () => {
     const lookup = {
-      securityCheck: { findFirst: vi.fn().mockResolvedValue({ postedAt: null, projectId: null }) },
-      project: { findMany: vi.fn().mockResolvedValue([{ id: "p1", name: "Web" }]) },
+      securityCheck: { findFirst: vi.fn().mockResolvedValue({ postedAt: null, projectId: null, target: { value: "www.ziki.dev" } }) },
+      project: { findMany: vi.fn().mockResolvedValue([{ id: "p1", name: "Web", siteUrl: "https://ziki.dev", stagingUrl: null }]) },
     };
-    await expect(listFixProjects(client, "c1", lookup as never)).resolves.toEqual({ projects: [{ id: "p1", name: "Web" }], projectId: null });
+    // The workspace's own site (ziki.dev, "www." ignored): its project is picked by default.
+    await expect(listFixProjects(client, "c1", lookup as never)).resolves.toEqual({ projects: [{ id: "p1", name: "Web" }], projectId: null, site: "www.ziki.dev", match: "p1" });
   });
 
   it("lists no projects for a check that isn't the requester's", async () => {

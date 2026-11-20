@@ -32,6 +32,7 @@ vi.mock("@/lib/agent-api/events", () => ({ publish: featurePublish }));
 vi.mock("@/lib/project-permissions", () => ({ canContributeToProject: featureMembership }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/search-index", () => ({ searchWorkItems: indexedSearch }));
+vi.mock("@/lib/auth-helpers", () => ({ optionalUser: vi.fn(async () => null), requireUser: vi.fn() }));
 
 const sessionUser = vi.hoisted(() => ({ resolve: vi.fn() }));
 vi.mock("@/lib/session-user", () => ({ resolveSessionUserId: sessionUser.resolve }));

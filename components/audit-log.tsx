@@ -101,7 +101,7 @@ function AuditLogEntry({
         </button>
       </div>
       {open && (
-        <dl id={detailsId} className="mt-2 space-y-1 rounded-[14px] bg-zk-tint p-3 text-xs text-zk-text2">
+        <dl id={detailsId} className="mt-2 space-y-1 rounded-xl bg-zk-tint p-3 text-xs text-zk-text2">
           <div>
             <dt className="inline font-bold text-zk-text">Event id: </dt>
             <dd className="inline font-mono">{row.id}</dd>

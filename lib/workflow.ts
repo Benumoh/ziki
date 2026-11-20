@@ -62,6 +62,7 @@ export async function workflowFor(
         stakeInProgressLimit: true,
         revisionLimit: true,
         planReviewSeconds: true,
+        humanApprovalsNeeded: true,
       },
     })) as Partial<ProjectWorkflowValues> | null;
   } catch (error) {

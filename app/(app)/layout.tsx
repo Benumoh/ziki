@@ -65,7 +65,7 @@ export default async function AppLayout({
   const intakeSegments = !session?.user ? publicIntakeSegments(reqPath) : null;
   const publicIssues = !session?.user ? publicIssuesSegments(reqPath) : null;
   const orgFeedback = !session?.user ? publicOrgFeedbackSegments(reqPath) : null;
-  const overviewSegments = !session?.user ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
+  const overviewSegments = !session?.user && !orgFeedback ? projectOverviewSegments(reqPath) ?? intakeSegments ?? publicIssues : null;
   const isFeedbackOrTrack = intakeSegments?.kind === "feedback" || intakeSegments?.kind === "track";
   const overviewProject = overviewSegments
     ? await prisma.project.findFirst({
@@ -261,7 +261,7 @@ export default async function AppLayout({
 
   return (
     // data-app-shell marks the signed-in app shell for the on-screen guide.
-    <div data-app-shell="" className="flex min-h-screen flex-col bg-zk-bg">
+    <div data-app-shell="" className="flex min-h-screen flex-col bg-background">
       <SkipLink />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader

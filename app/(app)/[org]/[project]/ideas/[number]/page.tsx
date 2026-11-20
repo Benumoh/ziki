@@ -26,6 +26,8 @@ import { isThresholdOnly } from "@/lib/governance";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { RejectIdeaButton } from "@/components/reject-idea-button";
 import { approveIdeaAction, rejectIdeaAction, withdrawIdeaAction } from "@/app/actions/idea-verdicts";
+import { YourTurnCard } from "@/components/your-turn-card";
+import { getHumanApprovalSummary } from "@/lib/human-approval";
 import { awardingAgentOf } from "@/lib/bid-award-permission";
 import { OwnerIdeaControls } from "@/components/owner-idea-controls";
 
@@ -92,6 +94,8 @@ export default async function IdeaPage({ params, searchParams }: {
       archiveDuplicateOf: true,
       reporterId: true,
       beneficiaryUserId: true,
+      requiresHumanApproval: true,
+      humanApprovalReason: true,
       legacyComments: true,
       reporter: { select: { name: true, role: true, image: true } },
       beneficiary: { select: { name: true, role: true, image: true } },
@@ -110,10 +114,11 @@ export default async function IdeaPage({ params, searchParams }: {
     : new Map<string, { id: string; name: string | null; image: string | null }>();
   if (!idea) notFound();
 
-  const [verdicts, workflow, securityFinding] = await Promise.all([
+  const [verdicts, workflow, securityFinding, humanApproval] = await Promise.all([
     listIdeaVerdicts({ organisationId, projectId: idea.projectId }, idea.id),
     workflowFor(idea.projectId),
     findingForIdea(idea.id),
+    getHumanApprovalSummary(prisma, { kind: "idea", id: idea.id }),
   ]);
   // #security-findings: the private details, shown only to who may see them.
   const securityAdmin = securityFinding ? (await organisationAccessFor(user.id, organisationId, user.role)).admin : false;
@@ -161,7 +166,7 @@ export default async function IdeaPage({ params, searchParams }: {
   const marketingIdea = idea.track === "marketing";
   const closedIdea = idea.status === "rejected" || idea.status === "archived";
   const backFallback = marketingIdea
-    ? marketingPath(slug, closedIdea ? "ideas/rejected" : "tasks")
+    ? closedIdea ? marketingPath(slug, "ideas/rejected") : marketingPath(slug)
     : closedIdea ? ideasPath(slug, "rejected") : ideasPath(slug);
 
   return (
@@ -208,6 +213,23 @@ export default async function IdeaPage({ params, searchParams }: {
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Attachments</h2>
               <AttachmentList attachments={idea.attachments} />
             </section>
+          ) : null}
+
+          {idea.status === "open" &&
+          humanApproval.required &&
+          !humanApproval.satisfied &&
+          user.id !== idea.reporterId &&
+          !humanApproval.approvedByUserIds.includes(user.id) ? (
+            <YourTurnCard
+              bugId={idea.id}
+              targetKind="idea"
+              turn={{
+                kind: "human_approval",
+                reason: idea.humanApprovalReason,
+                approvals: humanApproval.approvalsCount,
+                needed: humanApproval.needed,
+              }}
+            />
           ) : null}
 
           <IdeaVerdictsPanel ideaId={idea.id} track={idea.track} data={verdicts} viewerId={user.id} block={block} summaryMaxChars={IDEA_SUMMARY_MAX_CHARS} />

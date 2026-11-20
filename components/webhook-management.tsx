@@ -511,7 +511,7 @@ export function WebhookManagement() {
                         role="radio"
                         aria-checked={on}
                         onClick={() => setAgentId(agent.id)}
-                        className={`flex min-w-0 items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-left ${
+                        className={`flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left ${
                           on
                             ? "border-2 border-electric-blue-strong bg-zk-tint"
                             : "m-px border border-zk-border bg-zk-surface"

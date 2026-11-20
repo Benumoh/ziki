@@ -54,7 +54,7 @@ export function SortHeader({
       type="button"
       onClick={choose}
       aria-label={`Sort by ${label}${active ? `, sorted ${descending ? "descending" : "ascending"}; click to reverse` : ""}`}
-      className={`group inline-flex cursor-pointer items-center gap-1 text-left hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${active ? "font-semibold text-zk-text" : ""} ${className}`}
+      className={`group inline-flex cursor-pointer items-center gap-1 text-left hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${active ? "text-zk-text" : ""} ${className}`}
     >
       {label}
       <svg

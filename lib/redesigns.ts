@@ -9,13 +9,17 @@ import { IssueApiError } from "@/lib/agent-api/errors";
 import { isOrganisationAdminRole } from "@/lib/agents/membership";
 
 const id = z.string().trim().min(1).max(191);
+/** Why a proposal without an issue is refused: every redesign belongs to the issue it redesigns. */
+export const REDESIGN_ISSUE_REQUIRED = "bugId: a redesign proposal belongs to an issue; link the issue it redesigns.";
 export const redesignSchema = z.object({
-  projectId: id, onBehalfOfUserId: id.optional(), bugId: id.optional(),
+  projectId: id, onBehalfOfUserId: id.optional(),
+  bugId: z.string({ error: REDESIGN_ISSUE_REQUIRED }).trim().min(1, REDESIGN_ISSUE_REQUIRED).max(191),
   title: z.string().trim().min(3).max(200), body: z.string().trim().min(10).max(5000),
   previewUrl: z.url().max(2048).refine((value) => new URL(value).protocol === "https:", "Preview URL must use HTTPS.").optional(),
   attachmentIds: z.array(id).max(5).refine((values) => new Set(values).size === values.length, "Attachment IDs must be unique.").default([]),
 }).strict();
-export const redesignDecisionSchema = z.object({ decision: z.enum(["approved", "rejected", "chosen"]) }).strict();
+/** A person decides a proposal on its issue: chooses it (the others for that issue are superseded) or rejects it. */
+export const redesignDecisionSchema = z.object({ decision: z.enum(["chosen", "rejected"]) }).strict();
 
 export async function proposeRedesign(agent: AgentContext, input: z.infer<typeof redesignSchema>) {
   // #412: a project-scoped key may only propose in its own project.
@@ -25,7 +29,7 @@ export async function proposeRedesign(agent: AgentContext, input: z.infer<typeof
     if (!project) throw new IssueApiError(404, "Project not found.");
     const member = await tx.membership.findUnique({ where: { organisationId_userId: { organisationId: agent.organisationId, userId: onBehalfOfUserId } }, select: { userId: true } });
     if (!member) throw new IssueApiError(422, "The person must belong to the organisation.");
-    if (input.bugId && !await tx.bug.findFirst({ where: { id: input.bugId, organisationId: agent.organisationId, projectId: input.projectId, isDeleted: false }, select: { id: true } })) {
+    if (!await tx.bug.findFirst({ where: { id: input.bugId, organisationId: agent.organisationId, projectId: input.projectId, isDeleted: false }, select: { id: true } })) {
       throw new IssueApiError(404, "Linked issue not found in this project.");
     }
     const { attachmentIds, ...proposalInput } = input;
@@ -56,7 +60,7 @@ export async function proposeRedesign(agent: AgentContext, input: z.infer<typeof
 }
 
 /** Only a person who currently belongs to this organisation may decide a pending proposal. */
-export async function decideRedesign(userId: string, organisationId: string, proposalId: string, decision: "approved" | "rejected" | "chosen") {
+export async function decideRedesign(userId: string, organisationId: string, proposalId: string, decision: "chosen" | "rejected") {
   return prisma.$transaction(async (tx) => {
     const member = await tx.membership.findUnique({ where: { organisationId_userId: { organisationId, userId } }, select: { userId: true, role: true } });
     if (!member) throw new IssueApiError(403, "Organisation membership required.");
@@ -69,9 +73,8 @@ export async function decideRedesign(userId: string, organisationId: string, pro
     if (proposal.authorAgent.ownerUserId === userId) {
       throw new IssueApiError(403, "The proposing agent's owner cannot decide this proposal.");
     }
-    if (decision === "chosen" && !proposal.bugId) throw new IssueApiError(422, "Only proposals linked to an issue can be chosen.");
-    if (decision === "approved" && proposal.bugId) throw new IssueApiError(422, "Choose an issue-linked design from the issue comparison.");
-    const chosenAt = decision === "chosen" || decision === "approved" ? new Date() : null;
+    if (decision === "chosen" && !proposal.bugId) throw new IssueApiError(422, "A redesign is chosen for its issue, and this proposal has none.");
+    const chosenAt = decision === "chosen" ? new Date() : null;
     const status = decision === "chosen" ? "approved" : decision;
     const updated = await tx.redesignProposal.updateMany({ where: { id: proposalId, organisationId, status: "proposed" },
       data: { status, approverId: chosenAt ? userId : null, approvedAt: chosenAt } });
@@ -82,7 +85,7 @@ export async function decideRedesign(userId: string, organisationId: string, pro
     }) : { count: 0 };
     await audit({ agentId: proposal.authorAgentId, organisationId }, `redesign.${decision}`, proposalId, { decision },
       { db: tx, actorUserId: userId, bugId: proposal.bugId });
-    await publish(tx, { organisationId, type: decision === "chosen" ? "redesign.chosen" : `redesign.${decision}`, bugId: proposal.bugId,
+    await publish(tx, { organisationId, type: `redesign.${decision}`, bugId: proposal.bugId,
       payload: decision === "chosen" ? { proposalId, winningProposalId: proposalId, supersededCount: superseded.count, actorUserId: userId } : { proposalId, decision, actorUserId: userId } });
     return { id: proposalId, status, approverId: chosenAt ? userId : null, approvedAt: chosenAt, supersededCount: superseded.count };
   }, { isolationLevel: "Serializable" });

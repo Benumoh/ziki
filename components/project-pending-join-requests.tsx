@@ -4,7 +4,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { acceptJoinRequestAction, rejectJoinRequestAction } from "@/app/actions/project-join-requests";
-import { orgPath, projectPath, projectRef, type ProjectRef } from "@/lib/project-paths";
+import { issuesPath, orgPath, projectRef, type ProjectRef } from "@/lib/project-paths";
 
 export type PendingJoinRequestItem = {
   id: string;
@@ -93,7 +93,7 @@ export function ProjectPendingJoinRequestsBanner({
                         <>
                           Asked to join{" "}
                           <Link
-                            href={projectPath(projectRef(targetProject.organisation.slug, targetProject.slug))}
+                            href={issuesPath(projectRef(targetProject.organisation.slug, targetProject.slug), "your_work")}
                             className="font-medium text-zk-accent hover:underline"
                           >
                             {targetProject.name}
