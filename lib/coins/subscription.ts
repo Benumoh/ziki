@@ -79,7 +79,7 @@ export async function createSubscriptionCheckout(userId: string, email: string |
     subscription_data: { metadata: { userId, planId: plan.id } },
     metadata: { userId, planId: plan.id },
     success_url: absoluteUrl("/coins?subscribed=1"),
-    cancel_url: absoluteUrl(from === "pricing" ? "/pricing" : "/coins"),
+    cancel_url: absoluteUrl(from === "pricing" ? "/pricing" : "/coins?section=plan"),
   });
   if (!session.url) throw new CoinError("not_configured", "Stripe didn't return a checkout page.");
   return session.url;

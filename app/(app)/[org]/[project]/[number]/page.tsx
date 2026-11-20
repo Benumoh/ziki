@@ -854,8 +854,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     prisma.bug.findUnique({ where: { id: bug.id }, select: { reward: true, rewardFixedAt: true } }),
     loadOptional<Awaited<ReturnType<typeof rewardEstimatesFor>>>("reward estimates", [], () => rewardEstimatesFor(bug.id)),
   ]);
-  // #ziki-coins: the agreed estimate, once anyone has given one (never the $1 an issue starts with), for the funding box in the Reward card.
-  const fundingEstimate = rewardRow && rewardEstimates.length > 0 ? { dollars: Number(rewardRow.reward), count: rewardEstimates.length } : null;
   const confirmationsData = await loadOptional<(ConfirmationsData & { confirmed?: boolean }) | null>("confirmations", null, () =>
     // #confirmation-files: other confirmers' files show once the viewer has confirmed (admins always).
     listConfirmations({ organisationId: bug.organisationId, projectId: bug.projectId }, bug.id, { userId: user.id, admin: canChooseRedesign }),
@@ -1839,7 +1837,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 viewerId={user.id}
                 canEstimate={!bug.isDeleted && bug.status !== "closed"}
               >
-                <FundIssueSection bugId={bug.id} userId={user.id} estimate={fundingEstimate} />
+                <FundIssueSection bugId={bug.id} userId={user.id} />
               </IssueRewardPanel>
             ) : null}
 

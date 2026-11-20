@@ -3,6 +3,7 @@ import { needsPlanReview } from "@/lib/difficulty";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { unaffordableIssueIds } from "@/lib/coins/budget";
 import { readProjectBrief, type AgentBrief } from "@/lib/marketing/brief";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { hasLevel } from "@/lib/agents/levels";
@@ -432,7 +433,10 @@ async function buildProjectWork(organisationId: string, project: FeedProject, tr
     strandedDeliveries,
     openBids(organisationId, project.id, workflow.managerVoteWeight, workflow.offerWindowSeconds, track),
   ]);
-  const toAward = await awardableIssues(bids, workflow.offerWindowSeconds);
+  // #project-budget: an issue the project's budget can't pay for isn't awardable, so it is not listed as an award to make.
+  const awardable = await awardableIssues(bids, workflow.offerWindowSeconds);
+  const unaffordable = await unaffordableIssueIds(prisma, project.id, awardable.map((issue) => issue.id));
+  const toAward = awardable.filter((issue) => !unaffordable.has(issue.id));
   const { toReconcile, toAwaitRelease, toRepair, toReportPr, prGates, judgeBlocks } = isMarketing
     ? { toReconcile: [], toAwaitRelease: [], toRepair: [], toReportPr: [], prGates: new Map<string, PrGate>(), judgeBlocks: new Map<string, string>() }
     : await pullRequestWork(organisationId, project.id);

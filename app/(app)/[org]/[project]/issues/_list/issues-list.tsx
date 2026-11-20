@@ -1674,7 +1674,10 @@ export async function IssuesList({
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="project-goal-heading" className="text-sm font-bold text-zk-text">{activeProject.name} goal</h2>
             {membershipRole && isOrganisationAdmin(membershipRole, effectiveRole) ? (
-              <Link href={`/projects/${encodeURIComponent(activeProject.slug)}/settings`} className="text-xs font-bold text-zk-accent underline">Edit project settings</Link>
+              <span className="flex items-baseline gap-4">
+                <Link href={projectPath(ref, "/budget")} className="text-xs font-bold text-zk-accent underline">Budget</Link>
+                <Link href={`/projects/${encodeURIComponent(activeProject.slug)}/settings`} className="text-xs font-bold text-zk-accent underline">Edit project settings</Link>
+              </span>
             ) : null}
           </div>
           <RichText content={activeProject.goal} className="mt-1 text-sm text-zk-text2" />
@@ -2209,6 +2212,11 @@ export async function IssuesList({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isOrgAdmin ? (
+            <Link href={projectPath(ref, "/budget")} aria-label="Fund this project with Ziks" title="Fund this project with Ziks" className="inline-flex h-8 items-center rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue">
+              Budget
+            </Link>
+          ) : null}
           {canContribute ? <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? orgPath(ref, "invites") : undefined} /> : null}
           <ProjectIconLinks
             settingsHref={isOrgAdmin ? `/projects/${encodeURIComponent(slug)}/settings` : undefined}

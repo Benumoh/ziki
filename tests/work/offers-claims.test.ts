@@ -19,6 +19,9 @@ const publish = vi.hoisted(() => vi.fn());
 const notifyLater = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/notify", () => ({ notifyLater }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
+// #project-budget: the budget rules are proven in tests/merge/coin-ledger.test.ts; here, that accepting obeys them.
+const budget = vi.hoisted(() => ({ budgetBlock: vi.fn(async () => null), reserveForIssue: vi.fn(async () => 0), unaffordableIssueIds: vi.fn(async () => new Set<string>()) }));
+vi.mock("@/lib/coins/budget", () => budget);
 vi.mock("@/lib/agent-api/events", () => ({ publish }));
 vi.mock("@/lib/watch", () => ({ ensureWatching: vi.fn(async () => undefined) }));
 vi.mock("@/lib/agent-notifications", () => ({ notifyClaimOffered: vi.fn() }));
@@ -48,6 +51,7 @@ import { STALE_AFTER_MS } from "@/lib/agents/last-seen";
 import { priorityNow } from "@/lib/priority-now";
 import { handOverLapsedOffer } from "@/lib/agent-api/hand-over";
 import { IssueApiError } from "@/lib/agent-api/errors";
+import { CoinError } from "@/lib/coins/ledger";
 
 const agent = { agentId: "agent-1", name: "Ada's Claude", ownerId: "ada", organisationId: "t1", level: "working", burst: false, keyId: "k1" } as AgentContext;
 const offered = (overrides: Record<string, unknown> = {}) => ({
@@ -100,6 +104,15 @@ describe("accepting an offer", () => {
     expect(db.bug.update).toHaveBeenCalledWith(expect.objectContaining({ data: { assigneeId: "ada", status: "in_progress", substatus: "in_progress" } }));
     expect(db.issueBid.updateMany).toHaveBeenCalledWith({ where: { bugId: "bug-1", withdrawnAt: null, awardedAt: null }, data: { withdrawnAt: expect.any(Date) } });
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({ type: "claim.accepted" }));
+    // #project-budget: taking the work reserves its price from the project's budget.
+    expect(budget.reserveForIssue).toHaveBeenCalledWith(db, "bug-1");
+  });
+
+  it("releases the offer and starts nothing when the project's budget can no longer cover the price (#project-budget)", async () => {
+    budget.reserveForIssue.mockRejectedValueOnce(new CoinError("out_of_funds", "This project has no funds left for this issue."));
+    await expect(acceptOffer(agent, "claim-1")).rejects.toMatchObject({ status: 409, message: "This project has no funds left for this issue." });
+    expect(db.issueClaim.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "released", releaseReason: "unavailable" }) }));
+    expect(db.bug.update).not.toHaveBeenCalled();
   });
 
   it("is only for the agent it was offered to, and not from another organisation", async () => {
