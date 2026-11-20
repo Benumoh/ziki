@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ScreenshotPreview } from "@/components/screenshot-preview";
+import { BrokenShot, SafeImg } from "@/components/safe-img";
 
 /**
  * The issue's screenshots, in the side rail apart from its Links (#screenshots-panel): the delivery's screenshots and
@@ -26,8 +27,7 @@ export function ScreenshotsPanel({ screenshots }: { screenshots: string[] }) {
             aria-label={`Preview ${shot.label.toLowerCase()}`}
             className="block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg transition hover:border-zk-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
-            <img src={shot.url} alt={shot.label} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+            <SafeImg src={shot.url} alt={shot.label} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
           </button>
         ))}
       </div>

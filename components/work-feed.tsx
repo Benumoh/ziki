@@ -10,6 +10,7 @@ import { CelebrationStyles, DancingAgent, Fireworks, Hearts } from "@/components
 import { LocalTime } from "@/components/local-time";
 import { IDEA_ADDED_EVENT } from "@/lib/just-added";
 import { RichText } from "@/components/rich-text";
+import { BrokenShot, SafeImg } from "@/components/safe-img";
 import { ScreenshotPreview, type PreviewShot } from "@/components/screenshot-preview";
 import { BASE_PATH } from "@/lib/base-path";
 import { formatIssueNumber } from "@/lib/issue-number";
@@ -298,22 +299,24 @@ const ISSUE_KINDS: Array<{ match: RegExp; tone: PillTone; icon: string }> = [
 export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files"> & { screenshots?: string[] } }) {
   const image = item.files.find((file) => file.type.startsWith("image/"));
   const src = item.screenshots?.[0] ?? (image ? `${BASE_PATH}/api/attachments/${image.id}` : null);
-  if (src) {
-    return (
-      <span aria-hidden="true" className="relative h-11 w-14 shrink-0 overflow-hidden rounded-[10px] border border-zk-border bg-zk-bg">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a small screenshot, from an attachment or the agent's link */}
-        <img src={src} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
-      </span>
-    );
-  }
   const kind = ISSUE_KINDS.find((entry) => entry.match.test(item.title.trim()));
   const tone = kind?.tone ?? toneForName(item.title);
-  return (
+  // The issue's coloured icon tile: shown when there is no screenshot, or the screenshot won't load (#safe-img).
+  const tile = (
     <span aria-hidden="true" className="flex h-11 w-14 shrink-0 items-center justify-center rounded-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[tone]}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d={kind?.icon ?? "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"} />
       </svg>
     </span>
+  );
+  if (!src) return tile;
+  return (
+    <SafeImg
+      src={src}
+      alt=""
+      fallback={tile}
+      className="h-11 w-14 shrink-0 overflow-hidden rounded-[10px] border border-zk-border bg-zk-bg object-cover object-top"
+    />
   );
 }
 
@@ -738,15 +741,13 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
       {first ? (
         <div className="flex flex-col gap-2">
           <button type="button" onClick={() => setOpened(0)} aria-label="Preview the screenshot" className={`block w-full cursor-zoom-in overflow-hidden rounded-xl border border-zk-border bg-zk-bg ${focus}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
-            <img src={first} alt={`Screenshot of the delivered work for ${formatIssueNumber(item.number)}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+            <SafeImg src={first} alt={`Screenshot of the delivered work for ${formatIssueNumber(item.number)}`} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
           </button>
           {rest.length > 0 ? (
             <div className="grid grid-cols-3 gap-2">
               {rest.map((url, index) => (
                 <button key={url} type="button" onClick={() => setOpened(index + 1)} aria-label={`Preview screenshot ${index + 2}`} className={`block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
-                  <img src={url} alt={`Screenshot ${index + 2}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+                  <SafeImg src={url} alt={`Screenshot ${index + 2}`} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
                 </button>
               ))}
             </div>
@@ -765,8 +766,7 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           <div className="grid grid-cols-3 gap-2">
             {item.beforeScreenshots.map((url, index) => (
               <button key={url} type="button" onClick={() => setOpened(before + index)} aria-label={`Preview before screenshot ${index + 1}`} className={`block w-full cursor-zoom-in overflow-hidden rounded-lg border border-zk-border bg-zk-bg ${focus}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- a screenshot the agent linked, any host */}
-                <img src={url} alt={`Before the work, screenshot ${index + 1}`} loading="lazy" className="aspect-[4/3] w-full object-cover object-top" />
+                <SafeImg src={url} alt={`Before the work, screenshot ${index + 1}`} className="aspect-[4/3] w-full object-cover object-top" fallback={<BrokenShot className="aspect-[4/3]" />} />
               </button>
             ))}
           </div>
@@ -984,20 +984,27 @@ function IdeaOkCard({ idea, flashing }: { idea: JustAddedIdea; flashing: boolean
   return (
     <li>
       <div
-        className={`flex items-center gap-4 rounded-2xl border border-[#bcd7fb] border-l-4 border-l-electric-blue-strong bg-[#f5f9ff] px-5 py-3.5 ${flashing ? "zk-flash" : ""}`}
+        // The same row as the work around it (#just-added); only a flash marks the one just filed.
+        className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg ${flashing ? "zk-flash" : ""}`}
         style={flashing ? { animation: "zk-flash 1.6s ease-in-out 3" } : undefined}
       >
-        <Link href={idea.href} className={`flex min-w-0 flex-1 items-center gap-4 rounded-lg ${focus}`}>
+        <Link href={idea.href} className={`flex min-w-0 flex-1 items-center gap-4 text-left ${focus}`}>
           <IssueThumb item={{ title: idea.title, files: [] }} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[15px] font-semibold text-zk-text">{cleanTitle(idea.title)}</span>
             <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
-              <span className="font-semibold text-electric-blue-strong">{flashing ? "Just added" : "New idea"}</span> · Idea #{idea.number}
+              {flashing ? <span className="font-medium text-zk-text2">Just added · </span> : null}
+              <span className="tabular-nums">Idea #{idea.number}</span>
               {idea.by ? ` · ${idea.by}` : ""} · <LocalTime date={idea.at} />
             </span>
           </span>
         </Link>
         <div className="flex shrink-0 flex-col items-end gap-1">
+          {/* Where it is, above Approve, as on delivered work. */}
+          <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold leading-none" style={{ color: PILL_TONES.blue.color }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /></svg>
+            Idea
+          </span>
           {approved ? (
             <span className={PILL} style={PILL_TONES.green}>✓ Approved</span>
           ) : (

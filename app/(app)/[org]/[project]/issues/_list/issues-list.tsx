@@ -921,9 +921,22 @@ export async function IssuesList({
             <span className="ml-0.5 rounded-full bg-zk-chip px-1.5 py-px text-[11px] font-semibold tabular-nums text-zk-text2">{deliveredCount}</span>
           ) : null}
         </Link>,
-        // Fixes (the new ideas) sits after New Features.
+        // Fixes (the new ideas) sits after New Features, with a small + before it to plan a new feature (#add-feature).
         ...(tab === "features"
           ? [
+              ...(everyProject
+                ? []
+                : [
+                    <Link
+                      key="add-feature"
+                      href={projectPath(ref, "/features/new")}
+                      aria-label="Add a new feature"
+                      title="Add a new feature"
+                      className="-ml-1 inline-flex h-8 w-8 items-center justify-center self-center rounded-full text-zk-muted transition hover:bg-white hover:text-zk-accent hover:shadow-[0_1px_2px_rgba(16,24,40,0.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    </Link>,
+                  ]),
               <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
                 <TabIcon tab="new" />
                 Fixes

@@ -1,5 +1,3 @@
-import { AskAboutFix } from "@/components/ask-about-fix";
-import { ASKABLE_STATUSES } from "@/lib/validations/support-thread";
 import { MergerTransparencyCard } from "@/components/merger-transparency-card";
 import { requireProject } from "@/lib/project-route";
 import Link from "next/link";
@@ -864,17 +862,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const confirming = !bug.isDeleted && takesConfirmations(bug.substatus, confirmationsData?.confirmed ?? pastConfirmation);
   // Anyone may confirm their own issue (#confirmation-weights): it counts 1.
   const confirmationBlock: ConfirmationBlock = null;
-  const activeSupportThread =
-    isOrgMember && !bug.isDeleted && (ASKABLE_STATUSES as readonly string[]).includes(bug.status)
-      ? await prisma.supportThread.findFirst({
-          where: {
-            bugId: bug.id,
-            requesterUserId: user.id,
-            status: { in: ["open", "taken"] },
-          },
-          select: { id: true },
-        })
-      : null;
   // #close-reasons: the issue's owner may withdraw it while it is not closed or live.
   const canWithdraw = !bug.isDeleted && bug.status !== "closed" && bug.status !== "resolved" && ownsIssue(bug, user.id);
   const isAssignee = !!userId && bug.assigneeId === userId;
@@ -2406,20 +2393,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 {bug.closeEvidence}
               </p>
             ) : null}
-            {/* createSupportThreadAction accepts organisation members only, so nobody else is offered the button. */}
-            {isOrgMember && !bug.isDeleted && (ASKABLE_STATUSES as readonly string[]).includes(bug.status) ? (
-              activeSupportThread ? (
-                <Link
-                  href={`/inbox?tab=requests&thread=${activeSupportThread.id}`}
-                  className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-zk-border bg-zk-chip/40 px-3 text-xs font-semibold text-zk-text hover:bg-zk-chip"
-                >
-                  <span aria-hidden="true">💬</span>
-                  <span>View your request</span>
-                </Link>
-              ) : (
-                <AskAboutFix issueId={bug.id} issueNumber={bug.number} issueTitle={bug.title} />
-              )
-            ) : null}
             {/* The reporter or the person it is for cancels their own issue (#close-reasons). */}
             {canWithdraw ? (
               <form action={withdrawIssueAction} data-testid="issue-withdraw">
@@ -2440,9 +2413,9 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           {/* People, compact: one row each, label on the left. */}
           <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
-              <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="w-16 shrink-0 pt-1 text-xs text-zk-muted">Reporter</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 {/* One line: a long name truncates rather than dropping under the avatar. */}
                 <UserNameWithBadges
                   name={bug.reporter.name}
@@ -2451,13 +2424,13 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   className="min-w-0 !flex-nowrap text-xs"
                   userId={bug.reporterId}
                 />
-                {/* The agent that filed it, on the right. */}
-                {bug.createdByAgent ? <AgentChip name={bug.createdByAgent.name} className="ml-auto" /> : null}
+                {/* The agent that filed it, quietly under the name. */}
+                {bug.createdByAgent ? <PersonAgent name={bug.createdByAgent.name} /> : null}
               </div>
             </div>
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-zk-muted">Assignee</span>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="w-16 shrink-0 pt-1 text-xs text-zk-muted">Assignee</span>
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                 {assignee ? (
                   <UserNameWithBadges
                     name={assignee.name}
@@ -2471,8 +2444,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 ) : (
                   <span className="text-xs text-zk-muted">Unassigned</span>
                 )}
-                {/* The agent doing the work for the assignee, on the right. */}
-                {assignee && hold?.agentName ? <AgentChip name={hold.agentName} className="ml-auto" /> : null}
+                {/* The agent doing the work for the assignee, quietly under the name. */}
+                {assignee && hold?.agentName ? <PersonAgent name={hold.agentName} /> : null}
                 {/* Only an unassigned issue offers Assign to me (and your own, Unassign). */}
                 {canSelfAssign && (!assignee || isAssignee) ? (
                   <SelfAssignButton
@@ -2529,4 +2502,15 @@ function proofNote(state: JudgementProofState, missing: string[]): { label: stri
     case "no_fail_proof":
       return { label: "Doesn't count · no proof of what fails", tone: "warn" };
   }
+}
+
+/** The agent acting for a person in the People card: one quiet line under their name, "via 🤖 name". */
+function PersonAgent({ name }: { name: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1 pl-8 text-[11px] leading-4 text-zk-muted" title={`Agent: ${name}`}>
+      via
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01" /></svg>
+      <span className="truncate font-medium text-zk-text2">{name}</span>
+    </span>
+  );
 }
