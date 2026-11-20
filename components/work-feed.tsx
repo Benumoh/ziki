@@ -5,6 +5,7 @@ import type React from "react";
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { approveDeliveredWorkAction, confirmLiveWorkAction } from "@/app/actions/human-steps";
+import { quickIdeaVerdictAction } from "@/app/actions/idea-verdicts";
 import { CelebrationStyles, DancingAgent, Fireworks, Hearts } from "@/components/celebrate";
 import { LocalTime } from "@/components/local-time";
 import { IDEA_ADDED_EVENT } from "@/lib/just-added";
@@ -134,10 +135,12 @@ export function StatusBadge({ substatus, className = "" }: { substatus: Substatu
  * last moved, and a pill on the right with its status, or Approve on delivered work. Clicking a card unfolds
  * it downwards, in place, as an opened email; clicking its head folds it.
  */
-export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdded = [] }: {
+export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdded = [], justAddedCount = 0 }: {
   items: WorkFeedItem[];
-  /** Ideas filed in the last day (#just-added), newest first, shown above the sections; the one just filed flashes. */
+  /** New ideas that need your OK (#just-added), newest first, at the top of Needs your OK; the one just filed flashes. */
   justAdded?: JustAddedIdea[];
+  /** How many there are in all, counted into Needs your OK. */
+  justAddedCount?: number;
   /**
    * The Work Feed's sections (#work-feed-sections), top to bottom: each its title, a line on what it holds, how many,
    * a few cards, and a link to all of it. Given instead of `items`.
@@ -172,8 +175,10 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdd
   }, []);
 
   // A list of cards on the gray inset, as Marketing's are.
-  const cards = (list: WorkFeedItem[], label: string) => (
+  // `lead`: cards that go first (the new ideas in Needs your OK).
+  const cards = (list: WorkFeedItem[], label: string, lead?: React.ReactNode) => (
         <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-4" aria-label={label}>
+          {lead}
           {list.map((item) => {
             const who = item.who ?? "Nobody yet";
             return (
@@ -228,7 +233,6 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdd
     <section aria-label={title}>
       {/* No title: the tabs on the left say which list this is, the Status filter is on the right. */}
       {toolbar ? <div className="mb-4 flex flex-wrap items-center justify-between gap-2">{toolbar}</div> : null}
-      {justAdded.length > 0 ? <JustAdded ideas={justAdded} flash={flash} /> : null}
       {groups ? (
         // The Work Feed's sections, each with its few newest cards and a link to all of them.
         <div className="flex flex-col gap-6">
@@ -237,25 +241,28 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdd
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1">
                 <div className="min-w-0">
                   <h2 id={`work-feed-${group.key}`} className="m-0 inline text-[15px] font-semibold text-zk-text">
-                    {group.title} <span className="ml-1 text-[13px] font-medium tabular-nums text-zk-muted">{group.count}</span>
+                    {group.title} <span className="ml-1 text-[13px] font-medium tabular-nums text-zk-muted">{group.count + (group.key === "needs" ? justAddedCount : 0)}</span>
                   </h2>
                 </div>
                 {group.moreHref ? (
                   <Link href={group.moreHref} className={`shrink-0 text-[13px] font-medium text-zk-accent hover:underline ${focus}`}>
-                    Show all {group.count} →
+                    Show all {group.count + (group.key === "needs" ? justAddedCount : 0)} →
                   </Link>
                 ) : null}
               </div>
-              {group.items.length > 0 ? cards(group.items, group.title) : (
+              {group.items.length > 0 || (group.key === "needs" && justAdded.length > 0)
+                ? cards(group.items, group.title, group.key === "needs" && justAdded.length > 0 ? <IdeaOkCards ideas={justAdded} flash={flash} /> : null)
+                : (
                 <p className="m-0 rounded-xl bg-zk-bg px-4 py-4 text-[13px] text-zk-muted">Nothing here right now.</p>
               )}
             </section>
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && justAdded.length === 0 ? (
         <div className="rounded-2xl border border-zk-border bg-white p-5">{empty}</div>
       ) : (
-        cards(items, "Work")
+        // One section in full: Needs your OK starts with its new ideas.
+        cards(items, "Work", justAdded.length > 0 ? <IdeaOkCards ideas={justAdded} flash={flash} /> : null)
       )}
       {footer ? <div className="mt-3">{footer}</div> : null}
     </section>
@@ -431,13 +438,14 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
             <p className="m-0 mt-0.5 whitespace-pre-line">{item.mergeHold}</p>
           </div>
         ) : null}
-        {/* The summary, unless the description already opens with it. */}
-        {item.summary && !item.body?.trimStart().startsWith(item.summary.trim().split("\n")[0]) ? <p className="m-0 mb-3 whitespace-pre-line">{item.summary}</p> : null}
-        {item.body ? (
-          // Quiet headings, as in a letter, not a document.
-          <RichText content={item.body} className="text-[14.5px] [&_h1]:text-[14.5px] [&_h2]:text-[14.5px] [&_h3]:text-[14.5px] [&_h4]:text-[14.5px] [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold" />
-        ) : item.summary ? null : (
-          <p className="m-0 text-zk-muted">No description.</p>
+        {/* Only the summary, for a quick glance: the full description is on the issue's page. An issue without one
+            shows the description's first paragraph. */}
+        {item.summary ? (
+          <p className="m-0 whitespace-pre-line">{item.summary}</p>
+        ) : item.body ? (
+          <RichText content={firstParagraph(item.body)} className="text-[14.5px]" />
+        ) : (
+          <p className="m-0 text-zk-muted">No summary.</p>
         )}
       </div>
       {/* The right column: the full issue's link on top, then, when stalled, what you can do to move it on, then the
@@ -919,44 +927,78 @@ function DeliveredActions({ item, className = "" }: { item: WorkFeedItem; classN
   );
 }
 
-/** An idea filed in the last day, for the Work Feed's Just added (#just-added). */
+/** A new idea that needs your OK (#just-added): open, and you haven't given it a verdict yet. */
 export type JustAddedIdea = { id: string; number: number; title: string; at: Date; by: string | null; href: string };
 
 /**
- * Just added (#just-added): the ideas filed in the last day, above the Work Feed's sections. The one the chat has just
- * filed flashes, so it is clear where it went: agents pick ideas up from here.
+ * New ideas at the top of Needs your OK (#just-added): each highlighted as something to do, with Approve (your good
+ * verdict, as on the ideas list). The one the chat has just filed flashes, so it is clear where it went.
  */
-function JustAdded({ ideas, flash }: { ideas: JustAddedIdea[]; flash: number | null }) {
+function IdeaOkCards({ ideas, flash }: { ideas: JustAddedIdea[]; flash: number | null }) {
   return (
-    <section aria-labelledby="work-feed-just-added" className="mb-6">
+    <>
       <style>{`
-@keyframes zk-flash { 0%, 100% { background-color: #ffffff; box-shadow: 0 0 0 0 rgba(47,140,240,0) } 20%, 60% { background-color: #eaf3ff; box-shadow: 0 0 0 3px rgba(47,140,240,0.35) } }
-@media (prefers-reduced-motion: reduce) { .zk-flash { animation: none !important; box-shadow: 0 0 0 2px rgba(47,140,240,0.4) } }
+@keyframes zk-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(47,140,240,0) } 20%, 60% { box-shadow: 0 0 0 4px rgba(47,140,240,0.35) } }
+@media (prefers-reduced-motion: reduce) { .zk-flash { animation: none !important; box-shadow: 0 0 0 3px rgba(47,140,240,0.4) } }
 `}</style>
-      <h2 id="work-feed-just-added" className="m-0 mb-2 px-1 text-[15px] font-semibold text-zk-text">Just added</h2>
-      <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-4">
-        {ideas.map((idea) => {
-          const flashing = idea.number === flash;
-          return (
-            <li key={idea.id}>
-              <Link
-                href={idea.href}
-                className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-3.5 transition hover:bg-zk-bg ${flashing ? "zk-flash" : ""} ${focus}`}
-                style={flashing ? { animation: "zk-flash 1.6s ease-in-out 3" } : undefined}
-              >
-                <IssueThumb item={{ title: idea.title, files: [] }} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-zk-text">{cleanTitle(idea.title)}</span>
-                  <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
-                    Idea #{idea.number}{idea.by ? ` · ${idea.by}` : ""} · <LocalTime date={idea.at} />
-                  </span>
-                </span>
-                <span className={PILL} style={PILL_TONES[flashing ? "blue" : "grey"]}>{flashing ? "Just added" : "New idea"}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+      {ideas.map((idea) => <IdeaOkCard key={idea.id} idea={idea} flashing={idea.number === flash} />)}
+    </>
   );
+}
+
+function IdeaOkCard({ idea, flashing }: { idea: JustAddedIdea; flashing: boolean }) {
+  const [approved, setApproved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const approve = () => {
+    setError(null);
+    setApproved(true);
+    start(async () => {
+      let message: string | null;
+      try {
+        message = (await quickIdeaVerdictAction(idea.id, "good"))?.error ?? null;
+      } catch {
+        message = "Could not save that. Please try again.";
+      }
+      if (message) {
+        setApproved(false);
+        setError(message);
+      }
+    });
+  };
+  return (
+    <li>
+      <div
+        className={`flex items-center gap-4 rounded-2xl border border-[#bcd7fb] border-l-4 border-l-electric-blue-strong bg-[#f5f9ff] px-5 py-3.5 ${flashing ? "zk-flash" : ""}`}
+        style={flashing ? { animation: "zk-flash 1.6s ease-in-out 3" } : undefined}
+      >
+        <Link href={idea.href} className={`flex min-w-0 flex-1 items-center gap-4 rounded-lg ${focus}`}>
+          <IssueThumb item={{ title: idea.title, files: [] }} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold text-zk-text">{cleanTitle(idea.title)}</span>
+            <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
+              <span className="font-semibold text-electric-blue-strong">{flashing ? "Just added" : "New idea"}</span> · Idea #{idea.number}
+              {idea.by ? ` · ${idea.by}` : ""} · <LocalTime date={idea.at} />
+            </span>
+          </span>
+        </Link>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {approved ? (
+            <span className={PILL} style={PILL_TONES.green}>✓ Approved</span>
+          ) : (
+            <button type="button" onClick={approve} disabled={pending} aria-label={`Approve idea #${idea.number}: give it your good verdict`} className={RAISED}>
+              <ThumbsUp />
+              Approve
+            </button>
+          )}
+          {error ? <p role="alert" className="m-0 max-w-[220px] text-[12px] text-zk-bad-fg">{error}</p> : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/** A description's first paragraph that isn't a heading: what an issue without a summary shows when opened. */
+function firstParagraph(body: string): string {
+  return body.split(/\n\s*\n/).map((part) => part.trim()).find((part) => part && !part.startsWith("#")) ?? body.trim();
 }

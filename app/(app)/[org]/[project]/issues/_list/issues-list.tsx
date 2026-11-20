@@ -27,7 +27,7 @@ import { IdeasMoreFilters } from "@/components/ideas-more-filters";
 import { IDEA_AUTHOR_PARAM, parseIdeaAuthorFilter } from "@/lib/idea-filters";
 import { MY_WORK_PARAM, TRACK_PARAM, myWorkWhere, parseMyWorkFilter, parseTrackFilter, trackWhere, yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
 import { WORK_CATEGORY_PARAM, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes } from "@/lib/work-category";
-import { WorkFeed, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
+import { WorkFeed, type JustAddedIdea, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
 import { statusLabel as STATUS_NAMES } from "@/lib/labels";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { WORK_TAG_TONE, whatsNext } from "@/lib/whats-next";
@@ -683,16 +683,24 @@ export async function IssuesList({
   const overviewSection: FeedSection | null = overviewTab === "all" ? FEED_SECTIONS.find(({ key }) => key === sectionParam)?.key ?? null : null;
   type FeedGroup = { key: FeedSection; title: string; count: number; items: WorkFeedItem[] };
   const emptyFeed = { items: [] as WorkFeedItem[], groups: null as FeedGroup[] | null, total: 0, page: 1, counts: new Map<string, number>() };
-  // Just added (#just-added): this project's ideas filed in the last day, newest first, at the top of the Work Feed,
-  // where the one the chat just filed flashes. Ideas aren't issues, so they sit apart from the sections.
-  const justAdded = feedView && overviewTab === "all" && !toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]) && !allProjects
-    ? await loadOrEmpty("just added", () => prisma.idea.findMany({
-        where: { projectId: project.id, isDeleted: false, status: "open", createdAt: { gte: new Date(currentTime() - 24 * 60 * 60 * 1000) } },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 3,
-        select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } } },
-      }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(ref, row.number) }))), [])
-    : [];
+  // New ideas that need your OK (#just-added): this project's open ideas you haven't given a verdict on, newest first.
+  // They top Needs your OK with Approve (your good verdict), and the one the chat just filed flashes there.
+  const ideaSection = toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]);
+  const ideasToOkWhere: Prisma.IdeaWhereInput = {
+    projectId: project.id, isDeleted: false, status: "open", track: "product",
+    ...(userId ? { verdicts: { none: { onBehalfOfUserId: userId } } } : {}),
+  };
+  const [justAdded, ideasToOkCount] = feedView && overviewTab === "all" && (!ideaSection || ideaSection === "needs") && !allProjects
+    ? await loadOrEmpty("ideas to approve", () => Promise.all([
+        prisma.idea.findMany({
+          where: ideasToOkWhere,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: ideaSection === "needs" ? 30 : 3,
+          select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } } },
+        }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(ref, row.number) }))),
+        prisma.idea.count({ where: ideasToOkWhere }),
+      ]), [[], 0] as [JustAddedIdea[], number])
+    : [[] as JustAddedIdea[], 0];
   const feed = feedView
     ? await loadOrEmpty("work feed", async () => {
         const select = {
@@ -1829,8 +1837,13 @@ export async function IssuesList({
           // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
           <WorkFeed
             items={feed.items}
-            groups={feed.groups?.map((group) => ({ ...group, moreHref: group.count > group.items.length ? sectionHref(group.key) : null }))}
+            groups={feed.groups?.map((group) => {
+              // Needs your OK also holds the new ideas (#just-added).
+              const ideas = group.key === "needs" ? { all: ideasToOkCount, shown: justAdded.length } : { all: 0, shown: 0 };
+              return { ...group, moreHref: group.count + ideas.all > group.items.length + ideas.shown ? sectionHref(group.key) : null };
+            })}
             justAdded={justAdded}
+            justAddedCount={ideasToOkCount}
             title={OVERVIEW_TABS.find(([tab]) => tab === overviewTab)?.[1] ?? "Work Feed"}
             toolbar={overviewToolbar}
             empty={
