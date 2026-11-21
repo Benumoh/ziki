@@ -18,6 +18,8 @@ type Project = {
   repoUrl: string | null;
   stagingUrl: string | null;
   siteUrl: string | null;
+  appStoreUrl?: string | null;
+  playStoreUrl?: string | null;
   visibility?: "public" | "private";
   isOpenForContributors?: boolean;
   acceptsGuestIdeas?: boolean;
@@ -65,6 +67,14 @@ export function ProjectSettingsForm({
       <label htmlFor="project-site-url" className="block space-y-1 text-sm font-medium text-zk-text">Site URL
         <Input id="project-site-url" name="siteUrl" type="url" inputMode="url" placeholder="https://example.com" defaultValue={project.siteUrl ?? ""} />
         {result?.field === "siteUrl" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.siteUrl ?? result.error}</span> : null}
+      </label>
+      <label htmlFor="project-app-store-url" className="block space-y-1 text-sm font-medium text-zk-text">App Store link
+        <Input id="project-app-store-url" name="appStoreUrl" type="url" inputMode="url" placeholder="https://apps.apple.com/app/id123456789" defaultValue={project.appStoreUrl ?? ""} />
+        {result?.field === "appStoreUrl" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.appStoreUrl ?? result.error}</span> : null}
+      </label>
+      <label htmlFor="project-play-store-url" className="block space-y-1 text-sm font-medium text-zk-text">Google Play link
+        <Input id="project-play-store-url" name="playStoreUrl" type="url" inputMode="url" placeholder="https://play.google.com/store/apps/details?id=com.yourcompany.app" defaultValue={project.playStoreUrl ?? ""} />
+        {result?.field === "playStoreUrl" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.playStoreUrl ?? result.error}</span> : null}
       </label>
       <details className="rounded-xl border border-zk-border bg-zk-subtle/30 p-4">
         <summary className="cursor-pointer text-sm font-medium text-zk-text">Developer Links &amp; Staging (Advanced)</summary>

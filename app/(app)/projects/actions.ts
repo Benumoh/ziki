@@ -113,6 +113,8 @@ export async function updateProjectAction(
     repoUrl: formData.get("repoUrl"),
     stagingUrl: formData.get("stagingUrl"),
     siteUrl: formData.get("siteUrl") ?? "",
+    appStoreUrl: formData.get("appStoreUrl") ?? "",
+    playStoreUrl: formData.get("playStoreUrl") ?? "",
     visibility,
     isOpenForContributors,
     acceptsGuestIdeas,
@@ -123,7 +125,7 @@ export async function updateProjectAction(
   const slug = String(formData.get("slug") ?? "").trim();
   const project = await prisma.project.findFirst({
     where: { organisationId, slug },
-    select: { id: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, humanApprovalGuidelines: true, rewardConfig: true },
+    select: { id: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, appStoreUrl: true, playStoreUrl: true, visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, humanApprovalGuidelines: true, rewardConfig: true },
   });
   if (!project) return { error: "Project not found." };
 
@@ -132,7 +134,7 @@ export async function updateProjectAction(
   const rewardConfig = rawReward ? parseProjectRewardConfig(rawReward, platformBase) : undefined;
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of ["name", "goal", "repoUrl", "stagingUrl", "siteUrl", "visibility", "isOpenForContributors", "acceptsGuestIdeas", "contributorGuidelines"] as const) {
+  for (const field of ["name", "goal", "repoUrl", "stagingUrl", "siteUrl", "appStoreUrl", "playStoreUrl", "visibility", "isOpenForContributors", "acceptsGuestIdeas", "contributorGuidelines"] as const) {
     if (project[field] !== parsed.data[field]) {
       changes[field] = { from: project[field], to: parsed.data[field] };
     }
@@ -186,15 +188,26 @@ export async function saveProjectLinksAction(
   if (!organisationId) return { error: NO_ORGANISATION_MESSAGE };
   if (!(await isAdminOfOrganisation(user, organisationId))) return { error: "Only organisation owners and admins can set these." };
 
-  const parsed = projectLinksSchema.safeParse({ siteUrl: formData.get("siteUrl") ?? "", repoUrl: formData.get("repoUrl") ?? "" });
+  // Store links only when the form has them (#app-links): the panel above the list sets just the site and repository.
+  const storeLink = (name: string) => (formData.has(name) ? String(formData.get(name) ?? "") : undefined);
+  const parsed = projectLinksSchema.safeParse({
+    siteUrl: formData.get("siteUrl") ?? "",
+    repoUrl: formData.get("repoUrl") ?? "",
+    appStoreUrl: storeLink("appStoreUrl"),
+    playStoreUrl: storeLink("playStoreUrl"),
+  });
   if (!parsed.success) return fromZodError(parsed.error, "Check the addresses.");
   const slug = String(formData.get("slug") ?? "").trim();
-  const project = await prisma.project.findFirst({ where: { organisationId, slug }, select: { id: true, siteUrl: true, repoUrl: true } });
+  const project = await prisma.project.findFirst({
+    where: { organisationId, slug },
+    select: { id: true, siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true },
+  });
   if (!project) return { error: "Project not found." };
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of ["siteUrl", "repoUrl"] as const) {
-    if (project[field] !== parsed.data[field]) changes[field] = { from: project[field], to: parsed.data[field] };
+  for (const field of ["siteUrl", "repoUrl", "appStoreUrl", "playStoreUrl"] as const) {
+    const to = parsed.data[field];
+    if (to !== undefined && project[field] !== to) changes[field] = { from: project[field], to };
   }
   if (Object.keys(changes).length > 0) {
     await prisma.$transaction(async (tx) => {

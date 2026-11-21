@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { unreservedProjectSlug } from "@/lib/project-slug";
+import { parseAppLink, type AppStore } from "@/lib/app-link";
 
 /** Project names are shown in the header, so keep them short and readable. */
 export const PROJECT_NAME_MIN = 2;
@@ -55,8 +56,31 @@ const siteUrlSchema = optionalUrl((url) => url.protocol === "https:" && !url.use
   !/(^|\.)example\.(com|org|net)$/i.test(url.hostname),
   "Enter your site's HTTPS address, such as https://yourproduct.com.");
 
-/** The site and GitHub repository, set from the panel above the list (#project-links). */
-export const projectLinksSchema = z.object({ siteUrl: siteUrlSchema, repoUrl: repoUrlSchema });
+/** A mobile app's store page (#app-links), saved in its canonical form. An empty box clears it. */
+const storeUrlSchema = (store: AppStore, message: string) =>
+  z.string().trim().transform((value, ctx) => {
+    if (!value) return null;
+    const link = parseAppLink(value);
+    if (link?.store !== store) {
+      ctx.addIssue({ code: "custom", message });
+      return z.NEVER;
+    }
+    return link.url;
+  });
+const appStoreUrlSchema = storeUrlSchema("app_store", "Enter your app's App Store link, such as https://apps.apple.com/app/id123456789.");
+const playStoreUrlSchema = storeUrlSchema("play", "Enter your app's Google Play link, such as https://play.google.com/store/apps/details?id=com.yourcompany.app.");
+
+/**
+ * The site, GitHub repository and app store links, set from the panel above the
+ * list and from First questions (#project-links, #app-links). A store link left
+ * out of the form is left as it is.
+ */
+export const projectLinksSchema = z.object({
+  siteUrl: siteUrlSchema,
+  repoUrl: repoUrlSchema,
+  appStoreUrl: appStoreUrlSchema.optional(),
+  playStoreUrl: playStoreUrlSchema.optional(),
+});
 
 export const projectSettingsSchema = z.object({
   name: z.string().trim().min(PROJECT_NAME_MIN, `Project name must be at least ${PROJECT_NAME_MIN} characters.`).max(PROJECT_NAME_MAX, `Project name must be ${PROJECT_NAME_MAX} characters or fewer.`),
@@ -65,6 +89,9 @@ export const projectSettingsSchema = z.object({
   stagingUrl: optionalUrl((url) => url.protocol === "https:",
     "Enter a valid HTTPS staging URL."),
   siteUrl: siteUrlSchema,
+  // Optional: creating a project doesn't ask for them; the settings form always sends both.
+  appStoreUrl: appStoreUrlSchema.optional(),
+  playStoreUrl: playStoreUrlSchema.optional(),
   visibility: z.enum(["public", "private"]).optional().default("private"),
   isOpenForContributors: z.boolean().optional().default(false),
   acceptsGuestIdeas: z.boolean().optional().default(false),
