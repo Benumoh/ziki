@@ -27,8 +27,9 @@ export async function openAlertFor(agentId: string, project: { id: string; name:
 
 /**
  * Records the person's answer to a work alert (#work-alerts). Only the agent
- * the alert was sent to may answer it, and only while it is waiting for an
- * answer. Every answer restarts the count of unanswered asks.
+ * the alert was sent to may answer it (or its owner on its page, through it),
+ * and only while it is waiting for an answer: a yes settles the ask until
+ * Ziki asks again. Every answer restarts the count of unanswered asks.
  *
  * - yes: the share is held for the agent for another HOLD_MS while it works.
  *   With `items`, only those are kept (the alert then lists only them) and the
@@ -54,6 +55,12 @@ export async function answerWorkAlert(
         error: "alert_not_open",
         message: "This alert is no longer waiting for an answer.",
       });
+    }
+    // The agent asks in the terminal while its owner sees the same question on its page
+    // (#agent-get-started): a yes given in either place settles this ask for both.
+    if (alert.answer === "yes") {
+      const message = "Your person already said yes to this (on your page or in your conversation). Start on your share; don't ask again.";
+      throw new IssueApiError(409, message, { error: "alert_already_answered", message, answer: "yes" });
     }
 
     const held = await tx.workAlertItem.findMany({ where: { alertId: alert.id, heldUntil: { gt: now } }, select: { id: true, itemType: true, number: true } });
