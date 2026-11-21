@@ -90,14 +90,7 @@
 .ziki-homepage .cmp-status-partial { background: #fff1d6; color: #7a4b00; }
 .ziki-homepage .cmp-status-not_available { background: #fde6e6; color: #9b1c1c; }
 .ziki-homepage .cmp-status-not_verified { background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
-:root[data-theme='dark'] .ziki-homepage .cmp-status-available { background: #123a27; color: #8ee0b0; }
-:root[data-theme='dark'] .ziki-homepage .cmp-status-partial { background: #46330d; color: #f5cf86; }
-:root[data-theme='dark'] .ziki-homepage .cmp-status-not_available { background: #4a1b1b; color: #f2a4a4; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .ziki-homepage .cmp-status-available { background: #123a27; color: #8ee0b0; }
-  :root:not([data-theme='light']) .ziki-homepage .cmp-status-partial { background: #46330d; color: #f5cf86; }
-  :root:not([data-theme='light']) .ziki-homepage .cmp-status-not_available { background: #4a1b1b; color: #f2a4a4; }
-}
+
 .ziki-homepage .cmp-legend { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 13px; gap: 8px 14px; margin-top: 14px; }
 
 .ziki-homepage .cmp-detail { border-top: 1px solid var(--line); display: grid; gap: 12px 28px; grid-template-columns: 200px 1fr 1fr; padding: 20px 0; }

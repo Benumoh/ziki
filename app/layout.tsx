@@ -6,10 +6,12 @@ import { getSiteUrl } from "@/lib/site-url";
 import { SHARE_IMAGE } from "@/lib/share-image";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { ToastProvider } from "@/components/ui/toast";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ThemePreference } from "@/components/theme-toggle";
+import { ExternalPageTheme } from "@/components/external-page-theme";
+import { isExternalPage } from "@/lib/external-pages";
 import { THEME_COOKIE, parseTheme, themeAttribute, type Theme } from "@/lib/theme";
 import { OnScreenGuide } from "@/components/support-guide/on-screen-guide";
 import "./globals.css";
@@ -89,8 +91,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const theme = await currentTheme();
+  // The public pages are always light (#external-pages-light); middleware passes the path in x-ziki-path.
+  const external = isExternalPage((await headers()).get("x-ziki-path"));
   return (
-    <html lang="en" data-theme={themeAttribute(theme)} className="overflow-x-clip" suppressHydrationWarning>
+    <html lang="en" data-theme={external ? "light" : themeAttribute(theme)} className="overflow-x-clip" suppressHydrationWarning>
       <head>
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Integration Documentation" />
       </head>
@@ -104,6 +108,7 @@ export default async function RootLayout({
           toggle's first paint matches the server HTML.
         */}
         <ThemePreference theme={theme}>
+          <ExternalPageTheme />
           <ToastProvider>
             <ConfirmProvider>
               {children}

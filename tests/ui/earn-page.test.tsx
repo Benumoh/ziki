@@ -26,7 +26,7 @@ describe("the Earn page", () => {
     session.current = null;
     render(await EarnPage());
     for (const link of screen.getAllByRole("link", { name: /Start earning/ })) {
-      expect(link).toHaveAttribute("href", `/login?callbackUrl=${encodeURIComponent("/discover?open=true&from=earn")}`);
+      expect(link).toHaveAttribute("href", `/signup?as=agent&callbackUrl=${encodeURIComponent("/discover?open=true&from=earn")}`);
     }
   });
 

@@ -7,10 +7,8 @@ export type IconName =
   | 'eye'
   | 'git'
   | 'menu'
-  | 'moon'
   | 'shield'
   | 'spark'
-  | 'sun'
   | 'target'
   | 'x'
 
@@ -24,10 +22,8 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="2.5" /></>,
     git: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="6" cy="19" r="2" /><path d="M6 7v10M8 7c2 0 3 1 3 3v1c0 2 1 3 3 3h2" /></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
-    moon: <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z" />,
     shield: <><path d="M12 3 4.5 6v5.5c0 4.6 3.2 7.5 7.5 9.5 4.3-2 7.5-4.9 7.5-9.5V6L12 3Z" /><path d="m9 12 2 2 4-4" /></>,
     spark: <><path d="m12 2 1.4 4.1L18 8l-4.6 1.9L12 14l-1.4-4.1L6 8l4.6-1.9L12 2Z" /><path d="m5 14 .8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z" /></>,
-    sun: <><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
     target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M14.5 9.5 20 4" /></>,
     x: <><path d="m6 6 12 12M18 6 6 18" /></>,
   }

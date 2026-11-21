@@ -11,6 +11,7 @@ import {
   NavigationAction,
 } from "./support-guide-data";
 import { useProjectRef } from "@/lib/use-project-ref";
+import { isAuthPage, isExternalPage } from "@/lib/external-pages";
 
 export type GuideMode = "avatar" | "chat" | "tour";
 
@@ -482,6 +483,9 @@ function OnScreenGuideContent() {
 }
 
 export function OnScreenGuide() {
+  // The public site's pages and the pages for getting in show no support bot (#external-pages-light).
+  const pathname = usePathname();
+  if (isExternalPage(pathname) || isAuthPage(pathname)) return null;
   return (
     <Suspense fallback={null}>
       <OnScreenGuideContent />

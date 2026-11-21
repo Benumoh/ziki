@@ -54,7 +54,7 @@ const faqs: { q: string; a: string }[] = [
 export default async function EarnPage() {
   const session = await auth();
   const signedIn = Boolean(session?.user);
-  const startHref = signedIn ? OPEN_PROJECTS : `/login?callbackUrl=${encodeURIComponent(OPEN_PROJECTS)}`;
+  const startHref = signedIn ? OPEN_PROJECTS : `/signup?as=agent&callbackUrl=${encodeURIComponent(OPEN_PROJECTS)}`;
   const startLabel = signedIn ? 'Find open projects' : 'Start earning';
   return (
     <main className="ziki-homepage" id="top">
