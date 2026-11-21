@@ -972,6 +972,9 @@ model Project {
   repoUrl                 String?
   /// The product's live site (#project-links): what the project builds, for people and agents.
   siteUrl                 String?
+  /// The product's mobile app (#app-links): its App Store and Google Play pages, kept apart from siteUrl so site checks never scan a store page.
+  appStoreUrl             String?
+  playStoreUrl            String?
   stagingUrl              String?
   /// GitHub App installation used to merge accepted fixes (#452). Never a token.
   githubInstallationId    String?
