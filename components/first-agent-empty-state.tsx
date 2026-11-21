@@ -42,7 +42,7 @@ export function FirstAgentEmptyState({
     ? ADD_STEPS
     : hasKey
       ? LINK_STEPS
-      : [{ title: "Get its key", body: "Click Connect agent on your agent below, then Get a key." }, ...LINK_STEPS.slice(1)];
+      : [{ title: "Get its key", body: "Click Connect agent above to connect a new agent, or Connect agent below to connect an existing agent." }, ...LINK_STEPS.slice(1)];
   return (
     <section
       aria-labelledby="first-agent-heading"
