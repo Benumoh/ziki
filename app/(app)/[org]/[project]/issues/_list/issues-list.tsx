@@ -1237,7 +1237,7 @@ export async function IssuesList({
   const rejectedIdeaWhere: Prisma.IdeaWhereInput = { ...ideaWhere, status: { in: ["rejected", "archived"] } };
   // #project-links: the project's site and GitHub repository, and whether you can set them.
   const [projectLinks, canEditProjectLinks] = await Promise.all([
-    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true } }), null),
+    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true } }), null),
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
@@ -1264,9 +1264,11 @@ export async function IssuesList({
           [] as UnconfiguredAgent[],
         )
       : [];
-  // First questions: only on the Ideas page of a project that has no ideas yet (any status, rejected included).
+  // First questions (#first-questions): setting up a project is the organisation owner's or an admin's, so only
+  // they get it, on a project that has no ideas yet (any status, rejected included). It opens on Overview too,
+  // where /home lands right after creating an organisation. Members who join get the welcome tour instead.
   const showFirstQuestions =
-    isIdeasView && !isDeletedView && Boolean(organisationId && userId) && canContribute &&
+    (isIdeasView || isYourWorkView) && !isDeletedView && Boolean(organisationId && userId) && isOrgAdmin &&
     (await loadOrEmpty("first questions", () => prisma.idea.count({ where: { projectId: project.id } }), 1)) === 0;
   // My Work shows only when you have work in this project: issues you bid on or hold, whatever their status.
   const myWorkCount =
@@ -1790,6 +1792,8 @@ export async function IssuesList({
             projectSlug={project.slug}
             siteUrl={projectLinks?.siteUrl ?? null}
             repoUrl={projectLinks?.repoUrl ?? null}
+            appStoreUrl={projectLinks?.appStoreUrl ?? null}
+            playStoreUrl={projectLinks?.playStoreUrl ?? null}
             canEditLinks={canEditProjectLinks}
             firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
           />

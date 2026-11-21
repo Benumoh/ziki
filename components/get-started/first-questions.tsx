@@ -4,38 +4,51 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { IdeaChat } from "@/components/idea-chat";
-import { ZikiMark } from "@/components/ziki-mark";
+import { NeedPicker, needsFor, PRIMARY_BUTTON, SECONDARY_BUTTON, type ProductKind } from "@/components/get-started/need-picker";
 import { saveProjectLinksAction } from "@/app/(app)/projects/actions";
 
 /**
- * First questions: a few full-screen questions, one at a time, the first time
- * someone opens a project that has no ideas yet (Pinterest-style sign-up
- * questions). 1. your website, 2. what you need help with (tap tiles),
- * 3. your first request, sent through the normal Ideas box. Skip or × closes it
- * for this project on this device; sending the request ends it because the
- * project then has an idea.
+ * First questions (#first-questions): a few questions, one at a time, for the
+ * organisation owner or an admin the first time they open a project that has
+ * no ideas yet, such as right after creating an organisation. Shaped like
+ * Pinterest's sign-up questions: one card over the dimmed app, a small progress
+ * bar on top, one big question, and the button at the card's foot.
+ *
+ * 1. what you're building: a website, a mobile app, both, or nothing yet (one
+ * tap), 2. where it is: the site address and/or the App Store and Google Play
+ * links (#app-links), 3. what you need help with (tap tiles, worded for what you
+ * build), 4. your first request, sent through the normal Ideas box. Skip or ×
+ * closes it for this project on this device; sending the request ends it
+ * because the project then has an idea.
  */
 
 const DONE_KEY = "ziki.first-questions.v1.done";
-
-type Need = { id: string; icon: string; label: string; text: string };
-
-const NEEDS: Need[] = [
-  { id: "fix", icon: "🔧", label: "Fix something broken", text: "On my website, the ___ doesn't work." },
-  { id: "new", icon: "✨", label: "Add something new", text: "I'd like my customers to be able to ___." },
-  { id: "look", icon: "🎨", label: "Change how it looks", text: "Please change how the ___ looks on my website." },
-  { id: "customers", icon: "📣", label: "Get more customers", text: "Help more people find my website when they search for ___." },
-  { id: "safe", icon: "🔒", label: "Keep it safe", text: "Please check my website is safe, especially the ___." },
-  { id: "fast", icon: "⚡", label: "Make it faster", text: "The ___ page on my website is slow to load." },
-];
 
 type Props = {
   projectId: string;
   projectSlug: string;
   siteUrl: string | null;
   repoUrl: string | null;
+  appStoreUrl: string | null;
+  playStoreUrl: string | null;
   canEditLinks: boolean;
   firstName: string | null;
+};
+
+type Step = "kind" | "links" | "needs" | "request";
+
+const KINDS: { id: ProductKind; icon: string; label: string; hint: string }[] = [
+  { id: "website", icon: "🌐", label: "A website", hint: "People visit it in a browser" },
+  { id: "app", icon: "📱", label: "A mobile app", hint: "On the App Store or Google Play" },
+  { id: "both", icon: "🌐📱", label: "Both", hint: "A website and a mobile app" },
+  { id: "idea", icon: "💡", label: "Not built yet", hint: "I have an idea to start" },
+];
+
+const REQUEST_EXAMPLE: Record<ProductKind, string> = {
+  website: "For example: The contact form on my website doesn't send me an email.",
+  app: "For example: The sign-up screen in my app freezes after I tap Continue.",
+  both: "For example: Customers can't reset their password in the app or on the website.",
+  idea: "For example: I want an app where neighbours can lend each other tools.",
 };
 
 function readDone(projectId: string): boolean {
@@ -56,26 +69,29 @@ function markDone(projectId: string) {
   }
 }
 
-const PRIMARY =
-  "inline-flex min-h-12 w-full items-center justify-center rounded-full bg-electric-blue px-6 text-base font-bold text-white transition hover:bg-electric-blue-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40";
-const SECONDARY =
-  "inline-flex min-h-11 w-full items-center justify-center rounded-full px-6 text-sm font-semibold text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
 const ICON_BUTTON =
   "flex h-10 w-10 items-center justify-center rounded-full text-zk-muted transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
 
-export function FirstQuestions({ projectId, projectSlug, siteUrl, repoUrl, canEditLinks, firstName }: Props) {
+export function FirstQuestions({ projectId, projectSlug, siteUrl, repoUrl, appStoreUrl, playStoreUrl, canEditLinks, firstName }: Props) {
   const router = useRouter();
-  const steps = canEditLinks ? (["site", "needs", "request"] as const) : (["needs", "request"] as const);
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
+  const [kind, setKind] = useState<ProductKind | null>(null);
   const [site, setSite] = useState(siteUrl ?? "");
-  const [siteError, setSiteError] = useState<string | null>(null);
+  const [appStore, setAppStore] = useState(appStoreUrl ?? "");
+  const [play, setPlay] = useState(playStoreUrl ?? "");
+  const [linkErrors, setLinkErrors] = useState<Record<string, string>>({});
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const requestRef = useRef<HTMLDivElement>(null);
+  // Nothing to link for a product not built yet, and only owners and admins can set the links.
+  const steps: Step[] = ["kind", ...(canEditLinks && kind !== "idea" ? (["links"] as const) : []), "needs", "request"];
   const step = steps[index];
   const greeting = firstName ? `Welcome, ${firstName}!` : "Welcome!";
+  const asksSite = kind === "website" || kind === "both";
+  const asksStores = kind === "app" || kind === "both";
 
   // Opens after mounting, since whether it was closed before lives in this browser.
   useEffect(() => {
@@ -118,18 +134,34 @@ export function FirstQuestions({ projectId, projectSlug, siteUrl, repoUrl, canEd
     if (index < steps.length - 1) setIndex(index + 1);
   }
 
-  async function saveSite() {
-    if (!site.trim()) return next();
+  // One tap answers it and moves on, as Pinterest's sign-up questions do.
+  function chooseKind(choice: ProductKind) {
+    if (choice !== kind) setPicked([]); // The tiles differ, so earlier picks no longer apply.
+    setKind(choice);
+    setIndex(1);
+  }
+
+  const linksFilled = (asksSite && site.trim()) || (asksStores && (appStore.trim() || play.trim()));
+
+  async function saveLinks() {
+    if (!linksFilled) return next();
     setSaving(true);
-    setSiteError(null);
+    setLinkError(null);
+    setLinkErrors({});
     const form = new FormData();
     form.set("slug", projectSlug);
-    form.set("siteUrl", site.trim());
+    // A box this screen doesn't show keeps the project's saved value.
+    form.set("siteUrl", asksSite ? site.trim() : (siteUrl ?? ""));
     form.set("repoUrl", repoUrl ?? "");
+    if (asksStores) {
+      form.set("appStoreUrl", appStore.trim());
+      form.set("playStoreUrl", play.trim());
+    }
     const result = await saveProjectLinksAction(undefined, form);
     setSaving(false);
     if (result?.error) {
-      setSiteError(result.error);
+      if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) setLinkErrors(result.fieldErrors);
+      else setLinkError(result.error);
       return;
     }
     router.refresh();
@@ -148,119 +180,183 @@ export function FirstQuestions({ projectId, projectSlug, siteUrl, repoUrl, canEd
 
   if (!open) return null;
 
-  const pickedNeeds = NEEDS.filter((need) => picked.includes(need.id));
-  const starters = pickedNeeds.length > 0 ? pickedNeeds : NEEDS.slice(0, 3);
+  const needs = needsFor(kind ?? "website");
+  const pickedNeeds = needs.filter((need) => picked.includes(need.id));
+  const starters = pickedNeeds.length > 0 ? pickedNeeds : needs.slice(0, 3);
 
+  // A big question, left-aligned; a line break in the text starts its second line.
   const heading = (text: string) => (
-    <h2 id="first-questions-heading" ref={headingRef} tabIndex={-1} className="m-0 text-balance text-3xl font-extrabold tracking-tight text-zk-text outline-none sm:text-4xl">
+    <h2
+      id="first-questions-heading"
+      ref={headingRef}
+      tabIndex={-1}
+      className="m-0 whitespace-pre-line text-[30px] font-extrabold leading-[1.12] tracking-tight text-zk-text outline-none sm:text-[38px]"
+    >
       {text}
     </h2>
   );
-  const lead = (text: string) => <p className="m-0 mt-3 text-balance text-base text-zk-text2">{text}</p>;
+  const lead = (text: string) => <p className="m-0 mt-3 text-base leading-relaxed text-zk-text2 sm:text-[17px]">{text}</p>;
+
+  // A box with its label inside, as Pinterest's are.
+  const linkField = (props: {
+    id: string;
+    name: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+  }) => {
+    const error = linkErrors[props.name];
+    return (
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor={props.id}
+          className={`flex cursor-text flex-col gap-1 rounded-2xl border-2 bg-zk-surface px-5 py-3 transition focus-within:border-electric-blue ${error ? "border-zk-bad-fg" : "border-zk-border"}`}
+        >
+          <span className="text-sm font-semibold text-zk-text">{props.label}</span>
+          <input
+            id={props.id}
+            type="url"
+            inputMode="url"
+            autoComplete={props.name === "siteUrl" ? "url" : "off"}
+            value={props.value}
+            onChange={(event) => props.onChange(event.target.value)}
+            placeholder={props.placeholder}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${props.id}-error` : undefined}
+            className="w-full bg-transparent text-lg text-zk-text outline-none placeholder:text-zk-muted"
+          />
+        </label>
+        {error ? <p id={`${props.id}-error`} role="alert" className="m-0 px-1 text-sm text-zk-bad-fg">{error}</p> : null}
+      </div>
+    );
+  };
 
   // On <body>, so nothing on the page (a transformed parent, a sticky bar) can clip or cover it.
   return createPortal(
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="first-questions-heading"
-      className="fixed inset-0 z-[100] flex flex-col bg-zk-surface"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 max-sm:p-0"
       // The Ideas box closes itself on a click outside it; clicks in here are inside this screen.
       onPointerDown={(event) => event.nativeEvent.stopImmediatePropagation()}
     >
-      <header className="shrink-0">
-        <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4 sm:px-8">
-          <ZikiMark className="h-7 w-auto text-zk-text" title="Ziki" />
-          <p className="m-0 text-sm font-semibold text-zk-muted">Step {index + 1} of {steps.length}</p>
-          <button type="button" onClick={close} aria-label="Close" className={ICON_BUTTON}>
+      {/* The app stays in sight behind the card, dimmed. A click on it does nothing. */}
+      <div aria-hidden="true" className="absolute inset-0 bg-[rgba(11,23,51,0.55)] backdrop-blur-[2px]" />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="first-questions-heading"
+        className="relative flex max-h-[calc(100dvh-2rem)] min-h-[min(720px,calc(100dvh-2rem))] w-full max-w-[610px] flex-col overflow-hidden rounded-[28px] bg-zk-surface shadow-[0_24px_64px_rgba(11,23,51,0.35)] max-sm:h-[100dvh] max-sm:max-h-none max-sm:min-h-0 max-sm:max-w-none max-sm:rounded-none"
+      >
+        <div className="relative flex h-16 shrink-0 items-center justify-center px-4">
+          {index > 0 ? (
+            <button type="button" onClick={() => setIndex(index - 1)} aria-label="Back" className={`${ICON_BUTTON} absolute left-3`}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+          ) : null}
+          <div
+            className="h-1.5 w-36 overflow-hidden rounded-full bg-zk-chip"
+            role="progressbar"
+            aria-label="Progress"
+            aria-valuemin={1}
+            aria-valuemax={steps.length}
+            aria-valuenow={index + 1}
+            aria-valuetext={`Step ${index + 1} of ${steps.length}`}
+          >
+            <div className="h-full rounded-full bg-electric-blue transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${((index + 1) / steps.length) * 100}%` }} />
+          </div>
+          <button type="button" onClick={close} aria-label="Close" className={`${ICON_BUTTON} absolute right-3`}>
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        <div className="h-1 w-full bg-zk-chip" role="progressbar" aria-label="Progress" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={index + 1}>
-          <div className="h-full bg-electric-blue transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${((index + 1) / steps.length) * 100}%` }} />
-        </div>
-      </header>
 
-      <main className="flex flex-1 overflow-y-auto">
-        <div className={`m-auto flex w-full flex-col items-center px-4 py-10 text-center sm:px-8 ${step === "needs" ? "max-w-2xl" : "max-w-xl"}`}>
-          {step === "site" ? (
+        <div className="flex flex-1 flex-col overflow-y-auto px-6 pb-8 pt-8 sm:px-14 sm:pb-10 sm:pt-10">
+          {step === "kind" ? (
             <>
-              {heading(`${greeting} What's your website?`)}
-              {lead("So the people who help you can see your site and understand what you mean.")}
-              <form
-                className="mt-8 flex w-full max-w-md flex-col gap-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void saveSite();
-                }}
-              >
-                <label className="sr-only" htmlFor="first-questions-site">Website address</label>
-                <input
-                  id="first-questions-site"
-                  type="url"
-                  inputMode="url"
-                  autoComplete="url"
-                  value={site}
-                  onChange={(event) => setSite(event.target.value)}
-                  placeholder="https://yourwebsite.com"
-                  aria-invalid={siteError ? true : undefined}
-                  aria-describedby={siteError ? "first-questions-site-error" : undefined}
-                  className="min-h-14 w-full rounded-2xl border-2 border-zk-border bg-zk-surface px-5 text-center text-lg text-zk-text placeholder:text-zk-muted focus:border-electric-blue focus:outline-none"
-                />
-                {siteError ? <p id="first-questions-site-error" role="alert" className="m-0 text-sm text-zk-bad-fg">{siteError}</p> : null}
-                <button type="submit" disabled={saving || !site.trim()} className={PRIMARY}>
-                  {saving ? "Saving…" : "Next"}
-                </button>
-                <button type="button" onClick={next} className={SECONDARY}>
-                  I don&apos;t have one yet
-                </button>
-              </form>
-            </>
-          ) : null}
-
-          {step === "needs" ? (
-            <>
-              {heading(canEditLinks ? "What do you need help with?" : `${greeting} What do you need help with?`)}
-              {lead("Pick as many as you like.")}
-              <ul className="mt-8 grid w-full list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 sm:gap-4">
-                {NEEDS.map((need) => {
-                  const on = picked.includes(need.id);
+              {heading(`${greeting}\nWhat are you building?`)}
+              {lead("Your answers to the next few questions help us ask the right things and find the right people to help.")}
+              <ul className="mt-8 grid w-full list-none grid-cols-2 gap-3 p-0">
+                {KINDS.map((option) => {
+                  const on = kind === option.id;
                   return (
-                    <li key={need.id}>
+                    <li key={option.id}>
                       <button
                         type="button"
                         aria-pressed={on}
-                        onClick={() => setPicked(on ? picked.filter((id) => id !== need.id) : [...picked, need.id])}
-                        className={`relative flex h-32 w-full flex-col items-center justify-center gap-2.5 rounded-3xl border-2 px-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 sm:h-36 ${
+                        onClick={() => chooseKind(option.id)}
+                        className={`flex h-36 w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 px-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
                           on ? "border-electric-blue bg-zk-tint" : "border-zk-border bg-zk-surface hover:border-zk-muted"
                         }`}
                       >
-                        <span aria-hidden="true" className={`absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full transition ${on ? "bg-electric-blue text-white" : "border-2 border-zk-border"}`}>
-                          {on ? <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg> : null}
-                        </span>
-                        <span aria-hidden="true" className="text-4xl leading-none">{need.icon}</span>
-                        <span className="text-[15px] font-bold leading-tight text-zk-text">{need.label}</span>
+                        <span aria-hidden="true" className="text-4xl leading-none">{option.icon}</span>
+                        <span className="text-base font-bold leading-tight text-zk-text">{option.label}</span>
+                        <span className="text-xs leading-snug text-zk-muted">{option.hint}</span>
                       </button>
                     </li>
                   );
                 })}
               </ul>
-              <div className="mt-8 flex w-full max-w-md flex-col gap-3">
-                <button type="button" onClick={next} disabled={picked.length === 0} className={PRIMARY}>
-                  {picked.length === 0 ? "Pick at least one" : `Next (${picked.length} picked)`}
-                </button>
-                <button type="button" onClick={next} className={SECONDARY}>
-                  Not sure yet
+              <div className="mt-auto flex w-full flex-col pt-8">
+                <button type="button" onClick={close} className={SECONDARY_BUTTON}>
+                  I&apos;ll set this up later
                 </button>
               </div>
             </>
           ) : null}
 
+          {step === "links" ? (
+            <>
+              {heading(kind === "app" ? "Nice! Where can we\nfind your app?" : kind === "both" ? "Nice! Where can we\nfind them?" : "Nice! What's your\nwebsite?")}
+              {lead(
+                kind === "website"
+                  ? "So the people who help you can see your site and understand what you mean."
+                  : "Paste the link from your app's page in the store, so the people who help you can see it. Add whichever stores you're on.",
+              )}
+              <form
+                className="mt-8 flex flex-1 flex-col gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveLinks();
+                }}
+              >
+                {asksSite
+                  ? linkField({ id: "first-questions-site", name: "siteUrl", label: "Website address", value: site, onChange: setSite, placeholder: "https://yourwebsite.com" })
+                  : null}
+                {asksStores
+                  ? linkField({ id: "first-questions-app-store", name: "appStoreUrl", label: "App Store link (iPhone)", value: appStore, onChange: setAppStore, placeholder: "https://apps.apple.com/app/id123456789" })
+                  : null}
+                {asksStores
+                  ? linkField({ id: "first-questions-play", name: "playStoreUrl", label: "Google Play link (Android)", value: play, onChange: setPlay, placeholder: "https://play.google.com/store/apps/details?id=…" })
+                  : null}
+                {linkError ? <p role="alert" className="m-0 px-1 text-sm text-zk-bad-fg">{linkError}</p> : null}
+                <div className="mt-auto flex flex-col gap-2 pt-8">
+                  <button type="submit" disabled={saving || !linksFilled} className={PRIMARY_BUTTON}>
+                    {saving ? "Saving…" : "Continue"}
+                  </button>
+                  <button type="button" onClick={next} className={SECONDARY_BUTTON}>
+                    {kind === "website" ? "I don't have one yet" : "It's not in a store yet"}
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : null}
+
+          {step === "needs" ? (
+            <NeedPicker
+              heading={heading("What do you need\nhelp with?")}
+              needs={needs}
+              picked={picked}
+              onPickedChange={setPicked}
+              onNext={next}
+              onSkip={next}
+            />
+          ) : null}
+
           {step === "request" ? (
             <>
-              {heading("Tell us one thing you want")}
+              {heading("Tell us one thing\nyou want")}
               {lead("Use your own words. Tap a start below, then fill in the blank.")}
-              <div className="mt-8 flex flex-wrap justify-center gap-2">
+              <div className="mt-6 flex flex-wrap gap-2">
                 {starters.map((need) => (
                   <button
                     key={need.id}
@@ -273,30 +369,19 @@ export function FirstQuestions({ projectId, projectSlug, siteUrl, repoUrl, canEd
                   </button>
                 ))}
               </div>
-              <div ref={requestRef} className="mt-4 w-full text-left">
-                <IdeaChat projectId={projectId} alwaysOpen placeholder="For example: The contact form on my website doesn't send me an email." />
+              <div ref={requestRef} className="mt-4 w-full">
+                <IdeaChat projectId={projectId} alwaysOpen placeholder={REQUEST_EXAMPLE[kind ?? "website"]} />
               </div>
-              <p className="m-0 mt-3 text-sm text-zk-muted">Press Enter or the round arrow to send it. Nothing changes on your site without your OK.</p>
-              <div className="mt-6 flex w-full max-w-md flex-col">
-                <button type="button" onClick={close} className={SECONDARY}>
+              <p className="m-0 mt-3 text-sm text-zk-muted">Press Enter or the round arrow to send it. Nothing changes without your OK.</p>
+              <div className="mt-auto flex w-full flex-col pt-8">
+                <button type="button" onClick={close} className={SECONDARY_BUTTON}>
                   I&apos;ll do this later
                 </button>
               </div>
             </>
           ) : null}
         </div>
-      </main>
-
-      {index > 0 ? (
-        <footer className="shrink-0 border-t border-zk-divider">
-          <div className="mx-auto flex h-16 w-full max-w-5xl items-center px-4 sm:px-8">
-            <button type="button" onClick={() => setIndex(index - 1)} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue">
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-              Back
-            </button>
-          </div>
-        </footer>
-      ) : null}
+      </div>
     </div>,
     document.body,
   );
