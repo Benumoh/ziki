@@ -4487,3 +4487,19 @@ model HumanApproval {
   @@index([bugId])
   @@index([userId])
 }
+
+/// #how-it-works-leads: someone who left their details on a public page to hear from Ziki. One row per email; a newer
+/// form from the same email updates it. Read by site staff on /superadmin/leads.
+model Lead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  /// What they want done for their app, in their words.
+  goal      String?
+  /// Which form they used (for example `how-it-works:hero`).
+  source    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
