@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { pointsNumber } from "./rules";
 import { issueHref } from "@/lib/issue-ref";
+import { MAX_POINT_CURSOR_STACK_DEPTH } from "./cursor-stack";
 
 const timestamp = z.string().datetime({ offset: true });
 const dateBound = z.union([timestamp, z.string().date()]);
@@ -16,9 +17,37 @@ export const pointEntriesQuerySchema = z.object({
 });
 export type PointEntriesQuery = z.infer<typeof pointEntriesQuerySchema>;
 
+export type PointCursorStack = Array<string | null>;
+
 export function decodePointCursor(raw: string) {
   try { return cursorSchema.parse(JSON.parse(Buffer.from(raw, "base64url").toString("utf8"))); }
   catch { throw new Error("Invalid points cursor."); }
+}
+
+/**
+ * Validate the repeated `prev` query values used by the profile history pager.
+ * An empty value represents the first page, whose cursor is null.
+ */
+export function parsePointCursorStack(raw: string | string[] | undefined): PointCursorStack | null {
+  if (raw === undefined) return [];
+  const values = Array.isArray(raw) ? raw : [raw];
+  if (values.length > MAX_POINT_CURSOR_STACK_DEPTH) return null;
+
+  const stack: PointCursorStack = [];
+  for (const value of values) {
+    if (value === "") {
+      stack.push(null);
+      continue;
+    }
+    if (value.length > 1024) return null;
+    try {
+      decodePointCursor(value);
+      stack.push(value);
+    } catch {
+      return null;
+    }
+  }
+  return stack;
 }
 
 function entrySource(role: string, points: number, sourceKey: string): string {

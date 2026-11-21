@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState, useMemo } from "react";
 import { LocalTime } from "@/components/local-time";
-import type { PointEntriesPage } from "@/lib/points/entries";
+import { MAX_POINT_CURSOR_STACK_DEPTH } from "@/lib/points/cursor-stack";
+import type { PointCursorStack, PointEntriesPage } from "@/lib/points/entries";
 import { formatZ } from "@/lib/points/rules";
 import {
   type DetailedPointEntry,
@@ -16,6 +17,8 @@ import type { PointRole } from "@prisma/client";
 export type PointsLedgerProps = {
   page?: PointEntriesPage | null;
   profileId?: string;
+  currentCursor?: string;
+  previousCursors?: PointCursorStack;
   from?: string;
   to?: string;
   error?: boolean;
@@ -36,6 +39,8 @@ const roleBadgeClasses: Record<string, string> = {
 export function PointsLedger({
   page,
   profileId,
+  currentCursor,
+  previousCursors = [],
   from,
   to,
   error,
@@ -45,10 +50,17 @@ export function PointsLedger({
 }: PointsLedgerProps) {
   const [selectedRole, setSelectedRole] = useState<string>("all");
 
-  const query = new URLSearchParams();
-  if (from) query.set("from", from);
-  if (to) query.set("to", to);
-  if (page?.nextCursor) query.set("cursor", page.nextCursor);
+  const pageHref = (cursor: string | null, stack: PointCursorStack) => {
+    const query = new URLSearchParams();
+    if (from) query.set("from", from);
+    if (to) query.set("to", to);
+    if (cursor) query.set("cursor", cursor);
+    for (const previous of stack) query.append("prev", previous ?? "");
+    const queryString = query.toString();
+    return `/users/${profileId}${queryString ? `?${queryString}` : ""}#ledger-heading`;
+  };
+  const pagerLinkClass = "inline-flex min-h-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface px-3.5 text-xs font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
+  const pagerDisabledClass = "inline-flex min-h-10 cursor-not-allowed items-center justify-center rounded-full border border-zk-border bg-zk-chip px-3.5 text-xs font-bold text-zk-muted";
 
   // Normalize entries whether provided directly or through page.items
   type StandardItem = {
@@ -356,13 +368,29 @@ export function PointsLedger({
         </ul>
       )}
 
-      {page?.nextCursor && profileId ? (
-        <Link
-          className="mt-4 inline-block rounded text-sm text-zk-accent underline"
-          href={`/users/${profileId}?${query}#ledger-heading`}
-        >
-          Older entries
-        </Link>
+      {page && profileId && (page.nextCursor || previousCursors.length > 0) ? (
+        <nav aria-label="Points history pagination" className="mt-4 flex items-center gap-1.5">
+          {previousCursors.length > 0 ? (
+            <Link
+              className={pagerLinkClass}
+              href={pageHref(previousCursors[previousCursors.length - 1] ?? null, previousCursors.slice(0, -1))}
+            >
+              Newer entries
+            </Link>
+          ) : (
+            <span aria-disabled="true" className={pagerDisabledClass}>Newer entries</span>
+          )}
+          {page.nextCursor ? (
+            <Link
+              className={pagerLinkClass}
+              href={pageHref(page.nextCursor, [...previousCursors, currentCursor ?? null].slice(-MAX_POINT_CURSOR_STACK_DEPTH))}
+            >
+              Older entries
+            </Link>
+          ) : (
+            <span aria-disabled="true" className={pagerDisabledClass}>Older entries</span>
+          )}
+        </nav>
       ) : null}
     </section>
   );

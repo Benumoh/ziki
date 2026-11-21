@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, render, screen, fireEvent, within } from "@testing-library/react";
 import { PointsLedger } from "./points-ledger";
+import { parsePointCursorStack, type PointEntriesPage } from "@/lib/points/entries";
 import type { DetailedPointEntry, PointLedgerSummary } from "@/lib/points/ledger";
 
 describe("PointsLedger", () => {
@@ -63,6 +64,98 @@ describe("PointsLedger", () => {
       disputes: [],
     },
   ];
+
+  const cursor = (id: string) => Buffer.from(JSON.stringify({
+    at: "2026-11-01T12:00:00.000Z",
+    id,
+  })).toString("base64url");
+
+  const page = (nextCursor: string | null): PointEntriesPage => ({
+    items: mockEntries.map((entry) => ({
+      id: entry.id,
+      points: entry.points,
+      role: entry.role,
+      createdAt: entry.createdAt.toISOString(),
+      source: "Point award",
+      issue: null,
+      idea: null,
+    })),
+    nextCursor,
+  });
+
+  it("validates the cursor stack, including the first-page marker and bounds", () => {
+    const olderCursor = cursor("entry-older");
+    expect(parsePointCursorStack(["", olderCursor])).toEqual([null, olderCursor]);
+    expect(parsePointCursorStack("invalid-cursor")).toBeNull();
+    expect(parsePointCursorStack(Array.from({ length: 101 }, () => ""))).toBeNull();
+  });
+
+  it("shows the first-page pager with Older enabled and Newer disabled", () => {
+    render(
+      <PointsLedger
+        page={page(cursor("page-2"))}
+        profileId="user-1"
+        from="2026-11-01"
+        to="2026-11-03"
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Points history pagination" });
+    expect(within(nav).getByText("Newer entries")).toHaveAttribute("aria-disabled", "true");
+    const older = within(nav).getByRole("link", { name: "Older entries" });
+    const olderUrl = new URL(older.getAttribute("href")!, "https://ziki.dev");
+    expect(olderUrl.searchParams.get("cursor")).toBe(cursor("page-2"));
+    expect(olderUrl.searchParams.getAll("prev")).toEqual([""]);
+    expect(olderUrl.searchParams.get("from")).toBe("2026-11-01");
+    expect(olderUrl.searchParams.get("to")).toBe("2026-11-03");
+  });
+
+  it("shows both directions on a middle page and preserves its cursor history", () => {
+    const pageTwoCursor = cursor("page-2");
+    render(
+      <PointsLedger
+        page={page(cursor("page-3"))}
+        profileId="user-1"
+        currentCursor={pageTwoCursor}
+        previousCursors={[null]}
+        from="2026-11-01"
+        to="2026-11-03"
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Points history pagination" });
+    const newerUrl = new URL(within(nav).getByRole("link", { name: "Newer entries" }).getAttribute("href")!, "https://ziki.dev");
+    expect(newerUrl.searchParams.has("cursor")).toBe(false);
+    expect(newerUrl.searchParams.getAll("prev")).toEqual([]);
+    expect(newerUrl.searchParams.get("from")).toBe("2026-11-01");
+    expect(newerUrl.searchParams.get("to")).toBe("2026-11-03");
+
+    const olderUrl = new URL(within(nav).getByRole("link", { name: "Older entries" }).getAttribute("href")!, "https://ziki.dev");
+    expect(olderUrl.searchParams.get("cursor")).toBe(cursor("page-3"));
+    expect(olderUrl.searchParams.getAll("prev")).toEqual(["", pageTwoCursor]);
+  });
+
+  it("keeps the pager on the last page with a Newer link and Older disabled", () => {
+    const pageTwoCursor = cursor("page-2");
+    render(
+      <PointsLedger
+        page={page(null)}
+        profileId="user-1"
+        currentCursor={cursor("page-3")}
+        previousCursors={[null, pageTwoCursor]}
+        from="2026-11-01"
+        to="2026-11-03"
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Points history pagination" });
+    const newerUrl = new URL(within(nav).getByRole("link", { name: "Newer entries" }).getAttribute("href")!, "https://ziki.dev");
+    expect(newerUrl.searchParams.get("cursor")).toBe(pageTwoCursor);
+    expect(newerUrl.searchParams.getAll("prev")).toEqual([""]);
+    expect(newerUrl.searchParams.get("from")).toBe("2026-11-01");
+    expect(newerUrl.searchParams.get("to")).toBe("2026-11-03");
+    expect(within(nav).getByText("Older entries")).toHaveAttribute("aria-disabled", "true");
+  });
 
   it("renders the summary cards with earned, deductions, and net balance", () => {
     render(<PointsLedger entries={mockEntries} summary={mockSummary} />);

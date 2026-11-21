@@ -7,7 +7,7 @@ import { pointTotals } from "@/lib/points/leaderboard";
 import { getPlatformRewardConfig } from "@/lib/points/platform-rewards";
 import { formatZ } from "@/lib/points/rules";
 import { pointBalance } from "@/lib/points/balance";
-import { decodePointCursor, pointEntries, pointEntriesQuerySchema } from "@/lib/points/entries";
+import { decodePointCursor, parsePointCursorStack, pointEntries, pointEntriesQuerySchema } from "@/lib/points/entries";
 import { PointsLedger } from "@/components/points-ledger";
 import { PointsSources } from "@/components/points-sources";
 import { pointSources } from "@/lib/points/sources";
@@ -101,7 +101,8 @@ export default async function ProfilePage({ params, searchParams }: ProfileProps
   const ledgerQuery = pointEntriesQuerySchema.safeParse({
     from: ledgerParams.from || undefined, to: ledgerParams.to || undefined, cursor: ledgerParams.cursor || undefined,
   });
-  let ledgerError = !ledgerQuery.success;
+  const previousCursors = parsePointCursorStack(ledgerParams.prev);
+  let ledgerError = !ledgerQuery.success || previousCursors === null;
   if (ledgerQuery.success && ledgerQuery.data.cursor) {
     try { decodePointCursor(ledgerQuery.data.cursor); } catch { ledgerError = true; }
   }
@@ -199,7 +200,15 @@ export default async function ProfilePage({ params, searchParams }: ProfileProps
       {sources ? <PointsSources sources={sources} name={person.name ?? "this person"} /> : null}
 
       {organisationId && viewer.id === person.id ? (
-        <PointsLedger page={ledger} profileId={person.id} from={ledgerQuery.success ? ledgerQuery.data.from : undefined} to={ledgerQuery.success ? ledgerQuery.data.to : undefined} error={ledgerError} />
+        <PointsLedger
+          page={ledger}
+          profileId={person.id}
+          from={ledgerQuery.success ? ledgerQuery.data.from : undefined}
+          to={ledgerQuery.success ? ledgerQuery.data.to : undefined}
+          currentCursor={ledgerQuery.success ? ledgerQuery.data.cursor : undefined}
+          previousCursors={previousCursors ?? []}
+          error={ledgerError}
+        />
       ) : null}
 
       <section className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5" aria-labelledby="profile-agents-heading">
