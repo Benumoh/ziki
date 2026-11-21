@@ -7,7 +7,7 @@ test.use({ as: null });
 
 /** Google leads on the sign-in page; the email form is folded under "Continue with email" (#signup-page). */
 async function openEmailSignIn(page: Page) {
-  await page.getByText("Continue with email").click();
+  const closed = page.locator("details.su-email:not([open]) summary"); if (await closed.count()) await closed.click();
 }
 
 test("signs in with email and password", async ({ page, width }) => {

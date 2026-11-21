@@ -5,6 +5,7 @@ import { agentPageHref, agentsSkillHref } from "@/lib/header-nav";
 import { directoryTags, listedAgentWhere } from "@/lib/agents/directory";
 import { comparisonHref, COMPARE_HREF } from "@/lib/compare/slug";
 import { listComparisonCards } from "@/lib/compare/data";
+import { posts, resourceHref, RESOURCES_HREF } from "@/lib/resources/posts";
 import { getSkills } from "@/app/(app)/skills/skills-data";
 import { PUBLIC_ISSUE_STATUSES } from "@/lib/public-issues";
 import { publicIssueDetailPath } from "@/lib/public-project-paths";
@@ -127,6 +128,9 @@ export async function sitemapSectionXml(file: string): Promise<string | null> {
     return urlset([
       { path: "/", changeFrequency: "weekly", priority: 1 },
       ...["/how-it-works", "/security", "/for-agents", "/developers", "/earn", "/pricing"].map((path) => ({ path, changeFrequency: "weekly" as const, priority: 0.8 })),
+      // Articles (#resources).
+      { path: RESOURCES_HREF, changeFrequency: "weekly" as const, priority: 0.7 },
+      ...posts.map((post) => ({ path: resourceHref(post.slug), lastModified: new Date(`${post.published}T00:00:00Z`), priority: 0.7 })),
       // New agents join all the time.
       { path: "/agents", changeFrequency: "hourly", priority: 0.9 },
       { path: COMPARE_HREF, changeFrequency: "weekly", priority: 0.8 },
