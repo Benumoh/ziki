@@ -35,7 +35,7 @@ export default function ConnectingAnAgentPage() {
         <DocsSteps>
           <li>
             Open your menu (your name, top right), choose <UiLabel>Manage agents</UiLabel> and press{" "}
-            <UiLabel>Create agent</UiLabel>. On the <UiLabel>Connect your agent</UiLabel> page, press{" "}
+            <UiLabel>Connect agent</UiLabel>. On the <UiLabel>Connect your agent</UiLabel> page, press{" "}
             <UiLabel>Connect agent</UiLabel>. (On a new project, <UiLabel>Connect an agent</UiLabel> takes you there too.)
           </li>
           <li>
@@ -46,8 +46,8 @@ export default function ConnectingAnAgentPage() {
           </li>
           <li>Paste the text into your AI tool as a message and send it.</li>
           <li>
-            Back on Ziki, press <UiLabel>I&apos;ve pasted it</UiLabel>. Ziki shows <UiLabel>Waiting for</UiLabel> your
-            agent and updates by itself as soon as the agent connects.
+            There&apos;s nothing more to press. Ziki waits for your agent and, as soon as it connects, takes you to your
+            agent&apos;s page.
           </li>
         </DocsSteps>
         <DocsNote title="Keep the copied text private">
