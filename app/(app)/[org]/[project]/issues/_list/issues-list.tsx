@@ -1800,7 +1800,7 @@ export async function IssuesList({
           />
         ) : null}
         {isIdeasView ? null : isFirstRun ? (
-          <FirstRunWelcome isAdmin={canDelete} hasOrganisation={Boolean(organisationId)} slug={ref} returnTo={returnTo} canContribute={canContribute} />
+          <FirstRunWelcome hasOrganisation={Boolean(organisationId)} slug={ref} returnTo={returnTo} canContribute={canContribute} />
         ) : feedView ? (
           // The Work Feed: one card with its tabs and filter on top, the table of work, and its pages under it. An
           // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
@@ -2241,13 +2241,11 @@ export async function IssuesList({
 
 /** What a brand-new tracker shows instead of an empty list (#292, #444). */
 function FirstRunWelcome({
-  isAdmin,
   hasOrganisation = true,
   slug,
   returnTo,
   canContribute = true,
 }: {
-  isAdmin: boolean;
   hasOrganisation?: boolean;
   slug: ProjectRef;
   returnTo: string;
@@ -2289,15 +2287,6 @@ function FirstRunWelcome({
             Report the first issue
           </Link>
         </div>
-      ) : null}
-      {isAdmin ? (
-        <p className="mx-auto mt-6 max-w-md text-sm text-zk-muted">
-          Before people start reporting, you may want to set up your{" "}
-          <Link href={orgPath(slug, "projects")} className="font-bold text-zk-accent underline">projects</Link>
-          {" "}and the{" "}
-          <Link href={orgPath(slug, "types")} className="font-bold text-zk-accent underline">issue types</Link>{" "}
-          they will choose from.
-        </p>
       ) : null}
     </section>
   );

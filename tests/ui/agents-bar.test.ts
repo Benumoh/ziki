@@ -184,16 +184,9 @@ describe("organisationNextStep: the one next thing, from who you are", () => {
   };
   const ask = (over: Partial<OrganisationNextStepInput>) => organisationNextStep({ ...base, ...over });
 
-  it("tells an owner with no agents to connect one", () => {
-    const card = ask({});
-    expect(card?.id).toBe("connect-agent");
-    expect(card?.message).toBe("Your project is set up. Connect an agent to start filing and fixing issues.");
-    expect(card?.cta).toBe("Connect an agent");
-    expect(card?.href).toBe("/settings/connect");
-  });
-
-  it("tells an admin the same", () => {
-    expect(ask({ membershipRole: "admin" })?.id).toBe("connect-agent");
+  it("shows an owner or admin with no agents no card", () => {
+    expect(ask({})).toBeNull();
+    expect(ask({ membershipRole: "admin" })).toBeNull();
   });
 
   it("tells a member with no agents to create one and earn", () => {
@@ -229,8 +222,8 @@ describe("organisationNextStep: the one next thing, from who you are", () => {
     expect(ask({ dismissed: true, agentCount: 1, memberCount: 1 })).toBeNull();
   });
 
-  it("treats the site super admin as an admin of the organisation", () => {
-    expect(ask({ membershipRole: "member", appRole: "super_admin" })?.id).toBe("connect-agent");
+  it("treats the site super admin as an admin of the organisation: no member card", () => {
+    expect(ask({ membershipRole: "member", appRole: "super_admin" })).toBeNull();
   });
 });
 
