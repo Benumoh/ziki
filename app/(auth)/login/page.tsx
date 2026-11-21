@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
 import { AuthMethods, AuthStoryPage, type AuthStory } from "@/components/homepage/auth-story";
 import { isPasswordAuthEnabled } from "@/lib/auth-mode";
+import { localLogins } from "@/lib/local-logins";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
 import { AuthLegalNote } from "./auth-split-frame";
 import { NOINDEX } from "@/lib/seo/site";
@@ -42,6 +43,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const callbackUrl = safeCallbackUrl(params.callbackUrl);
+  const quickLogins = localLogins();
 
   return (
     <AuthStoryPage story={story}>
@@ -72,8 +74,8 @@ export default async function LoginPage({
 
       <AuthMethods
         callbackUrl={callbackUrl}
-        emailForm={isPasswordAuthEnabled() ? <LoginForm callbackUrl={callbackUrl} /> : null}
-        emailOpen={params.error === "TwoFactor"}
+        emailForm={isPasswordAuthEnabled() ? <LoginForm callbackUrl={callbackUrl} quickLogins={quickLogins} /> : null}
+        emailOpen={params.error === "TwoFactor" || quickLogins.length > 0}
       />
 
       <p className="su-switch">
