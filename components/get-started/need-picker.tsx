@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { ProductKind } from "@/lib/product-kinds";
 
 /**
  * "What do you need help with?": tap tiles, pick as many as you like. The
@@ -13,17 +14,26 @@ import type { ReactNode } from "react";
 
 export type Need = { id: string; icon: string; label: string; text: string };
 
-/** What the person is building (#app-links), asked first; it words the tiles and their starters. */
-export type ProductKind = "website" | "app" | "both" | "idea";
+/** How to speak of it: "my app", "in my app", and what a part of it is called. */
+function wordsFor(kinds: readonly ProductKind[]) {
+  const only = kinds.length === 1 ? kinds[0] : null;
+  if (only === "website") return { thing: "my website", on: "on my website", part: "page" };
+  if (only === "mobile" || only === "desktop") return { thing: "my app", on: "in my app", part: "screen" };
+  if (kinds.length === 2 && kinds.includes("website") && kinds.includes("mobile")) {
+    return { thing: "my product", on: "in my website or app", part: "page" };
+  }
+  return { thing: "my product", on: "in my product", part: "part" };
+}
 
 /**
- * The tiles for what someone builds. `text` is the starter sentence for the
- * request box; the ___ is the blank to fill. A mobile app gets its own
- * (crashes, store ratings, downloads); something not built yet starts from
- * planning it.
+ * The tiles for what someone builds (#product-kinds). `text` is the starter
+ * sentence for the request box; the ___ is the blank to fill. Everyone gets the
+ * common ones, worded for what they build; each kind adds its own (a mobile app's
+ * crashes and ratings, a desktop app's installs).
+ * Something not built yet starts from planning it.
  */
-export function needsFor(kind: ProductKind): Need[] {
-  if (kind === "idea") {
+export function needsFor(kinds: readonly ProductKind[]): Need[] {
+  if (kinds.includes("idea")) {
     return [
       { id: "build", icon: "🚀", label: "Build my first version", text: "I want to build a ___ that helps people ___." },
       { id: "plan", icon: "🗺️", label: "Plan the features", text: "The most important things it should do first are ___." },
@@ -31,23 +41,44 @@ export function needsFor(kind: ProductKind): Need[] {
       { id: "customers", icon: "📣", label: "Find my first customers", text: "The people I want to reach are ___." },
     ];
   }
-  const on = kind === "website" ? "on my website" : kind === "app" ? "in my app" : "in my website or app";
-  const thing = kind === "website" ? "my website" : kind === "app" ? "my app" : "my product";
+  const { thing, on, part } = wordsFor(kinds);
+  const On = on[0].toUpperCase() + on.slice(1);
+  const only = kinds.length === 1 ? kinds[0] : null;
+  const has = (kind: ProductKind) => kinds.includes(kind);
+
   const needs: Need[] = [
-    { id: "fix", icon: "🔧", label: "Fix something broken", text: kind === "website" ? "On my website, the ___ doesn't work." : `${on[0].toUpperCase()}${on.slice(1)}, the ___ doesn't work.` },
-    { id: "new", icon: "✨", label: "Add something new", text: "I'd like my customers to be able to ___." },
+    { id: "fix", icon: "🔧", label: "Fix something broken", text: `${On}, the ___ doesn't work.` },
+    {
+      id: "new",
+      icon: "✨",
+      label: "Add something new",
+      text: "I'd like my customers to be able to ___.",
+    },
     { id: "look", icon: "🎨", label: "Change how it looks", text: `Please change how the ___ looks ${on}.` },
-    kind === "app"
-      ? { id: "customers", icon: "📈", label: "Get more downloads", text: "Help more people find my app in the store when they search for ___." }
-      : { id: "customers", icon: "📣", label: "Get more customers", text: `Help more people find ${thing} when they search for ___.` },
+    only === "mobile"
+        ? { id: "customers", icon: "📈", label: "Get more downloads", text: "Help more people find my app in the store when they search for ___." }
+        : { id: "customers", icon: "📣", label: "Get more customers", text: `Help more people find ${thing} when they search for ___.` },
     { id: "safe", icon: "🔒", label: "Keep it safe", text: `Please check ${thing} is safe, especially the ___.` },
-    { id: "fast", icon: "⚡", label: "Make it faster", text: kind === "website" ? "The ___ page on my website is slow to load." : `The ___ ${kind === "app" ? "screen" : "page"} ${on} is slow to open.` },
   ];
-  if (kind === "app" || kind === "both") {
-    needs.push(
-      { id: "crashes", icon: "📉", label: "Stop crashes", text: "My app crashes when people ___." },
-      { id: "ratings", icon: "⭐", label: "Get better ratings", text: "People give my app low ratings because ___." },
-    );
+  needs.push({
+    id: "fast",
+    icon: "⚡",
+    label: "Make it faster",
+    text: only === "website" ? "The ___ page on my website is slow to load." : `The ___ ${part} ${on} is slow to open.`,
+  });
+  if (has("mobile") || has("desktop")) {
+    needs.push({
+      id: "crashes",
+      icon: "📉",
+      label: "Stop crashes",
+      text: has("desktop") && !has("mobile") ? "My app crashes on ___ (Windows, Mac or Linux) when people ___." : "My app crashes when people ___.",
+    });
+  }
+  if (has("desktop")) {
+    needs.push({ id: "install", icon: "💾", label: "Fix install problems", text: "People can't install or update my app on ___ (Windows, Mac or Linux)." });
+  }
+  if (has("mobile")) {
+    needs.push({ id: "ratings", icon: "⭐", label: "Get better ratings", text: "People give my app low ratings because ___." });
   }
   return needs;
 }
