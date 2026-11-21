@@ -46,7 +46,7 @@ export function FirstAgentEmptyState({
   return (
     <section
       aria-labelledby="first-agent-heading"
-      className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-8"
+      className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-8"
     >
       <div className="flex items-start gap-3">
         <span
@@ -77,7 +77,7 @@ export function FirstAgentEmptyState({
         {steps.map((step, index) => (
           <li
             key={step.title}
-            className="rounded-[16px] border border-zk-border bg-zk-chip/40 p-3.5"
+            className="rounded-panel border border-zk-border bg-zk-chip/40 p-3.5"
             data-testid={`first-agent-step-${index + 1}`}
           >
             <p className="text-sm font-bold text-zk-text">
@@ -93,7 +93,7 @@ export function FirstAgentEmptyState({
           <Link
             href={addHref}
             data-testid="first-agent-cta"
-            className="inline-flex min-h-11 items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(46,111,239,0.30)] transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center justify-center rounded-control bg-electric-blue-strong px-5 text-sm font-bold text-white transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2"
           >
             Add agent →
           </Link>

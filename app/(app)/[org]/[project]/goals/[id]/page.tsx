@@ -152,7 +152,7 @@ export default async function GoalDetailPage({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5">
       {/* The pool itself: what it holds, what is carved out, what is left. */}
-      <section aria-label="Budget pool" className="rounded-[20px] border border-zk-border bg-zk-surface p-5" data-testid="goal-detail">
+      <section aria-label="Budget pool" className="rounded-panel border border-zk-border bg-zk-surface p-5" data-testid="goal-detail">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-lg font-extrabold tracking-tight text-zk-text">{goal.title}</h1>
@@ -203,13 +203,13 @@ export default async function GoalDetailPage({
           agents={wizardAgents}
         />
       ) : (
-        <p className="rounded-[20px] border border-dashed border-zk-border bg-zk-surface p-5 text-sm text-zk-muted">
+        <p className="rounded-panel border border-dashed border-zk-border bg-zk-surface p-5 text-sm text-zk-muted">
           This goal is {goal.status}, so its pool cannot be split. Reopen it above to carve out more credits.
         </p>
       )}
 
       {/* The ledger: every live slice, with the sourceKey that proves which split made it. */}
-      <section aria-labelledby="ledger-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+      <section aria-labelledby="ledger-heading" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
         <div className="border-b border-zk-border px-5 py-4">
           <h2 id="ledger-heading" className="text-base font-bold text-zk-text">Allocation ledger</h2>
           <p className="mt-0.5 text-[13px] text-zk-text2">

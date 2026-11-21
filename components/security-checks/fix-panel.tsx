@@ -120,7 +120,7 @@ export function FixPanel({ checkId, findings, onDone }: { checkId: string; findi
                   placeholder="Name this project"
                   aria-invalid={mode === "new" && nameMissing ? true : undefined}
                   disabled={pending}
-                  className={`h-10 w-full rounded-[10px] border bg-zk-surface px-3 text-sm text-zk-text outline-none placeholder:text-zk-muted focus:ring-2 focus:ring-electric-blue-strong/30 ${mode === "new" && nameMissing ? "border-red-500" : "border-zk-border"} ${mode === "new" ? "" : "opacity-60"}`}
+                  className={`h-10 w-full rounded-control border bg-zk-surface px-3 text-sm text-zk-text outline-none placeholder:text-zk-muted focus:ring-2 focus:ring-electric-blue-strong/30 ${mode === "new" && nameMissing ? "border-red-500" : "border-zk-border"} ${mode === "new" ? "" : "opacity-60"}`}
                 />
               </span>
               {mode === "new" && nameMissing ? (
@@ -139,7 +139,7 @@ export function FixPanel({ checkId, findings, onDone }: { checkId: string; findi
               </span>
               <select
                 aria-label="Your project"
-                className="max-w-[45%] shrink-0 rounded-[10px] border border-zk-border bg-zk-surface px-2.5 py-2 text-sm text-zk-text focus-visible:outline-2 focus-visible:outline-zk-accent"
+                className="max-w-[45%] shrink-0 rounded-control border border-zk-border bg-zk-surface px-2.5 py-2 text-sm text-zk-text focus-visible:outline-2 focus-visible:outline-zk-accent"
                 value={mode === "existing" ? projectId : ""}
                 disabled={pending}
                 // Choosing a project also chooses this option (impeccable review, 18 Nov).

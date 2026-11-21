@@ -106,7 +106,7 @@ export function InsufficientVotesAuditBanner({
             type="button"
             disabled={pending || !canRequestAudit}
             onClick={handleRequestAudit}
-            className="inline-flex items-center justify-center rounded-lg bg-teal-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-teal-800 disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded-control bg-teal-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-teal-800 disabled:opacity-50"
           >
             {pending ? "Requesting…" : "Request Triage Audit"}
           </button>

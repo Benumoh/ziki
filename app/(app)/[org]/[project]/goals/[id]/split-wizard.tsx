@@ -266,7 +266,7 @@ export function SplitWizard({
   const shareTotal = selected.reduce((sum, target) => sum + intOr(weights[target.key], 0), 0);
 
   return (
-    <section aria-labelledby="split-heading" className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4" data-testid="split-wizard">
+    <section aria-labelledby="split-heading" className="rounded-panel border border-zk-border bg-zk-surface px-5 py-4" data-testid="split-wizard">
       <h2 id="split-heading" className="text-base font-bold text-zk-text">Split the pool</h2>
       <p className="mt-0.5 text-[13px] text-zk-text2">
         {budget.remaining.toLocaleString()} credits of {budget.budgetPool.toLocaleString()} are still unallocated.

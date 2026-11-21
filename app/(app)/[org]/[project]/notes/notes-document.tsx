@@ -47,7 +47,7 @@ export function NotesDocument({ projectId, notes, canEdit, revisions, historyLin
   });
 
   return (
-    <section aria-labelledby="official-notes-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
+    <section aria-labelledby="official-notes-heading" className="rounded-panel border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-border px-5 py-4 sm:px-7">
         <div>
           <h2 id="official-notes-heading" className="text-base font-bold text-zk-text">Project notes</h2>

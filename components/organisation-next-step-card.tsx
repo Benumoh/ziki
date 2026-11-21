@@ -13,7 +13,7 @@ export function OrganisationNextStepCard({ step, organisationId }: { step: Organ
   return (
     <section
       aria-labelledby="organisation-next-step-heading"
-      className="rounded-[20px] border border-zk-border bg-zk-surface p-5 print:hidden sm:p-6"
+      className="rounded-panel border border-zk-border bg-zk-surface p-5 print:hidden sm:p-6"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">

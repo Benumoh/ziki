@@ -140,7 +140,7 @@ export function ConnectAgentModalButton({
             event.preventDefault();
             setOpen(false);
           }}
-          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[20px] border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/50"
+          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-panel border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/50"
         >
           {step === "copy" ? (
             <div className="space-y-4">

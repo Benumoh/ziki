@@ -308,8 +308,8 @@ export function SiteChatBox({
               <p
                 className={`m-0 whitespace-pre-wrap break-words px-3.5 py-2 text-[14px] ${
                   message.role === "user"
-                    ? "rounded-[16px] rounded-br-md bg-electric-blue-strong text-white"
-                    : "rounded-[16px] rounded-tl-md border border-zk-border bg-zk-bg text-zk-text2"
+                    ? "rounded-panel rounded-br-md bg-electric-blue-strong text-white"
+                    : "rounded-panel rounded-tl-md border border-zk-border bg-zk-bg text-zk-text2"
                 }`}
               >
                 <span className="sr-only">{message.role === "user" ? "You: " : "Reply: "}</span>
@@ -319,7 +319,7 @@ export function SiteChatBox({
           ))}
           {pending ? (
             <li className="mr-auto">
-              <p className="m-0 rounded-[16px] rounded-tl-md border border-zk-border bg-zk-bg px-3.5 py-2 text-[14px] text-zk-muted">Thinking…</p>
+              <p className="m-0 rounded-panel rounded-tl-md border border-zk-border bg-zk-bg px-3.5 py-2 text-[14px] text-zk-muted">Thinking…</p>
             </li>
           ) : null}
         </ol>

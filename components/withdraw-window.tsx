@@ -120,7 +120,7 @@ export function WithdrawWindow({ className, children }: { className: string; chi
           onClick={(event) => {
             if (event.target === event.currentTarget) close();
           }}
-          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[20px] border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/40"
+          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-panel border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/40"
         >
           <div className="flex items-start justify-between gap-3">
             <h2 id="withdraw-title" className="text-xl font-extrabold tracking-tight text-zk-text">

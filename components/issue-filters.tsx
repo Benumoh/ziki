@@ -519,7 +519,7 @@ export function IssueFilters({
               ) : null}
             </div>
             {suggestions.length > 0 ? (
-              <ul id={listId} role="listbox" aria-label="Search suggestions" className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface py-1 text-sm shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
+              <ul id={listId} role="listbox" aria-label="Search suggestions" className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-panel border border-zk-border bg-zk-surface py-1 text-sm shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
                 {suggestions.map((suggestion, index) => (
                   // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                   <li
@@ -580,7 +580,7 @@ export function IssueFilters({
             </button>
 
             {filterOpen ? (
-              <div ref={filterPanelRef} id={filterPanelId} role="dialog" aria-label="Filters" className="issues-filter-dialog absolute right-0 z-30 mt-2.5 flex w-[340px] max-w-[calc(100vw-3rem)] flex-col gap-3.5 rounded-[20px] border border-zk-border bg-zk-surface p-5 shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
+              <div ref={filterPanelRef} id={filterPanelId} role="dialog" aria-label="Filters" className="issues-filter-dialog absolute right-0 z-30 mt-2.5 flex w-[340px] max-w-[calc(100vw-3rem)] flex-col gap-3.5 rounded-panel border border-zk-border bg-zk-surface p-5 shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
                 <div className="flex items-center justify-between border-b border-zk-divider pb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-base font-extrabold text-zk-text">Filters</span>
@@ -663,7 +663,7 @@ export function IssueFilters({
 
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => setFilterOpen(false)} className="h-[42px] flex-1 rounded-full border border-zk-border bg-zk-surface font-bold text-zk-text hover:bg-zk-chip">Cancel</button>
-                  <button type="button" onClick={() => setFilterOpen(false)} className="h-[42px] flex-1 rounded-full border-0 bg-electric-blue-strong font-bold text-white shadow-[0_8px_20px_rgba(46,111,239,0.30)] hover:brightness-105">Apply filters</button>
+                  <button type="button" onClick={() => setFilterOpen(false)} className="h-[42px] flex-1 rounded-control border-0 bg-electric-blue-strong font-bold text-white hover:brightness-105">Apply filters</button>
                 </div>
               </div>
             ) : null}

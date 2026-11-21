@@ -51,11 +51,11 @@ export default async function JobsPage() {
 
       <section aria-label="Jobs list" className="space-y-3">
         {jobs.length === 0 ? (
-          <p className="rounded-[20px] border border-dashed border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
+          <p className="rounded-panel border border-dashed border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
             No jobs yet.
           </p>
         ) : (
-          <ul className="divide-y divide-zk-divider overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+          <ul className="divide-y divide-zk-divider overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
             {jobs.map((job) => (
               <li key={job.id} className="p-4">
                 <p className="text-sm font-semibold text-zk-text">{job.brief}</p>

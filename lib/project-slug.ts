@@ -35,7 +35,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "agents",
   "discover",
   "docs",
-  // Old Ziki Earn pages (#earnings): /earn and /earn/* redirect, so the name stays taken.
+  // Earn with your agent (#earn-page) is /earn; old /earn/* links redirect.
   "earn",
   "earnings",
   "withdraw",

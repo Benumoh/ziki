@@ -121,7 +121,7 @@ function FindingsSummary({ report }: { report: CheckReport }) {
   const at = RISK_AT[risk];
 
   return (
-    <section aria-label="Findings summary" className={`rounded-[20px] border p-4 sm:p-6 ${warn ? "border-2 border-red-400 bg-red-100" : "border-zk-border bg-zk-surface"}`}>
+    <section aria-label="Findings summary" className={`rounded-panel border p-4 sm:p-6 ${warn ? "border-2 border-red-400 bg-red-100" : "border-zk-border bg-zk-surface"}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1">
           {/* The same top line as the quick scan's meter on the front page (preview-result.tsx). */}

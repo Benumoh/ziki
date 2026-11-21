@@ -16,7 +16,7 @@ import { PayoutsPanel } from "./payouts-panel";
 export const metadata = { title: "Withdraw" };
 export const dynamic = "force-dynamic";
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 const notice = "m-0 rounded-xl px-4 py-3 text-sm font-semibold";
 
 const STATUS: Record<"paid" | "failed" | "pending", { label: string; tone: string }> = {

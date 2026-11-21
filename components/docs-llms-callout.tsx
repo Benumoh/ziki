@@ -1,7 +1,7 @@
 /** The banner pointing AI agents at /llms.txt, the full spec in one file. */
 export function DocsLlmsCallout() {
   return (
-    <div className="rounded-[20px] border border-zk-border bg-zk-info-bg/70 p-4 sm:p-5">
+    <div className="rounded-panel border border-zk-border bg-zk-info-bg/70 p-4 sm:p-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-sm font-extrabold text-zk-info-fg">

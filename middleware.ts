@@ -40,6 +40,8 @@ export function isPublicPath(
     pathWithoutBase === "/how-it-works" ||
     pathWithoutBase === "/for-agents" ||
     pathWithoutBase === "/developers" ||
+    // Earn with your agent (#earn-page): for people who bring an agent.
+    pathWithoutBase === "/earn" ||
     // The docs: anyone can read how Ziki works before signing up.
     pathWithoutBase === "/docs" ||
     pathWithoutBase.startsWith("/docs/") ||

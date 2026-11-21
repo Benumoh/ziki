@@ -123,7 +123,7 @@ export async function RequestsView({ thread: selectedId }: { thread?: string }) 
 
       <section
         aria-labelledby="request-heading"
-        className="min-w-0 rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-6"
+        className="min-w-0 rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zk-divider pb-3">
           <span
@@ -178,7 +178,7 @@ export async function RequestsView({ thread: selectedId }: { thread?: string }) 
             return (
               <li
                 key={msg.id}
-                className={`rounded-[16px] border border-zk-border p-4 ${
+                className={`rounded-panel border border-zk-border p-4 ${
                   isResponder ? "bg-zk-tint/70 sm:ml-8" : "bg-zk-chip/40"
                 }`}
               >

@@ -29,7 +29,7 @@ function Medal({ place }: { place: 0 | 1 | 2 }) {
 }
 
 /** Each place's bar colour, in rank order; the sixth place on starts again. */
-const BAR_COLOURS = ["#2563EB", "#7C3AED", "#0D9488", "#D97706", "#DB2777", "#0891B2", "#65A30D", "#DC2626"] as const;
+const BAR_COLOURS = ["#0972D5", "#7C3AED", "#0D9488", "#D97706", "#DB2777", "#0891B2", "#65A30D", "#DC2626"] as const;
 
 /**
  * One person's tickets this week as a fat bar, left to right on the panel's
@@ -95,7 +95,7 @@ export function ProjectWeekPanel({ people: everyone, viewerId }: { people: WeekP
   const total = people.reduce((sum, person) => sum + person.delivered, 0);
   const shown = all ? people : people.slice(0, TOP);
   return (
-    <section aria-labelledby="week-panel-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
+    <section aria-labelledby="week-panel-heading" className="rounded-panel border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-2 pt-5">
         <div>
           <h2 id="week-panel-heading" className="text-base font-bold text-zk-text">Top contributors this week</h2>

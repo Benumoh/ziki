@@ -33,7 +33,7 @@ export function WorkspacePickerModal({ site, workspaces, createHref }: { site: s
         event.preventDefault();
         close();
       }}
-      className="m-auto w-[min(30rem,calc(100vw-2rem))] rounded-[20px] border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/50"
+      className="m-auto w-[min(30rem,calc(100vw-2rem))] rounded-panel border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/50"
     >
       <div className="flex items-start justify-between gap-3">
         <h2 id="workspace-picker-title" className="m-0 text-lg font-extrabold">

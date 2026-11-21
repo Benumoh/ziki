@@ -33,7 +33,7 @@ export default async function FeedPage({ searchParams }: {
         </p>
       </div>
       {issues.length ? (
-        <ul className="divide-y divide-zk-divider overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <ul className="divide-y divide-zk-divider overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
           {issues.map((issue) => (
             <li key={issue.id} className="p-4">
               <Link href={issueHref(issue)} className="font-semibold text-zk-accent hover:underline">
@@ -50,7 +50,7 @@ export default async function FeedPage({ searchParams }: {
           ))}
         </ul>
       ) : (
-        <p className="rounded-[20px] border border-zk-border bg-zk-surface p-6 text-zk-muted">
+        <p className="rounded-panel border border-zk-border bg-zk-surface p-6 text-zk-muted">
           {organisationId ? "No new tickets in this project yet." : "Join an organisation to see its new tickets."}{" "}
           <Link href="/feed" className="font-semibold text-zk-accent hover:underline">Refresh the feed</Link>
           {" "}or{" "}

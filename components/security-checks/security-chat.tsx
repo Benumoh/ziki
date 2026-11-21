@@ -306,14 +306,14 @@ export function SecurityChat({
           {turns.map((turn, index) => (
             <li key={index} className={turn.role === "user" ? "ml-auto max-w-[85%]" : `mr-auto flex flex-col gap-2 ${turn.scan ? "w-full" : "max-w-[90%]"}`}>
               {turn.role === "user" ? (
-                <p className="m-0 whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
+                <p className="m-0 whitespace-pre-wrap break-words rounded-panel rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
                   <span className="sr-only">You: </span>
                   {turn.text}
                 </p>
               ) : (
                 <>
                   {turn.text ? (
-                    <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-[18px] rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
+                    <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-panel rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
                       <span className="sr-only">Reply: </span>
                       {turn.text}
                     </p>
@@ -327,12 +327,12 @@ export function SecurityChat({
           {thread.map((message) => (
             <li key={message.id} className={message.role === "user" ? "ml-auto max-w-[85%]" : "mr-auto max-w-[90%]"}>
               {message.role === "user" ? (
-                <p className="m-0 whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
+                <p className="m-0 whitespace-pre-wrap break-words rounded-panel rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
                   <span className="sr-only">You: </span>
                   {message.text}
                 </p>
               ) : (
-                <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-[18px] rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
+                <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-panel rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
                   <span className="sr-only">Reply: </span>
                   {message.text}
                 </p>
@@ -364,7 +364,7 @@ export function SecurityChat({
         }}
         noValidate
       >
-        <div className="relative rounded-[22px] border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
+        <div className="relative rounded-panel border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
           {/* Close, like the X on Ziki's dialogs (add-confirmation-dialog.tsx). */}
           {onClose ? (
             <button

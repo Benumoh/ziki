@@ -65,7 +65,7 @@ function GoalNode({
   funding?: { from: string; amount: number };
 }) {
   return (
-    <div className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5" data-testid="goal-card">
+    <div className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5" data-testid="goal-card">
       {funding ? (
         <p className="mb-2 text-[12.5px] text-zk-muted">
           ↳ funded {funding.amount.toLocaleString()} credits by{" "}
@@ -163,7 +163,7 @@ export async function ProjectGoals({
       <CreateGoalForm org={org} slug={project.slug} />
 
       {goals.length === 0 ? (
-        <p className="rounded-[20px] border border-dashed border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
+        <p className="rounded-panel border border-dashed border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
           No goals yet. Create the first one to give work a budget.
         </p>
       ) : (

@@ -277,7 +277,7 @@ function ConnectCode({ site, price, checkId }: { site: string; price: number; ch
       <dialog
         ref={dialog}
         aria-labelledby="connect-code-title"
-        className="m-auto w-[min(520px,calc(100vw-32px))] rounded-[20px] border-0 bg-zk-surface p-0 text-left shadow-[0_30px_80px_rgba(11,23,51,0.35)] backdrop:bg-zk-text/45"
+        className="m-auto w-[min(520px,calc(100vw-32px))] rounded-panel border-0 bg-zk-surface p-0 text-left shadow-[0_30px_80px_rgba(11,23,51,0.35)] backdrop:bg-zk-text/45"
       >
         <form method="dialog" className="p-5 sm:p-6">
           <div className="flex items-start justify-between gap-3">
@@ -306,7 +306,7 @@ function ConnectCode({ site, price, checkId }: { site: string; price: number; ch
                 placeholder="github.com/your-team/your-repo"
                 value={repo}
                 onChange={(event) => setRepo(event.target.value)}
-                className="h-10 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-sm text-zk-text placeholder:text-zk-muted focus:border-electric-blue-strong/60 focus:outline-none"
+                className="h-10 rounded-control border border-zk-border bg-zk-surface px-3 text-sm text-zk-text placeholder:text-zk-muted focus:border-electric-blue-strong/60 focus:outline-none"
               />
             ) : null}
             <button type="button" onClick={() => setMode("github")} aria-pressed={mode === "github"} className={option("github")}>
@@ -323,14 +323,14 @@ function ConnectCode({ site, price, checkId }: { site: string; price: number; ch
                   aria-label="The project this code belongs to"
                   value={projectId}
                   onChange={(event) => setProjectId(event.target.value)}
-                  className="h-10 rounded-[10px] border border-zk-border bg-zk-surface px-3 text-sm text-zk-text focus:border-electric-blue-strong/60 focus:outline-none"
+                  className="h-10 rounded-control border border-zk-border bg-zk-surface px-3 text-sm text-zk-text focus:border-electric-blue-strong/60 focus:outline-none"
                 >
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>{project.name} · {project.repo}</option>
                   ))}
                 </select>
               ) : (
-                <p className="m-0 rounded-[10px] bg-zk-chip px-3 py-2 text-xs leading-relaxed text-zk-text2">
+                <p className="m-0 rounded-control bg-zk-chip px-3 py-2 text-xs leading-relaxed text-zk-text2">
                   None of your projects has GitHub connected yet. Connect GitHub in a project&apos;s settings, then come back here.
                 </p>
               )
@@ -345,7 +345,7 @@ function ConnectCode({ site, price, checkId }: { site: string; price: number; ch
               {borrow ? " Not enough: you can borrow 20 once, and your first top-up pays it back." : ""}
             </p>
           ) : null}
-          {error ? <p role="alert" className="m-0 mt-3 rounded-[10px] bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg">{error}</p> : null}
+          {error ? <p role="alert" className="m-0 mt-3 rounded-control bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg">{error}</p> : null}
           <div className="mt-5 flex justify-end gap-2">
             <button disabled={paying} className="h-10 rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text hover:bg-zk-chip">Cancel</button>
             {short && !wallet?.canBorrow && checkId ? (

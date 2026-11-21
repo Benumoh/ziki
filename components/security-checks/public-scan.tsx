@@ -136,7 +136,7 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="w-full max-w-[620px]">
-      <form onSubmit={scan} noValidate className="flex items-center gap-2 rounded-[18px] bg-white p-2 shadow-[0_12px_40px_rgba(0,20,50,0.28)]">
+      <form onSubmit={scan} noValidate className="flex items-center gap-2 rounded-panel bg-white p-2 shadow-[0_12px_40px_rgba(0,20,50,0.28)]">
         <label htmlFor="security-check-url" className="sr-only">Your URL</label>
         <input
           id="security-check-url"
@@ -149,7 +149,7 @@ export function PublicScan({ signedIn }: { signedIn: boolean }) {
           aria-describedby={error ? "security-check-error" : undefined}
           className="h-12 min-w-0 flex-1 border-0 bg-transparent px-3 text-[17px] text-[#0b1733] outline-none placeholder:text-[#8a94a6]"
         />
-        <button type="submit" disabled={pending} className="h-12 shrink-0 rounded-[12px] bg-[#2e6fef] px-7 text-[16px] font-bold text-white disabled:opacity-70">
+        <button type="submit" disabled={pending} className="h-12 shrink-0 rounded-panel bg-[#2e6fef] px-7 text-[16px] font-bold text-white disabled:opacity-70">
           {pending ? "Scanning…" : "Scan"}
         </button>
       </form>

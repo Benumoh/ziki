@@ -53,7 +53,7 @@ export default function GlossaryPage() {
     >
       <dl className="space-y-4">
         {TERMS.map((item) => (
-          <div key={item.term} id={anchor(item.term)} className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-4">
+          <div key={item.term} id={anchor(item.term)} className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-4">
             <dt className="text-sm font-semibold text-zk-text">{item.term}</dt>
             <dd className="mt-1 text-sm leading-6 text-zk-text2">
               {item.meaning}

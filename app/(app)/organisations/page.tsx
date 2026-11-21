@@ -93,14 +93,14 @@ export default async function OrganisationsPage({
       <OrganisationActions nameMax={ORGANISATION_NAME_MAX} next={next} />
       </div>
 
-      <div className="flex items-center justify-between rounded-[18px] border border-zk-border bg-gradient-to-r from-zk-surface to-zk-tint/20 p-4 sm:p-5">
+      <div className="flex items-center justify-between rounded-panel border border-zk-border bg-gradient-to-r from-zk-surface to-zk-tint/20 p-4 sm:p-5">
         <div className="space-y-0.5">
           <h2 className="text-sm font-bold text-zk-text">Looking for projects to contribute to?</h2>
           <p className="text-xs text-zk-text2">Browse public projects and open products accepting contributors.</p>
         </div>
         <Link
           href="/discover"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-electric-blue-strong px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:brightness-110"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-control bg-electric-blue-strong px-4 py-2 text-xs font-bold text-white transition hover:bg-zk-ink"
         >
           <svg
             width="13"
@@ -136,7 +136,7 @@ export default async function OrganisationsPage({
       ) : null}
 
       {listedInvites.length > 0 ? (
-        <section aria-labelledby="your-invites" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <section aria-labelledby="your-invites" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
           <h2
             id="your-invites"
             className="border-b border-zk-border bg-zk-tint px-4 py-3 text-base font-semibold text-zk-text sm:px-6"
@@ -181,7 +181,7 @@ export default async function OrganisationsPage({
       ) : null}
 
       {hasOrganisations ? (
-        <section aria-labelledby="your-organisations" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <section aria-labelledby="your-organisations" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
           <h2
             id="your-organisations"
             className="border-b border-zk-border bg-zk-tint px-4 py-3 text-base font-semibold text-zk-text sm:px-6"
@@ -230,7 +230,7 @@ export default async function OrganisationsPage({
       {archivedOrganisations.length > 0 ? (
         <section
           aria-labelledby="archived-organisations"
-          className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface"
+          className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface"
         >
           <h2
             id="archived-organisations"

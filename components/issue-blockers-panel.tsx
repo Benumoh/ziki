@@ -65,7 +65,7 @@ export function IssueBlockersPanel({ projectSlug: propProjectSlug, issueId, bloc
   };
 
   return (
-    <section aria-label="Issue blockers" data-testid="issue-blockers-panel" className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+    <section aria-label="Issue blockers" data-testid="issue-blockers-panel" className="rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
       <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Blockers</h2>
 
       <div className="mt-3">

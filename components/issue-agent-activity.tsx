@@ -335,7 +335,7 @@ export function IssueAgentActivity({
                 <p className="mt-1.5 text-sm leading-snug text-zk-text2">{decisionSentence(decision)}</p>
                 {(decision.kind === "rejected" || decision.kind === "merge_rejected") && decision.notes ? (
                   <ExpandableText maxLines={3} expandText="View more" collapseText="View less">
-                    <blockquote className="mt-1.5 whitespace-pre-wrap break-words rounded-r-[10px] border-l-[3px] border-zk-border bg-zk-chip px-3.5 py-2.5 text-[13px] leading-relaxed text-zk-text2">
+                    <blockquote className="mt-1.5 whitespace-pre-wrap break-words rounded-r-control border-l-[3px] border-zk-border bg-zk-chip px-3.5 py-2.5 text-[13px] leading-relaxed text-zk-text2">
                       {decision.notes}
                     </blockquote>
                   </ExpandableText>
@@ -351,7 +351,7 @@ export function IssueAgentActivity({
   return (
     <section
       aria-label="Agent decisions"
-      className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+      className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
     >
       <h2 className="sr-only">Agent decisions</h2>
       {timeline}

@@ -91,7 +91,7 @@ export function MemberList({
         </div>
       ) : null}
 
-      <ul className="divide-y divide-zk-border overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+      <ul className="divide-y divide-zk-border overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
         {shown.length === 0 ? (
           <li className="px-4 py-8 text-center text-sm text-zk-muted sm:px-6">
             {members.length === 0

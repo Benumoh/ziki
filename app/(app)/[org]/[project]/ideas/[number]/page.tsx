@@ -190,26 +190,26 @@ export default async function IdeaPage({ params, searchParams }: {
           {securityView ? <SecurityFindingPanel view={securityView} canDisclose={securityAdmin} kind="idea" /> : null}
           <ReportSummary summary={idea.summary} />
           {marketingIdea && idea.rationale ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Why it serves the focus</h2>
               <p className="mt-3 text-sm text-zk-text">{idea.rationale}</p>
             </section>
           ) : null}
           {idea.status === "archived" && idea.archiveEvidence ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6" data-testid="idea-archive-evidence">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6" data-testid="idea-archive-evidence">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
                 Archived: {archiveReasonLabel(idea.archiveReason, idea.archiveDuplicateOf)}
               </h2>
               <RichText content={idea.archiveEvidence} className="mt-3 text-sm text-zk-text" />
             </section>
           ) : null}
-          <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+          <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
             <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Description</h2>
             <RichText content={idea.description} className="mt-3 text-sm text-zk-text" />
           </section>
 
           {idea.attachments.length > 0 ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Attachments</h2>
               <AttachmentList attachments={idea.attachments} />
             </section>
@@ -235,7 +235,7 @@ export default async function IdeaPage({ params, searchParams }: {
           <IdeaVerdictsPanel ideaId={idea.id} track={idea.track} data={verdicts} viewerId={user.id} block={block} summaryMaxChars={IDEA_SUMMARY_MAX_CHARS} />
 
           {earlier.length > 0 ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6" aria-labelledby="earlier-comments">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6" aria-labelledby="earlier-comments">
               <h2 id="earlier-comments" className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
                 Earlier comments
               </h2>
@@ -256,7 +256,7 @@ export default async function IdeaPage({ params, searchParams }: {
 
         {/* SIDE RAIL, like an issue's: status, score, people, details. */}
         <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-4">
-          <section aria-label="Status" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section aria-label="Status" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2>
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
               <span data-testid="idea-status" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${chip.className}`}>
@@ -296,7 +296,7 @@ export default async function IdeaPage({ params, searchParams }: {
           {/* Actions (#idea-actions): approve once the score reached the threshold,
               reject a bad idea (a manager agent's), withdraw your own. */}
           {ideaOwner || canApprove || canReject || canWithdraw ? (
-            <section aria-label="Actions" data-testid="idea-actions" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+            <section aria-label="Actions" data-testid="idea-actions" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Actions</h2>
               {actionError ? <p role="alert" className="m-0 text-xs text-zk-bad-fg">{actionError}</p> : null}
               {ideaOwner ? (
@@ -359,7 +359,7 @@ export default async function IdeaPage({ params, searchParams }: {
             </section>
           ) : null}
 
-          <section aria-label="Score" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section aria-label="Score" className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Score</h2>
             <p className="m-0 text-sm text-zk-text">
               <b className="text-lg font-extrabold tabular-nums">{verdicts.ideaScore}</b>
@@ -378,7 +378,7 @@ export default async function IdeaPage({ params, searchParams }: {
             ) : null}
           </section>
 
-          <section aria-label="People" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section aria-label="People" className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
             <div className="flex min-w-0 items-center gap-3">
               <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
@@ -424,7 +424,7 @@ export default async function IdeaPage({ params, searchParams }: {
           </section>
 
           {idea.type || idea.area ? (
-            <section aria-label="Details" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+            <section aria-label="Details" className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
               <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Details</span>
               {idea.type ? (
                 <div className="flex items-center gap-3 text-sm">

@@ -72,7 +72,7 @@ export async function MessagesView({ agent: selected }: { agent?: string }) {
         </ul>
       </nav>
 
-      <section aria-labelledby="messages-heading" className="min-w-0 rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-6">
+      <section aria-labelledby="messages-heading" className="min-w-0 rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6">
         <h2 id="messages-heading" className="text-base font-extrabold text-zk-text">
           {current.name}
         </h2>
@@ -83,7 +83,7 @@ export async function MessagesView({ agent: selected }: { agent?: string }) {
           <ol className="mt-4 space-y-3">
             {thread.entries.map((entry) =>
               entry.kind === "question" ? (
-                <li key={`question-${entry.id}`} className="rounded-[16px] border border-zk-border bg-zk-chip/40 p-4">
+                <li key={`question-${entry.id}`} className="rounded-panel border border-zk-border bg-zk-chip/40 p-4">
                   <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-zk-muted">
                     <span>
                       <span className="font-semibold text-zk-text">{current.name}</span> asked
@@ -113,7 +113,7 @@ export async function MessagesView({ agent: selected }: { agent?: string }) {
                   )}
                 </li>
               ) : (
-                <li key={`message-${entry.id}`} className="rounded-[16px] border border-zk-border bg-zk-tint/70 p-4 sm:ml-8">
+                <li key={`message-${entry.id}`} className="rounded-panel border border-zk-border bg-zk-tint/70 p-4 sm:ml-8">
                   <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-zk-muted">
                     <span>
                       <span className="font-semibold text-zk-text">{entry.from.id === user.id ? "You" : entry.from.name}</span> wrote

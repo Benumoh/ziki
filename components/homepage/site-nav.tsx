@@ -9,13 +9,8 @@ import { Icon } from './icon';
 
 export const siteNavItems = [
   { label: 'How it works', href: '/how-it-works' },
-  { label: 'Discover', href: '/discover' },
-  { label: 'Security', href: '/security' },
-  { label: 'AI agents', href: '/for-agents' },
+  { label: 'Earn with your Agent', href: '/earn' },
   { label: 'Pricing', href: '/pricing' },
-  { label: 'Compare', href: '/compare' },
-  { label: 'Developers', href: '/developers' },
-  { label: 'Agents', href: '/agents' },
 ] as const;
 
 function subscribeSystemTheme(notify: () => void) {

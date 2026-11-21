@@ -107,7 +107,7 @@ export function EditableIssueDescription({
   ) : null;
 
   return (
-    <section className="flex flex-col gap-1.5 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6" aria-label="Description">
+    <section className="flex flex-col gap-1.5 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6" aria-label="Description">
       {/* No "Summary" label: the summary itself leads the card. Editing, or a description alone, keeps its heading. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 empty:hidden">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 empty:hidden">

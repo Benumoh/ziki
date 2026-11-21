@@ -34,7 +34,7 @@ export default async function EscalationDetailPage({
         ← Back to Escalations
       </Link>
 
-      <div className="space-y-4 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+      <div className="space-y-4 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zk-divider pb-4">
           <div className="flex items-center gap-2">
             <EscalationTypeBadge type={escalationType} />
@@ -47,13 +47,13 @@ export default async function EscalationDetailPage({
           <h2 className="text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
             Escalation Details
           </h2>
-          <p className="whitespace-pre-wrap rounded-[12px] border border-zk-border bg-zk-chip/50 p-4 text-sm leading-relaxed text-zk-text">
+          <p className="whitespace-pre-wrap rounded-panel border border-zk-border bg-zk-chip/50 p-4 text-sm leading-relaxed text-zk-text">
             {parsed.cleanBody}
           </p>
         </div>
 
         {question.bug ? (
-          <div className="rounded-[12px] border border-zk-border bg-zk-tint p-3 text-xs">
+          <div className="rounded-panel border border-zk-border bg-zk-tint p-3 text-xs">
             <span className="text-zk-muted">Associated issue: </span>
             <Link
               href={issueHref(question.bug)}
@@ -70,7 +70,7 @@ export default async function EscalationDetailPage({
           </h2>
 
           {question.answeredAt ? (
-            <div className="space-y-2 rounded-[12px] border border-zk-border bg-zk-ok-bg/60 p-4">
+            <div className="space-y-2 rounded-panel border border-zk-border bg-zk-ok-bg/60 p-4">
               <div className="flex items-center justify-between text-xs font-semibold text-zk-ok-fg">
                 <span>✓ Resolved</span>
                 <LocalTime date={question.answeredAt} className="text-zk-muted" />
@@ -79,7 +79,7 @@ export default async function EscalationDetailPage({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-[12px] border border-zk-border bg-zk-chip/50 p-3">
+              <div className="rounded-panel border border-zk-border bg-zk-chip/50 p-3">
                 <span className="mb-2 block text-xs font-semibold text-zk-muted">
                   Quick Actions:
                 </span>

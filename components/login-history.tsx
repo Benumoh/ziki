@@ -19,7 +19,7 @@ export function LoginHistory({
   const summaryText = rangeLabel ?? `Showing ${items.length} of ${totalCount}`;
 
   return (
-    <section className="flex flex-col gap-4 rounded-[20px] border border-zk-border bg-zk-surface p-6">
+    <section className="flex flex-col gap-4 rounded-panel border border-zk-border bg-zk-surface p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 id="login-history-heading" className="m-0 text-lg font-bold text-zk-text">

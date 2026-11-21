@@ -33,13 +33,6 @@ const geist = localFont({
   display: "swap",
 });
 
-const inter = localFont({
-  src: "./fonts/inter-latin.woff2",
-  variable: "--font-inter",
-  weight: "100 900",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
   // Every page gives only its own title; the site name follows it once (#seo-pages).
@@ -102,7 +95,7 @@ export default async function RootLayout({
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Integration Documentation" />
       </head>
       <body
-        className={`${geistMono.variable} ${geist.variable} ${inter.variable} min-h-screen overflow-x-clip antialiased`}
+        className={`${geistMono.variable} ${geist.variable} min-h-screen overflow-x-clip antialiased`}
       >
         {/*
           Both live at the root rather than in (app) so every route — including

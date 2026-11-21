@@ -308,7 +308,7 @@ export default async function RankingPanel({
       </div>
 
       {podium.length === 0 ? (
-        <p className="rounded-[20px] border border-zk-border bg-zk-surface p-6 text-sm text-zk-text2">
+        <p className="rounded-panel border border-zk-border bg-zk-surface p-6 text-sm text-zk-text2">
           No earnings yet. Resolve an assigned issue to earn your first.
         </p>
       ) : (
@@ -321,7 +321,7 @@ export default async function RankingPanel({
               return (
                 <div
                   key={entry.userId}
-                  className="zk-motion group relative flex flex-col gap-4 overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface p-5 motion-safe:animate-[leaderboard-in_0.5s_cubic-bezier(0.2,0.7,0.2,1)_both] motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-250 hover:border-[#BFD6FB] hover:shadow-[0_18px_40px_rgba(11,23,51,0.10),0_2px_6px_rgba(57,120,246,0.10)] motion-safe:hover:-translate-y-1 dark:hover:border-electric-blue-strong dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.45),0_0_0_1px_rgba(57,120,246,0.25)]"
+                  className="zk-motion group relative flex flex-col gap-4 overflow-hidden rounded-panel border border-zk-border bg-zk-surface p-5 motion-safe:animate-[leaderboard-in_0.5s_cubic-bezier(0.2,0.7,0.2,1)_both] motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-250 hover:border-[#BFD6FB] hover:shadow-[0_18px_40px_rgba(11,23,51,0.10),0_2px_6px_rgba(57,120,246,0.10)] motion-safe:hover:-translate-y-1 dark:hover:border-electric-blue-strong dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.45),0_0_0_1px_rgba(57,120,246,0.25)]"
                   style={{ animationDelay: `${i * 70}ms` }}
                 >
                   <div
@@ -385,7 +385,7 @@ export default async function RankingPanel({
             })}
           </div>
 
-          <div className="relative flex min-w-0 flex-[1_1_300px] flex-col gap-4 overflow-hidden rounded-[20px] bg-deep-ocean p-[22px] text-white">
+          <div className="relative flex min-w-0 flex-[1_1_300px] flex-col gap-4 overflow-hidden rounded-panel bg-deep-ocean p-[22px] text-white">
             <div
               aria-hidden="true"
               className="pointer-events-none absolute -right-[90px] -top-[90px] h-60 w-60 rounded-full"
@@ -427,7 +427,7 @@ export default async function RankingPanel({
         </div>
       )}
 
-      <section aria-label="Team" className="flex flex-col gap-3.5 rounded-[20px] border border-zk-border bg-zk-surface p-5">
+      <section aria-label="Team" className="flex flex-col gap-3.5 rounded-panel border border-zk-border bg-zk-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2.5">
             <h2 className="text-lg font-bold text-zk-text">Team</h2>

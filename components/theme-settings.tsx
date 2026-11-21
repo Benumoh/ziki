@@ -25,10 +25,10 @@ const preview: Record<Theme, { bg: string; line: string; bar: string }> = {
   system: {
     bg: "linear-gradient(90deg, #FFFFFF 50%, #0E1A33 50%)",
     line: "#8FA3C4",
-    bar: "#3978F6",
+    bar: "#0972D5",
   },
-  light: { bg: "#FFFFFF", line: "#E3E8F2", bar: "#3978F6" },
-  dark: { bg: "#0E1A33", line: "#22324F", bar: "#3978F6" },
+  light: { bg: "#FFFFFF", line: "#E3E8F2", bar: "#0972D5" },
+  dark: { bg: "#0E1A33", line: "#22324F", bar: "#0972D5" },
 };
 
 /** Settings → Appearance (#277): System / Light / Dark. */
@@ -82,7 +82,7 @@ export function ThemeSettings({ initialTheme }: { initialTheme: Theme }) {
               }`}
             >
               <span
-                className="box-border flex h-[72px] w-full flex-col gap-1.5 rounded-[10px] border border-zk-border p-2.5"
+                className="box-border flex h-[72px] w-full flex-col gap-1.5 rounded-control border border-zk-border p-2.5"
                 style={{ background: pv.bg }}
                 aria-hidden="true"
               >

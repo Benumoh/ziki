@@ -40,7 +40,7 @@ export const MANUAL_CHECKS = [
 export function MergeChecklistCard({ checklist, testCard = false }: { checklist: MergeChecklist; /** The issue has a test card (#deeper-testing). */ testCard?: boolean }) {
   const percent = Math.round((checklist.passed / checklist.total) * 100);
   return (
-    <section aria-labelledby="merge-checklist-heading" data-testid="merge-checklist" className="flex flex-col gap-3 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+    <section aria-labelledby="merge-checklist-heading" data-testid="merge-checklist" className="flex flex-col gap-3 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
       <div className="flex items-center justify-between gap-2">
         <h2 id="merge-checklist-heading" className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
           Ready-to-merge checklist

@@ -234,7 +234,7 @@ export default async function SecurityPage(props: {
         Report vulnerabilities privately. A workspace owner or admin decides when to publish them.
       </OrgPageHeader>
 
-      <form action="/security" className="grid gap-3 rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <form action="/security" className="grid gap-3 rounded-panel border border-zk-border bg-zk-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
         <input type="hidden" name="view" value="findings" />
         {selectedSeverity !== "all" ? <input type="hidden" name="severity" value={selectedSeverity} /> : null}
         {selectedStage !== "all" ? <input type="hidden" name="stage" value={selectedStage} /> : null}

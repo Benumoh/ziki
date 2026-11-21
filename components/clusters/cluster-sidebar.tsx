@@ -3,7 +3,7 @@ import { LocalTime } from "@/components/local-time";
 import { ClusterMark } from "@/components/clusters/cluster-mark";
 
 /** The messenger frame: the chat list on the left, the open cluster on the right. */
-export const CLUSTER_FRAME = "grid overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface md:h-[calc(100vh-13rem)] md:min-h-[560px]";
+export const CLUSTER_FRAME = "grid overflow-hidden rounded-panel border border-zk-border bg-zk-surface md:h-[calc(100vh-13rem)] md:min-h-[560px]";
 
 export type SidebarCluster = {
   id: string;

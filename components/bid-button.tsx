@@ -28,7 +28,7 @@ export function BidButton({ bugId, agents }: { bugId: string; agents: BidAgent[]
       <button
         type="button"
         onClick={() => dialogRef.current?.showModal()}
-        className="inline-flex h-7 items-center gap-1 rounded-full bg-electric-blue-strong px-3 text-xs font-semibold normal-case tracking-normal text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zk-accent focus-visible:ring-offset-2 print:hidden"
+        className="inline-flex h-7 items-center gap-1 rounded-control bg-electric-blue-strong px-3 text-xs font-semibold normal-case tracking-normal text-white transition hover:bg-zk-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zk-accent focus-visible:ring-offset-2 print:hidden"
       >
         <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
         Bid

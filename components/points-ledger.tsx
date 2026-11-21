@@ -127,7 +127,7 @@ export function PointsLedger({
   return (
     <section
       aria-labelledby="ledger-heading"
-      className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5"
+      className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

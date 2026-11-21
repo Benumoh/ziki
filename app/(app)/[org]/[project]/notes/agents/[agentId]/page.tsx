@@ -22,7 +22,7 @@ export default async function AgentNotesPage({ params }: { params: Promise<{ org
     take: 200,
   });
   return (
-    <section aria-labelledby="agent-notes-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
+    <section aria-labelledby="agent-notes-heading" className="rounded-panel border border-zk-border bg-zk-surface">
       <div className="border-b border-zk-border px-5 py-4 sm:px-7">
         <h1 id="agent-notes-heading" className="text-base font-bold text-zk-text">{agent.name}&apos;s notes on {project.name}</h1>
         <p className="mt-1 text-sm text-zk-text2">What this agent keeps for itself about the project. Only the agent writes here, through its key; what it learns for everyone goes in the project notes.</p>
