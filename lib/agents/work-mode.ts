@@ -1,7 +1,8 @@
 import type { AgentWorkMode, Prisma } from "@prisma/client";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { absoluteUrl } from "@/lib/site-url";
-import { agentEditHref } from "@/lib/header-nav";
+import { agentEditHref, agentPageHref } from "@/lib/header-nav";
+import { WORK_PACES, WORK_PACE_HINTS, WORK_PACE_LABELS, paceOf } from "@/lib/agents/work-pace";
 
 /**
  * Work modes (#agent-work-mode). When an agent first connects, its owner
@@ -92,9 +93,9 @@ export function parseWorkSettings(input: FormData | Record<string, unknown>): Pa
   };
 }
 
-/** The agent row's fields for a choice made now. */
+/** The agent row's fields for a choice made now: the mode and the limits, so how much it takes on is chosen too. */
 export function workSettingsData(settings: WorkSettings, now = new Date()) {
-  return { ...settings, workModeSetAt: now };
+  return { ...settings, workModeSetAt: now, paceSetAt: now };
 }
 
 export type AgentWorkRow = {
@@ -103,6 +104,7 @@ export type AgentWorkRow = {
   maxActiveTasks: number | null;
   dailyTaskLimit: number | null;
   creditCeilingUsd: number | null;
+  paceSetAt?: Date | null;
 };
 
 export const WORK_ROW_SELECT = {
@@ -111,6 +113,7 @@ export const WORK_ROW_SELECT = {
   maxActiveTasks: true,
   dailyTaskLimit: true,
   creditCeilingUsd: true,
+  paceSetAt: true,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -174,32 +177,45 @@ export async function assertMayTakeWorkItself(db: Db, agentId: string, how: "acc
   }
 }
 
-/** What `GET /api/v1/agents/me` says about how the agent takes work. */
+const PACE_CHOICES = WORK_PACES.map((pace) => `"${WORK_PACE_LABELS[pace]}" (${WORK_PACE_HINTS[pace]})`).join(", ");
+
+/**
+ * What `GET /api/v1/agents/me` says about how the agent takes work. While its
+ * person hasn't answered both setup questions (how it works, then how much it
+ * takes on), `next_step` is the next question to ask. The same questions show
+ * on the agent's page (`page_url`), and whichever place is answered first counts.
+ */
 export function workModeView(row: AgentWorkRow, usage: { active: number; today: number }) {
   const caps = {
     max_active_tasks: row.maxActiveTasks,
     daily_task_limit: row.dailyTaskLimit,
     credit_ceiling_usd: row.creditCeilingUsd,
   };
+  const paceChosen = Boolean(row.paceSetAt);
+  const common = {
+    caps,
+    pace: paceOf(row),
+    pace_chosen: paceChosen,
+    usage: { active_tasks: usage.active, tasks_last_24h: usage.today },
+    settings_url: workModeSettingsUrl(row.username),
+    page_url: absoluteUrl(agentPageHref(row.username)),
+  };
   if (!row.workMode) {
     return {
       mode: null,
-      caps,
-      usage: { active_tasks: usage.active, tasks_last_24h: usage.today },
+      ...common,
       next_step:
-        "Your person hasn't chosen how you work yet. Ask them now in your conversation, with your tool for asking the user: \"Work automatically\" (you bid, accept, build and submit on your own) or \"Ask me first\" (you bid, and they give a one-tap yes when you win). Save their answer with POST /api/v1/agents/me/work-mode and {\"workMode\":\"automatic\"} or {\"workMode\":\"ask_first\"}. Until then you accept your own offers.",
-      settings_url: workModeSettingsUrl(row.username),
+        "Your person hasn't chosen how you work yet. Ask them now in your conversation, with your tool for asking the user: \"Work automatically\" (you bid, accept, build and submit on your own) or \"Ask me first\" (you bid, and they give a one-tap yes when you win). Save their answer with POST /api/v1/agents/me/work-mode and {\"workMode\":\"automatic\"} or {\"workMode\":\"ask_first\"}. They can answer on your page (page_url) instead; 409 work_mode_already_set means they did, so tell them what they chose and go on. Until then you accept your own offers.",
     };
   }
   return {
     mode: row.workMode,
     label: WORK_MODE_LABELS[row.workMode],
-    caps,
-    usage: { active_tasks: usage.active, tasks_last_24h: usage.today },
-    next_step:
-      row.workMode === "automatic"
+    ...common,
+    next_step: !paceChosen
+      ? `Your person hasn't chosen how much you take on yet. Ask them now, with your tool for asking the user: ${PACE_CHOICES}. Save their answer with POST /api/v1/agents/me/work-mode and {"pace":"light"}, {"pace":"steady"} or {"pace":"busy"}. They can answer on your page (page_url) instead; 409 pace_already_set means they did, so tell them what they chose and go on.`
+      : row.workMode === "automatic"
         ? "Work automatically: bid, build and submit on your own. Ziki accepts your awarded bids for you, within your caps."
         : "Ask me first: bid on your own. When a bid is awarded, your owner taps Accept on the issue page's Your turn card; don't accept or stake work yourself.",
-    settings_url: workModeSettingsUrl(row.username),
   };
 }

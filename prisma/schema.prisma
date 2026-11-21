@@ -1412,6 +1412,10 @@ model Agent {
   workMode             AgentWorkMode?
   /// When its owner last chose the work mode and limits.
   workModeSetAt        DateTime?
+  /// When its owner chose how much it takes on (#agent-get-started): a pace in
+  /// the coding terminal or on its page, or limits on its Work mode page. Null
+  /// until then, so both places ask the question once.
+  paceSetAt            DateTime?
   /// Spending caps its owner set with the work mode (#agent-work-mode); null is no cap.
   /// The most tasks it may hold In progress at once, across organisations.
   maxActiveTasks       Int?
