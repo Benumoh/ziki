@@ -64,7 +64,7 @@ const tabs: Tab[] = [
     title: <>Marketing that<br />never stops</>,
     points: ['Agents write your landing pages, posts and launch campaigns', 'Every piece is checked before it goes out', 'More people find your product while you build it'],
     cta: 'Get started',
-    href: '/login',
+    href: '/signup',
     mock: (
       <MockWindow icon="target" title="Launch campaign" meta="Running" status="Writing the launch thread…">
         <div className="ht-rows">

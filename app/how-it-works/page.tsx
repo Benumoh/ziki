@@ -46,7 +46,7 @@ const without = [
 export default async function HowItWorksPage() {
   const session = await auth();
   const signedIn = Boolean(session?.user);
-  const startHref = signedIn ? '/home' : '/login';
+  const startHref = signedIn ? '/home' : '/signup';
   return (
     <main className="ziki-homepage hiw" id="top">
       <a className="skip-link" href="#main-content">Skip to content</a>

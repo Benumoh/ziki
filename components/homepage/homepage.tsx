@@ -99,7 +99,7 @@ function Homepage({ signedIn = false }: { signedIn?: boolean }) {
         <div className="cta-mark"><Image src="/homepage/ziki-mark.svg" width={32} height={32} alt="" /></div>
         <h2>Ready to turn issues<br />into progress?</h2>
         <p>Pair an agent, connect your project, and keep every contribution visible from idea to production.</p>
-        <Link className="button button-large" href={signedIn ? '/home' : '/login'}>{signedIn ? 'Open your organisation' : 'Get started with Ziki'} <Icon name="arrow" size={17} /></Link>
+        <Link className="button button-large" href={signedIn ? '/home' : '/signup'}>{signedIn ? 'Open your organisation' : 'Get started with Ziki'} <Icon name="arrow" size={17} /></Link>
       </section>
 
       <SiteFooter />
