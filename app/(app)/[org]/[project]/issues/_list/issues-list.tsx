@@ -2140,7 +2140,14 @@ export async function IssuesList({
           <div className="min-w-0">
             <p className="m-0 truncate text-[15px] font-semibold text-zk-text">{project.name}</p>
             {/* Where it runs and where its code is, each with a pencil to edit it in place. */}
-            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
+            <AppInfoLinks
+              slug={slug}
+              siteUrl={projectLinks?.siteUrl ?? null}
+              repoUrl={projectLinks?.repoUrl ?? null}
+              appStoreUrl={projectLinks?.appStoreUrl ?? null}
+              playStoreUrl={projectLinks?.playStoreUrl ?? null}
+              canEdit={canEditProjectLinks}
+            />
           </div>
         </div>
         <div className="flex items-center gap-2">
