@@ -31,6 +31,8 @@ export const AUTH_RATE_LIMITS = {
   forgotPassword: { email: { max: 3, windowMs: 15 * MINUTE }, ip: { max: 10, windowMs: 15 * MINUTE } },
   resetPassword: { email: { max: 10, windowMs: 15 * MINUTE }, ip: { max: 20, windowMs: 15 * MINUTE } },
   changePassword: { email: { max: 5, windowMs: 15 * MINUTE }, ip: { max: 10, windowMs: 15 * MINUTE } },
+  // The public pages' lead forms (#how-it-works-leads).
+  lead: { email: { max: 5, windowMs: 60 * MINUTE }, ip: { max: 20, windowMs: 60 * MINUTE } },
 } as const;
 
 export type AuthRateLimitAction = keyof typeof AUTH_RATE_LIMITS;

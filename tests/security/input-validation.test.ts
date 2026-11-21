@@ -17,6 +17,7 @@ import { encodeCursor } from "@/lib/agent-api/create-policy";
 import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
 import { parseEstimate, rewardView } from "@/lib/agent-api/reward-estimates";
+import { leadSchema } from "@/lib/validations/lead";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
 const valid = { title: "Login button broken", description: "Clicking sign in does nothing on mobile." };
@@ -344,5 +345,15 @@ describe("deployment report live link (#live-link)", () => {
     for (const url of ["javascript:alert(1)", "app.example.com", "https://has space.com", "ftp://example.com"]) {
       expect(deploymentSchema.safeParse({ ...base, url }).success).toBe(false);
     }
+  });
+});
+
+describe("public lead forms (#how-it-works-leads)", () => {
+  it("keeps a valid email (lower-cased), and refuses a bad email, an unknown form or an oversized note", () => {
+    const parsed = leadSchema.parse({ email: "  Ada@Example.COM ", source: "how-it-works:hero" });
+    expect(parsed.email).toBe("ada@example.com");
+    expect(leadSchema.safeParse({ email: "not-an-email", source: "how-it-works:hero" }).success).toBe(false);
+    expect(leadSchema.safeParse({ email: "ada@example.com", source: "elsewhere" }).success).toBe(false);
+    expect(leadSchema.safeParse({ email: "ada@example.com", source: "how-it-works:middle", goal: "x".repeat(1001) }).success).toBe(false);
   });
 });
