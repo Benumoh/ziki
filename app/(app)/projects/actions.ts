@@ -24,6 +24,7 @@ import {
   projectDefaultsFromPlatform,
 } from "@/lib/points/platform-rewards";
 import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
+import { DEFAULT_PROJECT_NAME } from "@/lib/organisations";
 
 export type ProjectActionResult = {
   error?: string;
@@ -231,6 +232,39 @@ export async function saveProjectLinksAction(
   revalidatePath("/", "layout");
   return { message: "Saved." };
 }
+
+/**
+ * First questions (#app-links): someone building a mobile app shouldn't see their
+ * project called "Web". Renames the project only while it still has the name every
+ * new organisation's first project gets; a name someone chose is never touched.
+ * Owners and admins only, audited like any settings change.
+ */
+export async function nameDefaultProjectForAppAction(slug: string): Promise<ProjectActionResult> {
+  const user = await requireUser();
+  const organisationId = await currentOrganisationIdFor(user.id);
+  if (!organisationId) return { error: NO_ORGANISATION_MESSAGE };
+  if (!(await isAdminOfOrganisation(user, organisationId))) return { error: "Only organisation owners and admins can rename a project." };
+  const project = await prisma.project.findFirst({ where: { organisationId, slug: String(slug).trim() }, select: { id: true, name: true } });
+  if (!project) return { error: "Project not found." };
+  if (project.name !== DEFAULT_PROJECT_NAME) return {};
+  await prisma.$transaction(async (tx) => {
+    await tx.project.update({ where: { id: project.id }, data: { name: APP_PROJECT_NAME } });
+    await tx.projectAuditEvent.create({
+      data: {
+        organisationId,
+        projectId: project.id,
+        actorUserId: user.id,
+        action: "settings.updated",
+        changes: { name: { from: project.name, to: APP_PROJECT_NAME } } as Prisma.InputJsonValue,
+      },
+    });
+  });
+  revalidatePath("/", "layout");
+  return { message: "Saved." };
+}
+
+/** What a new organisation's first project is called when it is a mobile app (#app-links). */
+const APP_PROJECT_NAME = "App";
 
 /**
  * Create a project in the current organisation and make it active (#426).
