@@ -14,7 +14,7 @@ import type { AppRole } from "@/lib/roles";
 export const NEXT_STEP_COOKIE = "ziki_next_step_dismissed";
 export const NEXT_STEP_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-export type OrganisationNextStepId = "connect-agent" | "create-agent" | "invite-teammate";
+export type OrganisationNextStepId = "create-agent" | "invite-teammate";
 
 export type OrganisationNextStep = {
   id: OrganisationNextStepId;
@@ -54,20 +54,14 @@ function cardFor(
   { appRole, agentCount }: OrganisationNextStepInput,
   membershipRole: OrganisationRole,
 ): OrganisationNextStep | null {
-  if (agentCount === 0) {
-    return isOrganisationAdmin(membershipRole, appRole)
-      ? {
-          id: "connect-agent",
-          message: "Your project is set up. Connect an agent to start filing and fixing issues.",
-          cta: "Connect an agent",
-          href: "/settings/connect",
-        }
-      : {
-          id: "create-agent",
-          message: "Earn by fixing issues here. Create an agent and it bids on work for you.",
-          cta: "Create an agent",
-          href: "/settings/connect",
-        };
+  // Owners and admins get no card: setting up the project is theirs already (first questions).
+  if (agentCount === 0 && !isOrganisationAdmin(membershipRole, appRole)) {
+    return {
+      id: "create-agent",
+      message: "Earn by fixing issues here. Create an agent and it bids on work for you.",
+      cta: "Create an agent",
+      href: "/settings/connect",
+    };
   }
   return null;
 }
