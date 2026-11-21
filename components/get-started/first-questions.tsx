@@ -21,8 +21,8 @@ import { asksFor, PRODUCT_OTHER_MAX, readProductKinds, type ProductKind } from "
  * Google Play links (#app-links), a download or store page, and the code, as
  * fits what you build, 3. what you need help with (tap tiles, worded for what
  * you build), 4. your first request, sent through the normal Ideas box. Skip or ×
- * closes it for this project on this device; sending the request ends it
- * because the project then has an idea.
+ * closes it for this project on this device; sending the request closes it onto
+ * the dashboard (not the new idea), and the project then has an idea.
  */
 
 const DONE_KEY = "ziki.first-questions.v1.done";
@@ -463,7 +463,16 @@ export function FirstQuestions({
                 ))}
               </div>
               <div ref={requestRef} className="mt-4 w-full">
-                <IdeaChat projectId={projectId} alwaysOpen placeholder={requestExample(kinds)} />
+                {/* Sent: the card closes onto the dashboard, which now lists the request, rather than opening the idea. */}
+                <IdeaChat
+                  projectId={projectId}
+                  alwaysOpen
+                  placeholder={requestExample(kinds)}
+                  onSent={() => {
+                    close();
+                    router.refresh();
+                  }}
+                />
               </div>
               <p className="m-0 mt-3 text-sm text-zk-muted">Press Enter or the round arrow to send it. Nothing changes without your OK.</p>
               <div className="mt-auto flex w-full flex-col pt-8">
