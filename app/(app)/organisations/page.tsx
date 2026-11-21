@@ -10,7 +10,6 @@ import { isSuperAdmin } from "@/lib/roles";
 import { currentOrganisationIdFor } from "@/lib/organisation-context";
 import {
   MEMBERSHIP_ROLE_LABELS,
-  ORGANISATION_NAME_MAX,
   organisationsForUser,
   zeduNeedsOwner,
 } from "@/lib/organisations";
@@ -137,7 +136,7 @@ export default async function OrganisationsPage({
             </p>
           </div>
         </div>
-        <OrganisationActions nameMax={ORGANISATION_NAME_MAX} next={next} />
+        <OrganisationActions next={next} />
       </section>
 
       {error ? (
