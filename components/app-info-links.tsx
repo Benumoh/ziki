@@ -2,9 +2,10 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { saveProjectLinksAction, type ProjectActionResult } from "@/app/(app)/projects/actions";
+import { asksFor, readProductKinds } from "@/lib/product-kinds";
 
-/** The app's own addresses and store pages; the marketing site is set on the Marketing side (#marketing-url). */
-type Field = "siteUrl" | "repoUrl" | "appStoreUrl" | "playStoreUrl";
+/** The app's own addresses, store pages and download page; the marketing site is set on the Marketing side (#marketing-url). */
+type Field = "siteUrl" | "repoUrl" | "appStoreUrl" | "playStoreUrl" | "downloadUrl";
 
 /** A phone, for the app's store pages. */
 const PHONE_ICON = "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2";
@@ -37,6 +38,13 @@ const FIELDS: Record<Field, { icon: string; empty: string; placeholder: string; 
     label: "the Google Play link",
     name: "Google Play",
   },
+  // A desktop app's or other product's download or store page (#product-kinds).
+  downloadUrl: {
+    icon: "M12 3v12M7 10l5 5 5-5M5 21h14",
+    empty: "No download page",
+    placeholder: "https://store.steampowered.com/app/123456",
+    label: "the download page",
+  },
 };
 
 /** The site and code addresses always go with a save; a store link only when it's the one edited. */
@@ -56,6 +64,10 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  *
  * A mobile app (#app-links): once the project has an App Store or Google Play link, both stores show in place of
  * "No site yet" (a site address still shows when it has one), so an app's card speaks of the app, not a website.
+ *
+ * Once the project says what it is (#product-kinds), the card shows that: the site for a website, the stores for
+ * a mobile app, the download page for a desktop app or something else, and the code for everything. A link already set
+ * always shows.
  */
 export function AppInfoLinks({
   slug,
@@ -63,6 +75,8 @@ export function AppInfoLinks({
   repoUrl,
   appStoreUrl = null,
   playStoreUrl = null,
+  downloadUrl = null,
+  productKinds = [],
   canEdit,
 }: {
   slug: string;
@@ -70,17 +84,26 @@ export function AppInfoLinks({
   repoUrl: string | null;
   appStoreUrl?: string | null;
   playStoreUrl?: string | null;
+  downloadUrl?: string | null;
+  productKinds?: readonly string[];
   canEdit: boolean;
 }) {
   // The field being edited, and the save result it was opened after: a newer successful save closes it.
   const [opened, setOpened] = useState<{ field: Field; after: ProjectActionResult | undefined } | null>(null);
   const [result, action, pending] = useActionState<ProjectActionResult | undefined, FormData>(saveProjectLinksAction, undefined);
   const inputRef = useRef<HTMLInputElement>(null);
-  const values: Record<Field, string | null> = { siteUrl, repoUrl, appStoreUrl, playStoreUrl };
-  const isApp = Boolean(appStoreUrl || playStoreUrl);
-  const shown: Field[] = isApp
-    ? [...(siteUrl ? (["siteUrl"] as const) : []), "appStoreUrl", "playStoreUrl", "repoUrl"]
-    : ["siteUrl", "repoUrl"];
+  const values: Record<Field, string | null> = { siteUrl, repoUrl, appStoreUrl, playStoreUrl, downloadUrl };
+  const kinds = readProductKinds(productKinds).filter((kind) => kind !== "idea");
+  const asks = asksFor(kinds);
+  const isApp = asks.stores || Boolean(appStoreUrl || playStoreUrl);
+  // Without kinds: a website unless it has store links, as before.
+  const showSite = kinds.length > 0 ? asks.site || Boolean(siteUrl) : !isApp || Boolean(siteUrl);
+  const shown: Field[] = [
+    ...(showSite ? (["siteUrl"] as const) : []),
+    ...(isApp ? (["appStoreUrl", "playStoreUrl"] as const) : []),
+    ...(asks.download || downloadUrl ? (["downloadUrl"] as const) : []),
+    "repoUrl",
+  ];
 
   // Saved: the editor closes (the page's data refreshes with the new address).
   const saved = opened !== null && result !== opened.after && Boolean(result?.message) && !result?.error;

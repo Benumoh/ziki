@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { unreservedProjectSlug } from "@/lib/project-slug";
 import { parseAppLink, type AppStore } from "@/lib/app-link";
+import { BUILT_KINDS, PRODUCT_OTHER_MAX } from "@/lib/product-kinds";
 
 /** Project names are shown in the header, so keep them short and readable. */
 export const PROJECT_NAME_MIN = 2;
@@ -69,17 +70,40 @@ const storeUrlSchema = (store: AppStore, message: string) =>
   });
 const appStoreUrlSchema = storeUrlSchema("app_store", "Enter your app's App Store link, such as https://apps.apple.com/app/id123456789.");
 const playStoreUrlSchema = storeUrlSchema("play", "Enter your app's Google Play link, such as https://play.google.com/store/apps/details?id=com.yourcompany.app.");
+/** A desktop app's or other product's download or store page (#product-kinds): any HTTPS page, such as Steam or itch.io. */
+const downloadUrlSchema = optionalUrl((url) => url.protocol === "https:" && !url.username && !url.password,
+  "Enter the HTTPS address of its download or store page, such as https://store.steampowered.com/app/123456.");
+
+/**
+ * What the project is (#product-kinds): one or more built kinds, or "idea" alone.
+ * "other" asks what it is, in a few words; any other choice drops those words.
+ */
+export const productKindsSchema = z
+  .object({
+    kinds: z.array(z.enum([...BUILT_KINDS, "idea"])).min(1, "Pick what you're building."),
+    other: z.string().trim().max(PRODUCT_OTHER_MAX, `Keep it to ${PRODUCT_OTHER_MAX} characters.`),
+  })
+  .refine((value) => !value.kinds.includes("idea") || value.kinds.length === 1, {
+    message: "Something not built yet can't be built too.",
+    path: ["kinds"],
+  })
+  .transform(({ kinds, other }) => ({
+    productKinds: [...new Set(kinds)],
+    productOther: kinds.includes("other") && other ? other : null,
+  }));
 
 /**
  * The site, GitHub repository and app store links, set from the panel above the
- * list and from First questions (#project-links, #app-links). A store link left
- * out of the form is left as it is.
+ * list and from First questions (#project-links, #app-links), and a desktop app's
+ * or other product's download page (#product-kinds). A store or download link left out of
+ * the form is left as it is.
  */
 export const projectLinksSchema = z.object({
   siteUrl: siteUrlSchema,
   repoUrl: repoUrlSchema,
   appStoreUrl: appStoreUrlSchema.optional(),
   playStoreUrl: playStoreUrlSchema.optional(),
+  downloadUrl: downloadUrlSchema.optional(),
 });
 
 export const projectSettingsSchema = z.object({
@@ -92,6 +116,7 @@ export const projectSettingsSchema = z.object({
   // Optional: creating a project doesn't ask for them; the settings form always sends both.
   appStoreUrl: appStoreUrlSchema.optional(),
   playStoreUrl: playStoreUrlSchema.optional(),
+  downloadUrl: downloadUrlSchema.optional(),
   visibility: z.enum(["public", "private"]).optional().default("private"),
   isOpenForContributors: z.boolean().optional().default(false),
   acceptsGuestIdeas: z.boolean().optional().default(false),
