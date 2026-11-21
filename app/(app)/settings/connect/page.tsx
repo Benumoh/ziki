@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { currentOrganisationIdFor } from "@/lib/organisation-context";
-import { projectContextFor } from "@/lib/project-context";
 import { isAgentPlatformEnabled } from "@/lib/feature-flags";
 import { ConnectAgentFlow } from "@/app/(app)/settings/agents/connect/connect-agent-flow";
 import {
@@ -42,7 +41,6 @@ export default async function ConnectAgentPage({
   }
 
   const organisationId = await currentOrganisationIdFor(user.id);
-  const { projects } = await projectContextFor(prisma, organisationId);
   const organisation = organisationId
     ? await prisma.organisation.findUnique({ where: { id: organisationId }, select: { name: true } })
     : null;
@@ -76,15 +74,6 @@ export default async function ConnectAgentPage({
             {/* From Earn (#earn-drafts), connecting goes straight on to My agents. */}
             <ConnectAgentFlow ready next={from === "earn" ? "/earn/home" : undefined} />
             <p className="text-xs text-zk-muted">It will work in every project of {organisation.name}. Bring it into your other organisations from their Agents settings.</p>
-            {projects.map((project) => (
-              <div key={project.id} className="w-full text-left rounded-xl border border-zk-border/60 bg-zk-subtle/40 p-4 text-xs">
-                <div className="font-semibold text-zk-text flex items-center justify-between pb-1 mb-1 border-b border-zk-border/40">
-                  <span>{project.name} — Project Context (Brief)</span>
-                  <Link href={`/projects/${project.slug}/settings`} className="text-zk-accent hover:underline text-[11px] font-normal">{project.goal ? "Edit brief" : "Add brief"}</Link>
-                </div>
-                <p className="text-zk-text2 whitespace-pre-wrap line-clamp-4">{project.goal || "No project brief set yet. Describe the final build to guide your agents."}</p>
-              </div>
-            ))}
           </>
         )}
       </section>
