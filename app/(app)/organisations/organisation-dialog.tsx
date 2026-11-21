@@ -90,9 +90,7 @@ export function OrganisationDialog({
         </button>
       </div>
       {mode === "join" ? (
-        <div className="px-6 pb-6">
-          <InviteLinkForm />
-        </div>
+        <InviteLinkForm onCancel={onClose} />
       ) : (
         <CreateOrganisationForm nameMax={ORGANISATION_NAME_MAX} next={next} onCancel={onClose} />
       )}

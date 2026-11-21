@@ -4,11 +4,9 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { FieldError, useFieldErrors } from "@/components/ui/field-errors";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { createOrganisationAction, type OrganisationFormResult } from "./actions";
+import { WINDOW_FIELD, WindowFooter } from "./window-parts";
 
 const FORM_ID = "create-organisation";
-
-const FOOT_BTN =
-  "inline-flex h-10 items-center justify-center rounded-full px-5 text-[13px] font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Create a organisation you own (#444), in the create window. It starts with no projects: they are
@@ -77,7 +75,7 @@ export function CreateOrganisationForm({
             required
             maxLength={nameMax + 20}
             disabled={pending}
-            className="h-11 min-w-0 flex-1 rounded-xl border border-zk-border bg-zk-surface px-3.5 text-[15px] text-zk-text placeholder:text-zk-muted focus:border-electric-blue focus:outline-none focus:ring-4 focus:ring-electric-blue/15 disabled:opacity-60 aria-[invalid=true]:border-zk-bad-bd"
+            className={`${WINDOW_FIELD} flex-1`}
             {...fieldAttrs}
           />
         </div>
@@ -90,18 +88,11 @@ export function CreateOrganisationForm({
       </div>
       {confirmingDuplicate ? <input type="hidden" name="confirmDuplicate" value={result?.duplicateName} /> : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zk-divider bg-zk-bg/60 px-6 py-4">
-        <button type="button" onClick={onCancel} className={`${FOOT_BTN} text-zk-text hover:bg-zk-chip`}>
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={pending || !trimmed}
-          className={`${FOOT_BTN} bg-zk-text text-zk-surface hover:opacity-90`}
-        >
-          {pending ? "Creating…" : confirmingDuplicate ? "Create anyway" : "Create organisation"}
-        </button>
-      </div>
+      <WindowFooter
+        onCancel={onCancel}
+        submitDisabled={pending || !trimmed}
+        submitLabel={pending ? "Creating…" : confirmingDuplicate ? "Create anyway" : "Create organisation"}
+      />
     </form>
   );
 }
