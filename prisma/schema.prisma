@@ -975,6 +975,12 @@ model Project {
   /// The product's mobile app (#app-links): its App Store and Google Play pages, kept apart from siteUrl so site checks never scan a store page.
   appStoreUrl             String?
   playStoreUrl            String?
+  /// What the project is (#product-kinds), from First questions: any of website, mobile, desktop and other (a game, an extension…), or idea alone (not built yet). Empty until asked.
+  productKinds            String[]                @default([])
+  /// What "other" is, in the owner's words, such as "a Chrome extension" (#product-kinds).
+  productOther            String?
+  /// A desktop app's or other product's download or store page (#product-kinds): Steam, itch.io, the Microsoft Store, its own download page.
+  downloadUrl             String?
   stagingUrl              String?
   /// GitHub App installation used to merge accepted fixes (#452). Never a token.
   githubInstallationId    String?
