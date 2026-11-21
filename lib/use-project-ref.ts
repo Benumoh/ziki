@@ -19,7 +19,7 @@ export function useProjectRef(): ProjectRef | null {
 
 /**
  * What the lists' links are built on here (#project-filter): the project in the address, or on an
- * organisation-wide list (`/<org>/issues/…`, `/<org>/ideas`, `/<org>/queue`) the organisation, or null.
+ * organisation-wide list (`/<org>/overview`, `/<org>/issues/…`, `/<org>/ideas`, `/<org>/queue`) the organisation, or null.
  */
 export function useListRef(): ProjectRef | null {
   const params = useParams<{ org?: string; project?: string }>();

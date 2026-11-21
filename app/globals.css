@@ -155,6 +155,13 @@ body {
 /* A vote on the issue list's confirmation badge: the count pops, and a +1 or −1
    floats up and fades (components/confirmation-vote-badge.tsx). Used with
    motion-safe:, so reduced motion shows the new count without the movement. */
+/* The first-run arrow (#first-run-arrow): each dash hides in turn, bottom to top, then shows again the same way. */
+@keyframes zk-dash-wave {
+  0%, 15% { opacity: 1; }
+  25%, 60% { opacity: 0; }
+  70%, 100% { opacity: 1; }
+}
+
 @keyframes zk-vote-pop {
   0% { transform: scale(1); }
   35% { transform: scale(1.45); }

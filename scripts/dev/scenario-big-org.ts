@@ -91,7 +91,7 @@ async function main() {
     }));
     await db.idea.createMany({ data: ideas });
 
-    console.log(`[scenario] Big Co: ${rows.length} issues and ${ideas.length} ideas. Open /big/issues/your-work as demo@fixtures.local.`);
+    console.log(`[scenario] Big Co: ${rows.length} issues and ${ideas.length} ideas. Open /big/overview as demo@fixtures.local.`);
   } finally {
     await db.$disconnect();
   }

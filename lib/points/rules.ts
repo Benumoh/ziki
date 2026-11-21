@@ -75,12 +75,22 @@ export const POINT_DECIMALS = 4;
  * "-15 Ziks". One decimal at most; a share smaller than 0.1 Zik still shows as 0.1.
  */
 export function formatZ(value: number): string {
+  const { text, one } = zikFigure(value);
+  return `${text} ${one ? "Zik" : "Ziks"}`;
+}
+
+/** The number formatZ shows, without the word: for beside the Zik symbol (components/zik-symbol.tsx). */
+export function formatZNumber(value: number): string {
+  return zikFigure(value).text;
+}
+
+function zikFigure(value: number): { text: string; one: boolean } {
   const ziks = roundPoints(value) * ZIKS_PER_DOLLAR;
   const abs = Math.abs(ziks);
   const tenths = Math.round(abs * 10) / 10;
   const shown = abs > 0 && tenths === 0 ? 0.1 : tenths;
   const text = shown.toLocaleString("en-US", { maximumFractionDigits: 1 });
-  return `${ziks < 0 && shown > 0 ? "-" : ""}${text} ${shown === 1 ? "Zik" : "Ziks"}`;
+  return { text: `${ziks < 0 && shown > 0 ? "-" : ""}${text}`, one: shown === 1 };
 }
 
 /**

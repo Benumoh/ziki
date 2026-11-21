@@ -35,9 +35,7 @@ import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
 import { AppInfoLinks } from "@/components/app-info-links";
 import { ShareMenu } from "@/components/share-menu";
-import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
 import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
-import { NEXT_STEP_COOKIE, organisationNextStep, type OrganisationNextStep } from "@/lib/organisation-next-step";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
@@ -101,7 +99,6 @@ import { ideaPath, ideasPath, issuesPath, orgPath, orgRefOf, projectPath, refOf,
 import { RichText } from "@/components/rich-text";
 import { isOrganisationAdmin } from "@/lib/organisation-role";
 import { cookies } from "next/headers";
-import { parseDismissed } from "@/lib/onboarding";
 import { liveCheck, liveConfirmLabel, liveFactLabel, type LiveCheck } from "@/lib/live-check";
 import { latestPullRequestReports } from "@/lib/agent-api/pull-request-report";
 import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/project-repositories";
@@ -1243,7 +1240,7 @@ export async function IssuesList({
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
-  // marks each one "Set up"; here they only hold back the next-step card and the ideas page's opening question.
+  // marks each one "Set up"; here they only hold back the ideas page's opening question.
   const unconfiguredAgents: UnconfiguredAgent[] =
     organisationId && userId
       ? await loadOrEmpty(
@@ -1266,41 +1263,6 @@ export async function IssuesList({
           [] as UnconfiguredAgent[],
         )
       : [];
-  // The next-step card (#agents-dock) where the empty agents bar used to be: the one next thing for you, from your role and what the
-  // organisation has. Not while one of your agents is blocked (the agents bar says so), and dismissable per organisation.
-  // A project contributor who joined a public project (canContribute without an org-wide membershipRole) also gets the
-  // "Create an agent" card so they can start earning right after joining.
-  let nextStep: OrganisationNextStep | null = null;
-  const nextStepRole: OrganisationRole | null = membershipRole ?? (canContribute ? "member" : null);
-  if (organisationId && userId && nextStepRole && !isDeletedView) {
-    const dismissed = parseDismissed((await cookies()).get(NEXT_STEP_COOKIE)?.value).includes(organisationId);
-    if (!dismissed) {
-      const counts = await loadOrEmpty(
-        "next step",
-        async () => {
-          const now = new Date();
-          const [agentCount, memberCount, pendingInvites] = await Promise.all([
-            prisma.agent.count({ where: { ...activeIn(organisationId), ownerUserId: userId, revokedAt: null } }),
-            prisma.membership.count({ where: { organisationId } }),
-            prisma.organisationInvite.count({ where: { organisationId, acceptedAt: null, expiresAt: { gt: now } } }),
-          ]);
-          return { agentCount, memberCount, pendingInvites };
-        },
-        null,
-      );
-      if (counts) {
-        nextStep = organisationNextStep({
-          slug: ref,
-          membershipRole: nextStepRole,
-          appRole: effectiveRole,
-          ...counts,
-          blockedAgentCount: unconfiguredAgents.length,
-          dismissed,
-          // The checklist is drawn on every view but Your Work (and hidden on phones).
-        });
-      }
-    }
-  }
   // My Work shows only when you have work in this project: issues you bid on or hold, whatever their status.
   const myWorkCount =
     userId && !isDeletedView
@@ -1813,7 +1775,6 @@ export async function IssuesList({
         {/* Earnings (#earnings): the way to earn, on the page everyone lands on, closed with × like the panel above. */}
         {isIdeasView && !isDeletedView && earnProject ? <EarnPanel project={earnProject} line={earnBannerLine(earnProject)} /> : null}
 
-        {nextStep && organisationId ? <OrganisationNextStepCard step={nextStep} organisationId={organisationId} /> : null}
 
         {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
 
@@ -1866,7 +1827,7 @@ export async function IssuesList({
           />
         ) : null}
         {isIdeasView ? null : isFirstRun ? (
-          <FirstRunWelcome isAdmin={canDelete} hasOrganisation={Boolean(organisationId)} slug={ref} returnTo={returnTo} canContribute={canContribute} />
+          <FirstRunWelcome hasOrganisation={Boolean(organisationId)} />
         ) : feedView ? (
           // The Work Feed: one card with its tabs and filter on top, the table of work, and its pages under it. An
           // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
@@ -2306,20 +2267,14 @@ export async function IssuesList({
 }
 
 
+/** The first-run arrow's dashes (#first-run-arrow): how many, each one's length (of 100 along the line), and the delay between
+ * them. The first starts at the line's foot and the last ends under the arrowhead, where the line runs straight up into it. */
+const ARROW_DASHES = 7;
+const ARROW_DASH = 8;
+const ARROW_STEP_S = 0.12;
+
 /** What a brand-new tracker shows instead of an empty list (#292, #444). */
-function FirstRunWelcome({
-  isAdmin,
-  hasOrganisation = true,
-  slug,
-  returnTo,
-  canContribute = true,
-}: {
-  isAdmin: boolean;
-  hasOrganisation?: boolean;
-  slug: ProjectRef;
-  returnTo: string;
-  canContribute?: boolean;
-}) {
+function FirstRunWelcome({ hasOrganisation = true }: { hasOrganisation?: boolean }) {
   if (!hasOrganisation) {
     return (
       <section aria-labelledby="issues-organisation-heading" className="issues-organisation-empty rounded-panel border border-zk-border bg-zk-bg px-6 py-10 text-center sm:px-8">
@@ -2340,32 +2295,41 @@ function FirstRunWelcome({
     );
   }
 
+  // The first thing to do is tell the agents about the app, in the box above the list: a winding arrow points up at it.
   return (
-    <section className="rounded-panel border border-zk-border bg-zk-surface px-5 py-8 text-center">
-      <h2 className="text-lg font-bold text-zk-text">No issues yet</h2>
+    <section className="rounded-panel border border-zk-border bg-zk-surface px-5 pb-8 pt-4 text-center">
+      {/* A winding dashed line up to a solid arrowhead. Its dashes vanish one after another from the bottom up, the
+          arrowhead last, then come back the same way: a wave that runs up towards the task box. */}
+      <svg aria-hidden="true" viewBox="0 0 120 172" className="mx-auto h-32 w-[90px] text-zk-text">
+        {Array.from({ length: ARROW_DASHES }, (_, index) => (
+          <path
+            key={index}
+            d="M60 166 C 78 150, 78 132, 60 118 C 42 104, 42 90, 60 78 C 76 67, 60 50, 60 31"
+            pathLength={100}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={`${ARROW_DASH} 200`}
+            strokeDashoffset={-(index * (100 - ARROW_DASH)) / (ARROW_DASHES - 1)}
+            className="motion-safe:animate-[zk-dash-wave_2.8s_ease-in-out_infinite]"
+            style={{ animationDelay: `${index * ARROW_STEP_S}s` }}
+          />
+        ))}
+        <path
+          d="M60 6 L45 32 Q60 26 75 32 Z"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          className="motion-safe:animate-[zk-dash-wave_2.8s_ease-in-out_infinite]"
+          style={{ animationDelay: `${ARROW_DASHES * ARROW_STEP_S}s` }}
+        />
+      </svg>
+      <h2 className="mt-2 text-lg font-bold text-zk-text">No tasks yet</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-zk-muted">
-        This is where reported issues will appear. A good report says what you
-        expected, what happened instead, and how to make it happen again.
+        This is where every task you add will be listed. Tell us what your app is and what you would like fixed.
       </p>
-      {canContribute ? (
-        <div className="mt-5">
-          <Link
-            href={newIssueHref(slug, returnTo)}
-            className="inline-flex h-[42px] items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(46,111,239,0.35)]"
-          >
-            Report the first issue
-          </Link>
-        </div>
-      ) : null}
-      {isAdmin ? (
-        <p className="mx-auto mt-6 max-w-md text-sm text-zk-muted">
-          Before people start reporting, you may want to set up your{" "}
-          <Link href={orgPath(slug, "projects")} className="font-bold text-zk-accent underline">projects</Link>
-          {" "}and the{" "}
-          <Link href={orgPath(slug, "types")} className="font-bold text-zk-accent underline">issue types</Link>{" "}
-          they will choose from.
-        </p>
-      ) : null}
     </section>
   );
 }

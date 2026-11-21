@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-/** What Claude is doing while an idea is structured (#idea-intake), typed out one after another. */
+/** What happens while an idea is structured (#idea-intake), typed out one after another. */
 const DEFAULT_STEPS = [
-  "Sending your idea to Claude…",
+  "Sending your idea…",
   "Reading what you wrote…",
   "Working out what you're asking for…",
   "Writing a clear title…",
@@ -18,7 +18,7 @@ const TYPE_MS = 28;
 const HOLD_MS = 1100;
 
 /**
- * Shown while a submitted idea goes to Claude: each step types out letter by
+ * Shown while a submitted idea is written up: each step types out letter by
  * letter with a blinking cursor, then the next one starts, so the wait (a few
  * seconds) visibly shows work happening. The last step stays until the page
  * moves on. Screen readers hear one plain sentence instead of the typing.
@@ -26,7 +26,7 @@ const HOLD_MS = 1100;
 export function ClaudeWorking({
   className = "",
   steps = DEFAULT_STEPS,
-  statusText = "Claude is writing up your idea.",
+  statusText = "Writing up your idea.",
 }: {
   className?: string;
   steps?: string[];
