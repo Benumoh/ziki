@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { copyText } from "@/lib/clipboard";
+import { agentPageHref } from "@/lib/header-nav";
 import { checkAgentConnectedAction, startAgentConnectAction } from "./actions";
 import {
   agentsInputClass,
@@ -14,19 +15,21 @@ import {
   agentsSecondaryBtn,
 } from "../agents-ui";
 
-type Step = "name" | "copy" | "waiting" | "connected";
+type Step = "name" | "copy" | "connected";
 
 /** How often the dialog asks whether the new agent has called in. */
 const POLL_MS = 2000;
-/** How long the dancing agent stays up before the dialog closes. */
-const CLOSE_AFTER_MS = 4000;
+/** How long the dancing agent stays up before the page moves on to the agent. */
+const CLOSE_AFTER_MS = 2500;
 
 /**
- * Connect agent in four beats: name it, copy one piece of text, paste it into
- * the agent, and watch it connect. The text holds the agent's key, so it is
- * copied, never shown in full.
+ * Connect agent in three beats: name it, copy one piece of text into the
+ * agent, and watch it connect. There is nothing to press after pasting: the
+ * dialog waits from the moment the text is ready and, once the agent calls
+ * in, goes on to the agent's own page. The text holds the agent's key, so it
+ * is copied, never shown in full.
  */
-export function ConnectAgentFlow({ ready, next }: { /** False until you are in an organisation: the agent is created active there. */ ready: boolean; /** Where to go once connected (Earn: My agents). */ next?: string }) {
+export function ConnectAgentFlow({ ready, next }: { /** False until you are in an organisation: the agent is created active there. */ ready: boolean; /** Where to go once connected instead of the agent's page (Earn: My agents). */ next?: string }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -35,6 +38,7 @@ export function ConnectAgentFlow({ ready, next }: { /** False until you are in a
   const [error, setError] = useState<string | null>(null);
   const [agent, setAgent] = useState<{ id: string; name: string; setupText: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // showModal() gives the focus trap, inert background and Escape handling.
@@ -42,13 +46,16 @@ export function ConnectAgentFlow({ ready, next }: { /** False until you are in a
     if (open) dialogRef.current?.showModal();
   }, [open]);
 
+  // From the moment the text is ready, keep asking whether the agent has called in.
   const agentId = agent?.id;
   useEffect(() => {
-    if (step !== "waiting" || !agentId) return;
+    if (step !== "copy" || !open || !agentId) return;
     let cancelled = false;
     const check = async () => {
       const result = await checkAgentConnectedAction(agentId);
-      if (!cancelled && result.connected) setStep("connected");
+      if (cancelled || !result.connected) return;
+      setUsername(result.username);
+      setStep("connected");
     };
     void check();
     const timer = setInterval(check, POLL_MS);
@@ -56,21 +63,22 @@ export function ConnectAgentFlow({ ready, next }: { /** False until you are in a
       cancelled = true;
       clearInterval(timer);
     };
-  }, [step, agentId]);
+  }, [step, open, agentId]);
 
-  // Connected: let the animation play, then close and show the new agent's state.
+  // Connected: let the robot dance, then go on to the agent's page (or where the caller asked).
+  const destination = next ?? (username ? agentPageHref(username) : null);
   useEffect(() => {
     if (step !== "connected") return;
     const timer = setTimeout(() => {
-      if (next) {
-        router.push(next);
+      if (destination) {
+        router.push(destination);
         return;
       }
       setOpen(false);
       router.refresh();
     }, CLOSE_AFTER_MS);
     return () => clearTimeout(timer);
-  }, [step, router, next]);
+  }, [step, router, destination]);
 
   /** Every opening starts from a blank name. */
   function openDialog() {
@@ -79,6 +87,7 @@ export function ConnectAgentFlow({ ready, next }: { /** False until you are in a
     setError(null);
     setAgent(null);
     setCopied(false);
+    setUsername(null);
     setOpen(true);
   }
 
@@ -177,34 +186,11 @@ export function ConnectAgentFlow({ ready, next }: { /** False until you are in a
                 </button>
               </div>
               <p className={agentsMutedClass}>
-                Paste it into your agent, then come back and press the button. It holds your agent&apos;s key, so
-                it is only shown here once.
+                Paste it into your agent and send it. It holds your agent&apos;s key, so it is only shown here once.
               </p>
               {error ? <p role="alert" className="text-sm font-semibold text-zk-bad-fg">{error}</p> : null}
+              <WaitingLine name={agent.name} />
               <div className="flex justify-end">
-                <button type="button" onClick={() => setStep("waiting")} disabled={!copied} className={agentsPrimaryBtn}>
-                  I&apos;ve pasted it
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {step === "waiting" && agent ? (
-            <div className="space-y-5 py-2 text-center" role="status">
-              <span
-                className="mx-auto block h-12 w-12 animate-spin rounded-full border-4 border-zk-tint border-t-electric-blue-strong motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-              <div className="space-y-1">
-                <h2 id="connect-agent-title" className="text-lg font-extrabold">
-                  Waiting for {agent.name}…
-                </h2>
-                <p className={agentsMutedClass}>This updates as soon as your agent connects.</p>
-              </div>
-              <div className="flex justify-center gap-2">
-                <button type="button" onClick={() => setStep("copy")} className={agentsSecondaryBtn}>
-                  Back
-                </button>
                 <button type="button" onClick={close} className={agentsSecondaryBtn}>
                   Close
                 </button>
@@ -222,12 +208,31 @@ export function ConnectAgentFlow({ ready, next }: { /** False until you are in a
                 <p className={agentsMutedClass}>{agent.name} is ready to work.</p>
               </div>
               {/* Earn (#earn-drafts): what the agent can earn is on My agents. */}
-              {next ? <Link href={next} className={agentsPrimaryBtn}>Go to My agents</Link> : null}
+              {destination ? (
+                <Link href={destination} className={agentsPrimaryBtn}>
+                  {next ? "Go to My agents" : `Go to ${agent.name}`}
+                </Link>
+              ) : null}
             </div>
           ) : null}
         </dialog>
       ) : null}
     </>
+  );
+}
+
+/** Shown under the text while Ziki waits for the agent's first call: nothing to press, it moves on by itself. */
+export function WaitingLine({ name }: { name: string }) {
+  return (
+    <p role="status" className="flex items-center gap-2.5 rounded-2xl bg-zk-tint px-3.5 py-2.5 text-sm text-zk-text2">
+      <span
+        className="block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-zk-border border-t-electric-blue-strong motion-reduce:animate-none"
+        aria-hidden="true"
+      />
+      <span>
+        Waiting for {name} to connect. This moves on by itself.
+      </span>
+    </p>
   );
 }
 
