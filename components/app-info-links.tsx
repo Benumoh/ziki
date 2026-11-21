@@ -3,9 +3,12 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { saveProjectLinksAction, type ProjectActionResult } from "@/app/(app)/projects/actions";
 
-type Field = "siteUrl" | "repoUrl";
+type Field = "siteUrl" | "repoUrl" | "appStoreUrl" | "playStoreUrl";
 
-const FIELDS: Record<Field, { icon: string; empty: string; placeholder: string; label: string }> = {
+/** A phone, for the app's store pages. */
+const PHONE_ICON = "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2";
+
+const FIELDS: Record<Field, { icon: string; empty: string; placeholder: string; label: string; name?: string }> = {
   siteUrl: {
     icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20",
     empty: "No site yet",
@@ -18,7 +21,25 @@ const FIELDS: Record<Field, { icon: string; empty: string; placeholder: string; 
     placeholder: "https://github.com/owner/repository",
     label: "the code address",
   },
+  // A mobile app's store pages (#app-links), shown by their store's name rather than the long address.
+  appStoreUrl: {
+    icon: PHONE_ICON,
+    empty: "Not on the App Store",
+    placeholder: "https://apps.apple.com/app/id123456789",
+    label: "the App Store link",
+    name: "App Store",
+  },
+  playStoreUrl: {
+    icon: PHONE_ICON,
+    empty: "Not on Google Play",
+    placeholder: "https://play.google.com/store/apps/details?id=…",
+    label: "the Google Play link",
+    name: "Google Play",
+  },
 };
+
+/** The site and code addresses always go with a save; a store link only when it's the one edited. */
+const ALWAYS_SENT: Field[] = ["siteUrl", "repoUrl"];
 
 /** An address as it reads: no scheme, no `www.`, no `.git` or trailing slash. */
 function shortUrl(url: string): string {
@@ -29,15 +50,36 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
 /**
  * The Overview's app card (#work-feed): where the app runs and where its code is, each with a pencil beside it (for
- * the organisation's owners and admins) that edits that address in place. Saving sends both, as the project's links
- * are saved together; the other stays as it was.
+ * the organisation's owners and admins) that edits that address in place. Saving sends the site and code addresses
+ * together, as the project's links are saved together; the other stays as it was.
+ *
+ * A mobile app (#app-links): once the project has an App Store or Google Play link, both stores show in place of
+ * "No site yet" (a site address still shows when it has one), so an app's card speaks of the app, not a website.
  */
-export function AppInfoLinks({ slug, siteUrl, repoUrl, canEdit }: { slug: string; siteUrl: string | null; repoUrl: string | null; canEdit: boolean }) {
+export function AppInfoLinks({
+  slug,
+  siteUrl,
+  repoUrl,
+  appStoreUrl = null,
+  playStoreUrl = null,
+  canEdit,
+}: {
+  slug: string;
+  siteUrl: string | null;
+  repoUrl: string | null;
+  appStoreUrl?: string | null;
+  playStoreUrl?: string | null;
+  canEdit: boolean;
+}) {
   // The field being edited, and the save result it was opened after: a newer successful save closes it.
   const [opened, setOpened] = useState<{ field: Field; after: ProjectActionResult | undefined } | null>(null);
   const [result, action, pending] = useActionState<ProjectActionResult | undefined, FormData>(saveProjectLinksAction, undefined);
   const inputRef = useRef<HTMLInputElement>(null);
-  const values: Record<Field, string | null> = { siteUrl, repoUrl };
+  const values: Record<Field, string | null> = { siteUrl, repoUrl, appStoreUrl, playStoreUrl };
+  const isApp = Boolean(appStoreUrl || playStoreUrl);
+  const shown: Field[] = isApp
+    ? [...(siteUrl ? (["siteUrl"] as const) : []), "appStoreUrl", "playStoreUrl", "repoUrl"]
+    : ["siteUrl", "repoUrl"];
 
   // Saved: the editor closes (the page's data refreshes with the new address).
   const saved = opened !== null && result !== opened.after && Boolean(result?.message) && !result?.error;
@@ -49,7 +91,7 @@ export function AppInfoLinks({ slug, siteUrl, repoUrl, canEdit }: { slug: string
 
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-zk-muted">
-      {(Object.keys(FIELDS) as Field[]).map((field) => {
+      {shown.map((field) => {
         const meta = FIELDS[field];
         const value = values[field];
         const icon = (
@@ -63,7 +105,7 @@ export function AppInfoLinks({ slug, siteUrl, repoUrl, canEdit }: { slug: string
               {icon}
               <input type="hidden" name="slug" value={slug} />
               {/* The other address goes too, unchanged. */}
-              {(Object.keys(FIELDS) as Field[]).filter((other) => other !== field).map((other) => (
+              {ALWAYS_SENT.filter((other) => other !== field).map((other) => (
                 <input key={other} type="hidden" name={other} value={values[other] ?? ""} />
               ))}
               <input
@@ -93,7 +135,7 @@ export function AppInfoLinks({ slug, siteUrl, repoUrl, canEdit }: { slug: string
           <span key={field} className="inline-flex min-w-0 items-center gap-1.5">
             {icon}
             {value ? (
-              <a href={value} target="_blank" rel="noopener noreferrer" className="truncate hover:text-zk-accent hover:underline">{shortUrl(value)}</a>
+              <a href={value} target="_blank" rel="noopener noreferrer" className="truncate hover:text-zk-accent hover:underline">{meta.name ?? shortUrl(value)}</a>
             ) : (
               <span>{meta.empty}</span>
             )}

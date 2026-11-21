@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { IdeaChat } from "@/components/idea-chat";
 import { NeedPicker, needsFor, PRIMARY_BUTTON, SECONDARY_BUTTON, type ProductKind } from "@/components/get-started/need-picker";
-import { saveProjectLinksAction } from "@/app/(app)/projects/actions";
+import { nameDefaultProjectForAppAction, saveProjectLinksAction } from "@/app/(app)/projects/actions";
 
 /**
  * First questions (#first-questions): a few questions, one at a time, for the
@@ -139,6 +139,12 @@ export function FirstQuestions({ projectId, projectSlug, siteUrl, repoUrl, appSt
     if (choice !== kind) setPicked([]); // The tiles differ, so earlier picks no longer apply.
     setKind(choice);
     setIndex(1);
+    // A mobile app's project shouldn't be called "Web": the default name becomes "App" (a chosen name stays).
+    if (choice === "app" && canEditLinks) {
+      void nameDefaultProjectForAppAction(projectSlug).then((result) => {
+        if (result?.message) router.refresh();
+      });
+    }
   }
 
   const linksFilled = (asksSite && site.trim()) || (asksStores && (appStore.trim() || play.trim()));

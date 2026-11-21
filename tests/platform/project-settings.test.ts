@@ -73,7 +73,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { createProjectAction, saveProjectLinksAction, updateProjectAction } from "@/app/(app)/projects/actions";
+import { createProjectAction, nameDefaultProjectForAppAction, saveProjectLinksAction, updateProjectAction } from "@/app/(app)/projects/actions";
 import { updateProjectWorkflowAction } from "@/app/(app)/projects/[slug]/settings/workflow-actions";
 import { updateProjectPreviewSettingsAction } from "@/app/(app)/projects/[slug]/settings/preview-actions";
 import { previewSettingsSchema } from "@/lib/validations/preview-settings";
@@ -480,6 +480,34 @@ describe("a project's mobile app links (#app-links)", () => {
     expect(data.siteUrl).toBe("https://acme-coffee.test");
     expect(data.appStoreUrl).toBeUndefined();
     expect(data.playStoreUrl).toBeUndefined();
+  });
+});
+
+describe("naming a mobile app's first project (#app-links)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireUser.mockResolvedValue({ id: "admin", role: "user" });
+    currentOrganisationIdFor.mockResolvedValue("organisation-1");
+    isAdminOfOrganisation.mockResolvedValue(true);
+    transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run({
+      project: { update: projectUpdate },
+      projectAuditEvent: { create: auditCreate },
+    }));
+  });
+
+  it("renames the untouched default project to App, and audits it", async () => {
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web" });
+    await expect(nameDefaultProjectForAppAction("web")).resolves.toEqual({ message: "Saved." });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { name: "App" } });
+    expect(auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ changes: { name: { from: "Web", to: "App" } } }) });
+  });
+
+  it("never touches a name someone chose, and refuses a member", async () => {
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Acme Coffee" });
+    await expect(nameDefaultProjectForAppAction("web")).resolves.toEqual({});
+    isAdminOfOrganisation.mockResolvedValueOnce(false);
+    await expect(nameDefaultProjectForAppAction("web")).resolves.toMatchObject({ error: expect.any(String) });
+    expect(projectUpdate).not.toHaveBeenCalled();
   });
 });
 
