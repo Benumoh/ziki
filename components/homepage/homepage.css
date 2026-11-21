@@ -906,3 +906,44 @@
 .ziki-homepage .su-email summary::-webkit-details-marker { display: none; }
 .ziki-homepage .su-email summary:hover { color: #0972d5; text-decoration: underline; }
 .ziki-homepage .su-email[open] summary { margin-bottom: 12px; }
+
+/* ---------- Resources (#resources) ---------- */
+.ziki-homepage .res-list { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); margin: 48px auto 0; max-width: 1080px; padding: 0 24px 88px; text-align: left; }
+.ziki-homepage .res-card { background: #fff; border: 1px solid rgba(24, 24, 27, .12); border-radius: 16px; color: #161616; display: flex; flex-direction: column; gap: 10px; padding: 26px 24px; transition: border-color .2s ease, box-shadow .2s ease; }
+.ziki-homepage .res-card:hover { border-color: #7cc2f8; box-shadow: 0 12px 32px rgba(9, 114, 213, .10); }
+.ziki-homepage .res-card h2, .ziki-homepage .res-card h3 { font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; margin: 0; }
+.ziki-homepage .res-card p { color: #52525b; font-size: 15px; line-height: 1.55; margin: 0; }
+.ziki-homepage .res-meta { color: #71717a; font-size: 13px; margin: 0; }
+.ziki-homepage .res-more { align-items: center; color: #0972d5; display: inline-flex; font-size: 14px; font-weight: 600; gap: 6px; margin-top: auto; padding-top: 6px; }
+.ziki-homepage .res-article { margin: 0 auto; max-width: 740px; padding: 72px 24px 80px; text-align: left; }
+.ziki-homepage .res-crumb a { color: #0972d5; font-size: 14px; font-weight: 600; }
+.ziki-homepage .res-crumb a:hover { text-decoration: underline; }
+.ziki-homepage .res-article h1 { color: #161616; font-size: clamp(32px, 4.4vw, 48px); font-weight: 600; letter-spacing: -.035em; line-height: 1.1; margin: 14px 0 12px; }
+.ziki-homepage .res-body { color: #27272a; font-size: 17px; line-height: 1.7; margin-top: 32px; }
+.ziki-homepage .res-body p { margin: 0 0 18px; }
+.ziki-homepage .res-body h2 { color: #161616; font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; margin: 40px 0 14px; }
+.ziki-homepage .res-body h3 { color: #161616; font-size: 19px; font-weight: 600; margin: 26px 0 10px; }
+.ziki-homepage .res-body ul { list-style: disc; margin: 0 0 18px; padding-left: 22px; }
+.ziki-homepage .res-body li { margin-bottom: 8px; }
+.ziki-homepage .res-body a { color: #0972d5; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.ziki-homepage .res-body strong { color: #161616; }
+.ziki-homepage .res-cta { background: #eef8ff; border: 1px solid #b3dcfc; border-radius: 16px; margin-top: 44px; padding: 28px; text-align: center; }
+.ziki-homepage .res-cta h2 { color: #161616; font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+.ziki-homepage .res-cta p { color: #3f3f46; margin: 0 0 18px; }
+.ziki-homepage .res-cta .th-btn-primary { background: #0972d5; color: #fff; }
+.ziki-homepage .res-cta .th-btn-primary:hover { background: #0866c0; }
+.ziki-homepage .res-related { padding-top: 24px; }
+.ziki-homepage .res-related > h2 { color: #161616; font-size: 26px; font-weight: 600; letter-spacing: -.02em; margin: 0 auto; max-width: 1080px; padding: 0 24px; }
+.ziki-homepage .res-related .res-list { margin-top: 20px; }
+@media (max-width: 760px) {
+  .ziki-homepage .res-list { grid-template-columns: 1fr; padding: 0 16px 64px; }
+  .ziki-homepage .res-article { padding: 40px 16px 56px; }
+  .ziki-homepage .res-body { font-size: 16px; }
+}
+
+.ziki-homepage .res-figure { float: right; margin: 6px -120px 20px 28px; width: 360px; }
+.ziki-homepage .res-figure img { border: 1px solid rgba(24, 24, 27, .12); border-radius: 12px; box-shadow: 0 14px 36px rgba(9, 40, 90, .12); display: block; height: auto; width: 100%; }
+.ziki-homepage .res-figure figcaption { color: #52525b; font-size: 13px; line-height: 1.5; margin-top: 10px; }
+.ziki-homepage .res-body h2 { clear: both; }
+@media (max-width: 1100px) { .ziki-homepage .res-figure { margin-right: 0; width: 300px; } }
+@media (max-width: 760px) { .ziki-homepage .res-figure { float: none; margin: 8px 0 22px; width: 100%; } }

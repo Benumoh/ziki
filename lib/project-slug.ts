@@ -16,6 +16,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "actions",
   "api",
   "compare",
+  "resources",
   "developers",
   "fonts",
   "for-agents",

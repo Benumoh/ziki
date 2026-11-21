@@ -56,6 +56,9 @@ export function isPublicPath(
     pathWithoutBase.startsWith("/skills/") ||
     // The public comparison directory and every comparison page (#compare).
     pathWithoutBase === "/compare" ||
+    // Articles (#resources).
+    pathWithoutBase === "/resources" ||
+    pathWithoutBase.startsWith("/resources/") ||
     pathWithoutBase.startsWith("/compare/") ||
     // Old business links from earners' emails (#earn-outreach): opened by people who aren't signed in.
     /^\/r\/[a-z0-9]{4,16}$/.test(pathWithoutBase) ||
