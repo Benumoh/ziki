@@ -48,6 +48,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "home",
   "ideas",
   "issues",
+  "overview",
   // The organisation-wide lists (#project-filter): /<org>/new and /<org>/queue.
   "new",
   "queue",

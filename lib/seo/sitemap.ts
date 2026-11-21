@@ -17,6 +17,7 @@ import { publicIssueDetailPath } from "@/lib/public-project-paths";
  *
  *   pages.xml          the public site: home, marketing pages, the agents directory, /compare, /discover, /skills
  *   compare.xml        every indexable comparison: Ziki against each platform, and published hand-written pairs
+ *   resources.xml      /resources and every article on it
  *   skills.xml         /agents/skill/{tag} for every skill a listed agent has
  *   library.xml        /skills/{slug} for every skill in the skills library
  *   issues-{n}.xml     /<org>/<project>/public-issues/{number} for every issue a guest's public list shows, ISSUES_PER_FILE a file
@@ -83,6 +84,11 @@ function urlset(entries: Entry[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
 }
 
+const postDate = (iso: string) => new Date(`${iso}T00:00:00Z`);
+/** When the newest article was published: the resources section's last change. */
+const newestPost = (): Date | undefined =>
+  posts.length ? new Date(Math.max(...posts.map((post) => postDate(post.published).getTime()))) : undefined;
+
 /** The sections, for the index: their file names and when each last changed. */
 export async function sitemapSections(): Promise<Array<{ file: string; lastModified?: Date }>> {
   const [agentCount, newestAgent, issueCount, newestIssue] = await Promise.all([
@@ -96,6 +102,7 @@ export async function sitemapSections(): Promise<Array<{ file: string; lastModif
   return [
     { file: "pages.xml" },
     { file: "compare.xml" },
+    { file: "resources.xml", lastModified: newestPost() },
     { file: "skills.xml", lastModified: newestAgent?.updatedAt },
     { file: "library.xml" },
     ...Array.from({ length: issueFiles }, (_, index) => ({ file: `issues-${index + 1}.xml`, lastModified: newestIssue?.updatedAt })),
@@ -128,14 +135,18 @@ export async function sitemapSectionXml(file: string): Promise<string | null> {
     return urlset([
       { path: "/", changeFrequency: "weekly", priority: 1 },
       ...["/how-it-works", "/security", "/for-agents", "/developers", "/earn", "/pricing"].map((path) => ({ path, changeFrequency: "weekly" as const, priority: 0.8 })),
-      // Articles (#resources).
-      { path: RESOURCES_HREF, changeFrequency: "weekly" as const, priority: 0.7 },
-      ...posts.map((post) => ({ path: resourceHref(post.slug), lastModified: new Date(`${post.published}T00:00:00Z`), priority: 0.7 })),
       // New agents join all the time.
       { path: "/agents", changeFrequency: "hourly", priority: 0.9 },
       { path: COMPARE_HREF, changeFrequency: "weekly", priority: 0.8 },
       { path: "/discover", changeFrequency: "daily", priority: 0.8 },
       { path: "/skills", changeFrequency: "daily", priority: 0.8 },
+    ]);
+  }
+  if (file === "resources.xml") {
+    // The articles and their list (#resources).
+    return urlset([
+      { path: RESOURCES_HREF, lastModified: newestPost(), changeFrequency: "weekly", priority: 0.7 },
+      ...posts.map((post) => ({ path: resourceHref(post.slug), lastModified: postDate(post.published), changeFrequency: "weekly" as const, priority: 0.7 })),
     ]);
   }
   if (file === "compare.xml") {

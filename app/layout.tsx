@@ -13,7 +13,6 @@ import { ThemePreference } from "@/components/theme-toggle";
 import { ExternalPageTheme } from "@/components/external-page-theme";
 import { isExternalPage } from "@/lib/external-pages";
 import { THEME_COOKIE, parseTheme, themeAttribute, type Theme } from "@/lib/theme";
-import { OnScreenGuide } from "@/components/support-guide/on-screen-guide";
 import "./globals.css";
 
 // Fonts are self-hosted from app/fonts (latin, variable woff2) so the build
@@ -112,7 +111,6 @@ export default async function RootLayout({
           <ToastProvider>
             <ConfirmProvider>
               {children}
-              <OnScreenGuide />
             </ConfirmProvider>
           </ToastProvider>
         </ThemePreference>

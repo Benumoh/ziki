@@ -43,6 +43,9 @@ const UNAVAILABLE = "The assistant can't answer right now. Try again in a moment
 const BUSY = "The assistant is busy (rate limit reached). Try again in a minute.";
 const NOT_SET_UP = "The assistant isn't set up on this server.";
 
+/** The message a person sees, with what actually went wrong after it (#assistant-errors), so they can act on it. */
+const withDetail = (message: string, detail: string) => `${message} Details: ${detail}`;
+
 function systemPrompt(siteUrl: string, projectName: string): string {
   return `You are Ziki's marketing assistant, in the Marketing section of the project "${projectName}". Its website is ${siteUrl}.
 
@@ -122,19 +125,19 @@ export async function runAssistant<C, R>(options: {
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     if (!apiKey) {
       logger.error(`${log} ZIKI_AI_PROVIDER is openrouter but OPENROUTER_API_KEY isn't set.`);
-      return { ok: false, error: NOT_SET_UP };
+      return { ok: false, error: withDetail(NOT_SET_UP, "ZIKI_AI_PROVIDER is openrouter but OPENROUTER_API_KEY isn't set.") };
     }
     conversation = new OpenRouterConversation(apiKey, process.env.OPENROUTER_MODEL?.trim() || OPENROUTER_DEFAULT_MODEL, system, turns);
   } else if (provider === "anthropic") {
     const apiKey = process.env.ZIKI_CLAUDE_API_KEY?.trim();
     if (!apiKey) {
       logger.error(`${log} ZIKI_CLAUDE_API_KEY isn't set.`);
-      return { ok: false, error: NOT_SET_UP };
+      return { ok: false, error: withDetail(NOT_SET_UP, "ZIKI_CLAUDE_API_KEY isn't set.") };
     }
     conversation = new ClaudeConversation(apiKey, system, turns);
   } else {
     logger.error(`${log} ZIKI_AI_PROVIDER "${provider}" isn't supported here. Use "openrouter" or "anthropic".`);
-    return { ok: false, error: NOT_SET_UP };
+    return { ok: false, error: withDetail(NOT_SET_UP, `ZIKI_AI_PROVIDER "${provider}" isn't supported. Use "openrouter" or "anthropic".`) };
   }
 
   const byName = new Map(tools.map((definition) => [definition.name, definition]));
@@ -146,7 +149,7 @@ export async function runAssistant<C, R>(options: {
         const reply = plainText(text) || options.fallback?.(run) || "";
         if (reply) return { ok: true, reply, run };
         logger.warn(`${log} The model returned no text.`, { provider });
-        return { ok: false, error: UNAVAILABLE };
+        return { ok: false, error: withDetail(UNAVAILABLE, `the model (${provider}) returned no text.`) };
       }
       // One at a time: results keep their order, and nothing is repeated in parallel.
       const results: ToolResult[] = [];
@@ -156,12 +159,13 @@ export async function runAssistant<C, R>(options: {
   } catch (error) {
     if (error instanceof ProviderError) {
       logger.error(`${log} ${error.message}`);
-      return { ok: false, error: error.userMessage };
+      return { ok: false, error: withDetail(error.userMessage, error.message) };
     }
-    logger.error(`${log} The assistant failed.`, error instanceof Error ? error.message : error);
-    return { ok: false, error: UNAVAILABLE };
+    const detail = error instanceof Error ? error.message : String(error);
+    logger.error(`${log} The assistant failed.`, detail);
+    return { ok: false, error: withDetail(UNAVAILABLE, detail) };
   }
-  return { ok: false, error: UNAVAILABLE };
+  return { ok: false, error: withDetail(UNAVAILABLE, "no answer after the most steps allowed.") };
 }
 
 /** The Marketing assistant's reply to the conversation, whose last turn is the person's. */
@@ -310,7 +314,7 @@ class ClaudeConversation implements Conversation {
       });
     } catch (error) {
       if (error instanceof Anthropic.RateLimitError) throw new ProviderError(BUSY, "Claude rate limit reached.");
-      if (error instanceof Anthropic.APIError) throw new ProviderError(UNAVAILABLE, `Claude API error ${error.status}.`);
+      if (error instanceof Anthropic.APIError) throw new ProviderError(UNAVAILABLE, `Claude API error ${error.status}: ${error.message}`);
       throw error;
     }
     if (response.stop_reason === "refusal") throw new ProviderError("The assistant can't help with that.", "Claude refused.");
