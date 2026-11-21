@@ -41,7 +41,7 @@ function Verdicts({ item }: { item: RejectedIdea }) {
 
 function IdeaCard({ slug, item }: { slug: ProjectRef; item: RejectedIdea }) {
   return (
-    <li className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
+    <li className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
       <article className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2 text-xs text-zk-muted">
           {item.typeName ? <span className={`${chip} bg-zk-chip text-zk-text2`}>{item.typeName}</span> : null}
@@ -110,13 +110,13 @@ export function RejectedIdeas({ slug, initial }: { slug: ProjectRef; initial: Re
       </header>
 
       {!initial.ok ? (
-        <div role="alert" className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-12 text-center">
+        <div role="alert" className="rounded-panel border border-zk-border bg-zk-surface px-4 py-12 text-center">
           <p className="font-bold text-zk-text">We couldn’t load the rejected ideas</p>
           <p className="mt-1.5 text-sm text-zk-muted">Check your connection and try again in a moment.</p>
           <Link href={href} className={`mt-4 inline-block text-sm font-semibold ${link}`}>Try again</Link>
         </div>
       ) : initial.items.length === 0 ? (
-        <div className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-12 text-center">
+        <div className="rounded-panel border border-zk-border bg-zk-surface px-4 py-12 text-center">
           <p className="font-bold text-zk-text">No rejected ideas.</p>
           <p className="mt-1.5 text-sm text-zk-muted">Ideas a manager rejects or archives appear here.</p>
         </div>

@@ -1677,7 +1677,7 @@ export async function IssuesList({
   const headerContent = (
     <>
       {activeProject?.goal ? (
-        <section aria-labelledby="project-goal-heading" className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4">
+        <section aria-labelledby="project-goal-heading" className="rounded-panel border border-zk-border bg-zk-surface px-5 py-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="project-goal-heading" className="text-sm font-bold text-zk-text">{activeProject.name} goal</h2>
             {membershipRole && isOrganisationAdmin(membershipRole, effectiveRole) ? (
@@ -1822,7 +1822,7 @@ export async function IssuesList({
 
 
         {milestoneSummary ? (
-          <section aria-label={`Milestone ${milestoneSummary.title}`} className="rounded-[20px] border border-zk-border bg-zk-surface p-5">
+          <section aria-label={`Milestone ${milestoneSummary.title}`} className="rounded-panel border border-zk-border bg-zk-surface p-5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-bold text-zk-text">{milestoneSummary.title}</h2>
               <MilestoneDue due={dueDateValue(milestoneSummary.dueDate) || null} isClosed={milestoneSummary.isClosed} />
@@ -2177,7 +2177,7 @@ export async function IssuesList({
         {isMyWorkTab && openBidCount > 0 ? (
           <Link
             href={issuesPath(listRef, "open", `${MY_WORK_PARAM}=1`)}
-            className="group flex items-center gap-4 rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4 transition hover:border-zk-accent/40 hover:bg-zk-tint/40 focus-visible:outline-2 focus-visible:outline-electric-blue"
+            className="group flex items-center gap-4 rounded-panel border border-zk-border bg-zk-surface px-5 py-4 transition hover:border-zk-accent/40 hover:bg-zk-tint/40 focus-visible:outline-2 focus-visible:outline-electric-blue"
           >
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zk-tint text-lg font-extrabold tabular-nums text-zk-accent">
               {openBidCount}
@@ -2322,7 +2322,7 @@ function FirstRunWelcome({
 }) {
   if (!hasOrganisation) {
     return (
-      <section aria-labelledby="issues-organisation-heading" className="issues-organisation-empty rounded-[20px] border border-zk-border bg-zk-bg px-6 py-10 text-center sm:px-8">
+      <section aria-labelledby="issues-organisation-heading" className="issues-organisation-empty rounded-panel border border-zk-border bg-zk-bg px-6 py-10 text-center sm:px-8">
         <h2 id="issues-organisation-heading" className="text-xl font-bold leading-7 text-zk-text">No organisation yet</h2>
         <p className="mx-auto mt-3 max-w-lg text-base leading-7 text-zk-text2">
           You are not currently a member of any organisation. Join an organisation via an invite from your team,
@@ -2341,7 +2341,7 @@ function FirstRunWelcome({
   }
 
   return (
-    <section className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-8 text-center">
+    <section className="rounded-panel border border-zk-border bg-zk-surface px-5 py-8 text-center">
       <h2 className="text-lg font-bold text-zk-text">No issues yet</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-zk-muted">
         This is where reported issues will appear. A good report says what you

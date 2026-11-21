@@ -40,7 +40,7 @@ export function CreateGoalForm({ org, slug }: { org: string; slug: string }) {
       ref={formRef}
       action={action}
       id={FORM_ID}
-      className="space-y-4 rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4"
+      className="space-y-4 rounded-panel border border-zk-border bg-zk-surface px-5 py-4"
       noValidate
       data-testid="create-goal-form"
     >

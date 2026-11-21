@@ -63,7 +63,7 @@ export function TimeTrackingPanel({ bugId, canEdit, isAdmin, viewerId, entries }
   };
 
   return (
-    <section aria-label="Time tracking" data-testid="time-tracking-panel" className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+    <section aria-label="Time tracking" data-testid="time-tracking-panel" className="rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Time tracking</h2>
         <span className="rounded-full bg-zk-chip px-2.5 py-0.5 text-sm font-semibold tabular-nums text-zk-text" aria-label={`Total time logged: ${formatDuration(total)}`}>

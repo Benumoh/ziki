@@ -16,7 +16,7 @@ import { FundForm, PauseButton, TakeBackButton } from "./budget-panel";
 export const metadata = { title: "Budget" };
 export const dynamic = "force-dynamic";
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 
 /** How each issue's state reads in Track funding: a short label and the colours of its tag. */
 const STATE: Record<BudgetIssueState, { label: string; tone: string }> = {

@@ -25,7 +25,7 @@ export default async function OrgChecksPage() {
       <OrgPageHeader title="Checks">
         What every project in {org.name} must prove before a fix counts as tested. Builds and tests are already read from the pull request. Each project adds its own on top, in its settings.
       </OrgPageHeader>
-      <section className="flex flex-col gap-4 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+      <section className="flex flex-col gap-4 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
         <div className="flex flex-col gap-1">
           <h3 className="m-0 text-lg font-bold text-zk-text">For every project</h3>
           <p className="m-0 text-sm text-zk-text2">

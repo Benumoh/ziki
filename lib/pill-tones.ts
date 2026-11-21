@@ -1,12 +1,12 @@
 /**
  * The pills' colours, from the agents design: soft warm tints with a strong text of the same hue (green #2fb36b,
- * indigo #4f6ef7, teal #2ec4b6, violet #8b5cf6, amber #f5b73b, orange #f26b3a, red #ef4766, slate #5b6478), each
+ * Ziki blue #0972d5, teal #2ec4b6, violet #8b5cf6, amber #f5b73b, orange #f26b3a, red #ef4766, slate #5b6478), each
  * text deepened to at least 4.5:1 on its tint, and on white when a pill is solid. One map, so the row statuses, the
  * feed's kinds and the priorities all read alike.
  */
 export const PILL_TONES = {
   green: { backgroundColor: "#edf8f1", color: "#187a42" },
-  blue: { backgroundColor: "#eef2fe", color: "#3352d1" },
+  blue: { backgroundColor: "#eef8ff", color: "#086ccc" },
   cyan: { backgroundColor: "#e8f7f5", color: "#0f766c" },
   teal: { backgroundColor: "#e8f7f5", color: "#0f766c" },
   purple: { backgroundColor: "#f3effe", color: "#6b46d9" },

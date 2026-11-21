@@ -140,7 +140,7 @@ export default async function AuditLogPage({ searchParams }: Props) {
         </p>
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3 rounded-[20px] border border-zk-border bg-zk-surface p-5">
+      <form method="get" className="flex flex-wrap items-end gap-3 rounded-panel border border-zk-border bg-zk-surface p-5">
         <label className="text-sm">
           <span className="block font-bold text-zk-text">Agent</span>
           <select
@@ -188,7 +188,7 @@ export default async function AuditLogPage({ searchParams }: Props) {
         ) : null}
       </form>
 
-      <section className="rounded-[20px] border border-zk-border bg-zk-surface px-5">
+      <section className="rounded-panel border border-zk-border bg-zk-surface px-5">
         <AuditLog
           rows={rows}
           isAdminOfOrganisation={access.kind === "all"}

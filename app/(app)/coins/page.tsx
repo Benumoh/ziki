@@ -22,7 +22,7 @@ import { safeReturnTo } from "@/lib/coins/return-to";
 export const metadata = { title: "Ziks" };
 export const dynamic = "force-dynamic";
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 const notice = "m-0 rounded-xl px-4 py-3 text-sm font-semibold";
 const quick =
   "inline-flex min-h-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
@@ -142,7 +142,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       {query.error ? <UrlNotice role="alert" className={`${notice} bg-zk-warn-bg text-zk-warn-fg`}>{query.error}</UrlNotice> : null}
 
       {/* What you hold, and the three things people come here to do. */}
-      <section aria-label="Your Ziks" className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-zk-border bg-zk-surface px-6 py-4">
+      <section aria-label="Your Ziks" className="flex flex-wrap items-center justify-between gap-4 rounded-panel border border-zk-border bg-zk-surface px-6 py-4">
         <div className="min-w-0">
           <p className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted">Your Ziks</p>
           <p className="m-0 mt-1 flex flex-wrap items-baseline gap-x-2">

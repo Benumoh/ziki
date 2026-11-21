@@ -77,7 +77,7 @@ export default async function OrgSettingsPage({
             </p>
           </section>
         ) : (
-          <section aria-labelledby="org-danger" className="rounded-[20px] border border-zk-bad-bd bg-zk-surface p-4 sm:p-6">
+          <section aria-labelledby="org-danger" className="rounded-panel border border-zk-bad-bd bg-zk-surface p-4 sm:p-6">
             <h3 id="org-danger" className="text-base font-semibold text-zk-bad-fg">
               Archive or delete
             </h3>

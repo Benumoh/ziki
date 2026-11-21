@@ -181,7 +181,7 @@ export function MarketingTaskHeader({
 
       {/* Unified Description & Strategic Rationale Card */}
       {description || rationale ? (
-        <section aria-label="Task description" className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6 text-sm text-zk-text">
+        <section aria-label="Task description" className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6 text-sm text-zk-text">
           {description ? (
             <div>
               <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">

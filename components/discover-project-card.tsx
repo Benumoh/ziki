@@ -53,7 +53,7 @@ export function DiscoverProjectCard({ project }: { project: DiscoverableProject 
 
   return (
     <>
-      <article className="flex flex-col justify-between self-start rounded-[20px] border border-zk-border bg-zk-surface p-5 transition hover:border-zk-border-hover sm:p-6">
+      <article className="flex flex-col justify-between self-start rounded-panel border border-zk-border bg-zk-surface p-5 transition hover:border-zk-border-hover sm:p-6">
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>

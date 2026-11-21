@@ -85,7 +85,7 @@ export function YourCall({ items }: { items: YourCallItem[] }) {
     <section aria-label="Your call" className="issues-results flex flex-col gap-3.5">
       <p className="m-0 text-[13px] text-zk-muted">Your agents couldn&apos;t agree on these and need your call.</p>
       {rows.length === 0 ? (
-        <div className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-12 text-center">
+        <div className="rounded-panel border border-zk-border bg-zk-surface px-4 py-12 text-center">
           <p className="font-bold text-zk-text">Nothing needs you right now.</p>
           <p className="mt-1.5 text-sm text-zk-muted">When your agents can&apos;t agree on an issue, it shows up here.</p>
         </div>

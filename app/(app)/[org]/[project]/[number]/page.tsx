@@ -1605,7 +1605,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             <section
               id="comments"
               aria-label="Comments"
-              className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+              className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
             >
               <IssueComments
                 count={commentCount}
@@ -1677,7 +1677,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         }
         attachmentsSlot={
           issueAttachments.length > 0 ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
                 Attachments
               </h2>
@@ -1688,7 +1688,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         alertsSlot={
           <>
             {bug.isDeleted ? (
-              <div className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
+              <div className="rounded-panel border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-zk-bad-fg">
@@ -1711,7 +1711,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             {bug.duplicateOf ? (
               <section
                 aria-label="Duplicate"
-                className="rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg p-4 sm:p-5"
+                className="rounded-panel border border-zk-warn-bd bg-zk-warn-bg p-4 sm:p-5"
               >
                 <h2 className="text-sm font-semibold text-zk-warn-fg">
                   Marked as duplicate of{" "}
@@ -1728,7 +1728,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             {resolution ? (
               <section
                 aria-label="Resolution note"
-                className="rounded-[20px] border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
+                className="rounded-panel border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
               >
                 <h2 className="text-sm font-semibold text-zk-ok-fg">
                   {resolutionStatusLabel[resolution.status]} by {resolution.by}
@@ -1746,14 +1746,14 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         sideRailSlot={
           <>
             {bug.linkedIssue && !bug.linkedIssue.isDeleted ? (
-              <section aria-label="Related product issue" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface p-5">
+              <section aria-label="Related product issue" className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface p-5">
                 <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Related product issue</h2>
                 <Link href={issuePath(refOf(bug.project), bug.linkedIssue.number)} className="text-sm font-semibold text-zk-accent hover:underline">
                   #{bug.linkedIssue.number} {bug.linkedIssue.title}
                 </Link>
               </section>
             ) : null}
-            <section aria-label="Status" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+            <section aria-label="Status" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2>
               <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
                 {bug.isDeleted ? (
@@ -1812,7 +1812,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               </IssueRewardPanel>
             ) : null}
 
-            <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+            <section className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
               <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
               <div className="flex min-w-0 items-center gap-3">
                 <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
@@ -1972,7 +1972,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   return (
     <div className="issue-detail-scope flex flex-col gap-5 pb-10">
       {bug.isDeleted ? (
-        <div className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
+        <div className="rounded-panel border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-sm font-semibold text-zk-bad-fg">
@@ -1995,7 +1995,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       {bug.duplicateOf ? (
         <section
           aria-label="Duplicate"
-          className="flex flex-col gap-2 rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          className="flex flex-col gap-2 rounded-panel border border-zk-warn-bd bg-zk-warn-bg p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
         >
           <p className="text-sm text-zk-warn-fg">
             <span className="font-semibold">This issue is a duplicate of </span>
@@ -2019,7 +2019,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       ) : null}
 
       {bug._count.duplicates > 0 ? (
-        <section aria-label="Duplicates of this issue" className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
+        <section aria-label="Duplicates of this issue" className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-zk-text">
             {bug._count.duplicates} duplicate{bug._count.duplicates === 1 ? "" : "s"} of this issue
           </h2>
@@ -2042,11 +2042,11 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       ) : null}
 
       {redesignProposals.length ? (
-        <section id="redesigns" aria-label="Redesign proposals" className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
+        <section id="redesigns" aria-label="Redesign proposals" className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-zk-text">Compare redesign proposals</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {redesignProposals.map((proposal) => (
-              <article key={proposal.id} className="space-y-3 rounded-[16px] border border-zk-border bg-zk-chip/40 p-4">
+              <article key={proposal.id} className="space-y-3 rounded-panel border border-zk-border bg-zk-chip/40 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="font-semibold text-zk-text">{proposal.title}</h3>
                   <span className="shrink-0 text-xs capitalize text-zk-muted">{proposal.status}</span>
@@ -2070,7 +2070,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       {resolution ? (
         <section
           aria-label="Resolution note"
-          className="rounded-[20px] border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
+          className="rounded-panel border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
         >
           <h2 className="text-sm font-semibold text-zk-ok-fg">
             {resolutionStatusLabel[resolution.status]} by {resolution.by}
@@ -2189,7 +2189,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           </EditableIssueDescription>
 
           {issueAttachments.length > 0 ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
                 Attachments
               </h2>
@@ -2227,7 +2227,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
 
               {/* #plan-review: the plan is the latest thing while the issue is at In progress · Plan review. */}
               {planReviewing && hold?.status === "planning" ? (
-                <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
+                <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
                   <PlanReviewCard
                     bugId={bug.id}
                     plan={planCard}
@@ -2252,7 +2252,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 <section
                   id="comments"
                   aria-label="Comments"
-                  className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+                  className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
                 >
                   {steeringAgent ? (
                     <AgentSteerPanel
@@ -2332,7 +2332,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             />
           ) : null}
           {/* Status: workflow state, when it was opened, and whether it is an idea or an issue (#687). */}
-          <section aria-label="Status" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section aria-label="Status" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2>
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
               {bug.isDeleted ? (
@@ -2392,7 +2392,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           </section>
 
           {/* People, compact: one row each, label on the left. */}
-          <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
             <div className="flex min-w-0 items-start gap-3">
               <span className="w-16 shrink-0 pt-1 text-xs text-zk-muted">Reporter</span>

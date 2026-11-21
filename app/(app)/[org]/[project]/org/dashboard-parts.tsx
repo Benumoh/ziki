@@ -81,7 +81,7 @@ export function Stat({
   hint?: string;
 }) {
   return (
-    <div className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3">
+    <div className="rounded-panel border border-zk-border bg-zk-surface px-4 py-3">
       <dt className="text-xs font-medium uppercase tracking-wide text-zk-muted">
         {label}
       </dt>
@@ -106,7 +106,7 @@ export function WeeklyChart({ points }: { points: WeekPoint[] }) {
   const height = 140;
 
   return (
-    <section className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-6">
+    <section className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zk-muted">
         Opened vs closed, by week
       </h2>
@@ -224,7 +224,7 @@ export function BreakdownCard({
   wide?: boolean;
 }) {
   return (
-    <section className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-6">
+    <section className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zk-muted">
         {title}
       </h2>

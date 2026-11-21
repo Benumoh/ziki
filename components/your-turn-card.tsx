@@ -130,7 +130,7 @@ export function YourTurnCard({ bugId, turn, targetKind = "issue" }: { bugId: str
       id="your-turn"
       aria-label="Your turn"
       data-testid="your-turn"
-      className="flex scroll-mt-24 flex-col gap-3 rounded-[20px] border border-zk-accent/40 bg-zk-surface p-4 sm:p-5"
+      className="flex scroll-mt-24 flex-col gap-3 rounded-panel border border-zk-accent/40 bg-zk-surface p-4 sm:p-5"
     >
       <div className="flex flex-col gap-1">
         <p className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-zk-accent">

@@ -130,7 +130,7 @@ export function GitHubStatusPanel({ bugId, pullRequestUrl, issueStatus, status, 
   const chip = snapshot ? stateChip(snapshot) : null;
 
   return (
-    <section aria-label="GitHub status" data-testid="github-status" data-verdict={diagnosis?.verdict ?? "unknown"} className="flex flex-col gap-3 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
+    <section aria-label="GitHub status" data-testid="github-status" data-verdict={diagnosis?.verdict ?? "unknown"} className="flex flex-col gap-3 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
       <header className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 text-sm font-bold text-zk-text">
           <GitHubMark /> GitHub

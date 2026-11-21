@@ -209,7 +209,7 @@ export function IdeaChat({
   // closes with ×.
   const conversation = chatSlug && turns.length ? (
     <div
-      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-[24px] bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
+      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
       style={{ animation: "zk-sheet 0.45s ease-out both" }}
     >
       <style>{`
@@ -289,7 +289,7 @@ export function IdeaChat({
               event.preventDefault();
               boxRef.current?.focus();
             }}
-            className="relative z-[1] cursor-text rounded-[22px] border border-black/[0.06] bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_14px_34px_rgba(16,24,40,0.10),0_3px_8px_rgba(16,24,40,0.06)] focus-within:border-electric-blue-strong/50"
+            className="relative z-[1] cursor-text rounded-panel border border-black/[0.06] bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_14px_34px_rgba(16,24,40,0.10),0_3px_8px_rgba(16,24,40,0.06)] focus-within:border-electric-blue-strong/50"
           >
             <label htmlFor={boxId} className="sr-only">Your idea</label>
             <textarea

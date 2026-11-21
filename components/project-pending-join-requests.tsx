@@ -113,7 +113,7 @@ export function ProjectPendingJoinRequestsBanner({
                     <input type="hidden" name="requestId" value={req.id} />
                     <button
                       type="submit"
-                      className="inline-flex cursor-pointer items-center justify-center rounded-full bg-electric-blue-strong px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:brightness-110"
+                      className="inline-flex cursor-pointer items-center justify-center rounded-control bg-electric-blue-strong px-4 py-1.5 text-xs font-bold text-white transition hover:bg-zk-ink"
                     >
                       Accept
                     </button>

@@ -95,7 +95,7 @@ function parseSection(value: string | undefined, github: string | undefined): Se
   return SECTIONS.find((item) => item.id === value)?.id ?? "details";
 }
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 
 /** The Checks section's data: the organisation's rules (read-only here) and this project's per area. */
 async function projectChecks(organisationId: string, projectId: string, user: { id: string; role?: AppRole | null }) {

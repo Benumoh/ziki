@@ -159,12 +159,12 @@ export function SkillApprovalsManager({ initialSubmissions = [] }: SkillApproval
         </div>
 
         {activeItems.length === 0 ? (
-          <div className="rounded-[18px] border border-zk-border bg-zk-surface/50 p-8 text-center">
+          <div className="rounded-panel border border-zk-border bg-zk-surface/50 p-8 text-center">
             <p className="text-sm font-medium text-zk-text">Review queue is clear</p>
             <p className="mt-1 text-xs text-zk-muted">No pending skill submissions waiting for approval.</p>
           </div>
         ) : (
-          <div className="rounded-[18px] border border-zk-border bg-zk-surface shadow-xs overflow-hidden w-full">
+          <div className="rounded-panel border border-zk-border bg-zk-surface shadow-xs overflow-hidden w-full">
             <table className="table-fixed w-full text-left text-sm divide-y divide-zk-border">
               <colgroup>
                 <col className="w-[36%]" />
@@ -242,11 +242,11 @@ export function SkillApprovalsManager({ initialSubmissions = [] }: SkillApproval
         </div>
 
         {historyItems.length === 0 ? (
-          <div className="rounded-[18px] border border-zk-border bg-zk-surface/50 p-6 text-center text-xs text-zk-muted">
+          <div className="rounded-panel border border-zk-border bg-zk-surface/50 p-6 text-center text-xs text-zk-muted">
             No reviewed skill history yet.
           </div>
         ) : (
-          <div className="rounded-[18px] border border-zk-border bg-zk-surface shadow-xs overflow-hidden w-full">
+          <div className="rounded-panel border border-zk-border bg-zk-surface shadow-xs overflow-hidden w-full">
             <table className="table-fixed w-full text-left text-sm divide-y divide-zk-border">
               <colgroup>
                 <col className="w-[44%]" />
@@ -566,7 +566,7 @@ export function SkillApprovalsManager({ initialSubmissions = [] }: SkillApproval
               <button
                 type="button"
                 onClick={() => setSelectedHistoryNote(null)}
-                className="rounded-xl bg-zk-accent px-4 py-2 text-xs font-semibold text-white hover:opacity-90 transition shadow-sm"
+                className="rounded-control bg-zk-accent px-4 py-2 text-xs font-semibold text-white hover:opacity-90 transition"
               >
                 Done
               </button>

@@ -1,5 +1,7 @@
 # Ziki brand guide
 
+> Colours, corners and components are set in [`docs/style-guide.md`](./style-guide.md), which wins where this page disagrees: the accent is now Ziki Blue (#0972D5), not teal.
+
 The Zedu Amp dashboard (`https://metrics.zedu.chat/dashboard`) is a reference for tone. It is not a skin to copy. Ziki already has a light theme and a dark theme. Both stay. Teal stays the brand accent. Do not hard-code Amp’s hex colors onto components.
 
 ## Words that do not change

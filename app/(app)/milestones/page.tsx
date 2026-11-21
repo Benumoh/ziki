@@ -13,7 +13,7 @@ export const metadata = { title: "Milestones" };
 function MilestoneCard({ m, slug }: { m: MilestoneSummary; slug: ProjectRef | null }) {
   const left = m.progress.total - m.progress.done;
   return (
-    <li className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
+    <li className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-base font-semibold text-zk-text">{m.title}</h2>
         <MilestoneDue due={dueDateValue(m.dueDate) || null} isClosed={m.isClosed} />
@@ -65,7 +65,7 @@ export default async function MilestonesPage() {
       </div>
 
       {open.length === 0 ? (
-        <p className="rounded-[20px] border border-dashed border-zk-border bg-zk-surface px-6 py-10 text-center text-sm text-zk-text2">
+        <p className="rounded-panel border border-dashed border-zk-border bg-zk-surface px-6 py-10 text-center text-sm text-zk-text2">
           No open milestones.
         </p>
       ) : (

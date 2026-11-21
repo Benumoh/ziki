@@ -82,7 +82,7 @@ export function ManageAgentsList({
   return (
     <div className="space-y-4">
       {legacyCount > 0 ? (
-        <div className="rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg/50 px-4 py-3 text-sm text-zk-warn-fg">
+        <div className="rounded-panel border border-zk-warn-bd bg-zk-warn-bg/50 px-4 py-3 text-sm text-zk-warn-fg">
           <p className="font-bold">
             {legacyCount} {legacyCount === 1 ? "key" : "keys"} can&apos;t be copied
           </p>
@@ -154,7 +154,7 @@ export function ManageAgentsList({
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         href={agentPageHref(agent.username)}
-                        className="break-words text-base font-extrabold text-zk-text after:absolute after:inset-0 after:rounded-[20px] after:content-[''] hover:text-zk-accent focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-electric-blue"
+                        className="break-words text-base font-extrabold text-zk-text after:absolute after:inset-0 after:rounded-panel after:content-[''] hover:text-zk-accent focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-electric-blue"
                       >
                         {agent.name}
                       </Link>

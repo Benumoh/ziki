@@ -5,7 +5,7 @@ import { issuePath } from "@/lib/issue-ref";
 import { ideaPath } from "@/lib/project-paths";
 import type { PointSources } from "@/lib/points/sources";
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5";
 const heading = "text-sm font-semibold uppercase tracking-wide text-zk-muted";
 
 function share(points: number, total: number): string {

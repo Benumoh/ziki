@@ -276,7 +276,7 @@ export function MarketingTaskDetail({
             </div>
 
             {/* Tab Panels Container */}
-            <div className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <div className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               {/* Bids & Award Panel */}
               <div
                 role="tabpanel"

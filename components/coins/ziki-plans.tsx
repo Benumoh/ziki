@@ -3,7 +3,7 @@ import { endSubscriptionAction, keepSubscriptionAction, subscribeAction } from "
 import { formatUsd } from "@/lib/coins/math";
 import { ZIK_PLANS, findPlan, planBreakEvenCents } from "@/lib/coins/plans";
 
-const card = "rounded-[22px] border border-zk-border bg-zk-surface p-5 sm:p-6";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6";
 const label = "text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted";
 const BUTTON =
   "inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue disabled:cursor-not-allowed disabled:opacity-60";

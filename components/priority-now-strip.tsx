@@ -16,7 +16,7 @@ export function PriorityNowStrip({ issues, projectRef }: { issues: PriorityNowIs
     <section
       aria-labelledby="priority-now-heading"
       data-testid="priority-now"
-      className="rounded-[20px] border border-zk-warn-bd/60 bg-zk-warn-bg/30 px-4 py-3"
+      className="rounded-panel border border-zk-warn-bd/60 bg-zk-warn-bg/30 px-4 py-3"
     >
       <h2 id="priority-now-heading" className="m-0 flex items-center gap-2 text-sm font-bold text-zk-text">
         <span aria-hidden className="relative flex size-2.5">

@@ -21,8 +21,8 @@ const styles = {
   metadata: "flex flex-wrap items-center gap-2 text-xs text-zk-text2",
   status: "rounded-full bg-zk-chip px-[9px] py-[3px] text-[11px] font-semibold text-zk-text2",
   actions: "flex flex-wrap gap-2.5",
-  primary: "inline-flex cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-zk-accent bg-zk-info-bg px-[18px] py-3 text-sm leading-[1.3] font-semibold text-zk-info-fg no-underline hover:bg-zk-tint focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-zk-accent disabled:cursor-wait disabled:opacity-65 max-[560px]:w-full",
-  secondary: "inline-flex items-center justify-center gap-2 rounded-[10px] border border-zk-border bg-transparent px-[18px] py-3 text-sm leading-[1.3] font-semibold text-zk-text2 no-underline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-zk-accent max-[560px]:w-full",
+  primary: "inline-flex cursor-pointer items-center justify-center gap-2 rounded-control border border-zk-accent bg-zk-info-bg px-[18px] py-3 text-sm leading-[1.3] font-semibold text-zk-info-fg no-underline hover:bg-zk-tint focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-zk-accent disabled:cursor-wait disabled:opacity-65 max-[560px]:w-full",
+  secondary: "inline-flex items-center justify-center gap-2 rounded-control border border-zk-border bg-transparent px-[18px] py-3 text-sm leading-[1.3] font-semibold text-zk-text2 no-underline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-zk-accent max-[560px]:w-full",
   error: "m-0 text-[13px] text-zk-bad-fg",
   fine: "m-0 text-xs text-zk-muted",
 };

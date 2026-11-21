@@ -80,7 +80,7 @@ export function ActivityTimeline({
   const latest = activities.slice(earlier.length);
   const notLoaded = total - activities.length;
   return (
-    <section className="group/activity rounded-[20px] border border-zk-border bg-zk-surface p-5">
+    <section className="group/activity rounded-panel border border-zk-border bg-zk-surface p-5">
       <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
         Activity ({total})
       </h2>

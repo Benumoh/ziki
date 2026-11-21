@@ -10,7 +10,7 @@ export default function SettingsLoading() {
           <Bar className="h-3 w-64" />
         </div>
         <div className="flex flex-wrap items-start gap-6">
-          <div className="w-full rounded-[20px] border border-zk-border bg-zk-surface p-3 sm:max-w-[280px]">
+          <div className="w-full rounded-panel border border-zk-border bg-zk-surface p-3 sm:max-w-[280px]">
             <div className="space-y-2">
               <Bar className="h-12 w-full rounded-xl" />
               <Bar className="h-12 w-full rounded-xl" />

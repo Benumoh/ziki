@@ -13,7 +13,7 @@ export function ScreenshotsPanel({ screenshots }: { screenshots: string[] }) {
   if (screenshots.length === 0) return null;
   const shots = screenshots.map((url, index) => ({ url, label: `Screenshot ${index + 1}` }));
   return (
-    <section aria-label="Screenshots" className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+    <section aria-label="Screenshots" className="rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
       <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
         Screenshots <span className="font-mono font-normal normal-case tracking-normal">{screenshots.length}</span>
       </h2>

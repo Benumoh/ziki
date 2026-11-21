@@ -177,7 +177,7 @@ export function CreateAgentForm({
               >
                 <div className="flex items-start justify-between gap-2">
                   <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-[10px] ${
+                    className={`flex h-8 w-8 items-center justify-center rounded-control ${
                       on ? "bg-electric-blue-strong text-white" : "bg-zk-tint text-zk-accent"
                     }`}
                   >

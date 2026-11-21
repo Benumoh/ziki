@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 /** Shared presentational classes for the agents redesign (lane-local; shell is frozen). */
 export const agentsSurface =
-  "rounded-[20px] border border-zk-border bg-zk-surface";
+  "rounded-panel border border-zk-border bg-zk-surface";
 
 export const agentsLink =
   "font-semibold text-zk-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2";

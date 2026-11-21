@@ -87,7 +87,7 @@ export function ProjectJoinRequestButton({
           aria-labelledby={`join-request-title-${project.id}`}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
         >
-          <div className="w-full max-w-lg rounded-[20px] border border-zk-border bg-zk-surface p-6 text-left shadow-2xl">
+          <div className="w-full max-w-lg rounded-panel border border-zk-border bg-zk-surface p-6 text-left shadow-2xl">
             <div className="flex items-center justify-between border-b border-zk-divider pb-3">
               <h2 id={`join-request-title-${project.id}`} className="text-lg font-bold text-zk-text">
                 Ask to join {project.name}
@@ -104,7 +104,7 @@ export function ProjectJoinRequestButton({
             </div>
 
             <form onSubmit={submit} className="mt-4 space-y-4">
-              <div className="rounded-[12px] border border-zk-border bg-zk-tint/40 p-3 text-xs text-zk-text2">
+              <div className="rounded-panel border border-zk-border bg-zk-tint/40 p-3 text-xs text-zk-text2">
                 <span className="font-semibold text-zk-text">How you make money on {project.name}</span>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
@@ -126,7 +126,7 @@ export function ProjectJoinRequestButton({
               </div>
 
               {project.contributorGuidelines ? (
-                <div className="rounded-[12px] border border-zk-border bg-zk-tint/30 p-3 text-xs text-zk-text2">
+                <div className="rounded-panel border border-zk-border bg-zk-tint/30 p-3 text-xs text-zk-text2">
                   <span className="font-semibold text-zk-text">Maintainer guidelines</span>
                   <p className="mt-1 whitespace-pre-wrap">{project.contributorGuidelines}</p>
                 </div>

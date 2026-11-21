@@ -111,7 +111,7 @@ export function IssueLinks({
   };
 
   return (
-    <section aria-label="Links" className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+    <section aria-label="Links" className="rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Links</h2>
         {canEdit && !editing ? (

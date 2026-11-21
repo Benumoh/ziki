@@ -33,11 +33,11 @@ function parseSection(value: string | string[] | undefined): SettingsSectionId {
 }
 
 const card =
-  "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+  "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 
 function LinkRow({ href, label, external }: { href: string; label: string; external?: boolean }) {
   const className =
-    "mt-1 flex min-h-10 items-center justify-between rounded-[10px] bg-zk-chip px-2.5 text-sm font-semibold text-zk-text transition hover:bg-zk-tint";
+    "mt-1 flex min-h-10 items-center justify-between rounded-control bg-zk-chip px-2.5 text-sm font-semibold text-zk-text transition hover:bg-zk-tint";
   if (external) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={className}>

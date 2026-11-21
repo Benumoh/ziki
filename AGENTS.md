@@ -14,6 +14,7 @@ Production code lives in [`emerjent/ziki`](https://github.com/emerjent/ziki) (re
 - Prisma + PostgreSQL (`docker compose`)
 - Auth.js (NextAuth v5) — credentials + optional Google
 - Zod validation in `lib/validations/`
+- UI colours, corners and components: [`docs/style-guide.md`](./docs/style-guide.md) (use its tokens, not hex codes or pixel radii)
 - Package manager: **pnpm only**
 - Deploy: Dockerfile → Coolify (malware CI gate on `main`)
 

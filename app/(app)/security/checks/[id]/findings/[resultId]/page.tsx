@@ -52,7 +52,7 @@ export default async function SecurityFindingPage({ params }: { params: Promise<
         </ol>
       </nav>
 
-      <section aria-labelledby="finding-title" className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-6">
+      <section aria-labelledby="finding-title" className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6">
         <p className="m-0 flex flex-wrap items-center gap-2 text-xs text-zk-text2">
           <span className={`security-severity security-severity--${finding.severity} inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold`}>
             {THREAT_LABEL[finding.severity]}

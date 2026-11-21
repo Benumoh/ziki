@@ -79,7 +79,7 @@ export async function NotificationsView({
       ) : null}
 
       {notifications.length === 0 ? (
-        <div className="rounded-[20px] border border-dashed border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
+        <div className="rounded-panel border border-dashed border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
           <p className="font-semibold text-zk-text">
             {track === "all" ? "No notifications yet" : `No ${track} notifications`}
           </p>
@@ -92,7 +92,7 @@ export async function NotificationsView({
           </Link>
         </div>
       ) : (
-        <ul className="divide-y divide-zk-divider overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <ul className="divide-y divide-zk-divider overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
           {notifications.map((n) => {
             const unreadItem = !n.readAt;
             return (

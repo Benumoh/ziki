@@ -4,7 +4,7 @@ import { FlashNote } from "./flash-note";
 import { ScansArea } from "./scan-list";
 
 /** One panel for everything, as wide as the tabs above it, like a project's Ideas and Issues. */
-const PANEL = "mx-auto w-full max-w-6xl overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface";
+const PANEL = "mx-auto w-full max-w-6xl overflow-hidden rounded-panel border border-zk-border bg-zk-surface";
 function PrivacyNote() {
   return (
     <p className="m-0 flex items-start gap-2 text-xs text-zk-muted">
@@ -61,7 +61,7 @@ export function SecurityChecksPanel({
         ) : null
       }
       bottom={
-        <div className="rounded-b-[20px] border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
+        <div className="rounded-b-panel border-t border-zk-border bg-zk-bg px-4 py-3 sm:px-6">
           <PrivacyNote />
         </div>
       }

@@ -207,7 +207,7 @@ export function ProjectLinks({
       aria-labelledby="project-links-heading"
       style={{ transformOrigin: "top left" }}
       // The same corners and border as the list below it (.issues-table: 10px, 8px on phones).
-      className="rounded-[10px] border border-zk-border bg-zk-chip px-4 py-4 max-md:rounded-lg sm:px-5"
+      className="rounded-control border border-zk-border bg-zk-chip px-4 py-4 max-md:rounded-lg sm:px-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>

@@ -57,7 +57,7 @@ export default async function OrgProjectsPage({
 
       <OrgMessages error={oneParam(params.error)} notice={oneParam(params.notice)} />
 
-      <section aria-labelledby="projects-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+      <section aria-labelledby="projects-heading" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-border px-5 py-4">
           <div>
             <h2 id="projects-heading" className="m-0 text-base font-bold text-zk-text">
@@ -121,7 +121,7 @@ export default async function OrgProjectsPage({
       </section>
 
       {org.owner && archived.length > 0 ? (
-        <section aria-labelledby="archived-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <section aria-labelledby="archived-heading" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
           <div className="border-b border-zk-border px-5 py-4">
             <h2 id="archived-heading" className="m-0 text-base font-bold text-zk-text">Archived</h2>
             <p className="m-0 mt-0.5 text-xs text-zk-muted">Hidden from the project switcher. Restore one to use it again; delete it from its settings.</p>

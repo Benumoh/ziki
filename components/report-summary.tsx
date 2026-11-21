@@ -9,7 +9,7 @@ export function ReportSummary({ summary }: { summary: string | null | undefined 
     <section
       aria-label="Summary"
       data-testid="report-summary"
-      className="rounded-[20px] border border-zk-border border-l-4 border-l-electric-blue-strong bg-zk-surface px-5 py-4"
+      className="rounded-panel border border-zk-border border-l-4 border-l-electric-blue-strong bg-zk-surface px-5 py-4"
     >
       <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Summary</h2>
       <p className="m-0 mt-1.5 whitespace-pre-line text-[15px] font-medium leading-relaxed text-zk-text">{summary}</p>
