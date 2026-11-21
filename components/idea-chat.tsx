@@ -29,12 +29,15 @@ export function IdeaChat({
   className = "",
   alwaysOpen = false,
   placeholder,
+  onSent,
 }: {
   projectId: string;
   className?: string;
   /** Just the box, open from the start and never closed (the Ideas empty state). */
   alwaysOpen?: boolean;
   placeholder?: string;
+  /** Stay on this page once it's filed, and run this instead of opening the new idea (First questions). */
+  onSent?: () => void;
 }) {
   const [open, setOpen] = useState(alwaysOpen);
   // The empty state and the header may both hold a box on one page.
@@ -88,11 +91,16 @@ export function IdeaChat({
     data.set("projectId", projectId);
     data.set("isReport", "true");
     if (files.ids.length) data.set("attachmentIds", files.ids.join(","));
+    if (onSent) data.set("stay", "true");
     startTransition(async () => {
       try {
-        // On success the action takes you to the new idea.
+        // On success the action takes you to the new idea, unless this box stays where it is.
         const result = await createBugAction(data);
         if (result?.error) setError(result.error);
+        else if (onSent && result?.ok) {
+          setText("");
+          onSent();
+        }
       } catch (thrown) {
         unstable_rethrow(thrown);
         setError("Could not send the idea. Try again.");
