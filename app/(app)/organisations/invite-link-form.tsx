@@ -1,15 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { FieldError, useFieldErrors } from "@/components/ui/field-errors";
-import { Input } from "@/components/ui/input";
 import { openInviteLinkAction, type OrganisationFormResult } from "./actions";
+import { WINDOW_FIELD, WindowFooter } from "./window-parts";
 
 const FORM_ID = "invite-link";
 
-/** Paste the invite link someone sent you, to open it here (#444). */
-export function InviteLinkForm() {
+/** Paste the invite link someone sent you, to open it here (#444). Laid out like the create window. */
+export function InviteLinkForm({ onCancel }: { onCancel: () => void }) {
   const formRef = useRef<HTMLFormElement>(null);
   const { fieldErrors, show, clear, attrs } = useFieldErrors(FORM_ID, formRef);
   const [link, setLink] = useState("");
@@ -25,12 +24,12 @@ export function InviteLinkForm() {
   }, [result, show, clear]);
 
   return (
-    <form ref={formRef} action={action} className="mt-4 space-y-1" noValidate>
-      <label htmlFor="invite-link-input" className="block text-sm font-medium text-zk-text">
-        Invite link
-      </label>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
+    <form ref={formRef} action={action} noValidate>
+      <div className="space-y-1.5 px-6 pb-6 pt-5">
+        <label htmlFor="invite-link-input" className="block text-[13px] font-semibold text-zk-text">
+          Invite link
+        </label>
+        <input
           id="invite-link-input"
           name="link"
           value={link}
@@ -40,14 +39,16 @@ export function InviteLinkForm() {
           spellCheck={false}
           required
           disabled={pending}
-          className="font-mono text-xs sm:max-w-md"
+          className={`${WINDOW_FIELD} w-full`}
           {...attrs("link")}
         />
-        <Button type="submit" variant="secondary" disabled={pending}>
-          {pending ? "Opening…" : "Open invite"}
-        </Button>
+        <FieldError formId={FORM_ID} field="link" errors={fieldErrors} />
       </div>
-      <FieldError formId={FORM_ID} field="link" errors={fieldErrors} />
+      <WindowFooter
+        onCancel={onCancel}
+        submitDisabled={pending || !link.trim()}
+        submitLabel={pending ? "Opening…" : "Open invite"}
+      />
     </form>
   );
 }
