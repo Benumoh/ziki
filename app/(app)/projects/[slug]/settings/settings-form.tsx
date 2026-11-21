@@ -20,6 +20,7 @@ type Project = {
   siteUrl: string | null;
   appStoreUrl?: string | null;
   playStoreUrl?: string | null;
+  downloadUrl?: string | null;
   visibility?: "public" | "private";
   isOpenForContributors?: boolean;
   acceptsGuestIdeas?: boolean;
@@ -75,6 +76,10 @@ export function ProjectSettingsForm({
       <label htmlFor="project-play-store-url" className="block space-y-1 text-sm font-medium text-zk-text">Google Play link
         <Input id="project-play-store-url" name="playStoreUrl" type="url" inputMode="url" placeholder="https://play.google.com/store/apps/details?id=com.yourcompany.app" defaultValue={project.playStoreUrl ?? ""} />
         {result?.field === "playStoreUrl" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.playStoreUrl ?? result.error}</span> : null}
+      </label>
+      <label htmlFor="project-download-url" className="block space-y-1 text-sm font-medium text-zk-text">Download or store page
+        <Input id="project-download-url" name="downloadUrl" type="url" inputMode="url" placeholder="https://store.steampowered.com/app/123456" defaultValue={project.downloadUrl ?? ""} />
+        {result?.field === "downloadUrl" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.downloadUrl ?? result.error}</span> : null}
       </label>
       <details className="rounded-xl border border-zk-border bg-zk-subtle/30 p-4">
         <summary className="cursor-pointer text-sm font-medium text-zk-text">Developer Links &amp; Staging (Advanced)</summary>

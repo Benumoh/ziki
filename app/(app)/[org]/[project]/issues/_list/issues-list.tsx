@@ -1152,7 +1152,7 @@ export async function IssuesList({
   const rejectedIdeaWhere: Prisma.IdeaWhereInput = { ...ideaWhere, status: { in: ["rejected", "archived"] } };
   // #project-links: the project's site and GitHub repository, and whether you can set them.
   const [projectLinks, canEditProjectLinks] = await Promise.all([
-    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true } }), null),
+    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true, productKinds: true, productOther: true } }), null),
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
@@ -1738,6 +1738,9 @@ export async function IssuesList({
             repoUrl={projectLinks?.repoUrl ?? null}
             appStoreUrl={projectLinks?.appStoreUrl ?? null}
             playStoreUrl={projectLinks?.playStoreUrl ?? null}
+            downloadUrl={projectLinks?.downloadUrl ?? null}
+            productKinds={projectLinks?.productKinds ?? []}
+            productOther={projectLinks?.productOther ?? null}
             canEditLinks={canEditProjectLinks}
             firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
           />
@@ -2146,6 +2149,8 @@ export async function IssuesList({
               repoUrl={projectLinks?.repoUrl ?? null}
               appStoreUrl={projectLinks?.appStoreUrl ?? null}
               playStoreUrl={projectLinks?.playStoreUrl ?? null}
+              downloadUrl={projectLinks?.downloadUrl ?? null}
+              productKinds={projectLinks?.productKinds ?? []}
               canEdit={canEditProjectLinks}
             />
           </div>
