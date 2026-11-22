@@ -58,7 +58,7 @@ export function CreateOrganisationForm({
           {/* The mark it will have: the first letter on its colour, the same tile the organisations page shows. */}
           <span
             aria-hidden="true"
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] text-[17px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] transition ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-[17px] font-semibold transition ${
               trimmed ? "" : "border border-dashed border-zk-border bg-zk-bg text-zk-muted"
             }`}
             style={trimmed ? TILE_TONES[toneForName(trimmed)] : undefined}

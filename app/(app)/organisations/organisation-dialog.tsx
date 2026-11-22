@@ -52,12 +52,12 @@ export function OrganisationDialog({
         event.preventDefault();
         onClose();
       }}
-      className="m-auto w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface p-0 text-zk-text shadow-[0_24px_60px_rgba(11,23,51,0.22)] backdrop:bg-[#0b1733]/45 backdrop:backdrop-blur-[2px]"
+      className="m-auto w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-panel border border-zk-border bg-zk-surface p-0 text-zk-text shadow-xl backdrop:bg-black/50 backdrop:backdrop-blur-[2px]"
     >
       <div className="flex items-start gap-3.5 px-6 pb-1 pt-6">
         <span
           aria-hidden="true"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-zk-text text-zk-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-zk-text text-zk-surface"
         >
           {mode === "create" ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
