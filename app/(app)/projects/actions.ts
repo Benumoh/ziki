@@ -13,6 +13,7 @@ import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import { isSuperAdmin, type AppRole } from "@/lib/roles";
 import {
   nextProjectSlug,
+  productKindsSchema,
   projectLinksSchema,
   siteUrlSchema,
   projectSettingsSchema,
@@ -24,6 +25,8 @@ import {
   projectDefaultsFromPlatform,
 } from "@/lib/points/platform-rewards";
 import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
+import { DEFAULT_PROJECT_NAME } from "@/lib/organisations";
+import { defaultProjectNameFor, type ProductKind } from "@/lib/product-kinds";
 
 export type ProjectActionResult = {
   error?: string;
@@ -114,6 +117,10 @@ export async function updateProjectAction(
     repoUrl: formData.get("repoUrl"),
     stagingUrl: formData.get("stagingUrl"),
     siteUrl: formData.get("siteUrl") ?? "",
+    appStoreUrl: formData.get("appStoreUrl") ?? "",
+    playStoreUrl: formData.get("playStoreUrl") ?? "",
+    // Left as it is when the form doesn't have it (#product-kinds).
+    downloadUrl: formData.has("downloadUrl") ? String(formData.get("downloadUrl") ?? "") : undefined,
     visibility,
     isOpenForContributors,
     acceptsGuestIdeas,
@@ -124,7 +131,7 @@ export async function updateProjectAction(
   const slug = String(formData.get("slug") ?? "").trim();
   const project = await prisma.project.findFirst({
     where: { organisationId, slug },
-    select: { id: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, humanApprovalGuidelines: true, rewardConfig: true },
+    select: { id: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true, visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, humanApprovalGuidelines: true, rewardConfig: true },
   });
   if (!project) return { error: "Project not found." };
 
@@ -133,8 +140,8 @@ export async function updateProjectAction(
   const rewardConfig = rawReward ? parseProjectRewardConfig(rawReward, platformBase) : undefined;
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of ["name", "goal", "repoUrl", "stagingUrl", "siteUrl", "visibility", "isOpenForContributors", "acceptsGuestIdeas", "contributorGuidelines"] as const) {
-    if (project[field] !== parsed.data[field]) {
+  for (const field of ["name", "goal", "repoUrl", "stagingUrl", "siteUrl", "appStoreUrl", "playStoreUrl", "downloadUrl", "visibility", "isOpenForContributors", "acceptsGuestIdeas", "contributorGuidelines"] as const) {
+    if (parsed.data[field] !== undefined && project[field] !== parsed.data[field]) {
       changes[field] = { from: project[field], to: parsed.data[field] };
     }
   }
@@ -187,19 +194,39 @@ export async function saveProjectLinksAction(
   if (!organisationId) return { error: NO_ORGANISATION_MESSAGE };
   if (!(await isAdminOfOrganisation(user, organisationId))) return { error: "Only organisation owners and admins can set these." };
 
-  const parsed = projectLinksSchema.safeParse({ siteUrl: formData.get("siteUrl") ?? "", repoUrl: formData.get("repoUrl") ?? "" });
+  // Store and download links only when the form has them (#app-links, #product-kinds): the panel above the list
+  // sets just the site and repository, plus the one link being edited.
+  const storeLink = (name: string) => (formData.has(name) ? String(formData.get(name) ?? "") : undefined);
+  const parsed = projectLinksSchema.safeParse({
+    siteUrl: formData.get("siteUrl") ?? "",
+    repoUrl: formData.get("repoUrl") ?? "",
+    appStoreUrl: storeLink("appStoreUrl"),
+    playStoreUrl: storeLink("playStoreUrl"),
+    downloadUrl: storeLink("downloadUrl"),
+  });
   if (!parsed.success) return fromZodError(parsed.error, "Check the addresses.");
   // The marketing site (#marketing-url) only when the form has it: forms without the field leave it as it is.
   const marketing = formData.has("marketingUrl") ? siteUrlSchema.safeParse(formData.get("marketingUrl") ?? "") : null;
   if (marketing && !marketing.success) return { error: marketing.error.issues[0]?.message ?? "Check the marketing site.", fieldErrors: { marketingUrl: marketing.error.issues[0]?.message ?? "" } };
-  const data: { siteUrl: string | null; repoUrl: string | null; marketingUrl?: string | null } = { ...parsed.data, ...(marketing?.success ? { marketingUrl: marketing.data } : {}) };
+  const data: {
+    siteUrl: string | null;
+    repoUrl: string | null;
+    marketingUrl?: string | null;
+    appStoreUrl?: string | null;
+    playStoreUrl?: string | null;
+    downloadUrl?: string | null;
+  } = { ...parsed.data, ...(marketing?.success ? { marketingUrl: marketing.data } : {}) };
   const slug = String(formData.get("slug") ?? "").trim();
-  const project = await prisma.project.findFirst({ where: { organisationId, slug }, select: { id: true, siteUrl: true, repoUrl: true, marketingUrl: true } });
+  const project = await prisma.project.findFirst({
+    where: { organisationId, slug },
+    select: { id: true, siteUrl: true, repoUrl: true, marketingUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true },
+  });
   if (!project) return { error: "Project not found." };
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of ["siteUrl", "repoUrl", "marketingUrl"] as const) {
-    if (field in data && project[field] !== data[field]) changes[field] = { from: project[field], to: data[field] };
+  for (const field of ["siteUrl", "repoUrl", "marketingUrl", "appStoreUrl", "playStoreUrl", "downloadUrl"] as const) {
+    const to = data[field];
+    if (to !== undefined && project[field] !== to) changes[field] = { from: project[field], to };
   }
   if (Object.keys(changes).length > 0) {
     await prisma.$transaction(async (tx) => {
@@ -209,6 +236,51 @@ export async function saveProjectLinksAction(
       });
     });
   }
+  revalidatePath("/", "layout");
+  return { message: "Saved." };
+}
+
+/**
+ * First questions (#product-kinds): what the project is, one or more of website,
+ * mobile, desktop and other (with the owner's words for it, such as a game), or not built yet.
+ * Saving it also renames the untouched first project ("Web") when "Web" is wrong
+ * for it: "App" for anything built without a website. A name
+ * someone chose is never touched. Owners and admins only, audited like any settings change.
+ */
+export async function saveProductKindsAction(
+  slug: string,
+  kinds: ProductKind[],
+  other: string,
+): Promise<ProjectActionResult> {
+  const user = await requireUser();
+  const organisationId = await currentOrganisationIdFor(user.id);
+  if (!organisationId) return { error: NO_ORGANISATION_MESSAGE };
+  if (!(await isAdminOfOrganisation(user, organisationId))) return { error: "Only organisation owners and admins can set what a project is." };
+  const parsed = productKindsSchema.safeParse({ kinds, other: String(other ?? "") });
+  if (!parsed.success) return fromZodError(parsed.error, "Pick what you're building.");
+  const project = await prisma.project.findFirst({
+    where: { organisationId, slug: String(slug).trim() },
+    select: { id: true, name: true, productKinds: true, productOther: true },
+  });
+  if (!project) return { error: "Project not found." };
+
+  const { productKinds, productOther } = parsed.data;
+  const renamed = project.name === DEFAULT_PROJECT_NAME ? defaultProjectNameFor(productKinds) : null;
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  if (project.productKinds.join(",") !== productKinds.join(",")) changes.productKinds = { from: project.productKinds, to: productKinds };
+  if (project.productOther !== productOther) changes.productOther = { from: project.productOther, to: productOther };
+  if (renamed) changes.name = { from: project.name, to: renamed };
+  if (Object.keys(changes).length === 0) return {};
+
+  await prisma.$transaction(async (tx) => {
+    await tx.project.update({
+      where: { id: project.id },
+      data: { productKinds, productOther, ...(renamed ? { name: renamed } : {}) },
+    });
+    await tx.projectAuditEvent.create({
+      data: { organisationId, projectId: project.id, actorUserId: user.id, action: "settings.updated", changes: changes as Prisma.InputJsonValue },
+    });
+  });
   revalidatePath("/", "layout");
   return { message: "Saved." };
 }
