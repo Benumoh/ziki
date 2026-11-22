@@ -1790,14 +1790,9 @@ export async function IssuesList({
           <FirstQuestions
             projectId={project.id}
             projectSlug={project.slug}
-            siteUrl={projectLinks?.siteUrl ?? null}
-            repoUrl={projectLinks?.repoUrl ?? null}
-            appStoreUrl={projectLinks?.appStoreUrl ?? null}
-            playStoreUrl={projectLinks?.playStoreUrl ?? null}
-            downloadUrl={projectLinks?.downloadUrl ?? null}
             productKinds={projectLinks?.productKinds ?? []}
             productOther={projectLinks?.productOther ?? null}
-            canEditLinks={canEditProjectLinks}
+            canEditProject={canEditProjectLinks}
             firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
           />
         ) : null}
