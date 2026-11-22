@@ -1237,7 +1237,7 @@ export async function IssuesList({
   const rejectedIdeaWhere: Prisma.IdeaWhereInput = { ...ideaWhere, status: { in: ["rejected", "archived"] } };
   // #project-links: the project's site and GitHub repository, and whether you can set them.
   const [projectLinks, canEditProjectLinks] = await Promise.all([
-    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true } }), null),
+    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true, productKinds: true, productOther: true } }), null),
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
@@ -1791,6 +1791,9 @@ export async function IssuesList({
             repoUrl={projectLinks?.repoUrl ?? null}
             appStoreUrl={projectLinks?.appStoreUrl ?? null}
             playStoreUrl={projectLinks?.playStoreUrl ?? null}
+            downloadUrl={projectLinks?.downloadUrl ?? null}
+            productKinds={projectLinks?.productKinds ?? []}
+            productOther={projectLinks?.productOther ?? null}
             canEditLinks={canEditProjectLinks}
             firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
           />
@@ -1847,7 +1850,7 @@ export async function IssuesList({
           />
         ) : null}
         {isIdeasView ? null : isFirstRun ? (
-          <FirstRunWelcome hasOrganisation={Boolean(organisationId)} />
+          <FirstRunWelcome hasOrganisation={Boolean(organisationId)} slug={ref} returnTo={returnTo} canContribute={canContribute} />
         ) : feedView ? (
           // The Work Feed: one card with its tabs and filter on top, the table of work, and its pages under it. An
           // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
@@ -2202,6 +2205,8 @@ export async function IssuesList({
               repoUrl={projectLinks?.repoUrl ?? null}
               appStoreUrl={projectLinks?.appStoreUrl ?? null}
               playStoreUrl={projectLinks?.playStoreUrl ?? null}
+              downloadUrl={projectLinks?.downloadUrl ?? null}
+              productKinds={projectLinks?.productKinds ?? []}
               canEdit={canEditProjectLinks}
             />
           </div>
@@ -2301,7 +2306,17 @@ const ARROW_DASH = 8;
 const ARROW_STEP_S = 0.12;
 
 /** What a brand-new tracker shows instead of an empty list (#292, #444). */
-function FirstRunWelcome({ hasOrganisation = true }: { hasOrganisation?: boolean }) {
+function FirstRunWelcome({
+  hasOrganisation = true,
+  slug,
+  returnTo,
+  canContribute = true,
+}: {
+  hasOrganisation?: boolean;
+  slug: ProjectRef;
+  returnTo: string;
+  canContribute?: boolean;
+}) {
   if (!hasOrganisation) {
     return (
       <section aria-labelledby="issues-organisation-heading" className="issues-organisation-empty rounded-panel border border-zk-border bg-zk-bg px-6 py-10 text-center sm:px-8">
@@ -2357,6 +2372,16 @@ function FirstRunWelcome({ hasOrganisation = true }: { hasOrganisation?: boolean
       <p className="mx-auto mt-2 max-w-md text-sm text-zk-muted">
         This is where every task you add will be listed. Tell us what your app is and what you would like fixed.
       </p>
+      {canContribute ? (
+        <div className="mt-5">
+          <Link
+            href={newIssueHref(slug, returnTo)}
+            className="inline-flex h-[42px] items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(46,111,239,0.35)]"
+          >
+            Report the first issue
+          </Link>
+        </div>
+      ) : null}
     </section>
   );
 }

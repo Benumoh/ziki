@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { selectOrganisationAction } from "@/app/(app)/organisations/actions";
+import { OrganisationDialog } from "@/app/(app)/organisations/organisation-dialog";
 import { avatarTone } from "@/lib/avatar";
 
 /** An organisation's mark: its initial on a soft tile, the same colour every time for the same name. */
@@ -76,6 +77,7 @@ export function OrganisationSwitcher({
   const formRef = useRef<HTMLFormElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const params = useParams();
   const currentOrgSlug = params?.org ? String(params.org) : null;
@@ -278,20 +280,26 @@ export function OrganisationSwitcher({
                 Manage organisations
               </Link>
 
-              <Link
-                href="/organisations#create-organisation"
-                onClick={() => setOpen(false)}
+              {/* Opens the create window over this page; there's no trip to the organisations page first. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setCreating(true);
+                }}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${bar ? "text-sm font-medium text-zk-accent hover:bg-zk-chip" : chrome ? "text-xs text-sky-tint hover:bg-white/5" : "text-xs text-teal-800 hover:bg-slate-50"}`}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
                 Add organisation
-              </Link>
+              </button>
             </div>
           </div>
         ) : null}
       </form>
+      {/* Outside the switcher's form: the create window holds a form of its own. */}
+      {creating ? <OrganisationDialog mode="create" onClose={() => setCreating(false)} /> : null}
     </div>
   );
 }

@@ -73,7 +73,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { createProjectAction, nameDefaultProjectForAppAction, saveProjectLinksAction, updateProjectAction } from "@/app/(app)/projects/actions";
+import { createProjectAction, saveProductKindsAction, saveProjectLinksAction, updateProjectAction } from "@/app/(app)/projects/actions";
 import { updateProjectWorkflowAction } from "@/app/(app)/projects/[slug]/settings/workflow-actions";
 import { updateProjectPreviewSettingsAction } from "@/app/(app)/projects/[slug]/settings/preview-actions";
 import { previewSettingsSchema } from "@/lib/validations/preview-settings";
@@ -484,7 +484,7 @@ describe("a project's mobile app links (#app-links)", () => {
   });
 });
 
-describe("naming a mobile app's first project (#app-links)", () => {
+describe("saying what a project is (#product-kinds)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireUser.mockResolvedValue({ id: "admin", role: "user" });
@@ -496,18 +496,32 @@ describe("naming a mobile app's first project (#app-links)", () => {
     }));
   });
 
-  it("renames the untouched default project to App, and audits it", async () => {
-    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web" });
-    await expect(nameDefaultProjectForAppAction("web")).resolves.toEqual({ message: "Saved." });
-    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { name: "App" } });
-    expect(auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ changes: { name: { from: "Web", to: "App" } } }) });
+  it("saves the kinds and renames the untouched default project to fit, audited", async () => {
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web", productKinds: [], productOther: null });
+    await expect(saveProductKindsAction("web", ["mobile"], "")).resolves.toEqual({ message: "Saved." });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { productKinds: ["mobile"], productOther: null, name: "App" } });
+    expect(auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ changes: expect.objectContaining({ name: { from: "Web", to: "App" } }) }) });
+
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web", productKinds: [], productOther: null });
+    await saveProductKindsAction("web", ["desktop", "other"], "  a game ");
+    expect(projectUpdate).toHaveBeenLastCalledWith({
+      where: { id: "project-1" },
+      data: { productKinds: ["desktop", "other"], productOther: "a game", name: "App" },
+    });
   });
 
-  it("never touches a name someone chose, and refuses a member", async () => {
-    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Acme Coffee" });
-    await expect(nameDefaultProjectForAppAction("web")).resolves.toEqual({});
+  it("keeps a name someone chose and a website's Web, and refuses idea with a built kind or a member", async () => {
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Acme Coffee", productKinds: [], productOther: null });
+    await saveProductKindsAction("web", ["mobile"], "");
+    expect(projectUpdate).toHaveBeenLastCalledWith({ where: { id: "project-1" }, data: { productKinds: ["mobile"], productOther: null } });
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web", productKinds: [], productOther: null });
+    await saveProductKindsAction("web", ["website", "other"], "");
+    expect(projectUpdate).toHaveBeenLastCalledWith({ where: { id: "project-1" }, data: { productKinds: ["website", "other"], productOther: null } });
+
+    projectUpdate.mockClear();
+    await expect(saveProductKindsAction("web", ["idea", "website"], "")).resolves.toMatchObject({ error: expect.any(String) });
     isAdminOfOrganisation.mockResolvedValueOnce(false);
-    await expect(nameDefaultProjectForAppAction("web")).resolves.toMatchObject({ error: expect.any(String) });
+    await expect(saveProductKindsAction("web", ["website"], "")).resolves.toMatchObject({ error: expect.any(String) });
     expect(projectUpdate).not.toHaveBeenCalled();
   });
 });
