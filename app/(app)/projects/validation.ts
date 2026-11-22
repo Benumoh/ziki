@@ -94,7 +94,7 @@ export const productKindsSchema = z
 
 /**
  * The site, GitHub repository and app store links, set from the panel above the
- * list and from First questions (#project-links, #app-links), and a desktop app's
+ * list and from Project Settings (#project-links, #app-links), and a desktop app's
  * or other product's download page (#product-kinds). A store or download link left out of
  * the form is left as it is.
  */

@@ -1,7 +1,7 @@
 /**
  * A mobile app's store link (#app-links): an App Store or Google Play page,
  * recognised and put in one canonical form. Pure and client-safe, so the
- * onboarding box and the server's validation read links the same way.
+ * project header and the server's validation read links the same way.
  */
 
 export type AppStore = "app_store" | "play";
