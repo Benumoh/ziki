@@ -50,10 +50,14 @@ export function TwoFactorSettings({
   googleVerifiedFor?: GoogleSecurityOperation;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>(
-    googleVerifiedFor === "setup" ? { name: "password" } :
-      googleVerifiedFor ? { name: googleVerifiedFor } : { name: "idle" },
-  );
+  const [step, setStep] = useState<Step>(() => {
+    switch (googleVerifiedFor) {
+      case "setup": return { name: "password" };
+      case "disable": return { name: "disable" };
+      case "regenerate": return { name: "regenerate" };
+      default: return { name: "idle" };
+    }
+  });
   const [googleProofAvailable, setGoogleProofAvailable] = useState(Boolean(googleVerifiedFor));
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
