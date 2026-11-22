@@ -73,7 +73,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { createProjectAction, updateProjectAction } from "@/app/(app)/projects/actions";
+import { createProjectAction, saveProductKindsAction, saveProjectLinksAction, updateProjectAction } from "@/app/(app)/projects/actions";
 import { updateProjectWorkflowAction } from "@/app/(app)/projects/[slug]/settings/workflow-actions";
 import { updateProjectPreviewSettingsAction } from "@/app/(app)/projects/[slug]/settings/preview-actions";
 import { previewSettingsSchema } from "@/lib/validations/preview-settings";
@@ -410,6 +410,119 @@ describe("public issue intake project setting (#3464)", () => {
     expect(projectUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ visibility: "private", acceptsGuestIdeas: false }),
     }));
+  });
+});
+
+describe("a project's mobile app links (#app-links)", () => {
+  function linksForm(values: Record<string, string>) {
+    const data = new FormData();
+    data.set("slug", "web");
+    data.set("siteUrl", "https://acme.test");
+    data.set("repoUrl", "https://github.com/acme/web");
+    for (const [key, value] of Object.entries(values)) data.set(key, value);
+    return data;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireUser.mockResolvedValue({ id: "admin", role: "user" });
+    currentOrganisationIdFor.mockResolvedValue("organisation-1");
+    isAdminOfOrganisation.mockResolvedValue(true);
+    findFirst.mockResolvedValue({
+      id: "project-1",
+      siteUrl: "https://acme.test",
+      repoUrl: "https://github.com/acme/web",
+      appStoreUrl: null,
+      playStoreUrl: "https://play.google.com/store/apps/details?id=com.acme.old",
+    });
+    transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run({
+      project: { update: projectUpdate },
+      projectAuditEvent: { create: auditCreate },
+    }));
+  });
+
+  it("saves App Store and Google Play links in their canonical form and audits them", async () => {
+    await expect(saveProjectLinksAction(undefined, linksForm({
+      appStoreUrl: "apps.apple.com/gb/app/acme-coffee/id1234567890?mt=8",
+      playStoreUrl: "https://play.google.com/store/apps/details?id=com.acme.coffee&hl=en",
+    }))).resolves.toEqual({ message: "Saved." });
+
+    expect(projectUpdate).toHaveBeenCalledWith({
+      where: { id: "project-1" },
+      data: expect.objectContaining({
+        appStoreUrl: "https://apps.apple.com/gb/app/id1234567890",
+        playStoreUrl: "https://play.google.com/store/apps/details?id=com.acme.coffee",
+      }),
+    });
+    expect(auditCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        changes: {
+          appStoreUrl: { from: null, to: "https://apps.apple.com/gb/app/id1234567890" },
+          playStoreUrl: { from: "https://play.google.com/store/apps/details?id=com.acme.old", to: "https://play.google.com/store/apps/details?id=com.acme.coffee" },
+        },
+      }),
+    });
+  });
+
+  it("refuses a link that isn't that store's page, without writing", async () => {
+    const result = await saveProjectLinksAction(undefined, linksForm({
+      appStoreUrl: "https://play.google.com/store/apps/details?id=com.acme.coffee",
+      playStoreUrl: "",
+    }));
+
+    expect(result).toMatchObject({ field: "appStoreUrl" });
+    expect(projectUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves the store links alone when the form only sets the site and repository", async () => {
+    await expect(saveProjectLinksAction(undefined, linksForm({ siteUrl: "https://acme-coffee.test" }))).resolves.toEqual({ message: "Saved." });
+
+    const { data } = projectUpdate.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(data.siteUrl).toBe("https://acme-coffee.test");
+    expect(data.appStoreUrl).toBeUndefined();
+    expect(data.playStoreUrl).toBeUndefined();
+  });
+});
+
+describe("saying what a project is (#product-kinds)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireUser.mockResolvedValue({ id: "admin", role: "user" });
+    currentOrganisationIdFor.mockResolvedValue("organisation-1");
+    isAdminOfOrganisation.mockResolvedValue(true);
+    transaction.mockImplementation(async (run: (tx: unknown) => unknown) => run({
+      project: { update: projectUpdate },
+      projectAuditEvent: { create: auditCreate },
+    }));
+  });
+
+  it("saves the kinds and renames the untouched default project to fit, audited", async () => {
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web", productKinds: [], productOther: null });
+    await expect(saveProductKindsAction("web", ["mobile"], "")).resolves.toEqual({ message: "Saved." });
+    expect(projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { productKinds: ["mobile"], productOther: null, name: "App" } });
+    expect(auditCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ changes: expect.objectContaining({ name: { from: "Web", to: "App" } }) }) });
+
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web", productKinds: [], productOther: null });
+    await saveProductKindsAction("web", ["desktop", "other"], "  a game ");
+    expect(projectUpdate).toHaveBeenLastCalledWith({
+      where: { id: "project-1" },
+      data: { productKinds: ["desktop", "other"], productOther: "a game", name: "App" },
+    });
+  });
+
+  it("keeps a name someone chose and a website's Web, and refuses idea with a built kind or a member", async () => {
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Acme Coffee", productKinds: [], productOther: null });
+    await saveProductKindsAction("web", ["mobile"], "");
+    expect(projectUpdate).toHaveBeenLastCalledWith({ where: { id: "project-1" }, data: { productKinds: ["mobile"], productOther: null } });
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "Web", productKinds: [], productOther: null });
+    await saveProductKindsAction("web", ["website", "other"], "");
+    expect(projectUpdate).toHaveBeenLastCalledWith({ where: { id: "project-1" }, data: { productKinds: ["website", "other"], productOther: null } });
+
+    projectUpdate.mockClear();
+    await expect(saveProductKindsAction("web", ["idea", "website"], "")).resolves.toMatchObject({ error: expect.any(String) });
+    isAdminOfOrganisation.mockResolvedValueOnce(false);
+    await expect(saveProductKindsAction("web", ["website"], "")).resolves.toMatchObject({ error: expect.any(String) });
+    expect(projectUpdate).not.toHaveBeenCalled();
   });
 });
 
