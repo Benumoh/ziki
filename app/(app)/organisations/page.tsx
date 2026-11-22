@@ -94,19 +94,19 @@ export default async function OrganisationsPage({
   const shown = view === "owned" ? ownedOrganisations : view === "joined" ? joinedOrganisations : activeOrganisations;
   const tabHref = (key: string) => (key === "all" ? "/organisations" : `/organisations?view=${key}`);
   const tabClass = (current: boolean) =>
-    `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${
-      current ? "bg-zk-surface font-semibold text-zk-accent shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
+    `inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-[13px] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${
+      current ? "bg-zk-surface font-semibold text-zk-accent" : "font-medium text-zk-muted hover:text-zk-text"
     }`;
   const tile = (name: string) => (
     <span
       aria-hidden="true"
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] text-[17px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-[17px] font-semibold"
       style={TILE_TONES[toneForName(name)]}
     >
       {name.charAt(0).toUpperCase()}
     </span>
   );
-  const ROW = "flex flex-wrap items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-4 py-3.5 transition hover:bg-zk-bg sm:px-5";
+  const ROW = "flex flex-wrap items-center gap-4 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5 transition hover:bg-zk-bg sm:px-5";
 
   return (
     <div className="mx-auto w-full max-w-[920px] space-y-4">
@@ -119,7 +119,7 @@ export default async function OrganisationsPage({
         <div className="flex min-w-0 items-center gap-3.5">
           <span
             aria-hidden="true"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-zk-text text-zk-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-zk-text text-zk-surface"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 10h.01M15 10h.01" />
@@ -155,9 +155,9 @@ export default async function OrganisationsPage({
       ) : null}
 
       {/* The white card holding the lists, as the Overview's card holding the Work Feed. */}
-      <div className="space-y-5 rounded-2xl border border-zk-border bg-zk-surface p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
+      <div className="space-y-5 rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
         {hasOrganisations ? (
-          <nav aria-label="Organisation lists" className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-2xl bg-zk-bg p-1 sm:rounded-full">
+          <nav aria-label="Organisation lists" className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-control bg-zk-bg p-1">
             {tabs.map((tab) => (
               <Link key={tab.key} href={tabHref(tab.key)} aria-current={view === tab.key ? "page" : undefined} className={tabClass(view === tab.key)}>
                 {tab.label}
@@ -243,7 +243,7 @@ export default async function OrganisationsPage({
                         <p className="m-0 flex flex-wrap items-center gap-2 text-[15px] font-semibold text-zk-text">
                           <span className="truncate">{organisation.name}</span>
                           {current ? (
-                            <Badge className="rounded-full bg-zk-tint text-zk-accent ring-1 ring-zk-border">Current</Badge>
+                            <Badge className="bg-zk-tint text-zk-accent ring-1 ring-zk-border">Current</Badge>
                           ) : null}
                         </p>
                         <p className="m-0 mt-0.5 text-[13px] text-zk-muted">
@@ -307,7 +307,7 @@ export default async function OrganisationsPage({
           </div>
           <Link
             href="/discover"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-zk-text px-4 text-[13px] font-bold text-zk-surface transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-control bg-electric-blue-strong px-4 text-[13px] font-bold text-white transition hover:bg-zk-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
           >
             Discover projects
           </Link>
