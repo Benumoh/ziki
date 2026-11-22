@@ -1477,8 +1477,9 @@ export async function IssuesList({
   // already empty, so a populated list pays nothing for it. It counts the
   // same scope the list shows, including ?project=all, so an empty filter
   // across a busy organisation is "no issues match", not "no issues yet".
+  // A project whose only work is ideas waiting for your OK isn't empty: the Work Feed lists them under Needs your OK.
   let isFirstRun = false;
-  if (totalCount === 0 && !isDeletedView) {
+  if (totalCount === 0 && !isDeletedView && ideasToOkCount === 0) {
     try {
       isFirstRun = (await prisma.bug.count({
         where: {

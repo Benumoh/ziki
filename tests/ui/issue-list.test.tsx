@@ -335,6 +335,20 @@ describe("issue list layout", () => {
     expect(Object.keys(counted(stages(html)))).toEqual(["Overview", "New", "In Progress", "Delivered"]);
   });
 
+  it("shows a new project's waiting idea on Overview instead of No tasks yet, and No tasks yet only when there is nothing at all", async () => {
+    count.mockResolvedValue(0);
+    findMany.mockResolvedValue([]);
+    ideaCount.mockResolvedValue(1);
+    ideaFindMany.mockResolvedValue([{ ...IDEA, project: { slug: "acme", organisation: { slug: "zedu" } } }]);
+    const waiting = clean(await renderList({ status: "your_work" }));
+    expect(waiting).toContain("Export activity as CSV");
+    expect(waiting).not.toContain("No tasks yet");
+
+    ideaCount.mockResolvedValue(0);
+    ideaFindMany.mockResolvedValue([]);
+    expect(clean(await renderList({ status: "your_work" }))).toContain("No tasks yet");
+  });
+
 });
 
 /** The agents dock's settings (#agents-dock): saved per browser, and the dock still works when they can't be. */
