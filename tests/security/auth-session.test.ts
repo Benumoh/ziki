@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { compare, hash } from "bcryptjs";
 
 /**
  * Sessions: sign-up and reset don't leak accounts, a reset or role change
  * ends older sessions (#208, #347), a refresh can't be forged (#389), and the
  * expired-session route signs the person out.
  */
-const { deleteCookieMock } = vi.hoisted(() => ({ deleteCookieMock: vi.fn() }));
+const { deleteCookieMock, setCookieMock } = vi.hoisted(() => ({ deleteCookieMock: vi.fn(), setCookieMock: vi.fn() }));
 const middleware = vi.hoisted(() => ({ handler: null as null | ((request: NextRequest & { auth?: { user: { id: string } } }) => Response) }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
-  cookies: vi.fn(async () => ({ delete: deleteCookieMock, get: vi.fn(), set: vi.fn() })),
+  cookies: vi.fn(async () => ({ delete: deleteCookieMock, get: vi.fn(), set: setCookieMock })),
   headers: vi.fn(async () => new Headers({ "x-forwarded-for": "203.0.113.7" })),
 }));
 vi.mock("next/navigation", () => ({
@@ -31,23 +32,24 @@ vi.mock("@/lib/mail", async (importOriginal) => {
 });
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+    user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     userSession: { findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     loginHistory: { create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     securityAuditEvent: { create: vi.fn(async () => ({})) },
+    totpCredential: { findUnique: vi.fn() },
     passwordResetToken: { findUnique: vi.fn(), deleteMany: vi.fn(), create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
 
 import { revalidatePath } from "next/cache";
-import { auth, signOut, updateSession } from "@/auth";
+import { auth, signIn, signOut, updateSession } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resetRateLimits } from "@/lib/rate-limit";
 import { ACTIVE_ROLE_COOKIE_NAME } from "@/lib/roles";
 import { SESSION_EXPIRED_MESSAGE, resolveSessionUserId } from "@/lib/session-user";
 import { acceptedSessionRefresh, sessionRefreshFor } from "@/lib/session-refresh";
-import { resetPasswordAction, signupAction } from "@/app/actions/auth";
+import { connectGoogleAction, requestPasswordSetupAction, resetPasswordAction, signupAction } from "@/app/actions/auth";
 import { signOutOtherSessionsAction, signOutSessionAction } from "@/app/actions/settings";
 import {
   buildLoginHistoryCsv,
@@ -57,6 +59,12 @@ import {
 } from "@/lib/user-sessions";
 import { GET as sessionExpired } from "@/app/session-expired/route";
 import { isPublicPath } from "@/middleware";
+import { upsertGoogleUser, GoogleLinkRequiredError, GoogleLinkMismatchError } from "@/lib/google-user";
+import { sealGoogleIntent, readGoogleIntent } from "@/lib/google-auth-intent";
+import { isPasswordAuthEnabled } from "@/lib/auth-mode";
+import { sendMail } from "@/lib/mail";
+import { hashResetToken } from "@/lib/password-reset";
+import { GOOGLE_CHALLENGE_COOKIE, GOOGLE_INTENT_COOKIE } from "@/lib/google-auth-cookies";
 
 const mockAuth = auth as unknown as ReturnType<typeof vi.fn>;
 const db = prisma as unknown as {
@@ -64,6 +72,7 @@ const db = prisma as unknown as {
     findUnique: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
   };
   userSession: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -73,7 +82,8 @@ const db = prisma as unknown as {
   };
   loginHistory: { create: ReturnType<typeof vi.fn> };
   securityAuditEvent: { create: ReturnType<typeof vi.fn> };
-  passwordResetToken: { findUnique: ReturnType<typeof vi.fn> };
+  totpCredential: { findUnique: ReturnType<typeof vi.fn> };
+  passwordResetToken: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -193,6 +203,15 @@ describe("shared issue login destinations", () => {
   it("returns a signed-in person to their original issue", () => {
     const request = Object.assign(new NextRequest("https://ziki.dev/login?callbackUrl=%2Fziki%2Fapp%2F482%3Fcomment%3Dc42"), { auth: { user: { id: "u" } } });
     expect(middleware.handler!(request).headers.get("location")).toBe("https://ziki.dev/ziki/app/482?comment=c42");
+  });
+
+  it("keeps the Google code step reachable with a pending challenge instead of bouncing to home", () => {
+    const request = Object.assign(new NextRequest("https://ziki.dev/login?googleCode=1", {
+      headers: { cookie: `${GOOGLE_CHALLENGE_COOKIE}=${"a".repeat(64)}` },
+    }), { auth: { user: { id: "u" } } });
+    expect(middleware.handler!(request).headers.get("location")).toBeNull();
+    const noChallenge = Object.assign(new NextRequest("https://ziki.dev/login?googleCode=1"), { auth: { user: { id: "u" } } });
+    expect(new URL(middleware.handler!(noChallenge).headers.get("location")!).pathname).toBe("/home");
   });
 });
 
@@ -392,5 +411,147 @@ describe("active sessions and login history", () => {
     expect(parsedProxy.maskedIp).toBe("127.0.xx.xx");
     expect(parsedProxy.sessionLocation).toBe("Local network");
     expect(legacySessionKey("u1", nextReadonlyHeaders)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("Google and password account ownership", () => {
+  let account: { id: string; email: string; name: string; role: string; passwordHash: string | null; emailVerified: Date | null; googleSubject: string | null; sessionVersion: number };
+  const google = () => ({ email: "a@x.dev", subject: "google-1", emailVerified: true });
+  beforeEach(() => {
+    account = { id: "u1", email: "a@x.dev", name: "Chosen name", role: "user", passwordHash: "existing-password-hash", emailVerified: null, googleSubject: null, sessionVersion: 3 };
+    db.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn({ user: db.user }));
+    db.user.findUnique.mockImplementation(async ({ where }: { where: { googleSubject?: string; email?: string } }) =>
+      where.googleSubject ? (account.googleSubject === where.googleSubject ? account : null) : account);
+    db.user.updateMany.mockImplementation(async ({ where, data }: { where: { sessionVersion: number }; data: object }) => {
+      if (where.sessionVersion !== account.sessionVersion) return { count: 0 };
+      Object.assign(account, data);
+      return { count: 1 };
+    });
+  });
+
+  it("connects a password account only after both methods are proven, keeping its password and data", async () => {
+    const linked = await upsertGoogleUser({ ...google(), link: { userId: "u1", email: "a@x.dev", sessionVersion: 3 } });
+    expect(linked.id).toBe("u1");
+    expect(account).toMatchObject({ passwordHash: "existing-password-hash", googleSubject: "google-1", name: "Chosen name", sessionVersion: 3 });
+    expect(account.emailVerified).toBeInstanceOf(Date);
+    const again = await upsertGoogleUser({ ...google(), email: "changed-google-email@x.dev" });
+    expect(again.id).toBe("u1");
+    expect(again.email).toBe("a@x.dev");
+  });
+
+  it("refuses to silently link an unverified password registration or an unverified Google email", async () => {
+    await expect(upsertGoogleUser(google())).rejects.toBeInstanceOf(GoogleLinkRequiredError);
+    await expect(upsertGoogleUser({ ...google(), emailVerified: false })).rejects.toBeInstanceOf(GoogleLinkMismatchError);
+    expect(account).toMatchObject({ passwordHash: "existing-password-hash", googleSubject: null, emailVerified: null });
+  });
+
+  it("rejects a different owner, different email, stale password proof, or a competing Google identity", async () => {
+    for (const link of [
+      { userId: "u2", email: "a@x.dev", sessionVersion: 3 },
+      { userId: "u1", email: "other@x.dev", sessionVersion: 3 },
+      { userId: "u1", email: "a@x.dev", sessionVersion: 2 },
+    ]) await expect(upsertGoogleUser({ ...google(), link })).rejects.toBeInstanceOf(GoogleLinkMismatchError);
+    account.googleSubject = "other-google";
+    await expect(upsertGoogleUser(google())).rejects.toBeInstanceOf(GoogleLinkMismatchError);
+    expect(account.passwordHash).toBe("existing-password-hash");
+  });
+
+  it("matches a proven email without discarding its password", async () => {
+    account.emailVerified = new Date();
+    await upsertGoogleUser(google());
+    expect(account).toMatchObject({ id: "u1", googleSubject: "google-1", passwordHash: "existing-password-hash" });
+  });
+
+  it("never trusts a forged or expired re-authentication intent", () => {
+    const now = 1_800_000_000_000;
+    const proof = sealGoogleIntent({ callbackUrl: "https://evil.example", link: { userId: "u1", email: "a@x.dev", sessionVersion: 3 } }, now);
+    expect(readGoogleIntent(proof, now)?.callbackUrl).toBe("/home");
+    expect(readGoogleIntent(proof, now + 601_000)).toBeNull();
+    expect(readGoogleIntent(proof.replace(/.$/, (last) => last === "0" ? "1" : "0"), now)).toBeNull();
+  });
+
+  it("offers password sign-in in production unless explicitly disabled", () => {
+    expect(isPasswordAuthEnabled({ NODE_ENV: "production" })).toBe(true);
+    expect(isPasswordAuthEnabled({ NODE_ENV: "production", AUTH_PASSWORD_LOGIN: "false" })).toBe(false);
+  });
+});
+
+describe("adding a password to a Google account", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", email: "a@x.dev", role: "user", sessionVersion: 3 } });
+    db.userSession.findUnique.mockResolvedValue(null);
+    db.user.findUnique.mockResolvedValue({ id: "u1", name: "Ada", email: "a@x.dev", role: "user", sessionVersion: 3, passwordHash: null, googleSubject: "google-1" });
+    db.passwordResetToken.create.mockResolvedValue({});
+    db.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
+    db.$transaction.mockImplementation(async (operations: Promise<unknown>[]) => Promise.all(operations));
+    vi.mocked(sendMail).mockResolvedValue(undefined);
+  });
+
+  it("emails a single-use setup proof to the signed-in account, without setting a password yet", async () => {
+    expect(await requestPasswordSetupAction()).toHaveProperty("success");
+    const message = vi.mocked(sendMail).mock.calls[0][0];
+    expect(message.to).toBe("a@x.dev");
+    const token = message.text.match(/token=([a-f0-9]{64})/)?.[1];
+    expect(token).toBeDefined();
+    const stored = db.passwordResetToken.create.mock.calls[0][0].data;
+    expect(stored).toMatchObject({ userId: "u1", tokenHash: hashResetToken(token!) });
+    expect(stored.tokenHash).not.toBe(token);
+    expect(db.user.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to replace an existing password or add one without a proven Google identity", async () => {
+    db.user.findUnique.mockResolvedValue({ id: "u1", email: "a@x.dev", sessionVersion: 3, role: "user", passwordHash: "existing", googleSubject: "google-1" });
+    expect(await requestPasswordSetupAction()).toHaveProperty("error");
+    db.user.findUnique.mockResolvedValue({ id: "u1", email: "a@x.dev", sessionVersion: 3, role: "user", passwordHash: null, googleSubject: null });
+    expect(await requestPasswordSetupAction()).toHaveProperty("error");
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("adds a usable password while retaining Google and invalidating existing sessions", async () => {
+    const account = { passwordHash: null as string | null, googleSubject: "google-1", sessionVersion: 3, emailVerified: null as Date | null };
+    db.passwordResetToken.findUnique.mockResolvedValue({ id: "t1", userId: "u1", usedAt: null, expiresAt: new Date(Date.now() + 60_000) });
+    const tx = {
+      passwordResetToken: { updateMany: vi.fn(async () => ({ count: 1 })), deleteMany: vi.fn() },
+      user: { update: vi.fn(async ({ data }) => {
+        account.passwordHash = data.passwordHash;
+        account.emailVerified = data.emailVerified;
+        account.sessionVersion += data.sessionVersion.increment;
+      }) },
+      agentApiKey: { updateMany: vi.fn() },
+    };
+    db.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(tx));
+    await expect(resetPasswordAction(undefined, form({ token: "a".repeat(64), password: "NewPassw0rd!", confirmPassword: "NewPassw0rd!" }))).rejects.toMatchObject({ to: "/login" });
+    expect(await compare("NewPassw0rd!", account.passwordHash!)).toBe(true);
+    expect(account.googleSubject).toBe("google-1");
+    expect(account.sessionVersion).toBe(4);
+    expect(account.emailVerified).toBeInstanceOf(Date);
+  });
+
+  it("does not issue a setup token for an unauthenticated request", async () => {
+    mockAuth.mockResolvedValue(null);
+    await expect(requestPasswordSetupAction()).rejects.toMatchObject({ to: "/login" });
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+});
+
+describe("password proof before connecting Google", () => {
+  it("never starts linking with a wrong password or a missing factor, and binds valid proof to the current account", async () => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-secret");
+    mockAuth.mockResolvedValue({ user: { id: "u1", email: "a@x.dev", role: "user", sessionVersion: 3 } });
+    db.userSession.findUnique.mockResolvedValue(null);
+    db.user.findUnique.mockResolvedValue({ id: "u1", name: "Ada", email: "a@x.dev", role: "user", sessionVersion: 3, passwordHash: await hash("ExistingPassw0rd!", 10) });
+    db.totpCredential.findUnique.mockResolvedValue(null);
+    expect(await connectGoogleAction(undefined, form({ currentPassword: "wrong" }))).toHaveProperty("error");
+    expect(setCookieMock).not.toHaveBeenCalled();
+    db.totpCredential.findUnique.mockResolvedValue({ enabledAt: new Date() });
+    expect(await connectGoogleAction(undefined, form({ currentPassword: "ExistingPassw0rd!" }))).toHaveProperty("error");
+    expect(setCookieMock).not.toHaveBeenCalled();
+    db.totpCredential.findUnique.mockResolvedValue(null);
+    vi.mocked(signIn).mockRejectedValueOnce(Object.assign(new Error("NEXT_REDIRECT"), { to: "/settings/security" }));
+    await expect(connectGoogleAction(undefined, form({ currentPassword: "ExistingPassw0rd!" }))).rejects.toMatchObject({ to: "/settings/security" });
+    const cookie = setCookieMock.mock.calls.find(([name]) => name === GOOGLE_INTENT_COOKIE);
+    expect(readGoogleIntent(cookie?.[1])?.link).toEqual({ userId: "u1", email: "a@x.dev", sessionVersion: 3 });
+    expect(cookie?.[2]).toMatchObject({ httpOnly: true, sameSite: "lax", maxAge: 600 });
   });
 });

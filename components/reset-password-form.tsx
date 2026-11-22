@@ -8,7 +8,7 @@ import { FieldError, useFieldErrors } from "@/components/ui/field-errors";
 import { PasswordInput } from "@/components/ui/password-input";
 
 const fieldClass =
-  "h-12 rounded-xl border-zk-border bg-zk-surface text-zk-text shadow-none placeholder:text-zk-muted focus:border-electric-blue focus:ring-electric-blue/20";
+  "h-9 rounded-control border-zk-border bg-zk-surface text-zk-text shadow-none placeholder:text-zk-muted focus:border-electric-blue focus:ring-electric-blue focus:ring-offset-2";
 
 export function ResetPasswordForm({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -134,13 +134,13 @@ export function ResetPasswordForm({ token }: { token: string }) {
         />
       </div>
       {error ? (
-        <p className="text-sm text-zk-bad-fg" role="alert">
+        <p className="rounded-panel bg-zk-bad-bg p-3 text-sm text-zk-bad-fg" role="alert">
           {error}
         </p>
       ) : null}
       <Button
         type="submit"
-        className="h-12 w-full bg-electric-blue-strong text-base font-bold text-white hover:bg-electric-blue focus-visible:ring-electric-blue"
+        className="w-full"
         disabled={pending}
       >
         {pending ? "Updating…" : "Update password"}

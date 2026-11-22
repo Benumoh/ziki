@@ -196,9 +196,9 @@ export default async function SettingsPage(props: {
                     </svg>
                   </span>
                   <div className="flex flex-col gap-1">
-                    <h2 className="m-0 text-lg font-bold text-zk-text">Two-factor sign-in</h2>
+                    <h2 className="m-0 text-lg font-bold text-zk-text">Sign-in and security</h2>
                     <span className="text-[13px] text-zk-muted">
-                      Protect your account with a second step at sign-in.
+                      Manage Google, your password and two-factor sign-in.
                     </span>
                   </div>
                 </div>
@@ -206,7 +206,7 @@ export default async function SettingsPage(props: {
                   href="/settings/security"
                   className="inline-flex h-[42px] items-center rounded-full bg-electric-blue-strong px-[18px] text-sm font-bold text-white hover:brightness-105"
                 >
-                  Set up
+                  Manage
                 </Link>
               </section>
 

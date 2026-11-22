@@ -87,14 +87,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             event.preventDefault();
             settle(false);
           }}
-          className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-card p-5 text-slate-900 shadow-xl backdrop:bg-black/50"
+          className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-panel border border-zk-border bg-zk-surface p-5 text-zk-text backdrop:bg-black/50"
         >
           {options?.art ? <div className="mb-3">{options.art}</div> : null}
           <h2 id="confirm-title" className={`text-base font-semibold ${options?.art ? "text-center" : ""}`}>
             {options?.title}
           </h2>
           {options?.body ? (
-            <p id="confirm-body" className={`mt-2 text-sm text-slate-600 ${options?.art ? "text-center" : ""}`}>
+            <p id="confirm-body" className={`mt-2 text-sm text-zk-muted ${options?.art ? "text-center" : ""}`}>
               {options.body}
             </p>
           ) : null}

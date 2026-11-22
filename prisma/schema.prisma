@@ -304,6 +304,10 @@ model User {
   /// Null for Google-only accounts; required for credentials login/signup.
   passwordHash                String?
   emailVerified               DateTime?
+  /// Google's stable account id. Linking never replaces the user's password.
+  googleSubject               String?                       @unique
+  googleSignInChallenges      GoogleSignInChallenge[]
+  googleSecurityProofs        GoogleSecurityProof[]
   image                       String?
   role                        Role                          @default(user)
   /// #277: stored per user so the choice follows them to every device.
@@ -413,7 +417,39 @@ model User {
   timeEntries                 TimeEntry[]
 }
 
-/// Single-use password reset tokens (~30 min TTL). Store only the SHA-256 hash.
+/// Single-use Google re-authentication for a specific 2FA setting and session.
+model GoogleSecurityProof {
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  userId         String
+  sessionId      String
+  sessionVersion Int
+  googleSubject  String
+  operation      String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Pending Google sign-ins that still need Ziki's authenticator code.
+model GoogleSignInChallenge {
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  userId         String
+  sessionVersion Int
+  callbackUrl    String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Single-use password setup/reset tokens (~30 min TTL). Store only the SHA-256 hash.
 model PasswordResetToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique

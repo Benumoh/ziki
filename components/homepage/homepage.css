@@ -876,37 +876,6 @@
   .ziki-homepage .price-plan { padding: 26px 20px; }
 }
 
-/* ---------- Sign up (#signup-page) ---------- */
-.ziki-homepage .su-page { min-height: 100vh; }
-.ziki-homepage .su-grid { align-items: center; display: grid; gap: 64px; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); margin: 0 auto; max-width: 1080px; padding: 72px 30px 96px; text-align: left; }
-.ziki-homepage .su-kicker { background: #eef8ff; border: 1px solid #b3dcfc; border-radius: 999px; color: #0a57a3; display: inline-block; font-size: 13px; font-weight: 600; padding: 6px 12px; }
-.ziki-homepage .su-title { color: #161616; font-size: clamp(34px, 4vw, 50px); font-weight: 600; letter-spacing: -.035em; line-height: 1.06; margin: 18px 0 30px; }
-.ziki-homepage .su-beats { display: grid; gap: 18px; list-style: none; margin: 0; padding: 0; }
-.ziki-homepage .su-beats li { align-items: flex-start; display: flex; gap: 14px; }
-.ziki-homepage .su-num { align-items: center; background: #161616; border-radius: 999px; color: #fff; display: inline-flex; flex: 0 0 30px; font-size: 14px; font-weight: 700; height: 30px; justify-content: center; }
-.ziki-homepage .su-beats li:first-child .su-num { background: #0972d5; }
-.ziki-homepage .su-beats b { color: #161616; display: block; font-size: 17px; font-weight: 600; }
-.ziki-homepage .su-beats p { color: #52525b; font-size: 15px; margin: 2px 0 0; }
-.ziki-homepage .su-promise { border-top: 1px solid rgba(24, 24, 27, .1); color: #3f3f46; font-size: 15px; margin: 30px 0 0; padding-top: 18px; }
-.ziki-homepage .su-card { background: #fff; border: 1px solid rgba(24, 24, 27, .12); border-radius: 18px; box-shadow: 0 24px 60px rgba(9, 40, 90, .10); display: flex; flex-direction: column; gap: 16px; padding: 32px 30px; }
-.ziki-homepage .su-card h2 { color: #161616; font-size: 24px; font-weight: 600; letter-spacing: -.02em; margin: 0; }
-.ziki-homepage .su-step { color: #52525b; font-size: 14px; margin: -8px 0 4px; }
-.ziki-homepage .su-form { display: flex; flex-direction: column; gap: 14px; }
-.ziki-homepage .su-or { align-items: center; color: #71717a; display: flex; font-size: 12px; font-weight: 700; gap: 10px; letter-spacing: .06em; text-transform: uppercase; }
-.ziki-homepage .su-or::before, .ziki-homepage .su-or::after { border-top: 1px solid rgba(24, 24, 27, .12); content: ''; flex: 1; }
-.ziki-homepage .su-switch { color: #52525b; font-size: 14px; margin: 0; text-align: center; }
-.ziki-homepage .su-switch a { color: #0972d5; font-weight: 600; }
-.ziki-homepage .su-switch a:hover { text-decoration: underline; }
-.ziki-homepage .su-error { background: #fde6e6; border-radius: 10px; color: #9b1c1c; font-size: 14px; margin: 0; padding: 12px; }
-@media (max-width: 900px) {
-  .ziki-homepage .su-grid { gap: 36px; grid-template-columns: 1fr; padding: 40px 16px 64px; }
-  .ziki-homepage .su-card { padding: 26px 20px; }
-}
-.ziki-homepage .su-email summary { color: #3f3f46; cursor: pointer; font-size: 14px; font-weight: 600; list-style: none; padding: 6px 0; text-align: center; }
-.ziki-homepage .su-email summary::-webkit-details-marker { display: none; }
-.ziki-homepage .su-email summary:hover { color: #0972d5; text-decoration: underline; }
-.ziki-homepage .su-email[open] summary { margin-bottom: 12px; }
-
 /* ---------- Resources (#resources) ---------- */
 .ziki-homepage .res-list { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); margin: 48px auto 0; max-width: 1080px; padding: 0 24px 88px; text-align: left; }
 .ziki-homepage .res-card { background: #fff; border: 1px solid rgba(24, 24, 27, .12); border-radius: 16px; color: #161616; display: flex; flex-direction: column; gap: 10px; padding: 26px 24px; transition: border-color .2s ease, box-shadow .2s ease; }

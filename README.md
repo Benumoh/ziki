@@ -16,7 +16,7 @@ Security scan payment behavior is documented in [Security checks](docs/security-
 ## Stack
 
 - Next.js 16 (App Router) + React 19 + TypeScript + Tailwind
-- Auth.js v5 — Google OAuth; email/password for local dev only (off in production, see `AUTH_PASSWORD_LOGIN`)
+- Auth.js v5 — Google OAuth and email/password; connect Google or add a password under Settings → Security
 - Prisma + PostgreSQL
 - pnpm
 - Docker / Coolify deploy (served from root at `ziki.dev`)
@@ -72,7 +72,7 @@ Shortcuts are enabled by default and can be turned off in **Settings → Keyboar
 
 ## Demo accounts (credentials seed)
 
-Local development only. Password sign-in is **off in production** (`AUTH_PASSWORD_LOGIN`), and the seeder refuses to load demo data when `NODE_ENV=production`.
+Demo accounts are for local development only. Password sign-in is enabled by default in every environment (`AUTH_PASSWORD_LOGIN` can explicitly disable it), and the seeder refuses to load demo data when `NODE_ENV=production`.
 
 | Email | Password |
 | --- | --- |
@@ -113,7 +113,7 @@ Platform unfurl caches are outside our control; metadata is generated on each re
 | `AUTH_SECRET` | Session secret (`openssl rand -base64 32`) |
 | `AUTH_URL` / `NEXTAUTH_URL` | Auth.js base path: origin + `/api/auth` (Next.js `basePath` is applied on top) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google sign-in (required in production) |
-| `AUTH_PASSWORD_LOGIN` | `true`/`false` to force email/password sign-in and the reset flow on/off. Default: off in production, on elsewhere |
+| `AUTH_PASSWORD_LOGIN` | `true`/`false` to force email/password sign-in and the reset flow on/off. Default: on in every environment |
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | Idempotent super-admin seed (optional; password min 12 chars) |
 | `SUPER_ADMIN_FORCE_UPDATE` | Set `true` to rotate password / promote an existing account |
 | `SEED_DEMO_DATA` | Set `true` to wipe and load demo users/bugs |
@@ -152,3 +152,11 @@ The legacy fork `Zedu-Endor/issue-tracker` is retired and no longer used. For te
 ## Archive
 
 Earlier standalone MVP history/issues origin: [`Zedu-Endor/bug-tracker-mvp`](https://github.com/Zedu-Endor/bug-tracker-mvp) (issues transferred here).
+
+### Google and password sign-in
+
+Both methods access the same account. Under **Settings → Security**, password users can connect Google after confirming their password and, when enabled, their authenticator or backup code. Choose the Google account with the same email. Google-only users can select **Add a password** to receive a single-use, 30-minute setup link. Production needs SMTP configured; development prints the email in the server terminal. Adding or resetting a password ends existing sessions and revokes agent API keys, but keeps Google connected.
+
+An unverified password account must be linked explicitly; Google sign-in never deletes its password or authenticator. Verified email ownership permits matching legacy accounts, and subsequent Google sign-ins use Google's stable account id. Ziki's two-factor code is required after either login method when enabled. A Google sign-in awaiting its code expires after five minutes and cannot be replayed.
+
+Google-only users can enable Ziki two-factor sign-in without creating a password. In **Settings → Security**, choose **Set up two-factor sign-in**, confirm the connected Google account, then scan the authenticator QR code and confirm its first code. Save the backup codes. Turning off two-factor or replacing backup codes requires a fresh Google confirmation plus an existing authenticator or backup code. Google verification lasts five minutes, is tied to the current Ziki session and selected operation, and can be used only once. Password accounts continue to confirm their password and existing factor for these changes.
