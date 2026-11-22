@@ -214,6 +214,7 @@ export async function saveProjectLinksAction(
     marketingUrl?: string | null;
     appStoreUrl?: string | null;
     playStoreUrl?: string | null;
+    downloadUrl?: string | null;
   } = { ...parsed.data, ...(marketing?.success ? { marketingUrl: marketing.data } : {}) };
   const slug = String(formData.get("slug") ?? "").trim();
   const project = await prisma.project.findFirst({
