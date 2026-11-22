@@ -29,8 +29,8 @@ type Db = PrismaClient | Prisma.TransactionClient;
 export const ACTIVE_ORGANISATION_COOKIE = "ziki_active_organisation";
 export const ACTIVE_ORGANISATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-export const ORGANISATION_NAME_MIN = 2;
-export const ORGANISATION_NAME_MAX = 60;
+import { ORGANISATION_NAME_MAX, ORGANISATION_NAME_MIN } from "@/lib/organisation-name-limits";
+export { ORGANISATION_NAME_MAX, ORGANISATION_NAME_MIN };
 export const ORGANISATION_SLUG_MAX = 48;
 
 /** Creating organisations is rare; this only stops a script from filling the table. */
