@@ -108,12 +108,12 @@ function fillStarter(text: string) {
 const PAD = 8;
 const GAP = 14;
 const EDGE = 16;
-const DIM = "rgba(11, 23, 51, 0.62)";
+const DIM = "color-mix(in srgb, var(--zk-ink) 60%, transparent)";
 
 const primary =
-  "inline-flex min-h-10 items-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2";
+  "inline-flex min-h-9 items-center rounded-control bg-electric-blue-strong px-5 text-sm font-bold text-white hover:bg-zk-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2";
 const quiet =
-  "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold text-zk-text2 hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
+  "inline-flex min-h-9 items-center rounded-control px-4 text-sm font-semibold text-zk-text2 hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
 
 type Props = {
   userId: string;
@@ -280,7 +280,7 @@ export function WelcomeTour({ userId, organisationId, organisationName, firstNam
                     key={starter.label}
                     type="button"
                     onClick={() => fillStarter(starter.text)}
-                    className="inline-flex min-h-9 items-center rounded-full border border-zk-border bg-zk-tint px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
+                    className="inline-flex min-h-9 items-center rounded-control border border-zk-border bg-zk-tint px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
                   >
                     {starter.label}
                   </button>
@@ -381,7 +381,7 @@ export function WelcomeTour({ userId, organisationId, organisationName, firstNam
       {spot ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute rounded-[18px] motion-safe:transition-all motion-safe:duration-300"
+          className="pointer-events-none absolute rounded-panel motion-safe:transition-all motion-safe:duration-300"
           style={{
             top: spot.top - PAD,
             left: spot.left - PAD,
@@ -401,13 +401,13 @@ export function WelcomeTour({ userId, organisationId, organisationName, firstNam
         aria-modal={step.interactive ? undefined : true}
         aria-labelledby="welcome-tour-title"
         aria-describedby="welcome-tour-body"
-        className="pointer-events-auto absolute w-[min(400px,calc(100vw-2rem))] rounded-[20px] border border-zk-border bg-zk-surface p-5 text-zk-text shadow-[0_24px_56px_rgba(11,23,51,0.28)] motion-safe:transition-[top,left] motion-safe:duration-300"
+        className="pointer-events-auto absolute w-[min(400px,calc(100vw-2rem))] rounded-panel border border-zk-border bg-zk-surface p-5 text-zk-text shadow-xl motion-safe:transition-[top,left] motion-safe:duration-300"
         style={cardStyle}
       >
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-zk-muted">{content.kicker}</p>
           {index > 0 && !isLast ? (
-            <button type="button" onClick={close} className="rounded-full px-2 py-1 text-xs font-semibold text-zk-text2 hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue">
+            <button type="button" onClick={close} className="rounded-lg px-2 py-1 text-xs font-semibold text-zk-text2 hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue">
               Skip tour
             </button>
           ) : null}

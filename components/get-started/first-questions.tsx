@@ -211,13 +211,13 @@ export function FirstQuestions({
       onPointerDown={(event) => event.nativeEvent.stopImmediatePropagation()}
     >
       {/* The app stays in sight behind the card, dimmed. A click on it does nothing. */}
-      <div aria-hidden="true" className="absolute inset-0 bg-[rgba(11,23,51,0.55)] backdrop-blur-[2px]" />
+      <div aria-hidden="true" className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="first-questions-heading"
-        className="relative flex max-h-[calc(100dvh-2rem)] min-h-[min(720px,calc(100dvh-2rem))] w-full max-w-[610px] flex-col overflow-hidden rounded-[28px] bg-zk-surface shadow-[0_24px_64px_rgba(11,23,51,0.35)] max-sm:h-[100dvh] max-sm:max-h-none max-sm:min-h-0 max-sm:max-w-none max-sm:rounded-none"
+        className="relative flex max-h-[calc(100dvh-2rem)] min-h-[min(720px,calc(100dvh-2rem))] w-full max-w-[610px] flex-col overflow-hidden rounded-panel border border-zk-border bg-zk-surface shadow-xl max-sm:h-[100dvh] max-sm:max-h-none max-sm:min-h-0 max-sm:max-w-none max-sm:rounded-none"
       >
         <div className="relative flex h-16 shrink-0 items-center justify-center px-4">
           {index > 0 ? (
@@ -226,7 +226,7 @@ export function FirstQuestions({
             </button>
           ) : null}
           <div
-            className="h-1.5 w-36 overflow-hidden rounded-full bg-zk-chip"
+            className="h-1.5 w-36 overflow-hidden rounded-sm bg-zk-chip"
             role="progressbar"
             aria-label="Progress"
             aria-valuemin={1}
@@ -234,7 +234,7 @@ export function FirstQuestions({
             aria-valuenow={index + 1}
             aria-valuetext={`Step ${index + 1} of ${steps.length}`}
           >
-            <div className="h-full rounded-full bg-electric-blue transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${((index + 1) / steps.length) * 100}%` }} />
+            <div className="h-full rounded-sm bg-electric-blue transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${((index + 1) / steps.length) * 100}%` }} />
           </div>
           <button type="button" onClick={close} aria-label="Close" className={`${ICON_BUTTON} absolute right-3`}>
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
@@ -255,7 +255,7 @@ export function FirstQuestions({
                         type="button"
                         aria-pressed={on}
                         onClick={() => toggleKind(option.id)}
-                        className={`relative flex h-32 w-full flex-col items-center justify-center gap-1.5 rounded-3xl border-2 px-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
+                        className={`relative flex h-32 w-full flex-col items-center justify-center gap-1.5 rounded-panel border-2 px-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
                           on ? "border-electric-blue bg-zk-tint" : "border-zk-border bg-zk-surface hover:border-zk-muted"
                         }`}
                       >
@@ -316,7 +316,7 @@ export function FirstQuestions({
                     key={need.id}
                     type="button"
                     onClick={() => fill(need.text)}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-semibold text-zk-text transition hover:border-electric-blue hover:bg-zk-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-chip border border-zk-border bg-zk-surface px-4 text-sm font-semibold text-zk-text transition hover:border-electric-blue hover:bg-zk-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
                   >
                     <span aria-hidden="true">{need.icon}</span>
                     {need.label}

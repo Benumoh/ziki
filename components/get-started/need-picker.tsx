@@ -85,10 +85,10 @@ export function needsFor(kinds: readonly ProductKind[]): Need[] {
 
 /** The card's main button: full width and tall, as Pinterest's Continue. */
 export const PRIMARY_BUTTON =
-  "inline-flex min-h-14 w-full items-center justify-center rounded-2xl bg-electric-blue px-6 text-lg font-bold text-white transition hover:bg-electric-blue-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-12 w-full items-center justify-center rounded-control bg-electric-blue-strong px-6 text-base font-bold text-white transition hover:bg-zk-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40";
 /** The quiet way out under it. */
 export const SECONDARY_BUTTON =
-  "inline-flex min-h-11 w-full items-center justify-center rounded-2xl px-6 text-sm font-semibold text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
+  "inline-flex min-h-11 w-full items-center justify-center rounded-control px-6 text-sm font-semibold text-zk-text2 transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
 
 type Props = {
   /** The question, rendered by the parent (it may own focus on it). */
@@ -118,7 +118,7 @@ export function NeedPicker({ heading, needs, picked, onPickedChange, onNext, onS
                 type="button"
                 aria-pressed={on}
                 onClick={() => onPickedChange(on ? picked.filter((id) => id !== need.id) : [...picked, need.id])}
-                className={`relative flex h-32 w-full flex-col items-center justify-center gap-2.5 rounded-3xl border-2 px-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
+                className={`relative flex h-32 w-full flex-col items-center justify-center gap-2.5 rounded-panel border-2 px-3 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
                   on ? "border-electric-blue bg-zk-tint" : "border-zk-border bg-zk-surface hover:border-zk-muted"
                 }`}
               >
