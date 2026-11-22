@@ -88,7 +88,7 @@ async function loadAlerts(organisationId: string) {
   return { needsYou, stopped, closed, stoppedCount: stoppedCount._sum.attempts ?? 0, keysOff };
 }
 
-const buttonBase = "inline-flex min-h-9 items-center justify-center rounded-[12px] px-3 text-sm font-semibold transition";
+const buttonBase = "inline-flex min-h-9 items-center justify-center rounded-panel px-3 text-sm font-semibold transition";
 const primaryButton = `${buttonBase} bg-electric-blue-strong text-white hover:opacity-90`;
 const quietButton = `${buttonBase} border border-zk-border bg-zk-surface text-zk-text hover:bg-zk-chip`;
 
@@ -221,7 +221,7 @@ export default async function OrgSecretsPage({
             {needsYou.map((alert) => {
               const info = kindInfo(alert.kind);
               return (
-                <li key={alert.id} className="space-y-3 rounded-[20px] border border-zk-bad-bd bg-zk-surface p-4 sm:p-5">
+                <li key={alert.id} className="space-y-3 rounded-panel border border-zk-bad-bd bg-zk-surface p-4 sm:p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-zk-bad-bg px-2.5 py-0.5 text-xs font-bold text-zk-bad-fg">{info.label}</span>
                     <code className="rounded-md bg-zk-chip px-1.5 py-0.5 font-mono text-xs text-zk-text2">{alert.preview}</code>

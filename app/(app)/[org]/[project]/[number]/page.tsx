@@ -1,5 +1,3 @@
-import { AskAboutFix } from "@/components/ask-about-fix";
-import { ASKABLE_STATUSES } from "@/lib/validations/support-thread";
 import { MergerTransparencyCard } from "@/components/merger-transparency-card";
 import { requireProject } from "@/lib/project-route";
 import Link from "next/link";
@@ -46,9 +44,9 @@ import {
   statusLabels,
 } from "@/lib/labels";
 import { ActivityTimeline, issueStepActivities, type ActivityEntry } from "@/components/activity-timeline";
+import { ActivityDrawer } from "@/components/activity-drawer";
 import { type AgentDecision } from "@/components/issue-agent-activity";
-import { IssueProgressReport } from "@/components/issue-progress-report";
-import { IssueStageProvider } from "@/components/issue-stage-context";
+import { StatusProgress } from "@/components/status-progress";
 import { IssueComments } from "@/components/comment-thread";
 import { AgentSteerPanel } from "@/components/agent-steer-panel";
 import { CommentComposer } from "@/components/comment-composer";
@@ -82,14 +80,8 @@ import { mergeReviewEntries } from "@/lib/agent-api/merge";
 import { DeliveriesPanel, MergeReviewsPanel, TestVerdictsPanel, type DeliveryView, type MergeReviewView, type TestVerdictView } from "@/components/issue-review-entries";
 import { Badge } from "@/components/ui/badge";
 import { VoteButton } from "@/components/vote-button";
-import { SpeedButton } from "@/components/speed-button";
-import {
-  InsufficientVotesAuditBanner,
-  WORK_READINESS_VOTE_THRESHOLD,
-} from "@/components/insufficient-votes-audit-banner";
 import { IssueConfirmationsPanel, type ConfirmationBlock, type ConfirmationsData } from "@/components/issue-confirmations";
 import { CONFIRMATION_SUMMARY_MAX_CHARS, listConfirmations, takesConfirmations } from "@/lib/agent-api/confirmations";
-import { DisputeAwardDialog, type DisputeRole } from "@/components/dispute-award-dialog";
 import { TakeItBackPanel } from "@/components/take-it-back";
 import { takeItBackViewFor } from "@/lib/take-it-back-server";
 import { AttachmentList, type AttachmentView } from "@/components/attachment-list";
@@ -127,15 +119,9 @@ import { findingForBug, findingView } from "@/lib/security-findings";
 import { IssueLinks } from "@/components/issue-links";
 import { parsePullRequestUrl } from "@/lib/github/pull-request-url";
 import { NextStepBar } from "@/components/next-step-bar";
-import { liveCheck, liveConfirmLabel, liveFactLabel, liveNextStep, liveStepState } from "@/lib/live-check";
+import { liveCheck, liveConfirmLabel, liveFactLabel } from "@/lib/live-check";
 import { loadProdConfirmers } from "@/lib/live-confirm-data";
-import { PROD_CONFIRMATIONS_NEEDED } from "@/lib/live-confirm";
-import { LiveFlow } from "@/components/live-flow";
-import { latestPullRequestReport, gateReport, pullRequestStateView, type PullRequestStateView } from "@/lib/agent-api/pull-request-report";
-import { prGate, reportWanted } from "@/lib/agent-api/pr-gate";
-import { parseGitHubRepoUrl } from "@/lib/github/pull-request-url";
-import { mergeChecklist } from "@/lib/merge-checklist";
-import { MergeChecklistCard } from "@/components/merge-checklist";
+import { latestPullRequestReport } from "@/lib/agent-api/pull-request-report";
 import { Prisma } from "@prisma/client";
 import { TestCardPanel } from "@/components/test-card";
 import { loadCard, proofAttachmentIds, storedProof, type JudgementProofState, type VerdictProof } from "@/lib/proof";
@@ -164,7 +150,7 @@ import { organisationMemberWhere } from "@/lib/organisation-mentions";
 import { readAgentResolution } from "@/lib/agent-resolution";
 import { AgentResolvedNotice } from "@/components/agent-resolved-notice";
 import { SubmissionEvidence } from "@/components/submission-evidence";
-import { PullRequestChecks } from "@/components/pull-request-checks";
+import { ScreenshotsPanel } from "@/components/screenshots-panel";
 import { GitHubStatusPanel, type GitHubStatusPanelProps } from "@/components/github-status-panel";
 import { storedGitHubStatus } from "@/lib/github/sync";
 import { lastReadyPreviewUrl, latestPreviewBuild } from "@/lib/previews/builds";
@@ -178,11 +164,7 @@ import {
 import "./issue-detail.css";
 import { stateLabel } from "@/lib/labels";
 import { IssueRewardPanel } from "@/components/issue-reward-panel";
-import { RetestRequest } from "@/components/retest-request";
 import { rewardEstimatesFor } from "@/lib/agent-api/reward-estimates";
-import { IssueBlockersPanel } from "@/components/issue-blockers-panel";
-import { IssueTimeTracking } from "@/components/issue-time-tracking";
-import type { IssueBlockerCandidate } from "@/app/actions/issue-blockers";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
 
 type BugPageProps = {
@@ -403,7 +385,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         milestone: { select: { id: true, title: true, dueDate: true, isClosed: true } },
         assignee: { select: { id: true, name: true, role: true, image: true } },
         area: { select: { id: true, name: true } },
-        project: { select: { slug: true, name: true, goal: true, siteUrl: true, organisation: { select: { slug: true } } } },
+        project: { select: { slug: true, name: true, goal: true, siteUrl: true, marketingUrl: true, organisation: { select: { slug: true } } } },
         votes: { where: { userId }, select: { id: true, value: true }, take: 1 },
         // #285: both sides of a duplicate link.
         duplicateOf: { select: { id: true, number: true, title: true, status: true, isDeleted: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } } },
@@ -438,7 +420,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           idea: { select: { id: true, number: true, rationale: true, convertedAt: true, _count: { select: { verdicts: true } } } },
           assignee: { select: { id: true, name: true, role: true, image: true } },
           area: { select: { id: true, name: true } },
-          project: { select: { slug: true, name: true, goal: true, siteUrl: true, organisation: { select: { slug: true } } } },
+          project: { select: { slug: true, name: true, goal: true, siteUrl: true, marketingUrl: true, organisation: { select: { slug: true } } } },
           votes: { where: { userId }, select: { id: true, value: true }, take: 1 },
           duplicateOf: { select: { id: true, number: true, title: true, status: true, isDeleted: true, project: { select: { slug: true, organisation: { select: { slug: true } } } } } },
           duplicates: {
@@ -479,19 +461,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     notFound();
   }
 
-  const blockerRows = organisationId ? await loadOptional("issue blockers", [], () =>
-    prisma.issueBlocker.findMany({
-      where: { OR: [{ blockedBugId: bug.id }, { blockerBugId: bug.id }] },
-      select: {
-        blockedBugId: true,
-        blockerBugId: true,
-        blockedBug: { select: { id: true, number: true, title: true, status: true, substatus: true } },
-        blockerBug: { select: { id: true, number: true, title: true, status: true, substatus: true } },
-      },
-    }),
-  ) : [];
-  const blockedBy = blockerRows.filter((row) => row.blockedBugId === bug.id).map((row) => row.blockerBug) satisfies IssueBlockerCandidate[];
-  const blocking = blockerRows.filter((row) => row.blockerBugId === bug.id).map((row) => row.blockedBug) satisfies IssueBlockerCandidate[];
   // These tables arrived after the issue row. A missing one must not blank the page.
   const [redesignProposals, membership] = organisationId ? await Promise.all([
     loadOptional("redesigns", [], () =>
@@ -882,8 +851,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     prisma.bug.findUnique({ where: { id: bug.id }, select: { reward: true, rewardFixedAt: true } }),
     loadOptional<Awaited<ReturnType<typeof rewardEstimatesFor>>>("reward estimates", [], () => rewardEstimatesFor(bug.id)),
   ]);
-  // #ziki-coins: the agreed estimate, once anyone has given one (never the $1 an issue starts with), for the funding box in the Reward card.
-  const fundingEstimate = rewardRow && rewardEstimates.length > 0 ? { dollars: Number(rewardRow.reward), count: rewardEstimates.length } : null;
   const confirmationsData = await loadOptional<(ConfirmationsData & { confirmed?: boolean }) | null>("confirmations", null, () =>
     // #confirmation-files: other confirmers' files show once the viewer has confirmed (admins always).
     listConfirmations({ organisationId: bug.organisationId, projectId: bug.projectId }, bug.id, { userId: user.id, admin: canChooseRedesign }),
@@ -894,17 +861,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const confirming = !bug.isDeleted && takesConfirmations(bug.substatus, confirmationsData?.confirmed ?? pastConfirmation);
   // Anyone may confirm their own issue (#confirmation-weights): it counts 1.
   const confirmationBlock: ConfirmationBlock = null;
-  const activeSupportThread =
-    isOrgMember && !bug.isDeleted && (ASKABLE_STATUSES as readonly string[]).includes(bug.status)
-      ? await prisma.supportThread.findFirst({
-          where: {
-            bugId: bug.id,
-            requesterUserId: user.id,
-            status: { in: ["open", "taken"] },
-          },
-          select: { id: true },
-        })
-      : null;
   // #close-reasons: the issue's owner may withdraw it while it is not closed or live.
   const canWithdraw = !bug.isDeleted && bug.status !== "closed" && bug.status !== "resolved" && ownsIssue(bug, user.id);
   const isAssignee = !!userId && bug.assigneeId === userId;
@@ -1110,16 +1066,10 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const organisationRoles: Record<string, OrganisationRole> = Object.fromEntries(
     organisationRoleRows.map((row) => [row.userId, row.role]),
   );
-  // Two views of one issue: the simple one people read by default, and the work view with everything agents use
-  // (?view=work), which the Work queue opens.
-  const workView = (Array.isArray(query.view) ? query.view[0] : query.view) === "work";
-  const viewHref = (work: boolean) => {
-    const next = new URLSearchParams(pageQuery);
-    if (work) next.set("view", "work");
-    else next.delete("view");
-    const queryString = next.toString();
-    return `${issueHref(bug)}${queryString ? `?${queryString}` : ""}`;
-  };
+  // The live link (#live-link): the newest deployment report that gave one.
+  const liveLink = bug.status === "resolved"
+    ? await loadOptional("live link", null, () => prisma.deploymentReport.findFirst({ where: { bugId: bug.id, url: { not: null } }, orderBy: { updatedAt: "desc" }, select: { url: true } }))
+    : null;
   const pageQuery = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (typeof value === "string") pageQuery.set(key, value);
@@ -1197,9 +1147,12 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     return meta && (meta.screenshots || meta.testResults || meta.field === "pullRequestUrl");
   });
   const prMeta = prActivity?.metadata as Record<string, unknown> | null;
-  const submissionScreenshots: string[] = Array.isArray(prMeta?.screenshots)
-    ? (prMeta?.screenshots as string[])
-    : proofLinks.filter((l) => /\.(png|jpe?g|webp|gif|svg)($|\?)/i.test(l));
+  // Screenshots have their own panel (#screenshots-panel): image links leave the Links card and join the delivery's.
+  const isImageLink = (link: string) => /\.(png|jpe?g|webp|gif|svg)($|\?)/i.test(link);
+  const linkOnlyProofs = proofLinks.filter((link) => !isImageLink(link));
+  const submissionScreenshots: string[] = [
+    ...new Set([...(Array.isArray(prMeta?.screenshots) ? (prMeta?.screenshots as string[]) : []), ...proofLinks.filter(isImageLink)]),
+  ];
   const submissionTestResults = (prMeta?.testResults as string | Record<string, unknown> | null) ?? null;
 
   const resolution = currentResolution(bug.status, latestStatusChange);
@@ -1232,15 +1185,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     ciPassed = bug.substatus !== "error";
     rebaseClean = bug.substatus !== "error";
   }
-  // "Dispute award", for the issue's reporter and assignee: its own button now
-  // that issues take no free-standing comments (#entry-replies-only).
-  const disputeRoles: DisputeRole[] = bug.isDeleted
-    ? []
-    : [
-        ...(userId && bug.assigneeId === userId ? (["solver"] as const) : []),
-        ...(userId && bug.reporterId === userId ? (["reporter"] as const) : []),
-      ];
-
   // Less common actions sit behind one icon at the top right: Mark as
   // duplicate and Delete. "Assign to me" lives in the People panel.
   const canMarkDuplicate = canTriage && !bug.isDeleted && !bug.duplicateOf;
@@ -1262,26 +1206,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     ? await loadOptional("merge review votes", null, () => mergeReviewVotes(prisma, reviewBug, workflow.managerVoteWeight))
     : null;
   const stale = bug.isDeleted ? null : (await loadOptional("stale hold", null, () => staleHold(bug.id)))?.kind ?? null;
-  // #pr-checks: the checks on the linked pull request, from the latest
-  // independent report, and why an agent should look again when it is stale.
-  // A load that fails says so rather than reading as a pass.
-  type IssuePrChecks = { report: PullRequestStateView | null; refreshHint: string | null; failed: boolean };
-  const prChecks: IssuePrChecks | null = bug.isDeleted || !bug.pullRequestUrl
-    ? null
-    : await loadOptional<IssuePrChecks>(
-        "pull request checks",
-        { report: null, refreshHint: null, failed: true },
-        async () => {
-          const report = await latestPullRequestReport(bug.id, bug.pullRequestUrl);
-          const project = await prisma.project.findUnique({ where: { id: bug.projectId }, select: { repoUrl: true } });
-          const gate = prGate(gateReport(report), {
-            pullRequestUrl: bug.pullRequestUrl,
-            pullRequestHeadSha: bug.pullRequestHeadSha ?? null,
-            repo: parseGitHubRepoUrl(project?.repoUrl),
-          });
-          return { report: pullRequestStateView(report), refreshHint: reportWanted(gate, report), failed: false };
-        },
-      );
   const abandonCheck = bug.isDeleted || bug.status !== "in_progress" ? null : await loadOptional("sense check", null, () => senseCheck(bug.id));
   const closeSuggestions = await loadOptional<CloseSuggestionsData | null>("close suggestions", null, () => closeSuggestionsFor(bug.id));
   // A decision other members made about the viewer's own issue (#your-decisions).
@@ -1303,21 +1227,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const testCard = card?.on ? card : null;
   const judgementCount = bug.status === "done" && !bug.isDeleted
     ? await loadOptional("judgement count", null, () => countedJudgements(prisma, bug.id, card ?? undefined))
-    : null;
-  // #merge-checklist: while delivered work is judged, reviewed or waiting to
-  // merge, the checks before "good to merge", from the latest pull request report.
-  const checklist = !bug.isDeleted && (bug.status === "done" || bug.status === "merge") && bug.pullRequestUrl
-    ? await loadOptional("merge checklist", null, async () => {
-        const [report, project] = await Promise.all([
-          latestPullRequestReport(bug.id, bug.pullRequestUrl),
-          prisma.project.findUnique({ where: { id: bug.projectId }, select: { repoUrl: true } }),
-        ]);
-        return mergeChecklist(report, {
-          pullRequestUrl: bug.pullRequestUrl ?? null,
-          pullRequestHeadSha: bug.pullRequestHeadSha ?? null,
-          repo: parseGitHubRepoUrl(project?.repoUrl),
-        });
-      })
     : null;
   // #live-check: on a Live issue, where its fix really is, from the latest
   // independent check of its pull request rather than the Live label.
@@ -1415,7 +1324,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const timelineReviews = newestFirst(mergeReviewList);
 
   // The Conversation card shows only when it has entries in it: no empty boxes.
-  // Its Dispute award button alone is not enough (nothing to dispute before an award).
   const conversationHasContent =
     Boolean(sourceIdea) ||
     Boolean(awardClaim) ||
@@ -1546,7 +1454,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       select: { currentFocus: true },
     });
     const marketingFocus = marketingBrief?.currentFocus ?? bug.project.goal;
-    const marketingSite = bug.project.siteUrl;
+    // The marketing site (#marketing-url), else the app's own address.
+    const marketingSite = bug.project.marketingUrl ?? bug.project.siteUrl;
 
     return (
       <>
@@ -1598,11 +1507,6 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               canReply={mergeReviewing}
               history={!mergeReviewing}
             />
-          ) : null
-        }
-        disputeSlot={
-          disputeRoles.length > 0 ? (
-            <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
           ) : null
         }
         escalationsSlot={<IssueEscalations escalations={escalations} />}
@@ -1701,7 +1605,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             <section
               id="comments"
               aria-label="Comments"
-              className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+              className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
             >
               <IssueComments
                 count={commentCount}
@@ -1773,7 +1677,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         }
         attachmentsSlot={
           issueAttachments.length > 0 ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
                 Attachments
               </h2>
@@ -1784,7 +1688,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         alertsSlot={
           <>
             {bug.isDeleted ? (
-              <div className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
+              <div className="rounded-panel border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-zk-bad-fg">
@@ -1807,7 +1711,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             {bug.duplicateOf ? (
               <section
                 aria-label="Duplicate"
-                className="rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg p-4 sm:p-5"
+                className="rounded-panel border border-zk-warn-bd bg-zk-warn-bg p-4 sm:p-5"
               >
                 <h2 className="text-sm font-semibold text-zk-warn-fg">
                   Marked as duplicate of{" "}
@@ -1824,7 +1728,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             {resolution ? (
               <section
                 aria-label="Resolution note"
-                className="rounded-[20px] border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
+                className="rounded-panel border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
               >
                 <h2 className="text-sm font-semibold text-zk-ok-fg">
                   {resolutionStatusLabel[resolution.status]} by {resolution.by}
@@ -1842,14 +1746,14 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         sideRailSlot={
           <>
             {bug.linkedIssue && !bug.linkedIssue.isDeleted ? (
-              <section aria-label="Related product issue" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface p-5">
+              <section aria-label="Related product issue" className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface p-5">
                 <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Related product issue</h2>
                 <Link href={issuePath(refOf(bug.project), bug.linkedIssue.number)} className="text-sm font-semibold text-zk-accent hover:underline">
                   #{bug.linkedIssue.number} {bug.linkedIssue.title}
                 </Link>
               </section>
             ) : null}
-            <section aria-label="Status" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+            <section aria-label="Status" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
               <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2>
               <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
                 {bug.isDeleted ? (
@@ -1903,13 +1807,12 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 estimates={rewardEstimates}
                 viewerId={user.id}
                 canEstimate={!bug.isDeleted && bug.status !== "closed"}
-                caption="paid upon accepted delivery"
               >
-                <FundIssueSection bugId={bug.id} userId={user.id} estimate={fundingEstimate} />
+                <FundIssueSection bugId={bug.id} userId={user.id} />
               </IssueRewardPanel>
             ) : null}
 
-            <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+            <section className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
               <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
               <div className="flex min-w-0 items-center gap-3">
                 <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
@@ -1954,15 +1857,17 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             </section>
 
             <IssueLinks
-              links={proofLinks}
+              links={linkOnlyProofs}
               linkedPullRequestUrl={bug.pullRequestUrl}
               pullRequests={false}
               idea={sourceIdea ? { number: sourceIdea.number, slug: refOf(bug.project) } : null}
               repairs={linkRepairs}
             />
 
+            <ScreenshotsPanel screenshots={submissionScreenshots} />
+
             <SubmissionEvidence
-              screenshots={submissionScreenshots}
+              screenshots={[]}
               testResults={submissionTestResults}
               pullRequestUrl={bug.pullRequestUrl}
             />
@@ -1979,348 +1884,18 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     );
   }
 
-  return (
-    <div className="issue-detail-scope flex flex-col gap-5 pb-10">
-      {bug.isDeleted ? (
-        <div className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-zk-bad-fg">
-                This issue was deleted
-              </h3>
-              <p className="text-xs text-zk-bad-fg/90">
-                {deletedSummary(keptCounts)}
-              </p>
-            </div>
-            <RestoreIssueButton
-              bugId={bug.id}
-              bugTitle={bug.title}
-              counts={keptCounts}
-              size="sm"
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {bug.duplicateOf ? (
-        <section
-          aria-label="Duplicate"
-          className="flex flex-col gap-2 rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
-        >
-          <p className="text-sm text-zk-warn-fg">
-            <span className="font-semibold">This issue is a duplicate of </span>
-            {bug.duplicateOf.isDeleted && !canDelete ? (
-              <span>{formatIssueNumber(bug.duplicateOf.number)} (since deleted)</span>
-            ) : (
-              <Link href={issueHref(bug.duplicateOf)} className="font-semibold text-zk-accent underline-offset-2 hover:underline">
-                {formatIssueNumber(bug.duplicateOf.number)} {bug.duplicateOf.title}
-              </Link>
-            )}{" "}
-            <span>({statusLabels[bug.duplicateOf.status]})</span>.{" "}
-            Follow it and mark it important there instead. It&apos;s hidden from the issues list.
-          </p>
-          {canTriage ? (
-            <div className="flex shrink-0 items-center gap-1 print:hidden">
-              <MarkDuplicateButton bugId={bug.id} label="Change" />
-              <ClearDuplicateButton bugId={bug.id} />
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {bug._count.duplicates > 0 ? (
-        <section aria-label="Duplicates of this issue" className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
-          <h2 className="text-sm font-semibold text-zk-text">
-            {bug._count.duplicates} duplicate{bug._count.duplicates === 1 ? "" : "s"} of this issue
-          </h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {bug.duplicates.map((d) => (
-              <li key={d.id}>
-                <Link href={issueHref(d)} className="text-zk-accent hover:underline">
-                  <span className="tabular-nums text-zk-muted">{formatIssueNumber(d.number)}</span> {d.title}
-                </Link>{" "}
-                <span className="text-xs text-zk-muted">· {statusLabels[d.status]}</span>
-              </li>
-            ))}
-          </ul>
-          {bug._count.duplicates > bug.duplicates.length ? (
-            <p className="mt-1 text-xs text-zk-muted">
-              And {bug._count.duplicates - bug.duplicates.length} more.
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      {redesignProposals.length ? (
-        <section id="redesigns" aria-label="Redesign proposals" className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
-          <h2 className="text-lg font-semibold text-zk-text">Compare redesign proposals</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {redesignProposals.map((proposal) => (
-              <article key={proposal.id} className="space-y-3 rounded-[16px] border border-zk-border bg-zk-chip/40 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-semibold text-zk-text">{proposal.title}</h3>
-                  <span className="shrink-0 text-xs capitalize text-zk-muted">{proposal.status}</span>
-                </div>
-                <p className="text-xs text-zk-muted">By {proposal.authorAgent.name}</p>
-                <p className="whitespace-pre-wrap text-sm text-zk-text2">{proposal.body}</p>
-                {proposal.previewUrl ? <a className="text-sm font-bold text-zk-accent underline" href={proposal.previewUrl} target="_blank" rel="noreferrer">Open live preview</a> : null}
-                {proposal.attachments.length ? <div className="grid grid-cols-2 gap-2">
-                  {proposal.attachments.map((file) => <a key={file.id} href={`/api/attachments/${file.id}`} target="_blank" rel="noreferrer" className="space-y-1 text-sm font-bold text-zk-accent underline">
-                    <Image src={`/api/attachments/${file.id}`} alt={file.filename} width={480} height={320} unoptimized className="h-auto max-h-56 w-full rounded-xl border border-zk-border object-contain" />
-                    <span className="block">{file.filename}</span>
-                  </a>)}
-                </div> : null}
-                {canChooseRedesign && proposal.status === "proposed" ? <ChooseRedesignButton id={proposal.id} /> : null}
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {resolution ? (
-        <section
-          aria-label="Resolution note"
-          className="rounded-[20px] border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
-        >
-          <h2 className="text-sm font-semibold text-zk-ok-fg">
-            {resolutionStatusLabel[resolution.status]} by {resolution.by}
-            <span className="ml-2 text-xs font-normal">
-              <LocalTime date={resolution.at} />
-            </span>
-          </h2>
-          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-zk-text">
-            {resolution.note}
-          </p>
-        </section>
-      ) : null}
-
-      {/* Header: number + title, status language, importance */}
-      <div className="flex flex-col gap-3.5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-[1_1_600px] space-y-3">
-            <div className="flex items-start gap-2">
-              {/* Back to the list it was opened from; otherwise the list for its status. */}
-              <BackToList fallback={issuesPath(refOf(bug.project), bug.status)} label="Back to issues" />
-              <h1 className="min-w-0 break-words text-[28px] font-extrabold leading-tight tracking-[-0.02em] text-zk-text">
-                <span className="font-bold tabular-nums text-zk-muted">
-                  {formatIssueNumber(bug.number)}
-                </span>{" "}
-                {bug.title}
-              </h1>
-            </div>
-
-            {agentResolution ? (
-              <AgentResolvedNotice bugId={bug.id} resolution={agentResolution} canReopen={canUpdateStatus} />
-            ) : null}
-
-            {/* Taxonomy (#687). Status, stage and the opened date are in the Status box. */}
-            {workView && bug.type ? (
-              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-zk-muted">
-                <span className={`${issueChipBaseClass} bg-zk-chip text-zk-text2`}>{bug.type.name}</span>
-              </p>
-            ) : null}
-            {workView ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <IssuePrioritySelect bugId={bug.id} priority={bug.priority} />
-              </div>
-            ) : null}
-          </div>
-
-          {/* Wraps on a narrow screen, so the actions menu stays on it. */}
-          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 self-start print:hidden">
-            <Link
-              href={viewHref(!workView)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip"
-            >
-              {workView ? "Simple view" : "Work view"}
-            </Link>
-            <VoteButton
-              bugId={bug.id}
-              voteCount={bug.voteCount}
-              userVote={userVote}
-              likeCount={voterSummary.likes.count}
-              likeVoters={voterSummary.likes.voters}
-              size="md"
-              showAvatars={false}
-              readOnly={bug.isDeleted || !canContribute}
-            />
-            {workView && !bug.isDeleted ? (
-              <SpeedButton
-                bugId={bug.id}
-                issueNumber={bug.number}
-                issueTitle={bug.title}
-                isExpedited={bug.isBoosted}
-              />
-            ) : null}
-            {workView && !bug.isDeleted ? (
-              <IssueActionsMenu>
-                <CopyIssueSummaryButton
-                  issue={{
-                    number: bug.number,
-                    title: bug.title,
-                    substatus: bug.substatus,
-                    summary: bug.summary,
-                    description: bug.description,
-                    orgSlug: bug.project.organisation.slug,
-                    projectSlug: bug.project.slug,
-                    canonicalPath: issueHref(bug),
-                    assigneeName: assignee?.name ?? null,
-                    pullRequestUrl: bug.pullRequestUrl ?? null,
-                  }}
-                />
-                {assignableMembers.length > 0 ? (
-                  <AssignToItem bugId={bug.id} members={assignableMembers} currentAssigneeId={bug.assigneeId} />
-                ) : null}
-                {myWorkingAgent ? <MoreTimeItem bugId={bug.id} agentName={myWorkingAgent} /> : null}
-                {canMarkDuplicate ? <MarkDuplicateButton bugId={bug.id} /> : null}
-                {myWorkingAgent ? <StopMyAgentItem bugId={bug.id} agentName={myWorkingAgent} /> : null}
-                {canDeleteHere ? (
-                  <DeleteIssueButton bugId={bug.id} bugTitle={bug.title} counts={keptCounts} variant="danger" size="sm" />
-                ) : null}
-              </IssueActionsMenu>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-start gap-5">
-        {/* MAIN COLUMN */}
-        <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-5">
-          {workView && bug.status === "open" && bug.voteCount < WORK_READINESS_VOTE_THRESHOLD ? (
-            <InsufficientVotesAuditBanner
-              issueId={bug.id}
-              voteCount={bug.voteCount}
-              threshold={WORK_READINESS_VOTE_THRESHOLD}
-              canRequestAudit={canTriage || bug.reporterId === user.id}
-            />
-          ) : null}
-
-          {/* #1446: the progress report's stage filters the Conversation (#186). */}
-          <IssueStageProvider initialStage={currentStage}>
-          {workView && securityView ? <SecurityFindingPanel view={securityView} canDisclose={access.admin} kind="issue" /> : null}
-          <EditableIssueDescription
-            bugId={bug.id}
-            initialTitle={bug.title}
-            initialDescription={bug.description}
-            summary={bug.summary}
-            canEdit={canEdit && !(securityView && !securityView.disclosed)}
-            users={users}
-            lastEditedAt={lastRevision?.editedAt ?? null}
-            historyHref={issueHref(bug, "/history")}
-            tags={
-              bug.area ? (
-                <span title="Area" className="inline-flex items-center rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2 ring-1 ring-zk-border">
-                  {bug.area.name}
-                </span>
-              ) : null
-            }
-          >
-            {bug.milestone ? (
-              <dl className="mt-4 grid grid-cols-1 gap-3 text-sm text-zk-text2 sm:grid-cols-2">
-                {bug.milestone ? (
-                  <div>
-                    <dt className="font-medium text-zk-muted">Milestone</dt>
-                    <dd className="flex flex-wrap items-center gap-2">
-                      <Link href={milestoneIssuesHref(refOf(bug.project), bug.milestone.id)} className="font-bold text-zk-accent hover:underline">
-                        {bug.milestone.title}
-                      </Link>
-                      <MilestoneDue due={dueDateValue(bug.milestone.dueDate) || null} isClosed={bug.milestone.isClosed} />
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            ) : null}
-          </EditableIssueDescription>
-
-          {issueAttachments.length > 0 ? (
-            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
-              <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
-                Attachments
-              </h2>
-              <AttachmentList attachments={issueAttachments} />
-            </section>
-          ) : null}
-
-          {workView ? (
-          <>
-          {/* Progress report (#1446), where the summary strip was; its stage drives the Conversation card. */}
-          <IssueProgressReport
-            decisions={agentDecisions}
-            entryCounts={{
-              idea: sourceIdea?._count.verdicts ?? 0,
-              confirm: confirmationsData?.entries.length ?? 0,
-              open: bidList.length,
-              progress: deliveryList.length,
-              delivered: testVerdictList.length,
-              done: mergeReviewList.length,
-            }}
-            currentStage={currentStage}
-            setback={stageSetback(currentStage, sentBack)}
-            live={liveFix ? {
-              // #live-confirm: once released, how many agents have found it on prod.
-              caption: liveFix.check.fact === "released" ? `${liveFactLabel(liveFix.check)}, ${liveConfirmLabel(liveFix.check)}` : liveFactLabel(liveFix.check),
-              state: liveStepState(liveFix.check),
-            } : undefined}
-          />
-
-          <NextStepBar step={liveFix ? liveNextStep(liveFix.check, liveFix.repo) : nextStep} agentInstructions={agentInstructions} />
-          {yourTurn ? <YourTurnCard bugId={bug.id} turn={yourTurn} /> : null}
-          {yourDecision ?<DecisionCard issueId={bug.id} decision={yourDecision} /> : null}
-
-          <IssueBlockersPanel
-            projectSlug={refOf(bug.project)}
-            issueId={bug.id}
-            blockedBy={blockedBy}
-            blocking={blocking}
-            canEdit={canTriage && !bug.isDeleted}
-          />
-
-          <IssueTimeTracking bugId={bug.id} canEdit={canUpdateStatus && !bug.isDeleted} />
-
-          {deliveredBanner ? <DeliveredBanner {...deliveredBanner} /> : null}
-
-          {githubPanel ? <GitHubStatusPanel {...githubPanel} /> : null}
-          {previewCard ? <PreviewCard {...previewCard} /> : null}
-
-          {testCard ? (
-            <TestCardPanel
-              card={testCard}
-              author={testCard.rows.find((row) => row.by)?.by ?? null}
-              priority={bug.priority}
-              bugId={bug.id}
-              canDecide={access.admin}
-              ideaHref={newIssueHref(refOf(bug.project), issueHref(bug))}
-            />
-          ) : null}
-
-
-              {/* Who has the issue, while it is the latest thing (In progress); the timeline below keeps the award after that. */}
-              {(hold?.status === "active" || hold?.status === "planning") && bug.status === "in_progress" ? <AwardBox hold={hold} agentPaused={Boolean(workingAgent?.pausedAt)} bugId={bug.id} isWatching={isWatchingIssue} isIssueOwner={bug.reporterId === user.id} /> : null}
-
-
-              {/* #plan-review: the plan is the latest thing while the issue is at In progress · Plan review. */}
-              {planReviewing && hold?.status === "planning" ? (
-                <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
-                  <PlanReviewCard
-                    bugId={bug.id}
-                    plan={planCard}
-                    isOwner={planOwnerId === user.id}
-                    live
-                    deadline={planDeadline({ offeredAt: hold.offeredAt, createdAt: hold.offeredAt ?? new Date() }, planCard ? { reviewBy: new Date(planCard.reviewBy) } : null, workflow.planReviewSeconds)}
-                    canReply={!bug.isDeleted}
-                    difficultyLabel={difficultyLabel[bug.difficulty]}
-                  />
-                </section>
-              ) : null}
-
-              {conversationHasContent ? (
-                <section
-                  id="conversation"
-                  className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
-                >
-                  <div className="flex justify-end empty:hidden">
-                    <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
-                  </div>
+  // How many entries the agents' steps hold, for the Agents tab's count (#comment-tabs): reviews, judgements,
+  // deliveries, the approved plan, the award, bids and (once past) confirmations.
+  const agentActivityCount = !conversationHasContent ? 0
+    : timelineReviews.length + timelineVerdicts.length + timelineDeliveries.length
+      + (!planReviewing && planCard?.decision === "approved" ? 1 : 0)
+      + (awardClaim ? 1 : 0)
+      + bidList.length
+      + (confirmationsCard && !confirming ? confirmationsData?.entries.length ?? 0 : 0);
+  // The agents' steps on the issue (#comment-tabs): the timeline of awards, bids, deliveries,
+  // judgements and reviews. They sit under the comments' Agents tab.
+  const agentTimeline = conversationHasContent ? (
+    <div id="conversation" className="mb-4 scroll-mt-24">
                   <IssueTimeline>
                     {mergeReviewing || timelineReviews.length > 0 ? (
                       <>
@@ -2377,7 +1952,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                         />
                       </TimelineStep>
                     ) : null}
-                    {confirmationsCard ? (
+                    {confirmationsCard && !confirming ? (
                       <TimelineStep>{confirmationsCard}</TimelineStep>
                     ) : null}
                     {sourceIdea ? (
@@ -2391,30 +1966,295 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                       </TimelineStep>
                     ) : null}
                   </IssueTimeline>
-                </section>
-              ) : null}
+    </div>
+  ) : null;
 
-              {closeSuggestions ? <CloseSuggestionsPanel data={closeSuggestions} /> : null}
-          </>
+  return (
+    <div className="issue-detail-scope flex flex-col gap-5 pb-10">
+      {bug.isDeleted ? (
+        <div className="rounded-panel border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-zk-bad-fg">
+                This issue was deleted
+              </h3>
+              <p className="text-xs text-zk-bad-fg/90">
+                {deletedSummary(keptCounts)}
+              </p>
+            </div>
+            <RestoreIssueButton
+              bugId={bug.id}
+              bugTitle={bug.title}
+              counts={keptCounts}
+              size="sm"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {bug.duplicateOf ? (
+        <section
+          aria-label="Duplicate"
+          className="flex flex-col gap-2 rounded-panel border border-zk-warn-bd bg-zk-warn-bg p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+        >
+          <p className="text-sm text-zk-warn-fg">
+            <span className="font-semibold">This issue is a duplicate of </span>
+            {bug.duplicateOf.isDeleted && !canDelete ? (
+              <span>{formatIssueNumber(bug.duplicateOf.number)} (since deleted)</span>
+            ) : (
+              <Link href={issueHref(bug.duplicateOf)} className="font-semibold text-zk-accent underline-offset-2 hover:underline">
+                {formatIssueNumber(bug.duplicateOf.number)} {bug.duplicateOf.title}
+              </Link>
+            )}{" "}
+            <span>({statusLabels[bug.duplicateOf.status]})</span>.{" "}
+            Follow it and mark it important there instead. It&apos;s hidden from the issues list.
+          </p>
+          {canTriage ? (
+            <div className="flex shrink-0 items-center gap-1 print:hidden">
+              <MarkDuplicateButton bugId={bug.id} label="Change" />
+              <ClearDuplicateButton bugId={bug.id} />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {bug._count.duplicates > 0 ? (
+        <section aria-label="Duplicates of this issue" className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
+          <h2 className="text-sm font-semibold text-zk-text">
+            {bug._count.duplicates} duplicate{bug._count.duplicates === 1 ? "" : "s"} of this issue
+          </h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {bug.duplicates.map((d) => (
+              <li key={d.id}>
+                <Link href={issueHref(d)} className="text-zk-accent hover:underline">
+                  <span className="tabular-nums text-zk-muted">{formatIssueNumber(d.number)}</span> {d.title}
+                </Link>{" "}
+                <span className="text-xs text-zk-muted">· {statusLabels[d.status]}</span>
+              </li>
+            ))}
+          </ul>
+          {bug._count.duplicates > bug.duplicates.length ? (
+            <p className="mt-1 text-xs text-zk-muted">
+              And {bug._count.duplicates - bug.duplicates.length} more.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {redesignProposals.length ? (
+        <section id="redesigns" aria-label="Redesign proposals" className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
+          <h2 className="text-lg font-semibold text-zk-text">Compare redesign proposals</h2>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {redesignProposals.map((proposal) => (
+              <article key={proposal.id} className="space-y-3 rounded-panel border border-zk-border bg-zk-chip/40 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-semibold text-zk-text">{proposal.title}</h3>
+                  <span className="shrink-0 text-xs capitalize text-zk-muted">{proposal.status}</span>
+                </div>
+                <p className="text-xs text-zk-muted">By {proposal.authorAgent.name}</p>
+                <p className="whitespace-pre-wrap text-sm text-zk-text2">{proposal.body}</p>
+                {proposal.previewUrl ? <a className="text-sm font-bold text-zk-accent underline" href={proposal.previewUrl} target="_blank" rel="noreferrer">Open live preview</a> : null}
+                {proposal.attachments.length ? <div className="grid grid-cols-2 gap-2">
+                  {proposal.attachments.map((file) => <a key={file.id} href={`/api/attachments/${file.id}`} target="_blank" rel="noreferrer" className="space-y-1 text-sm font-bold text-zk-accent underline">
+                    <Image src={`/api/attachments/${file.id}`} alt={file.filename} width={480} height={320} unoptimized className="h-auto max-h-56 w-full rounded-xl border border-zk-border object-contain" />
+                    <span className="block">{file.filename}</span>
+                  </a>)}
+                </div> : null}
+                {canChooseRedesign && proposal.status === "proposed" ? <ChooseRedesignButton id={proposal.id} /> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {resolution ? (
+        <section
+          aria-label="Resolution note"
+          className="rounded-panel border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
+        >
+          <h2 className="text-sm font-semibold text-zk-ok-fg">
+            {resolutionStatusLabel[resolution.status]} by {resolution.by}
+            <span className="ml-2 text-xs font-normal">
+              <LocalTime date={resolution.at} />
+            </span>
+          </h2>
+          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-zk-text">
+            {resolution.note}
+          </p>
+        </section>
+      ) : null}
+
+      {/* Header: number + title, status language, importance */}
+      <div className="flex flex-col gap-3.5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-[1_1_600px] space-y-3">
+            <div className="flex items-start gap-2">
+              {/* Back to the list it was opened from; otherwise the list for its status. */}
+              <BackToList fallback={issuesPath(refOf(bug.project), bug.status)} label="Back to issues" />
+              <h1 className="min-w-0 break-words text-[28px] font-extrabold leading-tight tracking-[-0.02em] text-zk-text">
+                <span className="font-bold tabular-nums text-zk-muted">
+                  {formatIssueNumber(bug.number)}
+                </span>{" "}
+                {bug.title}
+              </h1>
+            </div>
+
+            {agentResolution ? (
+              <AgentResolvedNotice bugId={bug.id} resolution={agentResolution} canReopen={canUpdateStatus} />
+            ) : null}
+
+          </div>
+
+          {/* Wraps on a narrow screen, so the actions menu stays on it. */}
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 self-start print:hidden">
+            {/* The ⋯ menu, on the right: Activity first, then the rarer actions. */}
+            <IssueActionsMenu>
+              <a
+                href="#activity"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-sm font-semibold text-zk-text hover:bg-zk-chip"
+              >
+                Activity
+              </a>
+            {!bug.isDeleted ? (
+              <>
+                <CopyIssueSummaryButton
+                  issue={{
+                    number: bug.number,
+                    title: bug.title,
+                    substatus: bug.substatus,
+                    summary: bug.summary,
+                    description: bug.description,
+                    orgSlug: bug.project.organisation.slug,
+                    projectSlug: bug.project.slug,
+                    canonicalPath: issueHref(bug),
+                    assigneeName: assignee?.name ?? null,
+                    pullRequestUrl: bug.pullRequestUrl ?? null,
+                  }}
+                />
+                {assignableMembers.length > 0 ? (
+                  <AssignToItem bugId={bug.id} members={assignableMembers} currentAssigneeId={bug.assigneeId} />
+                ) : null}
+                {myWorkingAgent ? <MoreTimeItem bugId={bug.id} agentName={myWorkingAgent} /> : null}
+                {canMarkDuplicate ? <MarkDuplicateButton bugId={bug.id} /> : null}
+                {myWorkingAgent ? <StopMyAgentItem bugId={bug.id} agentName={myWorkingAgent} /> : null}
+                {canDeleteHere ? (
+                  <DeleteIssueButton bugId={bug.id} bugTitle={bug.title} counts={keptCounts} variant="danger" size="sm" />
+                ) : null}
+              </>
+            ) : null}
+            </IssueActionsMenu>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-5">
+        {/* MAIN COLUMN */}
+        <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-5">
+
+          {/* #1446: the progress report's stage filters the Conversation (#186). */}
+          {securityView ? <SecurityFindingPanel view={securityView} canDisclose={access.admin} kind="issue" /> : null}
+          <EditableIssueDescription
+            bugId={bug.id}
+            initialTitle={bug.title}
+            initialDescription={bug.description}
+            summary={bug.summary}
+            canEdit={canEdit && !(securityView && !securityView.disclosed)}
+            users={users}
+            lastEditedAt={lastRevision?.editedAt ?? null}
+            historyHref={issueHref(bug, "/history")}
+            details={bug.isDeleted ? null : <IssuePrioritySelect bugId={bug.id} priority={bug.priority} />}
+            tags={
+              bug.area ? (
+                <span title="Area" className="inline-flex items-center rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2 ring-1 ring-zk-border">
+                  {bug.area.name}
+                </span>
+              ) : null
+            }
+          >
+            {bug.milestone ? (
+              <dl className="mt-4 grid grid-cols-1 gap-3 text-sm text-zk-text2 sm:grid-cols-2">
+                {bug.milestone ? (
+                  <div>
+                    <dt className="font-medium text-zk-muted">Milestone</dt>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      <Link href={milestoneIssuesHref(refOf(bug.project), bug.milestone.id)} className="font-bold text-zk-accent hover:underline">
+                        {bug.milestone.title}
+                      </Link>
+                      <MilestoneDue due={dueDateValue(bug.milestone.dueDate) || null} isClosed={bug.milestone.isClosed} />
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
+          </EditableIssueDescription>
+
+          {issueAttachments.length > 0 ? (
+            <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
+              <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
+                Attachments
+              </h2>
+              <AttachmentList attachments={issueAttachments} />
+            </section>
+          ) : null}
+
+          <>
+
+          {yourTurn ? <YourTurnCard bugId={bug.id} turn={yourTurn} /> : null}
+          {yourDecision ?<DecisionCard issueId={bug.id} decision={yourDecision} /> : null}
+
+
+
+          {deliveredBanner ? <DeliveredBanner {...deliveredBanner} /> : null}
+
+          {githubPanel ? <GitHubStatusPanel {...githubPanel} /> : null}
+          {previewCard ? <PreviewCard {...previewCard} /> : null}
+
+          {testCard ? (
+            <TestCardPanel
+              card={testCard}
+              author={testCard.rows.find((row) => row.by)?.by ?? null}
+              priority={bug.priority}
+              bugId={bug.id}
+              canDecide={access.admin}
+              ideaHref={newIssueHref(refOf(bug.project), issueHref(bug))}
+            />
           ) : null}
 
 
-              {bug.status === "resolved" && !bug.isDeleted ? (
-                <RetestRequest
-                  bugId={bug.id}
-                  issueHref={issueHref(bug)}
-                  issueLabel={`${formatIssueNumber(bug.number)} · ${bug.title}`}
-                />
+              {/* Who has the issue, while it is the latest thing (In progress); the timeline below keeps the award after that. */}
+              {(hold?.status === "active" || hold?.status === "planning") && bug.status === "in_progress" ? <AwardBox hold={hold} agentPaused={Boolean(workingAgent?.pausedAt)} bugId={bug.id} isWatching={isWatchingIssue} isIssueOwner={bug.reporterId === user.id} /> : null}
+
+
+              {/* #plan-review: the plan is the latest thing while the issue is at In progress · Plan review. */}
+              {planReviewing && hold?.status === "planning" ? (
+                <section className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
+                  <PlanReviewCard
+                    bugId={bug.id}
+                    plan={planCard}
+                    isOwner={planOwnerId === user.id}
+                    live
+                    deadline={planDeadline({ offeredAt: hold.offeredAt, createdAt: hold.offeredAt ?? new Date() }, planCard ? { reviewBy: new Date(planCard.reviewBy) } : null, workflow.planReviewSeconds)}
+                    canReply={!bug.isDeleted}
+                    difficultyLabel={difficultyLabel[bug.difficulty]}
+                  />
+                </section>
               ) : null}
 
-              {/* Comments, apart from the stage entries (bids, deliveries) in the Conversation. */}
-              {takesComments || commentCount > 0 ? (
+
+              {closeSuggestions ? <CloseSuggestionsPanel data={closeSuggestions} /> : null}
+          </>
+
+
+              {/* While it awaits confirmation, its confirmations are the decision being made: in view, not under a tab. */}
+              {confirming && confirmationsCard ? <div className="mb-4">{confirmationsCard}</div> : null}
+              {/* Comments, with the agents' steps (bids, award, deliveries) under their Agents tab (#comment-tabs). */}
+              {takesComments || commentCount > 0 || agentTimeline ? (
                 <section
                   id="comments"
                   aria-label="Comments"
-                  className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+                  className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
                 >
-                  {workView && steeringAgent ? (
+                  {steeringAgent ? (
                     <AgentSteerPanel
                       agentId={steeringAgent.id}
                       issueId={bug.id}
@@ -2427,6 +2267,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   ) : null}
                   <IssueComments
                     count={commentCount}
+                    agentActivity={agentTimeline}
+                    agentActivityCount={agentActivityCount}
                     composer={takesComments ? <CommentComposer bugId={bug.id} /> : null}
                     replyBugId={takesComments ? bug.id : undefined}
                     reporterId={bug.reporterId}
@@ -2472,23 +2314,32 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               ) : null}
 
 
-          {workView ? <IssueEscalations escalations={escalations} /> : null}
 
 
-          </IssueStageProvider>
         </div>
 
         {/* SIDE RAIL */}
         <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-4">
+          {/* #rewards: the ticket's Ziks reward first, compact: the values with yours highlighted. */}
+          {rewardRow ? (
+            <IssueRewardPanel
+              bugId={bug.id}
+              reward={dollarsToZiks(Number(rewardRow.reward))}
+              fixed={Boolean(rewardRow.rewardFixedAt)}
+              estimates={rewardEstimates}
+              viewerId={user.id}
+              canEstimate={!bug.isDeleted && bug.status !== "closed"}
+            />
+          ) : null}
           {/* Status: workflow state, when it was opened, and whether it is an idea or an issue (#687). */}
-          <section aria-label="Status" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section aria-label="Status" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2>
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
               {bug.isDeleted ? (
                 <span className={`${issueChipBaseClass} bg-zk-bad-bg text-zk-bad-fg`}>Deleted</span>
               ) : null}
               {/* #owner-control: the owner's chip opens the moves they can make by hand; everyone else sees the plain chip. */}
-              {workView && canTriage && !bug.isDeleted ? (
+              {canTriage && !bug.isDeleted ? (
                 <OwnerStatusMenu
                   bugId={bug.id}
                   substatus={bug.substatus}
@@ -2501,47 +2352,27 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   {stateLabel(bug.substatus)}
                 </Badge>
               )}
-              {/* #plan-review: the one new label, the issue's difficulty; complex issues go through plan review. */}
-              {workView ? (
-                <span className={`${issueChipBaseClass} ${bug.difficulty === "complex" ? "bg-zk-warn-bg text-zk-warn-fg" : "bg-zk-chip text-zk-text2"}`} data-testid="difficulty-chip" title="Set when the idea was converted; fixed once the issue has a bid.">
-                  {difficultyLabel[bug.difficulty]}
-                </span>
-              ) : null}
-              {workView && bug.isBoosted && !bug.isDeleted ? (
-                <span className={`${issueChipBaseClass} border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg`}>Boosted</span>
-              ) : null}
             </div>
-            {workView && liveFix ? (
-              <LiveFlow substatus={bug.substatus} reachedAt={liveFix.reachedAt} confirmed={liveFix.check.confirmedBy.length} needed={PROD_CONFIRMATIONS_NEEDED} />
-            ) : null}
-            {workView && statusFlags.length > 0 ? (
-              <ul data-testid="status-flags" className="m-0 flex list-none flex-col gap-1 p-0">
-                {statusFlags.map((flag) => (
-                  <li key={flag.label} className="flex items-center gap-1.5 text-xs text-zk-text2" title={flag.title}>
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${FLAG_DOT[flag.tone]}`} aria-hidden />
-                    {flag.label}
-                  </li>
-                ))}
-              </ul>
+            {/* The progress report, abridged to six steps (#status-progress). */}
+            {!bug.isDeleted ? (
+              <StatusProgress
+                currentStage={currentStage}
+                setback={stageSetback(currentStage, sentBack)}
+                entryCounts={{
+                  idea: sourceIdea?._count.verdicts ?? 0,
+                  confirm: confirmationsData?.entries.length ?? 0,
+                  open: bidList.length,
+                  progress: deliveryList.length,
+                  delivered: testVerdictList.length,
+                  done: mergeReviewList.length,
+                }}
+                live={liveFix ? { caption: liveFix.check.fact === "released" ? `${liveFactLabel(liveFix.check)}, ${liveConfirmLabel(liveFix.check)}` : liveFactLabel(liveFix.check) } : undefined}
+              />
             ) : null}
             {bug.status === "closed" && bug.closeEvidence && !bug.isDeleted ? (
               <p data-testid="close-evidence" className="m-0 break-words text-xs leading-[1.5] text-zk-muted">
                 {bug.closeEvidence}
               </p>
-            ) : null}
-            {/* createSupportThreadAction accepts organisation members only, so nobody else is offered the button. */}
-            {isOrgMember && !bug.isDeleted && (ASKABLE_STATUSES as readonly string[]).includes(bug.status) ? (
-              activeSupportThread ? (
-                <Link
-                  href={`/inbox?tab=requests&thread=${activeSupportThread.id}`}
-                  className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-zk-border bg-zk-chip/40 px-3 text-xs font-semibold text-zk-text hover:bg-zk-chip"
-                >
-                  <span aria-hidden="true">💬</span>
-                  <span>View your request</span>
-                </Link>
-              ) : (
-                <AskAboutFix issueId={bug.id} issueNumber={bug.number} issueTitle={bug.title} />
-              )
             ) : null}
             {/* The reporter or the person it is for cancels their own issue (#close-reasons). */}
             {canWithdraw ? (
@@ -2559,27 +2390,13 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
               </form>
             ) : null}
           </section>
-          {workView && checklist ? <MergeChecklistCard checklist={checklist} testCard={Boolean(testCard)} /> : null}
-          {/* #rewards: the reward, your estimate, and everyone's. */}
-          {workView && rewardRow ? (
-            <IssueRewardPanel
-              bugId={bug.id}
-              reward={dollarsToZiks(Number(rewardRow.reward))}
-              fixed={Boolean(rewardRow.rewardFixedAt)}
-              estimates={rewardEstimates}
-              viewerId={user.id}
-              canEstimate={!bug.isDeleted && bug.status !== "closed"}
-            >
-              <FundIssueSection bugId={bug.id} userId={user.id} estimate={fundingEstimate} />
-            </IssueRewardPanel>
-          ) : null}
 
           {/* People, compact: one row each, label on the left. */}
-          <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+          <section className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
-              <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="w-16 shrink-0 pt-1 text-xs text-zk-muted">Reporter</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 {/* One line: a long name truncates rather than dropping under the avatar. */}
                 <UserNameWithBadges
                   name={bug.reporter.name}
@@ -2588,13 +2405,13 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   className="min-w-0 !flex-nowrap text-xs"
                   userId={bug.reporterId}
                 />
-                {/* The agent that filed it, on the right. */}
-                {bug.createdByAgent ? <AgentChip name={bug.createdByAgent.name} className="ml-auto" /> : null}
+                {/* The agent that filed it, quietly under the name. */}
+                {bug.createdByAgent ? <PersonAgent name={bug.createdByAgent.name} /> : null}
               </div>
             </div>
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-zk-muted">Assignee</span>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="w-16 shrink-0 pt-1 text-xs text-zk-muted">Assignee</span>
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                 {assignee ? (
                   <UserNameWithBadges
                     name={assignee.name}
@@ -2608,8 +2425,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                 ) : (
                   <span className="text-xs text-zk-muted">Unassigned</span>
                 )}
-                {/* The agent doing the work for the assignee, on the right. */}
-                {assignee && hold?.agentName ? <AgentChip name={hold.agentName} className="ml-auto" /> : null}
+                {/* The agent doing the work for the assignee, quietly under the name. */}
+                {assignee && hold?.agentName ? <PersonAgent name={hold.agentName} /> : null}
                 {/* Only an unassigned issue offers Assign to me (and your own, Unassign). */}
                 {canSelfAssign && (!assignee || isAssignee) ? (
                   <SelfAssignButton
@@ -2623,41 +2440,28 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             </div>
           </section>
 
-          {workView ? (
-          <>
-          {/* Links, under People: the GitHub PR (the linked one too) and the idea it came from. */}
+          {/* Links, under People: the GitHub PR (the linked one too), where it is live, and the idea it
+              came from. */}
           <IssueLinks
-            links={proofLinks}
+            links={linkOnlyProofs}
             linkedPullRequestUrl={bug.pullRequestUrl}
+            liveUrl={bug.status === "resolved" ? liveLink?.url ?? null : undefined}
             idea={sourceIdea ? { number: sourceIdea.number, slug: refOf(bug.project) } : null}
             repairs={linkRepairs}
             bugId={bug.id}
             canEditPullRequest={canEditPullRequest}
           />
 
-          {prChecks && bug.pullRequestUrl && (prChecks.failed || prChecks.report?.reportedBy) ? (
-            <PullRequestChecks
-              report={prChecks.report}
-              pullRequestUrl={bug.pullRequestUrl}
-              refreshHint={prChecks.refreshHint}
-              refreshInstructions={prChecks.refreshHint ? agentInstructions : undefined}
-              failed={prChecks.failed}
-            />
-          ) : null}
+          <ScreenshotsPanel screenshots={submissionScreenshots} />
 
-          <SubmissionEvidence
-            screenshots={submissionScreenshots}
-            testResults={submissionTestResults}
-            pullRequestUrl={bug.pullRequestUrl}
-          />
-
+        </aside>
+        {/* The activity, in a sidebar the ⋯ menu's Activity item opens (#activity-drawer). */}
+        <ActivityDrawer>
           <ActivityTimeline
             activities={[...shownActivities].reverse()}
             totalCount={activityCount + stepActivities.length}
           />
-          </>
-          ) : null}
-        </aside>
+        </ActivityDrawer>
       </div>
     </div>
   );
@@ -2679,4 +2483,15 @@ function proofNote(state: JudgementProofState, missing: string[]): { label: stri
     case "no_fail_proof":
       return { label: "Doesn't count · no proof of what fails", tone: "warn" };
   }
+}
+
+/** The agent acting for a person in the People card: one quiet line under their name, "via 🤖 name". */
+function PersonAgent({ name }: { name: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1 pl-8 text-[11px] leading-4 text-zk-muted" title={`Agent: ${name}`}>
+      via
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01" /></svg>
+      <span className="truncate font-medium text-zk-text2">{name}</span>
+    </span>
+  );
 }

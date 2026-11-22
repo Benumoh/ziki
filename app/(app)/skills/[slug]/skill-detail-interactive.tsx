@@ -237,7 +237,7 @@ export function SkillDetailInteractive({
       <button
         onClick={() => copySkillPrompt(skill, value, agents)}
         type="button"
-        className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 transition active:scale-[0.98]"
+        className="flex items-center justify-center gap-2 rounded-control bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition"
       >
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={COPY_ICON} />

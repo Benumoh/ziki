@@ -79,7 +79,7 @@ export default async function AdminUsersPage({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-[20px] border border-zk-border bg-zk-surface">
+      <div className="overflow-x-auto rounded-panel border border-zk-border bg-zk-surface">
         {users.length > 0 ? (
           <table className="min-w-full divide-y divide-zk-border text-sm">
             <thead className="bg-zk-tint text-left text-xs font-semibold uppercase tracking-wide text-zk-muted">

@@ -10,7 +10,7 @@ export default function AdminUsersLoading() {
         </div>
         <Bar className="h-9 w-full sm:w-64" />
       </div>
-      <div className="divide-y divide-zk-divider rounded-[20px] border border-zk-border bg-zk-surface">
+      <div className="divide-y divide-zk-divider rounded-panel border border-zk-border bg-zk-surface">
         {Array.from({ length: 6 }, (_, i) => (
           <div key={i} className="flex items-center gap-4 px-4 py-3">
             <div className="flex-1 space-y-2">

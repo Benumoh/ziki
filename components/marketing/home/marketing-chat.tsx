@@ -191,7 +191,17 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
         className="text-left"
       >
         <label htmlFor={inputId} className="sr-only">{started ? "Reply to the agent" : "Ask the marketing agent"}</label>
-        <div className="rounded-[22px] border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
+        <div
+          role="presentation"
+          // A click anywhere in the box that isn't a control puts the cursor in the text, ready to type.
+          onMouseDown={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button, a, input, textarea, [role='menu']")) return;
+            event.preventDefault();
+            inputRef.current?.focus();
+          }}
+          className="cursor-text rounded-panel border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50"
+        >
           <textarea
             id={inputId}
             ref={inputRef}
@@ -210,7 +220,7 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
               : "Which website should we market? Paste its address, like https://yourproduct.com"}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `${hintId} ${errorId}` : hintId}
-            className="block max-h-[220px] min-h-[28px] w-full resize-none border-0 bg-transparent p-1 text-[15px] leading-6 text-zk-text placeholder:text-zk-muted focus:outline-none [field-sizing:content]"
+            className="block max-h-[220px] min-h-[28px] w-full resize-none border-0 bg-transparent p-1 text-[14px] leading-6 text-zk-text placeholder:text-zk-muted focus:outline-none [field-sizing:content]"
           />
           {files.chips}
           {files.error ? <p role="alert" className="m-0 mt-1 px-1 text-xs text-zk-bad-fg">{files.error}</p> : null}

@@ -27,8 +27,7 @@ import { IdeasMoreFilters } from "@/components/ideas-more-filters";
 import { IDEA_AUTHOR_PARAM, parseIdeaAuthorFilter } from "@/lib/idea-filters";
 import { MY_WORK_PARAM, TRACK_PARAM, myWorkWhere, parseMyWorkFilter, parseTrackFilter, trackWhere, yourOpenBidsWhere, yourWorkWhere } from "@/lib/my-work-filter";
 import { WORK_CATEGORY_PARAM, categoryTypesFor, ideaCategoryWhere, parseWorkCategory, workCategoryWhere, type CategoryTypes } from "@/lib/work-category";
-import { WorkFeed, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
-import { statusLabel as STATUS_NAMES } from "@/lib/labels";
+import { WorkFeed, type JustAddedIdea, type WorkFeedItem, type WorkFeedKind } from "@/components/work-feed";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { WORK_TAG_TONE, whatsNext } from "@/lib/whats-next";
 import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } from "@/lib/list-sort";
@@ -36,10 +35,8 @@ import { SortHeader } from "@/components/sort-header";
 import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
 import { AppInfoLinks } from "@/components/app-info-links";
 import { ShareMenu } from "@/components/share-menu";
-import { OrganisationNextStepCard } from "@/components/organisation-next-step-card";
 import { FirstQuestions } from "@/components/get-started/first-questions";
 import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
-import { NEXT_STEP_COOKIE, organisationNextStep, type OrganisationNextStep } from "@/lib/organisation-next-step";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
@@ -99,11 +96,10 @@ import { parseTagFilter, serializeTags, tagTypeIds } from "@/lib/tag-filter";
 import { bugInOrganisation, isMissingOrganisationColumnError } from "@/lib/organisation-context";
 import { requireProject } from "@/lib/project-route";
 import { redirect } from "next/navigation";
-import { ideasPath, issuesPath, orgPath, orgRefOf, projectPath, refOf, type ProjectRef } from "@/lib/project-paths";
+import { ideaPath, ideasPath, issuesPath, orgPath, orgRefOf, projectPath, refOf, type ProjectRef } from "@/lib/project-paths";
 import { RichText } from "@/components/rich-text";
 import { isOrganisationAdmin } from "@/lib/organisation-role";
 import { cookies } from "next/headers";
-import { parseDismissed } from "@/lib/onboarding";
 import { liveCheck, liveConfirmLabel, liveFactLabel, type LiveCheck } from "@/lib/live-check";
 import { latestPullRequestReports } from "@/lib/agent-api/pull-request-report";
 import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/project-repositories";
@@ -170,13 +166,15 @@ const OVERVIEW_STATES = ["open", "in_progress", "done", "merge", "resolved"] as 
 /** How many rows the Overview's list shows a page. */
 const FEED_PAGE_SIZE = 30;
 /**
- * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (delivered work to approve, live
- * work to confirm), what is being worked on right now, and what looks stalled. `?section=` shows one of them in full.
+ * The Work Feed's sections (#work-feed-sections), top to bottom: what needs your OK (new ideas, live work to confirm),
+ * what is being worked on right now, what is waiting for an agent (open, nobody on it yet), and what looks stalled. `?section=` shows one of them in full.
  */
 const OVERVIEW_SECTION_PARAM = "section";
 const FEED_SECTIONS = [
   { key: "needs", title: "Needs your OK" },
   { key: "active", title: "Being worked on" },
+  // Open issues nobody holds yet: waiting to be confirmed or for an agent's bid (#work-feed-waiting).
+  { key: "waiting", title: "Waiting for an agent" },
   { key: "stalled", title: "Stalled" },
 ] as const;
 type FeedSection = (typeof FEED_SECTIONS)[number]["key"];
@@ -203,6 +201,9 @@ function feedSectionWhere(section: FeedSection, now: number): Prisma.BugWhereInp
   }
   if (section === "active") {
     return { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, heartbeat] };
+  }
+  if (section === "waiting") {
+    return { substatus: { in: ["requires_confirmation", "open"] } };
   }
   return { OR: [
     { AND: [{ substatus: { in: ["in_progress", "plan_review"] } }, { NOT: heartbeat }] },
@@ -406,8 +407,8 @@ function issuesQueryError(reference: string, message?: string) {
  * route passes the organisation and project slugs and the list it names;
  * lib/project-route.ts resolves the project and checks access.
  */
-/** How much of an issue's description an opened Overview card shows (#work-feed); the full issue has the rest. */
-const FEED_BODY_LIMIT = 1200;
+/** How much of an issue's description an opened Overview card shows (#work-feed): all of it (descriptions are at most 5000 characters). */
+const FEED_BODY_LIMIT = 5000;
 
 /**
  * The decision an Overview card asks of you (#work-feed), and where you take it: the issue's simple view, at the
@@ -684,6 +685,25 @@ export async function IssuesList({
   const overviewSection: FeedSection | null = overviewTab === "all" ? FEED_SECTIONS.find(({ key }) => key === sectionParam)?.key ?? null : null;
   type FeedGroup = { key: FeedSection; title: string; count: number; items: WorkFeedItem[] };
   const emptyFeed = { items: [] as WorkFeedItem[], groups: null as FeedGroup[] | null, total: 0, page: 1, counts: new Map<string, number>() };
+  // New ideas that need your OK (#just-added): this project's open ideas you haven't given a verdict on, newest first.
+  // They top Needs your OK with Approve (your good verdict), and the one the chat just filed flashes there.
+  const ideaSection = toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]);
+  // On the organisation-wide list (every project), every project's ideas, as the Fixes tab lists them.
+  const ideasToOkWhere: Prisma.IdeaWhereInput = {
+    ...(allProjects ? { organisationId: organisationId ?? "" } : { projectId: project.id }), isDeleted: false, status: "open", track: "product",
+    ...(userId ? { verdicts: { none: { onBehalfOfUserId: userId } } } : {}),
+  };
+  const [justAdded, ideasToOkCount] = feedView && overviewTab === "all" && (!ideaSection || ideaSection === "needs")
+    ? await loadOrEmpty("ideas to approve", () => Promise.all([
+        prisma.idea.findMany({
+          where: ideasToOkWhere,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: ideaSection === "needs" ? 30 : 3,
+          select: { id: true, number: true, title: true, createdAt: true, reporter: { select: { name: true } }, project: { select: { slug: true, organisation: { select: { slug: true } } } } },
+        }).then((rows) => rows.map((row) => ({ id: row.id, number: row.number, title: row.title, at: row.createdAt, by: row.reporter?.name ?? null, href: ideaPath(refOf(row.project), row.number) }))),
+        prisma.idea.count({ where: ideasToOkWhere }),
+      ]), [[], 0] as [JustAddedIdea[], number])
+    : [[] as JustAddedIdea[], 0];
   const feed = feedView
     ? await loadOrEmpty("work feed", async () => {
         const select = {
@@ -700,7 +720,7 @@ export async function IssuesList({
           // else the pull request.
           substatus: true, pullRequestUrl: true, liveConfirmedAt: true,
           previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
-          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true } },
+          deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true, beneficiary: { select: { name: true } } } },
           // Why accepted work isn't merged yet (#work-feed-sections): the latest pull request report, when it says so.
           pullRequestReports: { orderBy: { createdAt: "desc" }, take: 1, select: { state: true, mergeable: true, checks: true, note: true } },
           // The live link (#live-link): the newest deployment report that gave one.
@@ -719,7 +739,31 @@ export async function IssuesList({
           });
           return new Map(firsts.flatMap((first) => (first._min.claimedAt ? [[first.bugId, first._min.claimedAt] as const] : [])));
         };
-        const toItem = (row: Prisma.BugGetPayload<{ select: typeof select }>, section: FeedSection | null, starts: Map<string, Date>): WorkFeedItem => {
+        // When each issue's pull request was merged and by whom: the first report that says merged. Ziki's own GitHub
+        // reads carry GitHub's merge time and merger; an agent's report gives its time and the person it works for.
+        const mergesFor = async (rows: { id: string }[]) => {
+          const merges = new Map<string, { at: Date; by: string | null }>();
+          if (rows.length === 0) return merges;
+          const reports = await prisma.pullRequestReport.findMany({
+            where: { bugId: { in: rows.map((row) => row.id) }, state: "merged" },
+            orderBy: { createdAt: "asc" },
+            select: { bugId: true, createdAt: true, details: true, agent: { select: { name: true } }, onBehalfOf: { select: { name: true } } },
+          });
+          for (const report of reports) {
+            const details = (report.details ?? {}) as { mergedAt?: string | null; mergedBy?: string | null };
+            const fromGitHub = details.mergedAt ? { at: new Date(details.mergedAt), by: details.mergedBy ?? null } : null;
+            const known = merges.get(report.bugId);
+            if (fromGitHub && (!known || !known.by)) merges.set(report.bugId, { at: fromGitHub.at, by: fromGitHub.by ?? known?.by ?? null });
+            else if (!known) merges.set(report.bugId, { at: report.createdAt, by: report.onBehalfOf?.name ?? report.agent?.name ?? null });
+          }
+          return merges;
+        };
+        type Times = { starts: Map<string, Date>; merges: Map<string, { at: Date; by: string | null }> };
+        const timesFor = async (rows: { id: string }[]): Promise<Times> => {
+          const [starts, merges] = await Promise.all([startsFor(rows), mergesFor(rows)]);
+          return { starts, merges };
+        };
+        const toItem = (row: Prisma.BugGetPayload<{ select: typeof select }>, section: FeedSection | null, times: Times): WorkFeedItem => {
           const href = issueHref(row);
           // Work under way (#work-feed): how far through its time it is, from when the agent took it to when it is due.
           const claim = row.claims[0];
@@ -747,7 +791,8 @@ export async function IssuesList({
             deliveredAt: row.deliveries[0]?.updatedAt ?? null,
             // The opened card's timeline: when it was added and when an agent started on it.
             addedAt: row.createdAt,
-            startedAt: starts.get(row.id) ?? null,
+            startedAt: times.starts.get(row.id) ?? null,
+            merged: times.merges.get(row.id) ?? null,
             // Stalled (#work-feed-sections): since when it hasn't moved. Work in progress since its agent last checked
             // in; anything else since it last changed.
             stalledSince: section === "stalled"
@@ -756,6 +801,9 @@ export async function IssuesList({
                 : row.updatedAt)
               : null,
             held: Boolean(claim),
+            // Who delivered it (#just-delivered): the person the delivering agent works for, else who solved it.
+            deliveredBy: row.deliveries[0]?.beneficiary?.name ?? row.assignee?.name ?? null,
+            justDelivered: false,
             stallReason: section === "stalled" ? stallReason(row.substatus, claim ? { agent: claim.agent?.name ?? null, due: claim.deliverBy, heartbeat: claim.lastHeartbeatAt } : null, currentTime()) : null,
             mergeHold: mergeHold(row.substatus, row.pullRequestReports[0] ?? null),
             // Opened (#work-feed): what it is, its files, and the decision it asks of you.
@@ -782,6 +830,27 @@ export async function IssuesList({
           };
         };
 
+        // A section's cards. Needs your OK puts the newest delivery first (#just-delivered): the work delivered last is
+        // the top card, then live work with no delivery on record, newest first. The others are newest first.
+        const sectionRows = async (key: FeedSection, sectionWhere: Prisma.BugWhereInput, skip: number, take: number) => {
+          if (key !== "needs") return prisma.bug.findMany({ where: sectionWhere, orderBy, skip, take, select });
+          const deliveredWhere: Prisma.BugWhereInput = { AND: [sectionWhere, { deliveries: { some: {} } }] };
+          const [latest, deliveredCount] = await Promise.all([
+            prisma.delivery.findMany({ where: { bug: deliveredWhere }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], distinct: ["bugId"], skip, take, select: { bugId: true } }),
+            prisma.bug.count({ where: deliveredWhere }),
+          ]);
+          const ids = latest.map((row) => row.bugId);
+          const delivered = ids.length ? await prisma.bug.findMany({ where: { id: { in: ids } }, select }) : [];
+          const byId = new Map(delivered.map((row) => [row.id, row]));
+          const rows = ids.flatMap((id) => byId.get(id) ?? []);
+          if (rows.length >= take) return rows;
+          const rest = await prisma.bug.findMany({
+            where: { AND: [sectionWhere, { deliveries: { none: {} } }] },
+            orderBy, skip: Math.max(0, skip - deliveredCount), take: take - rows.length, select,
+          });
+          return [...rows, ...rest];
+        };
+
         // The Work Feed (#work-feed-sections): its three sections, a few cards each, or one of them in full.
         if (overviewTab === "all") {
           const now = currentTime();
@@ -790,24 +859,29 @@ export async function IssuesList({
             const groups: FeedGroup[] = await Promise.all(FEED_SECTIONS.map(async ({ key, title }) => {
               const sectionWhere: Prisma.BugWhereInput = { AND: [where, feedSectionWhere(key, now)] };
               const [rows, count] = await Promise.all([
-                prisma.bug.findMany({ where: sectionWhere, orderBy, take: FEED_SECTION_SIZE, select }),
+                sectionRows(key, sectionWhere, 0, FEED_SECTION_SIZE),
                 prisma.bug.count({ where: sectionWhere }),
               ]);
               counts.set(key, count);
-              const starts = await startsFor(rows);
-              return { key, title, count, items: rows.map((row) => toItem(row, key, starts)) };
+              const times = await timesFor(rows);
+              const items = rows.map((row) => toItem(row, key, times));
+              // The newest delivery tops Needs your OK, celebrated (#just-delivered).
+              if (key === "needs" && items[0]) items[0] = { ...items[0], justDelivered: true };
+              return { key, title, count, items };
             }));
             return { items: [], groups, total: 0, page: 1, counts };
           }
           const sectionWhere: Prisma.BugWhereInput = { AND: [where, feedSectionWhere(overviewSection, now)] };
           const [rows, total, ...sectionCounts] = await Promise.all([
-            prisma.bug.findMany({ where: sectionWhere, orderBy, skip: (page - 1) * FEED_PAGE_SIZE, take: FEED_PAGE_SIZE, select }),
+            sectionRows(overviewSection, sectionWhere, (page - 1) * FEED_PAGE_SIZE, FEED_PAGE_SIZE),
             prisma.bug.count({ where: sectionWhere }),
             ...FEED_SECTIONS.map(({ key }) => prisma.bug.count({ where: { AND: [where, feedSectionWhere(key, now)] } })),
           ]);
           FEED_SECTIONS.forEach(({ key }, index) => counts.set(key, sectionCounts[index]));
-          const starts = await startsFor(rows);
-          return { items: rows.map((row) => toItem(row, overviewSection, starts)), groups: null, total, page, counts };
+          const times = await timesFor(rows);
+          const items = rows.map((row) => toItem(row, overviewSection, times));
+          if (overviewSection === "needs" && page === 1 && items[0]) items[0] = { ...items[0], justDelivered: true };
+          return { items, groups: null, total, page, counts };
         }
         // The other tabs: newest first; the Status filter narrows to one status, and its counts are the tab's.
         const feedWhere: Prisma.BugWhereInput = overviewState ? { AND: [where, { status: overviewState }] } : where;
@@ -817,13 +891,16 @@ export async function IssuesList({
           prisma.bug.groupBy({ by: ["status"], where, _count: { _all: true } }),
         ]);
         const counts = new Map(byStatus.map((group) => [group.status as string, group._count._all]));
-        const starts = await startsFor(rows);
-        return { items: rows.map((row) => toItem(row, null, starts)), groups: null, total, page, counts };
+        const times = await timesFor(rows);
+        return { items: rows.map((row) => toItem(row, null, times)), groups: null, total, page, counts };
       }, emptyFeed)
     : emptyFeed;
   // An Overview tab's address, with the Status filter when one is picked.
   const overviewHref = (tab: OverviewTab, state: string | null, mine: boolean = isMyWorkTab, section: FeedSection | null = null) =>
     listHref(new URLSearchParams({ status: YOUR_WORK_STATUS, ...(tab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: tab }), ...(state ? { [OVERVIEW_STATE_PARAM]: state } : {}), ...(mine ? { [OVERVIEW_MINE_PARAM]: "1" } : {}), ...(section ? { [OVERVIEW_SECTION_PARAM]: section } : {}) }));
+  // The same Overview tab in another project, or every project.
+  const overviewProjectHref = (target: ProjectRef) =>
+    listHrefIn(target, new URLSearchParams({ status: YOUR_WORK_STATUS, ...(overviewTab === "all" ? {} : { [OVERVIEW_TAB_PARAM]: overviewTab }), ...(overviewState ? { [OVERVIEW_STATE_PARAM]: overviewState } : {}), ...(isMyWorkTab ? { [OVERVIEW_MINE_PARAM]: "1" } : {}) }));
   // The Work Feed with one of its sections in full, or all three.
   const sectionHref = (section: FeedSection | null) => overviewHref("all", null, isMyWorkTab, section);
   // New ideas (`/new`) is one of the Overview's tabs (#work-feed): it has the Overview's top, chat box and tabs.
@@ -833,6 +910,12 @@ export async function IssuesList({
     `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition ${
       current ? "bg-white font-semibold text-zk-accent shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
     }`;
+  // How much has been delivered (#live-confirmed), shown on the Delivered tab: live work someone confirmed.
+  const deliveredCount = withOverviewLook
+    ? await loadOrEmpty("delivered count", () => prisma.bug.count({
+        where: { ...(allProjects ? { organisationId } : { projectId: project.id }), isDeleted: false, status: "resolved", liveConfirmedAt: { not: null } },
+      }), 0)
+    : 0;
   // The Overview's tabs, as a segmented control: the Work Feed, New (the ideas), then the work's other lists.
   const overviewTabs = withOverviewLook ? (
     <nav aria-label="Overview lists" className="flex flex-wrap gap-0.5 rounded-2xl bg-zk-bg p-1 sm:rounded-full">
@@ -840,10 +923,26 @@ export async function IssuesList({
         <Link key={tab} href={overviewHref(tab, null)} aria-current={isYourWorkView && overviewTab === tab ? "page" : undefined} className={tabClass(isYourWorkView && overviewTab === tab)}>
           <TabIcon tab={tab} />
           {label}
+          {tab === "delivered" && deliveredCount > 0 ? (
+            <span className="ml-0.5 rounded-full bg-zk-chip px-1.5 py-px text-[11px] font-semibold tabular-nums text-zk-text2">{deliveredCount}</span>
+          ) : null}
         </Link>,
-        // Fixes (the new ideas) sits after New Features.
+        // Fixes (the new ideas) sits after New Features, with a small + before it to plan a new feature (#add-feature).
         ...(tab === "features"
           ? [
+              ...(everyProject
+                ? []
+                : [
+                    <Link
+                      key="add-feature"
+                      href={projectPath(ref, "/features/new")}
+                      aria-label="Add a new feature"
+                      title="Add a new feature"
+                      className="-ml-1 inline-flex h-8 w-8 items-center justify-center self-center rounded-full text-zk-muted transition hover:bg-white hover:text-zk-accent hover:shadow-[0_1px_2px_rgba(16,24,40,0.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    </Link>,
+                  ]),
               <Link key="new" href={ideasPath(listRef, "new")} aria-current={isNewIdeasView ? "page" : undefined} className={tabClass(isNewIdeasView)}>
                 <TabIcon tab="new" />
                 Fixes
@@ -857,34 +956,20 @@ export async function IssuesList({
   const overviewToolbar = isYourWorkView ? (
     <>
       {overviewTabs}
-      <ToolbarFilterMenu
-        summary={[isMyWorkTab ? "Assigned to me" : "", overviewSection ? FEED_SECTIONS.find(({ key }) => key === overviewSection)!.title : "", overviewState ? STATUS_NAMES[overviewState] : ""].filter(Boolean).join(" · ")}
-        groups={[{
-          label: "Show",
-          options: [
-            { label: "Everyone's", href: overviewHref(overviewTab, overviewState, false), selected: !isMyWorkTab },
-            { label: "Assigned to me", href: overviewHref(overviewTab, overviewState, true), selected: isMyWorkTab },
-          ],
-        }, overviewTab === "all" ? {
-          // The Work Feed filters by its sections (#work-feed-sections).
-          label: "Section",
-          options: [
-            { label: "All sections", href: sectionHref(null), selected: !overviewSection },
-            ...FEED_SECTIONS.map(({ key, title }) => ({ label: title, count: feed.counts.get(key) ?? 0, href: sectionHref(key), selected: overviewSection === key })),
-          ],
-        } : {
-          label: "Status",
-          options: [
-            { label: "All", count: [...feed.counts.values()].reduce((sum, n) => sum + n, 0), href: overviewHref(overviewTab, null), selected: !overviewState },
-            ...OVERVIEW_STATES.filter((value) => (feed.counts.get(value) ?? 0) > 0 || value === overviewState).map((value) => ({
-              label: STATUS_NAMES[value],
-              count: feed.counts.get(value) ?? 0,
-              href: overviewHref(overviewTab, value),
-              selected: overviewState === value,
-            })),
-          ],
-        }]}
-      />
+      {/* The Filter picks the project only (#project-filter): every project, or one, keeping the tab. The tabs and
+          sections already say what kind of work and where it is, so the Filter doesn't repeat them. */}
+      {isOrgMember && orgProjects.length > 1 ? (
+        <ToolbarFilterMenu
+          summary={filterProject ? filterProject.name : ""}
+          groups={[{
+            label: "Project",
+            options: [
+              { label: "All projects", href: overviewProjectHref(orgRefOf(ref)), selected: !filterProject },
+              ...orgProjects.map((item) => ({ label: item.name, href: overviewProjectHref(refOf(item)), selected: filterProject?.id === item.id })),
+            ],
+          }]}
+        />
+      ) : null}
     </>
   ) : null;
   // The Overview shows the cards above, not the list: the list's count, rows and confirmations are skipped, which with
@@ -1156,7 +1241,7 @@ export async function IssuesList({
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
-  // marks each one "Set up"; here they only hold back the next-step card and the ideas page's opening question.
+  // marks each one "Set up"; here they only hold back the ideas page's opening question.
   const unconfiguredAgents: UnconfiguredAgent[] =
     organisationId && userId
       ? await loadOrEmpty(
@@ -1179,41 +1264,6 @@ export async function IssuesList({
           [] as UnconfiguredAgent[],
         )
       : [];
-  // The next-step card (#agents-dock) where the empty agents bar used to be: the one next thing for you, from your role and what the
-  // organisation has. Not while one of your agents is blocked (the agents bar says so), and dismissable per organisation.
-  // A project contributor who joined a public project (canContribute without an org-wide membershipRole) also gets the
-  // "Create an agent" card so they can start earning right after joining.
-  let nextStep: OrganisationNextStep | null = null;
-  const nextStepRole: OrganisationRole | null = membershipRole ?? (canContribute ? "member" : null);
-  if (organisationId && userId && nextStepRole && !isDeletedView) {
-    const dismissed = parseDismissed((await cookies()).get(NEXT_STEP_COOKIE)?.value).includes(organisationId);
-    if (!dismissed) {
-      const counts = await loadOrEmpty(
-        "next step",
-        async () => {
-          const now = new Date();
-          const [agentCount, memberCount, pendingInvites] = await Promise.all([
-            prisma.agent.count({ where: { ...activeIn(organisationId), ownerUserId: userId, revokedAt: null } }),
-            prisma.membership.count({ where: { organisationId } }),
-            prisma.organisationInvite.count({ where: { organisationId, acceptedAt: null, expiresAt: { gt: now } } }),
-          ]);
-          return { agentCount, memberCount, pendingInvites };
-        },
-        null,
-      );
-      if (counts) {
-        nextStep = organisationNextStep({
-          slug: ref,
-          membershipRole: nextStepRole,
-          appRole: effectiveRole,
-          ...counts,
-          blockedAgentCount: unconfiguredAgents.length,
-          dismissed,
-          // The checklist is drawn on every view but Your Work (and hidden on phones).
-        });
-      }
-    }
-  }
   // First questions (#first-questions): setting up a project is the organisation owner's or an admin's, so only
   // they get it, on a project that has no ideas yet (any status, rejected included). It opens on Overview too,
   // where /home lands right after creating an organisation. Members who join get the welcome tour instead.
@@ -1596,11 +1646,14 @@ export async function IssuesList({
   const headerContent = (
     <>
       {activeProject?.goal ? (
-        <section aria-labelledby="project-goal-heading" className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4">
+        <section aria-labelledby="project-goal-heading" className="rounded-panel border border-zk-border bg-zk-surface px-5 py-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="project-goal-heading" className="text-sm font-bold text-zk-text">{activeProject.name} goal</h2>
             {membershipRole && isOrganisationAdmin(membershipRole, effectiveRole) ? (
-              <Link href={`/projects/${encodeURIComponent(activeProject.slug)}/settings`} className="text-xs font-bold text-zk-accent underline">Edit project settings</Link>
+              <span className="flex items-baseline gap-4">
+                <Link href={projectPath(ref, "/budget")} className="text-xs font-bold text-zk-accent underline">Budget</Link>
+                <Link href={`/projects/${encodeURIComponent(activeProject.slug)}/settings`} className="text-xs font-bold text-zk-accent underline">Edit project settings</Link>
+              </span>
             ) : null}
           </div>
           <RichText content={activeProject.goal} className="mt-1 text-sm text-zk-text2" />
@@ -1743,9 +1796,6 @@ export async function IssuesList({
           />
         ) : null}
 
-
-        {nextStep && organisationId ? <OrganisationNextStepCard step={nextStep} organisationId={organisationId} /> : null}
-
         {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
 
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
@@ -1753,7 +1803,7 @@ export async function IssuesList({
 
 
         {milestoneSummary ? (
-          <section aria-label={`Milestone ${milestoneSummary.title}`} className="rounded-[20px] border border-zk-border bg-zk-surface p-5">
+          <section aria-label={`Milestone ${milestoneSummary.title}`} className="rounded-panel border border-zk-border bg-zk-surface p-5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-bold text-zk-text">{milestoneSummary.title}</h2>
               <MilestoneDue due={dueDateValue(milestoneSummary.dueDate) || null} isClosed={milestoneSummary.isClosed} />
@@ -1797,13 +1847,19 @@ export async function IssuesList({
           />
         ) : null}
         {isIdeasView ? null : isFirstRun ? (
-          <FirstRunWelcome isAdmin={canDelete} hasOrganisation={Boolean(organisationId)} slug={ref} returnTo={returnTo} canContribute={canContribute} />
+          <FirstRunWelcome hasOrganisation={Boolean(organisationId)} />
         ) : feedView ? (
           // The Work Feed: one card with its tabs and filter on top, the table of work, and its pages under it. An
           // empty tab says what it will hold: the tabs are lists of what happened, not filter results.
           <WorkFeed
             items={feed.items}
-            groups={feed.groups?.map((group) => ({ ...group, moreHref: group.count > group.items.length ? sectionHref(group.key) : null }))}
+            groups={feed.groups?.map((group) => {
+              // Needs your OK also holds the new ideas (#just-added).
+              const ideas = group.key === "needs" ? { all: ideasToOkCount, shown: justAdded.length } : { all: 0, shown: 0 };
+              return { ...group, moreHref: group.count + ideas.all > group.items.length + ideas.shown ? sectionHref(group.key) : null };
+            })}
+            justAdded={justAdded}
+            justAddedCount={ideasToOkCount}
             title={OVERVIEW_TABS.find(([tab]) => tab === overviewTab)?.[1] ?? "Work Feed"}
             toolbar={overviewToolbar}
             empty={
@@ -2102,7 +2158,7 @@ export async function IssuesList({
         {isMyWorkTab && openBidCount > 0 ? (
           <Link
             href={issuesPath(listRef, "open", `${MY_WORK_PARAM}=1`)}
-            className="group flex items-center gap-4 rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4 transition hover:border-zk-accent/40 hover:bg-zk-tint/40 focus-visible:outline-2 focus-visible:outline-electric-blue"
+            className="group flex items-center gap-4 rounded-panel border border-zk-border bg-zk-surface px-5 py-4 transition hover:border-zk-accent/40 hover:bg-zk-tint/40 focus-visible:outline-2 focus-visible:outline-electric-blue"
           >
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zk-tint text-lg font-extrabold tabular-nums text-zk-accent">
               {openBidCount}
@@ -2203,9 +2259,13 @@ export async function IssuesList({
         idea in this project for agents to take up, with files, a screen recording or a captured area. */}
     {withOverviewLook ? (
       <section aria-label="Tell the agents" className="mx-auto mb-4 w-full max-w-[920px]">
+        {/* The project chat (#project-chat): Ziki answers here, sets the product's basics as they're given, and
+            files the work people describe as ideas. */}
         <IdeaChat
           projectId={project.id}
           alwaysOpen
+          chatSlug={ref}
+          me={{ name: user.name ?? null, image: user.image ?? null }}
           placeholder="Tell the agents what you want done: a bug to fix, a change to make, a feature to add…"
         />
       </section>
@@ -2234,23 +2294,17 @@ export async function IssuesList({
 }
 
 
+/** The first-run arrow's dashes (#first-run-arrow): how many, each one's length (of 100 along the line), and the delay between
+ * them. The first starts at the line's foot and the last ends under the arrowhead, where the line runs straight up into it. */
+const ARROW_DASHES = 7;
+const ARROW_DASH = 8;
+const ARROW_STEP_S = 0.12;
+
 /** What a brand-new tracker shows instead of an empty list (#292, #444). */
-function FirstRunWelcome({
-  isAdmin,
-  hasOrganisation = true,
-  slug,
-  returnTo,
-  canContribute = true,
-}: {
-  isAdmin: boolean;
-  hasOrganisation?: boolean;
-  slug: ProjectRef;
-  returnTo: string;
-  canContribute?: boolean;
-}) {
+function FirstRunWelcome({ hasOrganisation = true }: { hasOrganisation?: boolean }) {
   if (!hasOrganisation) {
     return (
-      <section aria-labelledby="issues-organisation-heading" className="issues-organisation-empty rounded-[20px] border border-zk-border bg-zk-bg px-6 py-10 text-center sm:px-8">
+      <section aria-labelledby="issues-organisation-heading" className="issues-organisation-empty rounded-panel border border-zk-border bg-zk-bg px-6 py-10 text-center sm:px-8">
         <h2 id="issues-organisation-heading" className="text-xl font-bold leading-7 text-zk-text">No organisation yet</h2>
         <p className="mx-auto mt-3 max-w-lg text-base leading-7 text-zk-text2">
           You are not currently a member of any organisation. Join an organisation via an invite from your team,
@@ -2268,32 +2322,41 @@ function FirstRunWelcome({
     );
   }
 
+  // The first thing to do is tell the agents about the app, in the box above the list: a winding arrow points up at it.
   return (
-    <section className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-8 text-center">
-      <h2 className="text-lg font-bold text-zk-text">No issues yet</h2>
+    <section className="rounded-panel border border-zk-border bg-zk-surface px-5 pb-8 pt-4 text-center">
+      {/* A winding dashed line up to a solid arrowhead. Its dashes vanish one after another from the bottom up, the
+          arrowhead last, then come back the same way: a wave that runs up towards the task box. */}
+      <svg aria-hidden="true" viewBox="0 0 120 172" className="mx-auto h-32 w-[90px] text-zk-text">
+        {Array.from({ length: ARROW_DASHES }, (_, index) => (
+          <path
+            key={index}
+            d="M60 166 C 78 150, 78 132, 60 118 C 42 104, 42 90, 60 78 C 76 67, 60 50, 60 31"
+            pathLength={100}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={`${ARROW_DASH} 200`}
+            strokeDashoffset={-(index * (100 - ARROW_DASH)) / (ARROW_DASHES - 1)}
+            className="motion-safe:animate-[zk-dash-wave_2.8s_ease-in-out_infinite]"
+            style={{ animationDelay: `${index * ARROW_STEP_S}s` }}
+          />
+        ))}
+        <path
+          d="M60 6 L45 32 Q60 26 75 32 Z"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          className="motion-safe:animate-[zk-dash-wave_2.8s_ease-in-out_infinite]"
+          style={{ animationDelay: `${ARROW_DASHES * ARROW_STEP_S}s` }}
+        />
+      </svg>
+      <h2 className="mt-2 text-lg font-bold text-zk-text">No tasks yet</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-zk-muted">
-        This is where reported issues will appear. A good report says what you
-        expected, what happened instead, and how to make it happen again.
+        This is where every task you add will be listed. Tell us what your app is and what you would like fixed.
       </p>
-      {canContribute ? (
-        <div className="mt-5">
-          <Link
-            href={newIssueHref(slug, returnTo)}
-            className="inline-flex h-[42px] items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(46,111,239,0.35)]"
-          >
-            Report the first issue
-          </Link>
-        </div>
-      ) : null}
-      {isAdmin ? (
-        <p className="mx-auto mt-6 max-w-md text-sm text-zk-muted">
-          Before people start reporting, you may want to set up your{" "}
-          <Link href={orgPath(slug, "projects")} className="font-bold text-zk-accent underline">projects</Link>
-          {" "}and the{" "}
-          <Link href={orgPath(slug, "types")} className="font-bold text-zk-accent underline">issue types</Link>{" "}
-          they will choose from.
-        </p>
-      ) : null}
     </section>
   );
 }

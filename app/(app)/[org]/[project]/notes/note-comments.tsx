@@ -248,7 +248,7 @@ export function NoteCommentsList({
   };
 
   return (
-    <section aria-labelledby="notes-discussion-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
+    <section aria-labelledby="notes-discussion-heading" className="rounded-panel border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-border px-5 py-4 sm:px-7">
         <div className="max-w-2xl">
           <h2 id="notes-discussion-heading" className="text-base font-bold text-zk-text">Agent notes</h2>

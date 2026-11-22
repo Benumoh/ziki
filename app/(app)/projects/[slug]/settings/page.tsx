@@ -5,7 +5,7 @@ import { organisationAccessFor } from "@/lib/organisation-access";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import type { AppRole } from "@/lib/roles";
 import Link from "next/link";
-import { issuesPath, orgPath, refOf } from "@/lib/project-paths";
+import { issuesPath, orgPath, projectPath, refOf } from "@/lib/project-paths";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationIdFor } from "@/lib/organisation-context";
@@ -95,7 +95,7 @@ function parseSection(value: string | undefined, github: string | undefined): Se
   return SECTIONS.find((item) => item.id === value)?.id ?? "details";
 }
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 
 /** The Checks section's data: the organisation's rules (read-only here) and this project's per area. */
 async function projectChecks(organisationId: string, projectId: string, user: { id: string; role?: AppRole | null }) {
@@ -181,6 +181,9 @@ export default async function ProjectSettingsPage({
           <CopyProjectIdButton projectId={project.id} />
           {project.archivedAt ? <span className="rounded-full bg-zk-warn-bg px-2 py-0.5 text-[11px] font-bold text-zk-warn-fg">Archived</span> : null}
         </div>
+        <Link href={projectPath(refOf(project), "/budget")} className="self-start text-sm font-semibold text-zk-accent hover:underline">
+          Fund this project with Ziks (budget)
+        </Link>
       </div>
 
       <div className="settings-layout">

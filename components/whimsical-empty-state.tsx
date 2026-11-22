@@ -20,7 +20,7 @@ export function WhimsicalEmptyState({
   return (
     <div
       data-testid="whimsical-empty-state"
-      className="flex flex-col items-center justify-center rounded-[24px] border border-zk-border bg-zk-surface px-6 py-14 text-center shadow-[0_4px_24px_rgba(0,0,0,0.02)]"
+      className="flex flex-col items-center justify-center rounded-panel border border-zk-border bg-zk-surface px-6 py-14 text-center shadow-[0_4px_24px_rgba(0,0,0,0.02)]"
     >
       {/* Friendly Robot with Magnifying Glass Illustration */}
       <div className="relative mb-5 flex h-28 w-28 items-center justify-center rounded-3xl bg-zk-tint/60 text-zk-accent" aria-hidden="true">
@@ -81,7 +81,7 @@ export function WhimsicalEmptyState({
         {showClear && clearHref ? (
           <Link
             href={clearHref}
-            className="inline-flex h-10 items-center justify-center rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white shadow-[0_4px_14px_rgba(46,111,239,0.28)] transition-all hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+            className="inline-flex h-10 items-center justify-center rounded-control bg-electric-blue-strong px-5 text-sm font-bold text-white transition-all hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
           >
             Clear filters
           </Link>

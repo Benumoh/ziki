@@ -15,7 +15,7 @@ export default async function NotesLayout({ children, params }: { children: Reac
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 lg:flex-row">
       <nav aria-label="Notes" className="shrink-0 lg:w-56">
-        <ul className="m-0 flex list-none flex-col gap-1 rounded-[20px] border border-zk-border bg-zk-surface p-2">
+        <ul className="m-0 flex list-none flex-col gap-1 rounded-panel border border-zk-border bg-zk-surface p-2">
           <li><NotesSidebarLink href={projectPath(project.ref, "/notes")} exact>Project notes</NotesSidebarLink></li>
           <li className="px-3 pb-1 pt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted">Your agents&apos; notes</li>
           {agents.length ? agents.map((agent) => (

@@ -30,7 +30,7 @@ export function PreviewResult({ summary, children }: { summary: PreviewSummary; 
     .join(", ");
 
   return (
-    <section aria-label="Scan summary" className="w-full overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface text-left">
+    <section aria-label="Scan summary" className="w-full overflow-hidden rounded-panel border border-zk-border bg-zk-surface text-left">
       <div className="px-4 pt-4 sm:px-6 sm:pt-5">
         {/* Named after the site, like other scanners' results ("SSL Report: go.dev", "Website test: go.dev"). */}
         <h3 className="m-0 wrap-break-word text-base font-semibold text-zk-text">Scan summary: {summary.target}</h3>
@@ -121,7 +121,7 @@ export function QuickScanList({ summary }: { summary: PreviewSummary }) {
   const areaLabel = new Map(summary.areas.map((area) => [area.area, area.label]));
 
   return (
-    <section aria-labelledby="quick-scan-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+    <section aria-labelledby="quick-scan-heading" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-5">
         <div className="min-w-0">
           <h2 id="quick-scan-heading" className="text-base font-semibold text-zk-text">Scan summary</h2>

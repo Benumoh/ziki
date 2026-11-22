@@ -68,7 +68,7 @@ export default async function BulkClosePage({ params, searchParams }: {
       ) : null}
 
       {bugs.length === 0 ? (
-        <p className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-10 text-center text-sm text-zk-text2">Nothing to review: no Open issue shows signs of being done.</p>
+        <p className="rounded-panel border border-zk-border bg-zk-surface px-5 py-10 text-center text-sm text-zk-text2">Nothing to review: no Open issue shows signs of being done.</p>
       ) : (
         <form action={bulkCloseAction} className="space-y-3">
           <input type="hidden" name="slug" value={project.slug} />
@@ -81,7 +81,7 @@ export default async function BulkClosePage({ params, searchParams }: {
                 ...(signal?.links ?? []),
               ].join("\n");
               return (
-                <li key={bug.id} className="rounded-[20px] border border-zk-border bg-zk-surface p-4">
+                <li key={bug.id} className="rounded-panel border border-zk-border bg-zk-surface p-4">
                   <input type="hidden" name={`number:${bug.id}`} value={bug.number} />
                   <div className="flex flex-wrap items-start gap-3">
                     <input id={`pick-${bug.id}`} type="checkbox" name="issue" value={bug.id} disabled={!canClose} className="mt-1 h-4 w-4" />

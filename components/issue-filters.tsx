@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ideasPath, issuesPath, statusFromSegment, type ProjectRef } from "@/lib/project-paths";
+import { ideasPath, issuesPath, OVERVIEW_SEGMENT, statusFromSegment, type ProjectRef } from "@/lib/project-paths";
 import { useListRef } from "@/lib/use-project-ref";
 import { statuses } from "@/lib/validations/issue";
 import { statusLabel } from "@/lib/labels";
@@ -86,6 +86,7 @@ const FILTER_PARAMS = [
 
 /** The Ideas lists' names in the list logic (the issue list's IDEAS_STATUS and REJECTED_IDEAS_STATUS). */
 const IDEAS_STATUS = "ideas";
+const YOUR_WORK_STATUS = "your_work";
 const REJECTED_IDEAS_STATUS = "rejected_ideas";
 
 /**
@@ -139,12 +140,17 @@ export function IssueFilters({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // The list is in the path; the filters read it as if it were `?status=`.
-  // `/<org>/<project>/issues/<status>` or, for every project, `/<org>/issues/<status>` (and the same for ideas, at `new`).
+  // `/<org>/<project>/issues/<status>` or, for every project, `/<org>/issues/<status>` (and the same for ideas, at `new`);
+  // the Overview is `/<org>/overview` or `/<org>/<project>/overview` (#overview-url).
   const segments = pathname?.split("/").filter(Boolean) ?? [];
   const listAt = segments.findIndex((segment) => segment === "issues" || segment === "new");
-  const pathStatus = segments[listAt] === "new"
-    ? (segments[listAt + 1] === "rejected" ? REJECTED_IDEAS_STATUS : IDEAS_STATUS)
-    : statusFromSegment(segments[listAt + 1] ?? "") ?? "all";
+  const pathStatus = segments.at(-1) === OVERVIEW_SEGMENT
+    ? YOUR_WORK_STATUS
+    : listAt < 0
+      ? "all"
+      : segments[listAt] === "new"
+        ? (segments[listAt + 1] === "rejected" ? REJECTED_IDEAS_STATUS : IDEAS_STATUS)
+        : statusFromSegment(segments[listAt + 1] ?? "") ?? "all";
   const params = useMemo(() => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
     next.delete("status");
@@ -519,7 +525,7 @@ export function IssueFilters({
               ) : null}
             </div>
             {suggestions.length > 0 ? (
-              <ul id={listId} role="listbox" aria-label="Search suggestions" className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface py-1 text-sm shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
+              <ul id={listId} role="listbox" aria-label="Search suggestions" className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-panel border border-zk-border bg-zk-surface py-1 text-sm shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
                 {suggestions.map((suggestion, index) => (
                   // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                   <li
@@ -565,13 +571,13 @@ export function IssueFilters({
               aria-controls={filterPanelId}
               aria-label={activeFilterCount > 0 ? `Filter (${activeFilterCount} active)` : "Filter"}
               onClick={() => setFilterOpen((prev) => !prev)}
-              className={`issues-filter-trigger inline-flex h-[42px] items-center gap-2 rounded-full border px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
+              className={`issues-filter-trigger inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 ${
                 activeFilterCount > 0 || filterOpen
                   ? "border-electric-blue-strong bg-zk-tint text-zk-accent"
                   : "border-zk-border bg-zk-surface text-zk-text hover:bg-zk-chip"
               }`}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M22 3H2l8 9.5V19l4 2v-8.5z" /></svg>
+              <svg className="h-4 w-4 text-zk-text2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" d="M4 7h16M7 12h10M10 17h4" /></svg>
               <span>Filter</span>
               {activeFilterCount > 0 ? (
                 <span aria-hidden="true" className="inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{activeFilterCount}</span>
@@ -580,7 +586,7 @@ export function IssueFilters({
             </button>
 
             {filterOpen ? (
-              <div ref={filterPanelRef} id={filterPanelId} role="dialog" aria-label="Filters" className="issues-filter-dialog absolute right-0 z-30 mt-2.5 flex w-[340px] max-w-[calc(100vw-3rem)] flex-col gap-3.5 rounded-[20px] border border-zk-border bg-zk-surface p-5 shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
+              <div ref={filterPanelRef} id={filterPanelId} role="dialog" aria-label="Filters" className="issues-filter-dialog absolute right-0 z-30 mt-2.5 flex w-[340px] max-w-[calc(100vw-3rem)] flex-col gap-3.5 rounded-panel border border-zk-border bg-zk-surface p-5 shadow-[0_20px_48px_rgba(11,23,51,0.16)]">
                 <div className="flex items-center justify-between border-b border-zk-divider pb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-base font-extrabold text-zk-text">Filters</span>
@@ -663,7 +669,7 @@ export function IssueFilters({
 
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => setFilterOpen(false)} className="h-[42px] flex-1 rounded-full border border-zk-border bg-zk-surface font-bold text-zk-text hover:bg-zk-chip">Cancel</button>
-                  <button type="button" onClick={() => setFilterOpen(false)} className="h-[42px] flex-1 rounded-full border-0 bg-electric-blue-strong font-bold text-white shadow-[0_8px_20px_rgba(46,111,239,0.30)] hover:brightness-105">Apply filters</button>
+                  <button type="button" onClick={() => setFilterOpen(false)} className="h-[42px] flex-1 rounded-control border-0 bg-electric-blue-strong font-bold text-white hover:brightness-105">Apply filters</button>
                 </div>
               </div>
             ) : null}

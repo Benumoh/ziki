@@ -12,6 +12,11 @@ export type IssueLinksProps = {
   linkedPullRequestUrl?: string | null;
   /** False on work with no pull request (marketing): the row shows only if a link was given. */
   pullRequests?: boolean;
+  /**
+   * Live work's live link (#live-link): where it can be seen running; null shows that none was added yet, undefined
+   * (work that isn't live) leaves the row out.
+   */
+  liveUrl?: string | null;
   /** The idea the issue was converted from. */
   idea?: { number: number; slug: ProjectRef } | null;
   /** Repaired old links (#pr-link-repair): the verified canonical PR or commit, or that the old repository can't be read. */
@@ -42,6 +47,7 @@ function ExternalLinkIcon({ className }: { className: string }) {
 export function IssueLinks({
   links: proofLinks,
   linkedPullRequestUrl,
+  liveUrl,
   pullRequests = true,
   idea = null,
   repairs = [],
@@ -105,7 +111,7 @@ export function IssueLinks({
   };
 
   return (
-    <section aria-label="Links" className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+    <section aria-label="Links" className="rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Links</h2>
         {canEdit && !editing ? (
@@ -195,6 +201,22 @@ export function IssueLinks({
                     </li>
                   ))}
                 </ul>
+              )}
+            </dd>
+          </div>
+        ) : null}
+        {/* Where it runs, on live work (#live-link), or that nobody has added it yet. */}
+        {liveUrl !== undefined ? (
+          <div className="flex min-w-0 items-baseline gap-3">
+            <dt className="w-16 shrink-0 whitespace-nowrap text-xs leading-5 text-zk-muted">Live</dt>
+            <dd className="m-0 min-w-0 flex-1">
+              {liveUrl ? (
+                <a href={liveUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium leading-5 text-zk-accent hover:underline">
+                  <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{liveUrl.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</span>
+                </a>
+              ) : (
+                <span className="text-xs leading-5 text-zk-muted">Not added yet</span>
               )}
             </dd>
           </div>

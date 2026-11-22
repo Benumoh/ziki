@@ -10,8 +10,9 @@ import {
   assistantTools,
   toolParameters,
   type AssistantRun,
-  type AssistantTool,
   type AssistantToolContext,
+  type GenericTool,
+  type ToolSpec,
 } from "@/lib/marketing/assistant-tools";
 
 /**
@@ -38,9 +39,12 @@ const CLAUDE_MODEL = "claude-sonnet-5-5";
 const TIMEOUT_MS = 60_000;
 const MAX_TOKENS = 3000;
 
-const UNAVAILABLE = "The marketing assistant can't answer right now. Try again in a moment.";
-const BUSY = "The marketing assistant is busy (rate limit reached). Try again in a minute.";
-const NOT_SET_UP = "The marketing assistant isn't set up on this server.";
+const UNAVAILABLE = "The assistant can't answer right now. Try again in a moment.";
+const BUSY = "The assistant is busy (rate limit reached). Try again in a minute.";
+const NOT_SET_UP = "The assistant isn't set up on this server.";
+
+/** The message a person sees, with what actually went wrong after it (#assistant-errors), so they can act on it. */
+const withDetail = (message: string, detail: string) => `${message} Details: ${detail}`;
 
 function systemPrompt(siteUrl: string, projectName: string): string {
   return `You are Ziki's marketing assistant, in the Marketing section of the project "${projectName}". Its website is ${siteUrl}.
@@ -88,7 +92,7 @@ type Step = { text: string; calls: ToolCall[] };
 /** A provider's conversation: it records its own turns in its own format. */
 interface Conversation {
   /** `final`: the tools stay listed, but the model must answer in text. */
-  step(tools: AssistantTool[], final: boolean): Promise<Step>;
+  step(tools: ToolSpec[], final: boolean): Promise<Step>;
   addResults(results: ToolResult[]): void;
 }
 
@@ -98,63 +102,89 @@ class ProviderError extends Error {
   }
 }
 
-/** The assistant's reply to the conversation, whose last turn is the person's. */
-export async function askMarketingAssistant(
-  turns: MarketingTurn[],
-  project: { name: string } & AssistantToolContext,
-): Promise<MarketingAnswer> {
-  if (turns.at(-1)?.role !== "user") return { ok: false, error: "Describe the marketing problem first." };
-  const system = systemPrompt(project.siteUrl, project.name);
+/**
+ * Any of Ziki's assistants (#assistants): the model in `ZIKI_AI_PROVIDER`, the system prompt, the tools it may call
+ * for `context`, and the conversation, whose last turn is the person's. Tool calls run one at a time, then it answers
+ * in text. `fallback` is the reply when the model ends without text but its tools did something worth saying.
+ */
+export async function runAssistant<C, R>(options: {
+  label: string;
+  system: string;
+  turns: MarketingTurn[];
+  tools: GenericTool<C, R>[];
+  context: C;
+  run: R;
+  fallback?: (run: R) => string | null;
+}): Promise<{ ok: true; reply: string; run: R } | { ok: false; error: string }> {
+  const { label, system, turns, tools, context, run } = options;
+  const log = `[${label}]`;
   const provider = process.env.ZIKI_AI_PROVIDER?.trim().toLowerCase() || "anthropic";
 
   let conversation: Conversation;
   if (provider === "openrouter") {
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     if (!apiKey) {
-      logger.error("[marketing-assistant] ZIKI_AI_PROVIDER is openrouter but OPENROUTER_API_KEY isn't set.");
-      return { ok: false, error: NOT_SET_UP };
+      logger.error(`${log} ZIKI_AI_PROVIDER is openrouter but OPENROUTER_API_KEY isn't set.`);
+      return { ok: false, error: withDetail(NOT_SET_UP, "ZIKI_AI_PROVIDER is openrouter but OPENROUTER_API_KEY isn't set.") };
     }
     conversation = new OpenRouterConversation(apiKey, process.env.OPENROUTER_MODEL?.trim() || OPENROUTER_DEFAULT_MODEL, system, turns);
   } else if (provider === "anthropic") {
     const apiKey = process.env.ZIKI_CLAUDE_API_KEY?.trim();
     if (!apiKey) {
-      logger.error("[marketing-assistant] ZIKI_CLAUDE_API_KEY isn't set.");
-      return { ok: false, error: NOT_SET_UP };
+      logger.error(`${log} ZIKI_CLAUDE_API_KEY isn't set.`);
+      return { ok: false, error: withDetail(NOT_SET_UP, "ZIKI_CLAUDE_API_KEY isn't set.") };
     }
     conversation = new ClaudeConversation(apiKey, system, turns);
   } else {
-    logger.error(`[marketing-assistant] ZIKI_AI_PROVIDER "${provider}" isn't supported here. Use "openrouter" or "anthropic".`);
-    return { ok: false, error: NOT_SET_UP };
+    logger.error(`${log} ZIKI_AI_PROVIDER "${provider}" isn't supported here. Use "openrouter" or "anthropic".`);
+    return { ok: false, error: withDetail(NOT_SET_UP, `ZIKI_AI_PROVIDER "${provider}" isn't supported. Use "openrouter" or "anthropic".`) };
   }
 
-  const tools = assistantTools(project);
   const byName = new Map(tools.map((definition) => [definition.name, definition]));
-  const run: AssistantRun = { activity: [], drafts: [] };
   try {
     for (let step = 1; step <= MAX_STEPS; step++) {
       const final = step === MAX_STEPS;
       const { text, calls } = await conversation.step(tools, final);
       if (final || !calls.length) {
-        const reply = plainText(text);
-        if (reply) return { ok: true, reply, activity: run.activity, drafts: run.drafts };
-        if (run.drafts.length) return { ok: true, reply: "Here's what I drafted.", activity: run.activity, drafts: run.drafts };
-        logger.warn("[marketing-assistant] The model returned no text.", { provider });
-        return { ok: false, error: UNAVAILABLE };
+        const reply = plainText(text) || options.fallback?.(run) || "";
+        if (reply) return { ok: true, reply, run };
+        logger.warn(`${log} The model returned no text.`, { provider });
+        return { ok: false, error: withDetail(UNAVAILABLE, `the model (${provider}) returned no text.`) };
       }
-      // One at a time: drafts keep their order, and a page read isn't repeated in parallel.
+      // One at a time: results keep their order, and nothing is repeated in parallel.
       const results: ToolResult[] = [];
-      for (const call of calls) results.push(await runTool(call, byName, project, run));
+      for (const call of calls) results.push(await runTool(call, byName, context, run, log));
       conversation.addResults(results);
     }
   } catch (error) {
     if (error instanceof ProviderError) {
-      logger.error(`[marketing-assistant] ${error.message}`);
-      return { ok: false, error: error.userMessage };
+      logger.error(`${log} ${error.message}`);
+      return { ok: false, error: withDetail(error.userMessage, error.message) };
     }
-    logger.error("[marketing-assistant] The assistant failed.", error instanceof Error ? error.message : error);
-    return { ok: false, error: UNAVAILABLE };
+    const detail = error instanceof Error ? error.message : String(error);
+    logger.error(`${log} The assistant failed.`, detail);
+    return { ok: false, error: withDetail(UNAVAILABLE, detail) };
   }
-  return { ok: false, error: UNAVAILABLE };
+  return { ok: false, error: withDetail(UNAVAILABLE, "no answer after the most steps allowed.") };
+}
+
+/** The Marketing assistant's reply to the conversation, whose last turn is the person's. */
+export async function askMarketingAssistant(
+  turns: MarketingTurn[],
+  project: { name: string } & AssistantToolContext,
+): Promise<MarketingAnswer> {
+  if (turns.at(-1)?.role !== "user") return { ok: false, error: "Describe the marketing problem first." };
+  const answer = await runAssistant({
+    label: "marketing-assistant",
+    system: systemPrompt(project.siteUrl, project.name),
+    turns,
+    tools: assistantTools(project),
+    context: project as AssistantToolContext,
+    run: { activity: [], drafts: [] } as AssistantRun,
+    fallback: (run) => (run.drafts.length ? "Here's what I drafted." : null),
+  });
+  if (!answer.ok) return answer;
+  return { ok: true, reply: answer.reply, activity: answer.run.activity, drafts: answer.run.drafts };
 }
 
 /** The page shows replies as plain text: drop the Markdown bold, italics and headings models add anyway. */
@@ -167,7 +197,7 @@ function plainText(text: string): string {
     .trim();
 }
 
-async function runTool(call: ToolCall, tools: Map<string, AssistantTool>, context: AssistantToolContext, run: AssistantRun): Promise<ToolResult> {
+async function runTool<C, R>(call: ToolCall, tools: Map<string, GenericTool<C, R>>, context: C, run: R, log: string): Promise<ToolResult> {
   const fail = (content: string): ToolResult => ({ id: call.id, name: call.name, content: `Error: ${content}`, isError: true });
   const definition = tools.get(call.name);
   if (!definition) return fail(`There is no tool named "${call.name}".`);
@@ -179,7 +209,7 @@ async function runTool(call: ToolCall, tools: Map<string, AssistantTool>, contex
   try {
     return { id: call.id, name: call.name, content: await definition.run(parsed.data, context, run), isError: false };
   } catch (error) {
-    if (!(error instanceof Error)) logger.warn("[marketing-assistant] A tool failed.", { tool: call.name });
+    if (!(error instanceof Error)) logger.warn(`${log} A tool failed.`, { tool: call.name });
     return fail(error instanceof Error && error.message ? error.message : "The tool failed.");
   }
 }
@@ -197,7 +227,7 @@ class OpenRouterConversation implements Conversation {
     this.messages = [{ role: "system", content: system }, ...turns.map((turn) => ({ role: turn.role, content: turn.text }))];
   }
 
-  async step(tools: AssistantTool[], final: boolean): Promise<Step> {
+  async step(tools: ToolSpec[], final: boolean): Promise<Step> {
     let response: Response;
     try {
       response = await fetch(OPENROUTER_URL, {
@@ -268,7 +298,7 @@ class ClaudeConversation implements Conversation {
     this.messages = turns.map((turn) => ({ role: turn.role, content: turn.text }));
   }
 
-  async step(tools: AssistantTool[], final: boolean): Promise<Step> {
+  async step(tools: ToolSpec[], final: boolean): Promise<Step> {
     let response: Anthropic.Beta.BetaMessage;
     try {
       response = await this.client.beta.messages.create({
@@ -284,10 +314,10 @@ class ClaudeConversation implements Conversation {
       });
     } catch (error) {
       if (error instanceof Anthropic.RateLimitError) throw new ProviderError(BUSY, "Claude rate limit reached.");
-      if (error instanceof Anthropic.APIError) throw new ProviderError(UNAVAILABLE, `Claude API error ${error.status}.`);
+      if (error instanceof Anthropic.APIError) throw new ProviderError(UNAVAILABLE, `Claude API error ${error.status}: ${error.message}`);
       throw error;
     }
-    if (response.stop_reason === "refusal") throw new ProviderError("The marketing assistant can't help with that.", "Claude refused.");
+    if (response.stop_reason === "refusal") throw new ProviderError("The assistant can't help with that.", "Claude refused.");
 
     this.messages.push({ role: "assistant", content: response.content });
     const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");

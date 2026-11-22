@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { saveProjectLinksAction, type ProjectActionResult } from "@/app/(app)/projects/actions";
 
+/** The app's own addresses and its store pages (#app-links); the marketing site is set on the Marketing side (#marketing-url). */
 type Field = "siteUrl" | "repoUrl" | "appStoreUrl" | "playStoreUrl";
 
 /** A phone, for the app's store pages. */
@@ -13,7 +14,7 @@ const FIELDS: Record<Field, { icon: string; empty: string; placeholder: string; 
     icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20",
     empty: "No site yet",
     placeholder: "https://example.com",
-    label: "the site address",
+    label: "the app's address",
   },
   repoUrl: {
     icon: "m16 18 6-6-6-6M8 6l-6 6 6 6",

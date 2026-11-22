@@ -114,6 +114,8 @@ describe("work alerts", () => {
     expect(answered.heldUntil).not.toBeNull();
     const released = await prisma.workAlertItem.findFirst({ where: { alertId: alert.id, number: picks[1]!.number } });
     expect(released!.heldUntil.getTime()).toBeLessThanOrEqual(Date.now());
+    // #agent-get-started: a yes (here, or by its owner on its page) settles the ask for both places.
+    expect(await refused("ada", "answer-alert", { id: alert.id, answer: "no" }, 409)).toMatchObject({ error: "alert_already_answered" });
     await prisma.workAlert.update({ where: { id: alert.id }, data: { status: "ended", endedAt: new Date() } });
   });
 });

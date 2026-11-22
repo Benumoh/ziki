@@ -26,6 +26,8 @@ export type EditableIssueDescriptionProps = {
   /** When the title or description was last edited (#303); null if never. */
   lastEditedAt?: Date | null;
   historyHref?: string;
+  /** More about the issue (its priority), at the right of the summary. */
+  details?: ReactNode;
 };
 
 export function EditableIssueDescription({
@@ -39,6 +41,7 @@ export function EditableIssueDescription({
   tags = null,
   lastEditedAt = null,
   historyHref,
+  details = null,
 }: EditableIssueDescriptionProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
@@ -85,13 +88,36 @@ export function EditableIssueDescription({
 
   const mentionUsers = users.map((u) => ({ id: u.id, name: u.name }));
 
+  // Edit sits at the bottom of the full description, once it is opened (or under a description with no summary).
+  const editButton = canEdit && !isEditing ? (
+    <div className="mt-3 flex justify-end">
+      <button
+        type="button"
+        aria-label="Edit description"
+        title="Edit description"
+        onClick={handleStartEdit}
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold text-zk-muted hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue-strong"
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11.2 2.3a1.6 1.6 0 0 1 2.3 2.3L5.4 12.7l-3 .8.8-3z" />
+        </svg>
+        Edit
+      </button>
+    </div>
+  ) : null;
+
   return (
-    <section className="flex flex-col gap-1.5 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6" aria-label="Description">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
-            {isEditing ? "Edit issue" : summary ? "Summary" : "Description"}
-          </h2>
+    <section className="flex flex-col gap-1.5 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6" aria-label="Description">
+      {/* No "Summary" label: the summary itself leads the card. Editing, or a description alone, keeps its heading. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 empty:hidden">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 empty:hidden">
+          {isEditing || !summary ? (
+            <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
+              {isEditing ? "Edit issue" : "Description"}
+            </h2>
+          ) : (
+            <h2 className="sr-only">Summary</h2>
+          )}
           {!isEditing && lastEditedAt && historyHref ? (
             <p className="text-xs text-zk-muted">
               edited <LocalTime date={lastEditedAt} /> ·{" "}
@@ -101,20 +127,6 @@ export function EditableIssueDescription({
             </p>
           ) : null}
         </div>
-        {/* The opened date lives in the Status box, so the heading row only carries the edit action. */}
-        {canEdit && !isEditing ? (
-          <button
-            type="button"
-            aria-label="Edit description"
-            title="Edit description"
-            onClick={handleStartEdit}
-            className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-zk-muted hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue-strong"
-          >
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11.2 2.3a1.6 1.6 0 0 1 2.3 2.3L5.4 12.7l-3 .8.8-3z" />
-            </svg>
-          </button>
-        ) : null}
       </div>
 
       {isEditing ? (
@@ -199,7 +211,7 @@ export function EditableIssueDescription({
         <div>
           <div className="flex items-start justify-between gap-3">
             <RichText className="mt-0! max-w-3xl text-[15px] font-medium leading-relaxed text-zk-text" content={summary} />
-            {tags ? <div className="flex shrink-0 flex-wrap justify-end gap-1.5 pt-0.5">{tags}</div> : null}
+            {tags || details ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pt-0.5">{details}{tags}</div> : null}
           </div>
           <button
             type="button"
@@ -218,9 +230,10 @@ export function EditableIssueDescription({
               {/* Section headings at the text's own size, so the description doesn't read larger than the summary. */}
               <RichText
                 className="mt-0! [&_h1]:!text-[15px] [&_h2]:!text-[15px] [&_h3]:!text-[15px] [&_h1]:!font-bold [&_h2]:!font-bold [&_h3]:!font-bold"
-                content={initialDescription}
+                content={withoutSummarySection(initialDescription)}
                 renderMentions={(text) => <MentionText text={text} users={users} />}
               />
+              {editButton}
             </div>
           ) : null}
         </div>
@@ -234,12 +247,29 @@ export function EditableIssueDescription({
               renderMentions={(text) => <MentionText text={text} users={users} />}
             />
           </ExpandableText>
+          {editButton}
         </div>
-          {tags ? <div className="flex shrink-0 flex-wrap justify-end gap-1.5 pt-0.5">{tags}</div> : null}
+          {tags || details ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pt-0.5">{details}{tags}</div> : null}
         </div>
       )}
 
       {children}
     </section>
   );
+}
+
+/**
+ * The description without its own "Summary" section (#summary-once): the summary already shows above it, so the opened
+ * description starts at what comes after (a "Summary" heading, or a bold "Summary" line, up to the next heading).
+ */
+function withoutSummarySection(description: string): string {
+  const lines = description.split(/\r?\n/);
+  const isSummaryHeading = (line: string) => /^\s*(#{1,6}\s*summary\s*:?\s*|\*\*summary:?\*\*:?\s*)$/i.test(line);
+  const isHeading = (line: string) => /^\s*(#{1,6}\s+\S|\*\*[^*]+\*\*:?\s*$)/.test(line);
+  const start = lines.findIndex(isSummaryHeading);
+  if (start === -1) return description;
+  let end = start + 1;
+  while (end < lines.length && !isHeading(lines[end])) end += 1;
+  const rest = [...lines.slice(0, start), ...lines.slice(end)].join("\n").trim();
+  return rest || description;
 }

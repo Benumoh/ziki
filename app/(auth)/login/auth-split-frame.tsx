@@ -90,7 +90,7 @@ function BrandPanel() {
         aria-hidden="true"
         className="relative min-h-[300px] w-full max-w-[560px] flex-1"
       >
-        <div className="ziki-auth-float-a absolute top-0 right-10 left-0 flex items-start gap-3.5 rounded-[18px] bg-white p-[18px] text-[#15121F] shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+        <div className="ziki-auth-float-a absolute top-0 right-10 left-0 flex items-start gap-3.5 rounded-panel bg-white p-[18px] text-[#15121F] shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
           <span className="flex h-10 w-[46px] shrink-0 items-center justify-center gap-0.5 rounded-full border border-electric-blue-strong bg-electric-blue-strong text-[13px] font-extrabold text-white">
             <svg
               width="12"
@@ -122,7 +122,7 @@ function BrandPanel() {
           </div>
         </div>
 
-        <div className="ziki-auth-float-b absolute top-[132px] left-9 flex w-[250px] flex-col gap-2.5 rounded-[18px] border border-[#263B63] bg-[#13213F] px-[18px] py-4 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+        <div className="ziki-auth-float-b absolute top-[132px] left-9 flex w-[250px] flex-col gap-2.5 rounded-panel border border-[#263B63] bg-[#13213F] px-[18px] py-4 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
           <div className="flex items-baseline justify-between">
             <span className="text-[13px] font-bold text-[#C9D6EF]">$ this week</span>
             <span className="text-xs font-bold text-sky-tint">90%</span>
@@ -135,7 +135,7 @@ function BrandPanel() {
           </div>
         </div>
 
-        <div className="ziki-auth-float-a absolute top-44 right-0 flex w-[230px] items-center gap-3 rounded-[18px] bg-white px-4 py-3.5 text-[#15121F] shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+        <div className="ziki-auth-float-a absolute top-44 right-0 flex w-[230px] items-center gap-3 rounded-panel bg-white px-4 py-3.5 text-[#15121F] shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF2FE] text-[#1F5FD9]">
             <svg
               width="18"
@@ -182,7 +182,7 @@ function AuthCardMark() {
 
 function AgentDocsCallout() {
   return (
-    <div className="flex gap-3.5 rounded-[18px] bg-zk-tint p-[18px]">
+    <div className="flex gap-3.5 rounded-panel bg-zk-tint p-[18px]">
       <span className="flex size-[38px] shrink-0 items-center justify-center rounded-xl bg-electric-blue-strong text-white">
         <svg
           width="18"

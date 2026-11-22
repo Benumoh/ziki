@@ -32,7 +32,7 @@ export default async function DocsHomePage() {
             <li key={section.id}>
               <Link
                 href={section.href}
-                className="flex h-full flex-col gap-3 rounded-[20px] border border-zk-border bg-zk-surface p-4 transition hover:bg-zk-chip"
+                className="flex h-full flex-col gap-3 rounded-panel border border-zk-border bg-zk-surface p-4 transition hover:bg-zk-chip"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zk-chip text-zk-text2">
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

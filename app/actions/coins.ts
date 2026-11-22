@@ -6,9 +6,12 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { CoinError } from "@/lib/coins/ledger";
 import { fundIssue } from "@/lib/coins/fund";
+import { fundBudget, raiseIssuePrice, setBudgetPaused, takeBackBudget } from "@/lib/coins/budget";
+import { refreshBudgetAlert } from "@/lib/coins/budget-sweeps";
 import { createPackCheckout, createTestPurchase } from "@/lib/coins/purchase";
 import { createSubscriptionCheckout, setSubscriptionEnding, startTestSubscription, subscribeFrom } from "@/lib/coins/subscription";
 import { testPayments } from "@/lib/coins/test-mode";
+import { syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { startPayoutOnboarding, syncPayoutsEnabled, withdrawEarned } from "@/lib/coins/withdraw";
 
 /**
@@ -62,7 +65,8 @@ export async function subscribeAction(formData: FormData): Promise<void> {
     }
   } catch (error) {
     const message = failure(error);
-    redirect(`/${from}?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
+    // The Ziks page opens on its plan section, where the person was.
+    redirect(`${from === "coins" ? "/coins?section=plan&" : `/${from}?`}error=${encodeURIComponent(message.ok ? "" : message.error)}`);
   }
   redirect(url);
 }
@@ -74,10 +78,10 @@ async function setEnding(ending: boolean): Promise<void> {
     await setSubscriptionEnding(user.id, ending);
   } catch (error) {
     const message = failure(error);
-    redirect(`/coins?error=${encodeURIComponent(message.ok ? "" : message.error)}`);
+    redirect(`/coins?section=plan&error=${encodeURIComponent(message.ok ? "" : message.error)}`);
   }
   revalidatePath("/coins");
-  redirect("/coins");
+  redirect("/coins?section=plan");
 }
 
 export async function endSubscriptionAction(): Promise<void> {
@@ -92,9 +96,62 @@ export async function keepSubscriptionAction(): Promise<void> {
 export async function fundIssueAction(bugId: string, amount: number, requestId: string): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
+    // What they just earned is spendable at once (#earnings-in-ziks), not only after the next sweep.
+    await syncEarnedZiks(user.id);
     const result = await fundIssue(user.id, bugId, Math.trunc(Number(amount)), requestId);
     revalidatePath("/", "layout");
     return { ok: true, message: result.funded ? `Funded. ${result.escrow.toLocaleString("en-US")} Ziks are now behind this issue.` : "Already funded." };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Puts Ziks behind a whole project (#project-budget). `requestId` is made when the form is drawn, so a double submit funds once. */
+export async function fundBudgetAction(projectId: string, amount: number, requestId: string): Promise<CoinActionResult> {
+  const user = await requireUser();
+  try {
+    await syncEarnedZiks(user.id);
+    const result = await fundBudget(user.id, projectId, Math.trunc(Number(amount)), requestId);
+    revalidatePath("/", "layout");
+    await refreshBudgetAlert(projectId).catch(() => null);
+    return { ok: true, message: result.funded ? `Funded. The project's budget is now ${result.balance.toLocaleString("en-US")} Ziks.` : "Already funded." };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Takes back what the project's budget hasn't reserved for an issue. */
+export async function takeBackBudgetAction(projectId: string): Promise<CoinActionResult> {
+  const user = await requireUser();
+  try {
+    const returned = await takeBackBudget(user.id, projectId);
+    revalidatePath("/", "layout");
+    await refreshBudgetAlert(projectId).catch(() => null);
+    return { ok: true, message: `${returned.toLocaleString("en-US")} Ziks are back with the people who funded the budget.` };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Pauses or resumes a project's budget: no new issue is awarded while it is paused (#project-budget). */
+export async function setBudgetPausedAction(projectId: string, paused: boolean): Promise<CoinActionResult> {
+  const user = await requireUser();
+  try {
+    await setBudgetPaused(user.id, projectId, paused);
+    revalidatePath("/", "layout");
+    return { ok: true, message: paused ? "Paused. No new issue will be awarded until you resume." : "Resumed. Issues can be awarded again." };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Sets an issue's price above what it costs now (#project-budget). */
+export async function raiseIssuePriceAction(bugId: string, zik: number): Promise<CoinActionResult> {
+  const user = await requireUser();
+  try {
+    const price = await raiseIssuePrice(user.id, bugId, Math.trunc(Number(zik)));
+    revalidatePath("/", "layout");
+    return { ok: true, message: `The price is now ${price.toLocaleString("en-US")} Ziks.` };
   } catch (error) {
     return failure(error);
   }
@@ -129,6 +186,7 @@ export async function refreshPayoutsAction(): Promise<boolean> {
 export async function withdrawZiksAction(): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
+    await syncEarnedZiks(user.id);
     const outcome = await withdrawEarned(user.id);
     revalidatePath("/coins");
     revalidatePath("/coins/payouts");

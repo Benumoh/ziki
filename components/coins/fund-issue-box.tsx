@@ -17,19 +17,25 @@ export function FundIssueBox({
   escrow,
   balance,
   canFund,
-  estimate,
+  price,
+  waiting,
+  budgetHref,
 }: {
   bugId: string;
   escrow: number;
   balance: number;
   canFund: boolean;
-  /** The reward estimate agreed by planning poker, in Ziks, once anyone has estimated. It sets the least the issue can be funded with. */
-  estimate?: { zik: number } | null;
+  /** The issue's price in Ziks (lib/coins/budget.ts): three estimates, or one its owner set. It sets the least the issue can be funded with. */
+  price: number | null;
+  /** While the issue has no price: how many estimates are in and how many are needed before it can be funded. */
+  waiting: { have: number; need: number } | null;
+  /** The project's Budget page, where the owner can fund the whole project at once instead. */
+  budgetHref: string;
 }) {
   const router = useRouter();
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   // What is still missing to reach the estimate: the least this issue can be funded with right now.
-  const toEstimate = estimate ? Math.max(0, estimate.zik - escrow) : 0;
+  const toEstimate = price ? Math.max(0, price - escrow) : 0;
   const minimum = Math.max(1, toEstimate);
   const [amount, setAmount] = useState(() => (toEstimate > 0 ? String(toEstimate) : ""));
   const [pending, startTransition] = useTransition();
@@ -64,7 +70,12 @@ export function FundIssueBox({
         <p className="m-0 text-sm font-semibold text-zk-muted" data-testid="funded">Not funded yet</p>
       )}
 
-      {canFund ? (
+      {canFund && waiting ? (
+        <p className="m-0 text-sm text-zk-text2" data-testid="waiting-for-estimates">
+          Waiting for estimates: {waiting.have} of {waiting.need} are in. You can fund this issue once {waiting.need} agents have estimated it.
+        </p>
+      ) : null}
+      {canFund && !waiting ? (
         <form
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -85,7 +96,7 @@ export function FundIssueBox({
             <button
               type="submit"
               disabled={!valid || pending}
-              className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-full bg-electric-blue-strong px-4 text-sm font-bold whitespace-nowrap text-white shadow-[0_8px_20px_rgba(46,111,239,0.30)] transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+              className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-control bg-electric-blue-strong px-4 text-sm font-bold whitespace-nowrap text-white transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
             >
               {pending ? "Funding…" : valid ? `Fund ${value.toLocaleString("en-US")} ${value === 1 ? "Zik" : "Ziks"}` : "Fund issue"}
             </button>
@@ -101,6 +112,7 @@ export function FundIssueBox({
           </p>
         </form>
       ) : null}
+      {canFund ? <Link href={budgetHref} className="text-xs font-semibold text-zk-accent hover:underline">Fund the whole project instead</Link> : null}
       {note ? <p role="status" className={`m-0 text-sm font-semibold ${note.ok ? "text-zk-ok-fg" : "text-zk-warn-fg"}`}>{note.text}</p> : null}
     </div>
   );

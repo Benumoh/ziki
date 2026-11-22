@@ -115,8 +115,8 @@ const RANK: Record<DockAgent["status"], number> = { waiting: 0, stuck: 1, workin
  * line at the foot of the page, icon then name; click one to open its page.
  * The leaderboard (only in an organisation of more than one member) is a link in
  * the Agents menu, with Workstream (#workstream). The strip is drawn only where it helps (dockVisibleOn, an
- * allowlist of the work pages): with no agents, and on every other page,
- * nothing is drawn, not even its spacer. Wide screens only: on phones the
+ * allowlist of the work pages): on every other page nothing is drawn, not
+ * even its spacer. With no agents yet, the strip asks you to connect one. Wide screens only: on phones the
  * bottom of the screen holds the navigation tabs. Wording stays plain: no
  * issue numbers or title tags.
  */
@@ -152,8 +152,8 @@ export function AgentsDock({
   const dockHeight = AGENTS_DOCK_HEIGHT;
   const floorHeight = pixelOnFloor ? Math.round(CANVAS_H * ROBOT_SCALE) : LOW_FLOOR_H;
   const pathname = usePathname();
-  // Drawn only where it helps (lib/agents-dock.ts): an allowlist of the work pages, and never with no agents.
-  const visible = dockVisibleOn(pathname, all.length);
+  // Drawn only where it helps (lib/agents-dock.ts): an allowlist of the work pages. With no agents it asks you to connect one.
+  const visible = dockVisibleOn(pathname);
   const [panel, setPanel] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   // How wide each nameplate is closed (its name and status) and opened (with what it has earned), so its character stands just beside it.
@@ -348,6 +348,30 @@ export function AgentsDock({
 
   // Nothing at all, no strip and no spacer, where the bar doesn't help.
   if (!visible) return null;
+
+  // No agents yet (#agents-dock-empty): the bar is where you connect your first one.
+  if (all.length === 0) {
+    return (
+      <Strip height={dockHeight}>
+        <div className={`${PAGE_CONTAINER_CLASS} flex h-full items-center justify-center`}>
+          <Link
+            href="/settings/connect"
+            className="group inline-flex items-center gap-3 rounded-full py-1 pr-3 text-sm font-semibold text-zk-text2 hover:text-zk-text focus-visible:outline-2 focus-visible:outline-electric-blue"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-zk-border bg-zk-chip text-zk-muted group-hover:border-electric-blue-strong group-hover:text-electric-blue-strong">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="4" y="8" width="16" height="12" rx="2" />
+                <path d="M12 4v4" />
+                <path d="M9 14h.01" />
+                <path d="M15 14h.01" />
+              </svg>
+            </span>
+            <span className="group-hover:underline group-hover:underline-offset-4">Connect an Agent</span>
+          </Link>
+        </div>
+      </Strip>
+    );
+  }
 
   // Workstream and the leaderboard are in the Agents menu; the strip's right end is the support link.
   // The leaderboard is in the Agents menu; nobody to rank against in an organisation of one.
@@ -677,7 +701,6 @@ function Strip({ height, children }: { height: number; children?: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-30 hidden border-t border-zk-border bg-zk-surface shadow-[0_-2px_10px_rgba(11,23,51,0.06)] lg:block"
       >
         {children}
-        {/* Its far right is the support link's (components/support-guide/on-screen-guide.tsx). */}
       </nav>
     </>
   );

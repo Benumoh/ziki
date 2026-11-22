@@ -40,7 +40,7 @@ export function OrganisationActions({ nameMax, next }: { nameMax: number; next?:
             event.preventDefault();
             setOpen(null);
           }}
-          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[20px] border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/50"
+          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-panel border border-zk-border bg-zk-surface p-6 text-zk-text shadow-xl backdrop:bg-black/50"
         >
           <div className="flex items-start justify-between gap-3">
             <h2 id="organisation-action-title" className="text-lg font-extrabold">

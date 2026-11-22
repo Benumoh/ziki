@@ -103,8 +103,8 @@ export async function fileIssue(page: Page, title: string) {
   } finally {
     await prisma.$disconnect();
   }
-  // The work view: confirmations, bids, the next step and the actions menu live there; the plain view is for reading.
-  await page.goto(`${PROJECT}/${issueNumber}?view=work`);
+  // The issue page: confirmations, bids, the next step and the actions menu.
+  await page.goto(`${PROJECT}/${issueNumber}`);
   await expect(page.getByRole("heading", { level: 1, name: new RegExp(escapeRe(title)) })).toBeVisible();
   return page.url();
 }

@@ -74,7 +74,7 @@ export default async function AgentEditLayout({
 
       <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-8">
         <EditNav groups={groups} />
-        <div className="min-w-0 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-8">{children}</div>
+        <div className="min-w-0 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-8">{children}</div>
       </div>
     </div>
   );

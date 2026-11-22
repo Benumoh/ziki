@@ -148,7 +148,7 @@ export function SkillsDirectory({
           </div>
           <Link
             href="/skills/contribute"
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:brightness-110 transition active:scale-[0.98] shrink-0"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-control bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 transition shrink-0"
           >
             <span>+ Submit a Skill</span>
           </Link>

@@ -6,12 +6,13 @@ import { getSiteUrl } from "@/lib/site-url";
 import { SHARE_IMAGE } from "@/lib/share-image";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { ToastProvider } from "@/components/ui/toast";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ThemePreference } from "@/components/theme-toggle";
+import { ExternalPageTheme } from "@/components/external-page-theme";
+import { isExternalPage } from "@/lib/external-pages";
 import { THEME_COOKIE, parseTheme, themeAttribute, type Theme } from "@/lib/theme";
-import { OnScreenGuide } from "@/components/support-guide/on-screen-guide";
 import "./globals.css";
 
 // Fonts are self-hosted from app/fonts (latin, variable woff2) so the build
@@ -29,13 +30,6 @@ const geistMono = localFont({
 const geist = localFont({
   src: "./fonts/geist-latin.woff2",
   variable: "--font-geist",
-  weight: "100 900",
-  display: "swap",
-});
-
-const inter = localFont({
-  src: "./fonts/inter-latin.woff2",
-  variable: "--font-inter",
   weight: "100 900",
   display: "swap",
 });
@@ -96,13 +90,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const theme = await currentTheme();
+  // The public pages are always light (#external-pages-light); middleware passes the path in x-ziki-path.
+  const external = isExternalPage((await headers()).get("x-ziki-path"));
   return (
-    <html lang="en" data-theme={themeAttribute(theme)} className="overflow-x-clip" suppressHydrationWarning>
+    <html lang="en" data-theme={external ? "light" : themeAttribute(theme)} className="overflow-x-clip" suppressHydrationWarning>
       <head>
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Integration Documentation" />
       </head>
       <body
-        className={`${geistMono.variable} ${geist.variable} ${inter.variable} min-h-screen overflow-x-clip antialiased`}
+        className={`${geistMono.variable} ${geist.variable} min-h-screen overflow-x-clip antialiased`}
       >
         {/*
           Both live at the root rather than in (app) so every route — including
@@ -111,10 +107,10 @@ export default async function RootLayout({
           toggle's first paint matches the server HTML.
         */}
         <ThemePreference theme={theme}>
+          <ExternalPageTheme />
           <ToastProvider>
             <ConfirmProvider>
               {children}
-              <OnScreenGuide />
             </ConfirmProvider>
           </ToastProvider>
         </ThemePreference>

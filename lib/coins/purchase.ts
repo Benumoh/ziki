@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/site-url";
@@ -7,7 +8,7 @@ import { discountedCents, isKnownDiscount } from "./plans";
 import { getStripe } from "./stripe";
 import { discountPercentFor } from "./subscription";
 import { safeReturnTo } from "./return-to";
-import { TEST_CURRENCY } from "./test-mode";
+import { TEST_CURRENCY, TEST_SESSION_PREFIX } from "./test-mode";
 
 /**
  * Buying Ziks (#ziki-coins). Checkout takes the money; the webhook
@@ -62,8 +63,17 @@ export async function createTestPurchase(userId: string, packId: string, returnT
   const discountPercent = await discountPercentFor(userId);
   await prisma.$transaction(async (tx) => {
     await lockUser(tx, userId);
+    // The database requires every purchase to come from a Checkout session or an invoice (CoinPurchase_source_check), so a
+    // test purchase carries a stand-in session id of its own. It never matches a real Stripe session.
     const purchase = await tx.coinPurchase.create({
-      data: { userId, packId: pack.id, zik: pack.zik, amountCents: discountedCents(zikToCents(pack.zik), discountPercent), currency: TEST_CURRENCY },
+      data: {
+        userId,
+        stripeSessionId: `${TEST_SESSION_PREFIX}${randomUUID()}`,
+        packId: pack.id,
+        zik: pack.zik,
+        amountCents: discountedCents(zikToCents(pack.zik), discountPercent),
+        currency: TEST_CURRENCY,
+      },
     });
     await appendRows(tx, [{ account: "wallet", userId, kind: "purchase", amount: pack.zik, sourceKey: `purchase:test:${purchase.id}`, purchaseId: purchase.id }]);
   });

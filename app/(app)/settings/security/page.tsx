@@ -32,7 +32,7 @@ export default async function SecuritySettingsPage() {
         <p className="m-0 text-sm text-zk-muted">Protect your account with a second step at sign-in.</p>
       </div>
 
-      <section className="flex flex-col gap-4 rounded-[20px] border border-zk-border bg-zk-surface p-6">
+      <section className="flex flex-col gap-4 rounded-panel border border-zk-border bg-zk-surface p-6">
         <div className="flex items-center gap-3.5">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zk-tint text-zk-accent">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

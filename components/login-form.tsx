@@ -15,9 +15,12 @@ const fieldClass =
 export function LoginForm({
   callbackUrl = "/home",
   googleEnabled = false,
+  quickLogins = [],
 }: {
   callbackUrl?: string;
   googleEnabled?: boolean;
+  /** Local checkouts only (#local-quick-login): accounts that fill the form in one pick. */
+  quickLogins?: { email: string; password: string }[];
 }) {
   // Only show Google button if OAuth is actually configured
   const showGoogleButton = googleEnabled;
@@ -102,6 +105,29 @@ export function LoginForm({
             <span className="absolute inset-x-0 top-1/2 border-t border-zk-border" />
           </div>
         </>
+      ) : null}
+      {quickLogins.length > 0 ? (
+        <div className="space-y-1.5">
+          <label htmlFor="quick-login" className="text-sm font-medium text-zk-text2">
+            Local account
+          </label>
+          <select
+            id="quick-login"
+            className="h-12 w-full rounded-xl border border-zk-border bg-zk-surface px-3 text-zk-text"
+            value=""
+            onChange={(event) => {
+              const pick = quickLogins.find((login) => login.email === event.target.value);
+              if (!pick) return;
+              setEmail(pick.email);
+              setPassword(pick.password);
+            }}
+          >
+            <option value="">Pick an account to fill in…</option>
+            {quickLogins.map((login) => (
+              <option key={login.email} value={login.email}>{login.email}</option>
+            ))}
+          </select>
+        </div>
       ) : null}
       <div className="space-y-1.5">
         <label htmlFor="email" className="text-sm font-medium text-zk-text2">

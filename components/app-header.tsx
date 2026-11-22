@@ -28,7 +28,7 @@ import { CookieSettingsLink } from "@/components/consent-banner";
 import { VersionCredits } from "@/components/credits-dialog";
 import { PAGE_CONTAINER_CLASS } from "@/components/page-container";
 import { ZikiMark } from "@/components/ziki-mark";
-import { formatZ } from "@/lib/points/rules";
+import { formatZ, formatZNumber } from "@/lib/points/rules";
 import { WithdrawWindow } from "@/components/withdraw-window";
 
 const linkFocus =
@@ -213,15 +213,15 @@ export function AppHeader({
   reportFormUrl,
   defaultProjectSlug = null,
   earned = null,
-  earningsOrganisationId = null,
   version,
+  showWithdraw = false,
 }: {
+  /** Whether the account menu shows Withdraw: only for people who have earned Ziks (lib/coins/ledger.ts hasEarnedZiks). */
+  showWithdraw?: boolean;
   /** The running version (package version), shown with Cookie settings at the foot of the account menu. */
   version?: string;
-  /** Earnings (#earnings): what the person earned in the workspace they're in, shown with Withdraw on every page; null when unknown. */
+  /** Earnings (#earnings-in-ziks): everything the person earned, every workspace together, shown with Withdraw on every page; null hides it. */
   earned?: number | null;
-  /** The workspace the $ and Withdraw are for (#earnings): the one the person is in. */
-  earningsOrganisationId?: string | null;
   /** The first project in the current organisation, for pages whose URL names none yet. */
   defaultProjectSlug?: ProjectRef | null;
   userName?: string | null;
@@ -259,7 +259,6 @@ export function AppHeader({
   const roleAccess = roleAccessFor(organisationRole, realRole);
   // There is no request form yet: the members page names the admins who can change a role.
   const requestAccessHref = projectSlug ? orgPath(projectSlug, "members") : "/organisations";
-  const earningsWorkspaceName = organisationOptions.find((organisation) => organisation.id === earningsOrganisationId)?.name ?? null;
 
   return (
     // Sticky only from lg: on phones and tablets the toolbar wraps onto rows,
@@ -296,13 +295,16 @@ export function AppHeader({
               <Link
                 href={projectSlug ? `/earnings?in=${projectSlug}` : "/earnings"}
                 aria-current={isNavItemActive(pathname, "/earnings") ? "page" : undefined}
-                title={earningsWorkspaceName ? `Earned in ${earningsWorkspaceName}. Your earnings adds up every workspace.` : undefined}
+                title="Everything you earned, in every workspace. Your earnings shows how it adds up."
                 className={`rounded-full px-2.5 py-1 text-sm font-bold tabular-nums text-zk-text hover:bg-zk-chip ${linkFocus}`}
               >
-                {formatZ(earned)}
-                <span className="sr-only"> earned{earningsWorkspaceName ? ` in ${earningsWorkspaceName}` : ""}: Your earnings</span>
+                <span aria-hidden="true" className="inline-flex items-baseline gap-[0.12em]">
+                  <ZikSymbol />
+                  {formatZNumber(earned)}
+                </span>
+                <span className="sr-only">{formatZ(earned)} earned in every workspace: Your earnings</span>
               </Link>
-              <WithdrawWindow earned={earned} organisationId={earningsOrganisationId} className={`inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 max-sm:h-8 max-sm:w-8 max-sm:p-0 ${linkFocus}`}>
+              <WithdrawWindow className={`inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 max-sm:h-8 max-sm:w-8 max-sm:p-0 ${linkFocus}`}>
                 {/* Phones: a wallet icon; tablets and up: the word. Either way it is called Withdraw. */}
                 <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] sm:hidden" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v3" />
@@ -338,7 +340,7 @@ export function AppHeader({
                 id="account-menu"
                 role="menu"
                 aria-label="Account"
-                className="absolute right-0 top-[54px] z-50 flex w-[300px] max-w-[calc(100vw-2rem)] origin-top-right flex-col gap-1 rounded-[20px] border border-zk-border bg-zk-surface p-2 shadow-[0_24px_56px_rgba(11,23,51,0.22)] motion-safe:animate-[header-pop_120ms_ease-out]"
+                className="absolute right-0 top-[54px] z-50 flex w-[300px] max-w-[calc(100vw-2rem)] origin-top-right flex-col gap-1 rounded-panel border border-zk-border bg-zk-surface p-2 shadow-[0_24px_56px_rgba(11,23,51,0.22)] motion-safe:animate-[header-pop_120ms_ease-out]"
               >
                 <AccountSummary
                   userName={userName}
@@ -377,10 +379,12 @@ export function AppHeader({
                 <MenuLink href="/pricing" active={pathname === "/pricing"}>
                   Pricing
                 </MenuLink>
-                {/* What you earned and how to take it out (#ziki-coins), apart from buying Ziks. */}
-                <MenuLink href="/coins/payouts" active={Boolean(pathname?.startsWith("/coins/payouts"))}>
-                  Withdraw
-                </MenuLink>
+                {/* What you earned and how to take it out (#ziki-coins), apart from buying Ziks. Only for people who have earned. */}
+                {showWithdraw ? (
+                  <MenuLink href="/coins/payouts" active={Boolean(pathname?.startsWith("/coins/payouts"))}>
+                    Withdraw
+                  </MenuLink>
+                ) : null}
                 <MenuLink href="/settings" active={isNavItemActive(pathname, "/settings")}>
                   Settings
                 </MenuLink>

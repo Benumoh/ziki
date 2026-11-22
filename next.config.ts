@@ -173,6 +173,8 @@ const nextConfig: NextConfig = {
   experimental: {
     // #447: lets a page answer 403 with `forbidden()` and app/forbidden.tsx.
     authInterrupts: true,
+    // CI's build was killed when the runner ran out of memory; this lowers webpack's peak memory (docs: guides/memory-usage).
+    webpackMemoryOptimizations: true,
     serverActions: {
       bodySizeLimit: "10mb",
     },

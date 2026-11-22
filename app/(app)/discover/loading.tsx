@@ -12,7 +12,7 @@ export default function DiscoverLoading() {
       </div>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="h-48 animate-pulse rounded-[20px] border border-zk-border bg-zk-surface" />
+          <div key={item} className="h-48 animate-pulse rounded-panel border border-zk-border bg-zk-surface" />
         ))}
       </div>
     </div>

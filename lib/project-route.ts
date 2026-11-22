@@ -205,7 +205,7 @@ async function defaultProjectSlug(organisationId: string): Promise<string | null
 }
 
 /**
- * An organisation-wide list, `/<org>/issues/…`, `/<org>/ideas` or `/<org>/queue` (#project-filter): the
+ * An organisation-wide list, `/<org>/overview`, `/<org>/issues/…`, `/<org>/ideas` or `/<org>/queue` (#project-filter): the
  * organisation and the project the list is drawn through (its default one), so the list keeps the project
  * page's access checks. An old `/<project>/issues/…` address, where no organisation has the slug, goes on
  * to that project; an organisation with no project yet goes to `/<org>`, which offers to create one.

@@ -13,7 +13,7 @@ const BRIEF_LABELS: { key: MarketingBriefKey; label: string }[] = [
   { key: "outOfScope", label: "Out of scope" },
 ];
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6";
 
 function heading(name: string, id: string) {
   return <h2 id={id} className="m-0 text-base font-bold text-zk-text">{name}</h2>;

@@ -22,7 +22,7 @@ test("deletes an issue, finds it among deleted ones, and restores it", async ({ 
   await expect(deletedIssue).toHaveAttribute("href", new URL(url).pathname);
   await expectNoHorizontalScroll(page);
   await deletedIssue.click();
-  // The deleted list opens the issue at its own address (the work view's ?view=work is not kept).
+  // The deleted list opens the issue at its own address.
   await expect(page).toHaveURL(url.split("?")[0]);
   await page.getByRole("button", { name: /^Restore/ }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Restore issue" }).click();

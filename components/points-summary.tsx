@@ -46,7 +46,7 @@ export function PointsSummary({
 }) {
   const progress = pointsProgress(points, solvedTasks, targetPoints);
   return (
-    <section className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5" aria-labelledby="points-heading">
+    <section className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5" aria-labelledby="points-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="points-heading" className="text-sm font-semibold uppercase tracking-wide text-zk-muted">
           $ earned
@@ -61,7 +61,7 @@ export function PointsSummary({
         {progress.targetMet ? " · Goal reached" : ""}
       </p>
       <div className="mt-4">
-        <ProgressRow label="$" value={points} target={targetPoints} percent={progress.pointsPercent} />
+        <ProgressRow label="Ziks"value={points} target={targetPoints} percent={progress.pointsPercent} />
       </div>
     </section>
   );

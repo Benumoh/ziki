@@ -3,10 +3,17 @@ import { endSubscriptionAction, keepSubscriptionAction, subscribeAction } from "
 import { formatUsd } from "@/lib/coins/math";
 import { ZIK_PLANS, findPlan, planBreakEvenCents } from "@/lib/coins/plans";
 
-const card = "rounded-[22px] border border-zk-border bg-zk-surface p-5 sm:p-6";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6";
 const label = "text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted";
 const BUTTON =
   "inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue disabled:cursor-not-allowed disabled:opacity-60";
+
+/** Filled, like the Buy buttons on the packs: the one action on each plan card. */
+const FILLED =
+  "inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full bg-electric-blue-strong px-4 text-sm font-bold text-white transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+
+/** The plan the Pricing page marks as most popular; the same one stands out here. */
+const POPULAR_PLAN = "pro";
 
 export type PlanView = {
   planId: string;
@@ -72,9 +79,15 @@ export function ZikiPlans({ subscription, configured }: { subscription: PlanView
         Subscribe to pay less every time you buy Ziks. End it any time; the plan runs to the end of the month you paid for.{" "}
         <Link href="/pricing" className="font-semibold text-zk-accent hover:underline">See the pricing page</Link>
       </p>
-      <ul className="m-0 mt-4 grid list-none gap-3 p-0 sm:grid-cols-3">
+      <ul className="m-0 mt-4 grid list-none gap-3 p-0 pt-3 sm:grid-cols-3">
         {ZIK_PLANS.map((plan) => (
-          <li key={plan.id} className="flex flex-col rounded-2xl border border-zk-border p-4">
+          <li
+            key={plan.id}
+            className={`relative flex flex-col rounded-2xl border p-4 ${plan.id === POPULAR_PLAN ? "border-zk-accent bg-zk-tint/40 shadow-[0_0_0_1px_var(--color-zk-accent)]" : "border-zk-border"}`}
+          >
+            {plan.id === POPULAR_PLAN ? (
+              <span className="absolute -top-3 left-4 rounded-full bg-electric-blue-strong px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.06em] text-white">Most popular</span>
+            ) : null}
             <p className="m-0 text-sm font-bold text-zk-text">{plan.label}</p>
             <p className="m-0 mt-2 text-2xl font-extrabold tabular-nums text-zk-text">{plan.discountPercent}% off</p>
             <p className="m-0 text-xs text-zk-muted">every Ziks pack you buy</p>
@@ -82,7 +95,7 @@ export function ZikiPlans({ subscription, configured }: { subscription: PlanView
             <p className="m-0 mt-0.5 text-xs text-zk-muted">Pays for itself from {formatUsd(planBreakEvenCents(plan))} of Ziks a month</p>
             <form action={subscribeAction} className="mt-auto pt-4">
               <input type="hidden" name="planId" value={plan.id} />
-              <button type="submit" disabled={!configured} className={BUTTON}>Subscribe</button>
+              <button type="submit" disabled={!configured} className={FILLED}>Subscribe</button>
             </form>
           </li>
         ))}

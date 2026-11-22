@@ -185,7 +185,7 @@ export function PullRequestChecks({
   refreshInstructions,
   failed = false,
 }: PullRequestChecksProps) {
-  const card = "flex flex-col gap-2.5 rounded-[20px] border border-zk-border border-l-[3px] border-l-electric-blue bg-zk-surface px-4 py-3.5";
+  const card = "flex flex-col gap-2.5 rounded-panel border border-zk-border border-l-[3px] border-l-electric-blue bg-zk-surface px-4 py-3.5";
   const heading = <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Pull request checks</h2>;
   const checksUrl = pullRequestChecksUrl(pullRequestUrl);
 

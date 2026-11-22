@@ -43,8 +43,8 @@ export function EarnPanel({ project, line }: { project: EarnBannerProject; line:
   }
 
   return (
-    // The same card as OrganisationNextStepCard ("Your project is set up. Connect an agent…"): one line, a dark pill, Dismiss.
-    <section aria-labelledby="earn-panel-heading" className="rounded-[20px] border border-[#3978f6]/30 bg-[linear-gradient(120deg,var(--color-zk-tint),var(--color-zk-surface)_75%)] p-5 print:hidden sm:p-6">
+    // One line, a dark pill, Dismiss.
+    <section aria-labelledby="earn-panel-heading" className="rounded-panel border border-[#0972d5]/30 bg-[linear-gradient(120deg,var(--color-zk-tint),var(--color-zk-surface)_75%)] p-5 print:hidden sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 id="earn-panel-heading" className="sr-only">Earn with your agent</h2>

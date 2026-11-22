@@ -139,7 +139,7 @@ export function ActiveSessions({
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-[20px] border border-zk-border bg-zk-surface p-6">
+    <section className="flex flex-col gap-4 rounded-panel border border-zk-border bg-zk-surface p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="m-0 text-lg font-bold text-zk-text">Active sessions</h2>
@@ -179,7 +179,7 @@ export function ActiveSessions({
               className="flex items-center justify-between gap-3 py-3.5 first:pt-1 last:pb-1"
             >
               <div className="flex min-w-0 items-center gap-3.5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-zk-chip text-zk-text2">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-panel bg-zk-chip text-zk-text2">
                   <DeviceIcon type={session.deviceType} />
                 </span>
                 <div className="flex min-w-0 flex-col gap-0.5">
@@ -213,7 +213,7 @@ export function ActiveSessions({
         })}
       </div>
 
-      <p className="m-0 rounded-[12px] border border-dashed border-zk-border bg-zk-bg px-4 py-3 text-xs leading-relaxed text-zk-muted">
+      <p className="m-0 rounded-panel border border-dashed border-zk-border bg-zk-bg px-4 py-3 text-xs leading-relaxed text-zk-muted">
         &ldquo;Sign out of all other devices&rdquo; ends every session except this one, so you stay
         signed in here. Signed-out devices must log in again.
       </p>

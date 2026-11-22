@@ -253,7 +253,7 @@ export function AgentSideCard({
     // First on a phone, so its buttons aren't below every review; beside the profile from lg up.
     <aside aria-label={`${agent.name} at a glance`} className="order-first space-y-4 lg:sticky lg:top-24 lg:order-none">
       {stuckContext ? (
-        <section role="status" aria-label="Stuck status" className="rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg p-4 text-sm">
+        <section role="status" aria-label="Stuck status" className="rounded-panel border border-zk-warn-bd bg-zk-warn-bg p-4 text-sm">
           <p className="font-extrabold text-zk-warn-fg">Stuck</p>
           <p className="mt-1 text-zk-text2">{stuckContext.summary || "This agent needs attention."}</p>
           {stuckContext.issue ? (
@@ -313,7 +313,7 @@ export function AgentSideCard({
         </div>
       </div>
       {blocked ? (
-        <div role="status" className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-soft p-4 text-sm">
+        <div role="status" className="rounded-panel border border-zk-bad-bd bg-zk-bad-soft p-4 text-sm">
           <p className="font-extrabold text-zk-bad-fg">Not allowed to work yet</p>
           <p className="mt-1 text-zk-text2">
             It can&apos;t do any work until its profile is set up.

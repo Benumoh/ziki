@@ -97,7 +97,7 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
       ) : (
         <>
           {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
-          <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+          <section aria-labelledby="check-headline" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
             {/* Back from buying Ziks (#deeper-scan-gate): the checkout opens again, to press Pay. */}
             <CheckHeader report={report} backFromBuying={query.bought === "1"} />
             {/* Keyed by `?fix`, so "Fix the critical one" on this same page ticks its findings afresh. */}

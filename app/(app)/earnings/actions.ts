@@ -12,7 +12,7 @@ export type GoalResult = { error?: string; saved?: boolean };
 export async function setWeeklyGoalAction(_prev: GoalResult, formData: FormData): Promise<GoalResult> {
   const user = await requireUser();
   const goal = parseWeeklyGoal(formData.get("goal"));
-  if (goal === null) return { error: `Enter an amount in dollars, up to ${formatZ(MAX_WEEKLY_GOAL)}.` };
+  if (goal === null) return { error: `Enter an amount in Ziks, up to ${formatZ(MAX_WEEKLY_GOAL)}.` };
   await prisma.user.update({ where: { id: user.id }, data: { weeklyEarningsGoal: goal } });
   revalidatePath("/earnings");
   return { saved: true };

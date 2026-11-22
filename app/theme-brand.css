@@ -4,7 +4,7 @@
  *
  * - Accent families (teal — the app's primary accent — plus the
  *   purple/violet family used for "in progress" chips) are re-seeded onto a
- *   single Electric Blue ramp (#3978F6). Everything written with teal, violet
+ *   single Electric Blue ramp (#0972d5). Everything written with teal, violet
  *   or purple classes keeps its same shading pattern, so any contrast pair
  *   that passed AA before still passes after the swap; no component classes
  *   change. No purple remains anywhere.
@@ -26,47 +26,47 @@
  * brand deck even when the user never touches the toggle.
  */
 
-/* The Electric Blue ramp. Anchor: #3978F6 (500, identical in both themes). */
+/* The Electric Blue ramp. Anchor: #0972d5 (500, identical in both themes). */
 :root {
   /* Light canvas: a neutral #f5f5f5 page (see globals.css). */
   --background: #f5f5f5;
   --foreground: #15171c;
 
-  --color-teal-50: #edf3fe;
-  --color-teal-100: #dbe7fd;
-  --color-teal-200: #bccffb;
-  --color-teal-300: #95b5f9;
-  --color-teal-400: #679bf8;
-  --color-teal-500: #3978f6;
-  --color-teal-600: #2a63d8;
-  --color-teal-700: #2756b8;
-  --color-teal-800: #1d4695;
-  --color-teal-900: #16356f;
-  --color-teal-950: #0f2549;
+  --color-teal-50: #eef8ff;
+  --color-teal-100: #d8eefe;
+  --color-teal-200: #b3dcfc;
+  --color-teal-300: #7cc2f8;
+  --color-teal-400: #3a9ef0;
+  --color-teal-500: #0972d5;
+  --color-teal-600: #0866c0;
+  --color-teal-700: #0a57a3;
+  --color-teal-800: #0d4885;
+  --color-teal-900: #103b6b;
+  --color-teal-950: #0b2646;
 
-  --color-violet-50: #edf3fe;
-  --color-violet-100: #dbe7fd;
-  --color-violet-200: #bccffb;
-  --color-violet-300: #95b5f9;
-  --color-violet-400: #679bf8;
-  --color-violet-500: #3978f6;
-  --color-violet-600: #2a63d8;
-  --color-violet-700: #2756b8;
-  --color-violet-800: #1d4695;
-  --color-violet-900: #16356f;
-  --color-violet-950: #0f2549;
+  --color-violet-50: #eef8ff;
+  --color-violet-100: #d8eefe;
+  --color-violet-200: #b3dcfc;
+  --color-violet-300: #7cc2f8;
+  --color-violet-400: #3a9ef0;
+  --color-violet-500: #0972d5;
+  --color-violet-600: #0866c0;
+  --color-violet-700: #0a57a3;
+  --color-violet-800: #0d4885;
+  --color-violet-900: #103b6b;
+  --color-violet-950: #0b2646;
 
-  --color-purple-50: #edf3fe;
-  --color-purple-100: #dbe7fd;
-  --color-purple-200: #bccffb;
-  --color-purple-300: #95b5f9;
-  --color-purple-400: #679bf8;
-  --color-purple-500: #3978f6;
-  --color-purple-600: #2a63d8;
-  --color-purple-700: #2756b8;
-  --color-purple-800: #1d4695;
-  --color-purple-900: #16356f;
-  --color-purple-950: #0f2549;
+  --color-purple-50: #eef8ff;
+  --color-purple-100: #d8eefe;
+  --color-purple-200: #b3dcfc;
+  --color-purple-300: #7cc2f8;
+  --color-purple-400: #3a9ef0;
+  --color-purple-500: #0972d5;
+  --color-purple-600: #0866c0;
+  --color-purple-700: #0a57a3;
+  --color-purple-800: #0d4885;
+  --color-purple-900: #103b6b;
+  --color-purple-950: #0b2646;
 }
 
 /* Mirror the same ramp end to end for dark mode, exactly the way
@@ -96,7 +96,7 @@
     --zk-chip: #222226;
     --zk-seg: #111113;
     --zk-accent: #8fc9ff;
-    --zk-primary: #3b5bdb;
+    --zk-primary: #0972d5;
     --zk-ok-bg: #0f3326;
     --zk-ok-fg: #6ee7a8;
     --zk-bad-bg: #3a1517;
@@ -109,41 +109,41 @@
     --zk-info-bg: #14294f;
     --zk-info-fg: #9cc2ff;
 
-    --color-teal-50: #0f2549;
-    --color-teal-100: #16356f;
-    --color-teal-200: #1d4695;
-    --color-teal-300: #2756b8;
-    --color-teal-400: #2a63d8;
-    --color-teal-500: #3978f6;
-    --color-teal-600: #679bf8;
-    --color-teal-700: #95b5f9;
-    --color-teal-800: #bccffb;
-    --color-teal-900: #dbe7fd;
-    --color-teal-950: #edf3fe;
+    --color-teal-50: #0b2646;
+    --color-teal-100: #103b6b;
+    --color-teal-200: #0d4885;
+    --color-teal-300: #0a57a3;
+    --color-teal-400: #0866c0;
+    --color-teal-500: #0972d5;
+    --color-teal-600: #3a9ef0;
+    --color-teal-700: #7cc2f8;
+    --color-teal-800: #b3dcfc;
+    --color-teal-900: #d8eefe;
+    --color-teal-950: #eef8ff;
 
-    --color-violet-50: #0f2549;
-    --color-violet-100: #16356f;
-    --color-violet-200: #1d4695;
-    --color-violet-300: #2756b8;
-    --color-violet-400: #2a63d8;
-    --color-violet-500: #3978f6;
-    --color-violet-600: #679bf8;
-    --color-violet-700: #95b5f9;
-    --color-violet-800: #bccffb;
-    --color-violet-900: #dbe7fd;
-    --color-violet-950: #edf3fe;
+    --color-violet-50: #0b2646;
+    --color-violet-100: #103b6b;
+    --color-violet-200: #0d4885;
+    --color-violet-300: #0a57a3;
+    --color-violet-400: #0866c0;
+    --color-violet-500: #0972d5;
+    --color-violet-600: #3a9ef0;
+    --color-violet-700: #7cc2f8;
+    --color-violet-800: #b3dcfc;
+    --color-violet-900: #d8eefe;
+    --color-violet-950: #eef8ff;
 
-    --color-purple-50: #0f2549;
-    --color-purple-100: #16356f;
-    --color-purple-200: #1d4695;
-    --color-purple-300: #2756b8;
-    --color-purple-400: #2a63d8;
-    --color-purple-500: #3978f6;
-    --color-purple-600: #679bf8;
-    --color-purple-700: #95b5f9;
-    --color-purple-800: #bccffb;
-    --color-purple-900: #dbe7fd;
-    --color-purple-950: #edf3fe;
+    --color-purple-50: #0b2646;
+    --color-purple-100: #103b6b;
+    --color-purple-200: #0d4885;
+    --color-purple-300: #0a57a3;
+    --color-purple-400: #0866c0;
+    --color-purple-500: #0972d5;
+    --color-purple-600: #3a9ef0;
+    --color-purple-700: #7cc2f8;
+    --color-purple-800: #b3dcfc;
+    --color-purple-900: #d8eefe;
+    --color-purple-950: #eef8ff;
   }
 }
 
@@ -168,7 +168,7 @@
     --zk-chip: #222226;
     --zk-seg: #111113;
     --zk-accent: #8fc9ff;
-    --zk-primary: #3b5bdb;
+    --zk-primary: #0972d5;
     --zk-ok-bg: #0f3326;
     --zk-ok-fg: #6ee7a8;
     --zk-bad-bg: #3a1517;
@@ -181,40 +181,40 @@
     --zk-info-bg: #14294f;
     --zk-info-fg: #9cc2ff;
 
-    --color-teal-50: #0f2549;
-    --color-teal-100: #16356f;
-    --color-teal-200: #1d4695;
-    --color-teal-300: #2756b8;
-    --color-teal-400: #2a63d8;
-    --color-teal-500: #3978f6;
-    --color-teal-600: #679bf8;
-    --color-teal-700: #95b5f9;
-    --color-teal-800: #bccffb;
-    --color-teal-900: #dbe7fd;
-    --color-teal-950: #edf3fe;
+    --color-teal-50: #0b2646;
+    --color-teal-100: #103b6b;
+    --color-teal-200: #0d4885;
+    --color-teal-300: #0a57a3;
+    --color-teal-400: #0866c0;
+    --color-teal-500: #0972d5;
+    --color-teal-600: #3a9ef0;
+    --color-teal-700: #7cc2f8;
+    --color-teal-800: #b3dcfc;
+    --color-teal-900: #d8eefe;
+    --color-teal-950: #eef8ff;
 
-    --color-violet-50: #0f2549;
-    --color-violet-100: #16356f;
-    --color-violet-200: #1d4695;
-    --color-violet-300: #2756b8;
-    --color-violet-400: #2a63d8;
-    --color-violet-500: #3978f6;
-    --color-violet-600: #679bf8;
-    --color-violet-700: #95b5f9;
-    --color-violet-800: #bccffb;
-    --color-violet-900: #dbe7fd;
-    --color-violet-950: #edf3fe;
+    --color-violet-50: #0b2646;
+    --color-violet-100: #103b6b;
+    --color-violet-200: #0d4885;
+    --color-violet-300: #0a57a3;
+    --color-violet-400: #0866c0;
+    --color-violet-500: #0972d5;
+    --color-violet-600: #3a9ef0;
+    --color-violet-700: #7cc2f8;
+    --color-violet-800: #b3dcfc;
+    --color-violet-900: #d8eefe;
+    --color-violet-950: #eef8ff;
 
-    --color-purple-50: #0f2549;
-    --color-purple-100: #16356f;
-    --color-purple-200: #1d4695;
-    --color-purple-300: #2756b8;
-    --color-purple-400: #2a63d8;
-    --color-purple-500: #3978f6;
-    --color-purple-600: #679bf8;
-    --color-purple-700: #95b5f9;
-    --color-purple-800: #bccffb;
-    --color-purple-900: #dbe7fd;
-    --color-purple-950: #edf3fe;
+    --color-purple-50: #0b2646;
+    --color-purple-100: #103b6b;
+    --color-purple-200: #0d4885;
+    --color-purple-300: #0a57a3;
+    --color-purple-400: #0866c0;
+    --color-purple-500: #0972d5;
+    --color-purple-600: #3a9ef0;
+    --color-purple-700: #7cc2f8;
+    --color-purple-800: #b3dcfc;
+    --color-purple-900: #d8eefe;
+    --color-purple-950: #eef8ff;
   }
 }

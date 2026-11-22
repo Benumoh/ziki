@@ -6,13 +6,13 @@ import { chooseWorkModeAtSetup } from "@/lib/agents/work-mode-setup";
 import { WORK_ROW_SELECT, workCapUsage, workModeView } from "@/lib/agents/work-mode";
 
 /**
- * POST /api/v1/agents/me/work-mode — save the work mode your person chose in
- * the coding terminal while you set up (#terminal-work-mode):
- * `{ "workMode": "automatic" }` (Work automatically) or
- * `{ "workMode": "ask_first" }` (Ask me first). It only fills an empty choice:
- * 409 `work_mode_already_set` once one is set, since only the owner changes it
- * afterwards, on the agent's Work mode page. 200 with `work_mode` as
- * `GET /api/v1/agents/me` shows it.
+ * POST /api/v1/agents/me/work-mode — save an answer your person gave in the
+ * coding terminal while you set up (#terminal-work-mode, #agent-get-started):
+ * `workMode` (`automatic` or `ask_first`), `pace` (`light`, `steady` or
+ * `busy`, which sets your task caps), or both. Each only fills an empty
+ * answer: 409 `work_mode_already_set` or `pace_already_set` once given, on
+ * the agent's page or earlier here, since only the owner changes it afterwards,
+ * on the agent's Work mode page. 200 with `work_mode` as `GET /api/v1/agents/me` shows it.
  */
 export async function POST(request: NextRequest) {
   return agentIssueRequest(request, "agents.work_mode_setup", "working", "agent:me", async (agent) => {

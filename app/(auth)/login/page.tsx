@@ -1,24 +1,36 @@
-import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import type { Metadata } from "next";
+import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
+import { AuthMethods, AuthStoryPage, type AuthStory } from "@/components/homepage/auth-story";
 import { isPasswordAuthEnabled } from "@/lib/auth-mode";
-import { isGoogleOAuthConfigured } from "@/lib/google-oauth";
+import { localLogins } from "@/lib/local-logins";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
-import { AuthLegalNote, AuthSplitFrame } from "./auth-split-frame";
+import { AuthLegalNote } from "./auth-split-frame";
 import { NOINDEX } from "@/lib/seo/site";
 
 /* Distinct browser-tab title; the root layout appends the site name. */
-export const metadata = {
+export const metadata: Metadata = {
   title: "Sign in",
   description: "Sign in to Ziki, the AI agent marketplace, to manage your projects and your AI agents.",
   robots: NOINDEX,
 };
 
+/** What has been waiting for them while they were away. */
+const story: AuthStory = {
+  kicker: "Welcome back",
+  title: <>Your agents kept <span className="th-accent">working</span></>,
+  beats: [
+    { when: "While you were away", what: "Agents found and fixed issues", detail: "Each fix checked by other agents." },
+    { when: "Waiting for you", what: "Your yes on what matters", detail: "Anything critical needs one click from you." },
+    { when: "Then", what: "It goes live", detail: "And the next fixes are already on their way." },
+  ],
+  promise: "Bring an agent? Its offers and earnings are waiting too.",
+};
+
 /**
- * Authenticated users are redirected to /bugs by middleware (`auth` wrapper).
- * Errors show fixed copy per `?error=` code only; any other query text (such
- * as the old `?reason=`) is never rendered (#118). Details are in server logs.
- * Google OAuth is the primary sign-in mechanism for Zedu Bugs.
- * Credentials stay when password auth is enabled (redesign mockup is Google-only).
+ * Sign in (#signup-page), in the same style as sign up, with Google as the default way in. Signed-in people are sent
+ * on by middleware. Errors show fixed copy per `?error=` code only; any other query text (such as the old
+ * `?reason=`) is never rendered (#118). Details are in server logs.
  */
 export default async function LoginPage({
   searchParams,
@@ -31,73 +43,45 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const callbackUrl = safeCallbackUrl(params.callbackUrl);
-  const googleConfigured = isGoogleOAuthConfigured();
-  const passwordEnabled = isPasswordAuthEnabled();
+  const quickLogins = localLogins();
 
   return (
-    <main>
-      <AuthSplitFrame
-        title="Sign in to Ziki"
-        description={
-          passwordEnabled
-            ? "Sign in with Google or your email to report, prioritize and track issues."
-            : "Use your Google account to report, prioritize and track issues."
-        }
-        showAgentDocs
-      >
-        {params.expired && !params.error ? (
-          <p
-            className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg"
-            role="status"
-          >
-            Your session ended. Sign in again to continue.
+    <AuthStoryPage story={story}>
+      <h2>Sign in to Ziki</h2>
+
+      {params.expired && !params.error ? (
+        <p className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg" role="status">
+          Your session ended. Sign in again to continue.
+        </p>
+      ) : null}
+
+      {params.error ? (
+        <div
+          className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <p className="font-medium">
+            {params.error === "TwoFactor"
+              ? "This account has two-factor sign-in on. Sign in with email and password, then enter the code. Google cannot skip that step."
+              : params.error === "OAuthCallbackError" || params.error === "Configuration"
+                ? "Unable to complete Google sign-in. Please try again."
+                : "Authentication failed. Please try again."}
           </p>
-        ) : null}
+        </div>
+      ) : null}
 
-        {params.error ? (
-          <div
-            className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg"
-            role="alert"
-            aria-live="assertive"
-            aria-atomic="true"
-          >
-            <p className="font-medium">
-              {params.error === "TwoFactor"
-                ? "This account has two-factor sign-in on. Sign in with email and password, then enter the code. Google cannot skip that step."
-                : params.error === "OAuthCallbackError" || params.error === "Configuration"
-                  ? "Unable to complete Google sign-in. Please try again."
-                  : "Authentication failed. Please try again."}
-            </p>
-          </div>
-        ) : null}
+      <AuthMethods
+        callbackUrl={callbackUrl}
+        emailForm={isPasswordAuthEnabled() ? <LoginForm callbackUrl={callbackUrl} quickLogins={quickLogins} /> : null}
+        emailOpen={params.error === "TwoFactor" || quickLogins.length > 0}
+      />
 
-        {passwordEnabled ? (
-          <LoginForm callbackUrl={callbackUrl} googleEnabled={googleConfigured} />
-        ) : googleConfigured ? (
-          <GoogleSignInButton callbackUrl={callbackUrl} />
-        ) : (
-          <div className="rounded-xl bg-zk-warn-bg p-4 text-sm text-zk-warn-fg" role="alert">
-            <p className="font-medium">Google sign-in is not configured.</p>
-            <p className="mt-1">
-              Set <code className="rounded bg-zk-chip px-1 font-mono">GOOGLE_CLIENT_ID</code> and
-              <code className="rounded bg-zk-chip px-1 font-mono">GOOGLE_CLIENT_SECRET</code>
-              in your environment to enable Google sign-in.
-            </p>
-            <p className="mt-2">
-              <a
-                href="https://console.cloud.google.com/apis/credentials"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-zk-accent hover:underline"
-              >
-                Configure in Google Cloud Console
-              </a>
-            </p>
-          </div>
-        )}
-
-        <AuthLegalNote />
-      </AuthSplitFrame>
-    </main>
+      <p className="su-switch">
+        New to Ziki? <Link href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Create a free account</Link>
+      </p>
+      <AuthLegalNote />
+    </AuthStoryPage>
   );
 }

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/superadmin/users", label: "Users" },
   { href: "/superadmin/orgs", label: "Organisations" },
+  { href: "/superadmin/leads", label: "Leads" },
   { href: "/superadmin/rewards", label: "Platform rewards" },
   { href: "/superadmin/money", label: "Money" },
   { href: "/superadmin/compare", label: "Compare directory" },

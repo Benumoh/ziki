@@ -17,7 +17,7 @@ export type CoinRow = Prisma.CoinEntryCreateManyInput;
 
 export class CoinError extends Error {
   constructor(
-    readonly code: "insufficient_ziks" | "invalid_amount" | "not_allowed" | "not_found" | "closed" | "payouts_not_ready" | "below_threshold" | "not_configured",
+    readonly code: "insufficient_ziks" | "invalid_amount" | "not_allowed" | "not_found" | "closed" | "payouts_not_ready" | "below_threshold" | "not_configured" | "out_of_funds" | "not_priced" | "paused",
     message: string,
   ) {
     super(message);
@@ -28,6 +28,20 @@ export class CoinError extends Error {
 /** Whole, positive Ziks. */
 export function assertAmount(amount: number): void {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new CoinError("invalid_amount", "Enter a whole number of Ziks above zero.");
+}
+
+/**
+ * Ziks to one decimal (#earnings-in-ziks): the ledger stores tenths (earnings move in exactly as earned), so every
+ * amount read from it, and every sum of amounts, goes through this to come back as a plain number rounded to a tenth.
+ */
+export function zikOf(value: { toString(): string } | number | null | undefined): number {
+  if (value == null) return 0;
+  return roundZik(typeof value === "number" ? value : Number(value.toString()));
+}
+
+/** A sum of Ziks rounded to a tenth, so float arithmetic (0.1 + 0.2) never leaves a stray digit. */
+export function roundZik(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 /**
@@ -50,12 +64,12 @@ export async function lockBug(tx: Tx, bugId: string): Promise<void> {
 
 export async function walletBalance(db: Db, userId: string): Promise<number> {
   const sum = await db.coinEntry.aggregate({ where: { account: "wallet", userId }, _sum: { amount: true } });
-  return sum._sum.amount ?? 0;
+  return zikOf(sum._sum.amount);
 }
 
 export async function escrowBalance(db: Db, bugId: string): Promise<number> {
   const sum = await db.coinEntry.aggregate({ where: { account: "escrow", bugId }, _sum: { amount: true } });
-  return sum._sum.amount ?? 0;
+  return zikOf(sum._sum.amount);
 }
 
 /** The Ziks held behind each of these issues, in one query, for lists. Issues with nothing held are left out. */
@@ -63,25 +77,38 @@ export async function escrowByBug(db: Db, bugIds: string[]): Promise<Map<string,
   if (bugIds.length === 0) return new Map();
   const rows = await db.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: bugIds } }, _sum: { amount: true } });
   const held = new Map<string, number>();
-  for (const row of rows) if (row.bugId && (row._sum.amount ?? 0) > 0) held.set(row.bugId, row._sum.amount ?? 0);
+  for (const row of rows) if (row.bugId && zikOf(row._sum.amount) > 0) held.set(row.bugId, zikOf(row._sum.amount));
   return held;
 }
 
+/** The wallet rows that count as earned: paid for an issue, or moved in from the points ledger (#earnings-in-ziks). */
+export const EARNED_KINDS = ["release", "earning"] as const;
+
 /**
- * What a person may withdraw: the Ziks they earned (released to them) less
- * what they already took out, never more than the wallet holds. Ziks they
- * bought are for spending on issues and checks, not for cashing out.
+ * What a person may withdraw: the Ziks they earned (released to them, or
+ * moved in from their points earnings) less what they already took out, never
+ * more than the wallet holds. Ziks they bought are for spending on issues and
+ * checks, not for cashing out.
  */
 export function withdrawableOf(balance: number, earnedNet: number): number {
-  return Math.max(0, Math.min(balance, earnedNet));
+  return roundZik(Math.max(0, Math.min(balance, earnedNet)));
 }
 
 export async function earnedNet(db: Db, userId: string): Promise<number> {
   const sum = await db.coinEntry.aggregate({
-    where: { account: "wallet", userId, kind: { in: ["release", "withdrawal", "withdrawal_reversal"] } },
+    where: { account: "wallet", userId, kind: { in: [...EARNED_KINDS, "withdrawal", "withdrawal_reversal"] } },
     _sum: { amount: true },
   });
-  return sum._sum.amount ?? 0;
+  return zikOf(sum._sum.amount);
+}
+
+/**
+ * Whether this person has ever earned Ziks: paid for solving an issue, or earnings moved in from the points ledger.
+ * Only they have anything to withdraw, so only they see Withdraw (someone who just posts issues never does). True even
+ * after they withdrew it all.
+ */
+export async function hasEarnedZiks(db: Db, userId: string): Promise<boolean> {
+  return (await db.coinEntry.count({ where: { account: "wallet", userId, kind: { in: [...EARNED_KINDS] }, amount: { gt: 0 } }, take: 1 })) > 0;
 }
 
 export async function walletSummary(db: Db, userId: string) {

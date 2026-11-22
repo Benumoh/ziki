@@ -9,7 +9,7 @@ import { ChangeGoal } from "./goal-form";
 export const metadata = { title: "Your earnings" };
 export const dynamic = "force-dynamic";
 
-const card = "rounded-[22px] border border-zk-border bg-zk-surface p-5 sm:p-6";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6";
 const label = "text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted";
 /** Where-it-came-from colours, in the bar's order: blue for the work, then quieter tones for the small things. */
 const SOURCE_DOT = ["bg-[#2f6fe4]", "bg-[#6f9bf0]", "bg-[#a9c4f7]", "bg-zk-ok-fg", "bg-[#5f6577]"];
@@ -134,7 +134,7 @@ export default async function EarningsPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-zk-muted">The $ in the header and Withdraw are for the workspace you are in. This page adds up every workspace.</p>
+          <p className="mt-3 text-xs text-zk-muted">The Ziks at the top of the page are everything you earned. Here is how it adds up, workspace by workspace.</p>
         </section>
       ) : null}
 

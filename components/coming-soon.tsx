@@ -13,7 +13,7 @@ export function ComingSoon({
   children: ReactNode;
 }) {
   return (
-    <section className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 rounded-[24px] border border-zk-border bg-zk-surface px-6 py-12 text-center">
+    <section className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 rounded-panel border border-zk-border bg-zk-surface px-6 py-12 text-center">
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zk-tint text-zk-accent">{icon}</span>
       <span className="rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
         Coming soon

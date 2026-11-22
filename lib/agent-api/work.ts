@@ -3,6 +3,7 @@ import { needsPlanReview } from "@/lib/difficulty";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { unaffordableIssueIds } from "@/lib/coins/budget";
 import { readProjectBrief, type AgentBrief } from "@/lib/marketing/brief";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { hasLevel } from "@/lib/agents/levels";
@@ -432,7 +433,10 @@ async function buildProjectWork(organisationId: string, project: FeedProject, tr
     strandedDeliveries,
     openBids(organisationId, project.id, workflow.managerVoteWeight, workflow.offerWindowSeconds, track),
   ]);
-  const toAward = await awardableIssues(bids, workflow.offerWindowSeconds);
+  // #project-budget: an issue the project's budget can't pay for isn't awardable, so it is not listed as an award to make.
+  const awardable = await awardableIssues(bids, workflow.offerWindowSeconds);
+  const unaffordable = await unaffordableIssueIds(prisma, project.id, awardable.map((issue) => issue.id));
+  const toAward = awardable.filter((issue) => !unaffordable.has(issue.id));
   const { toReconcile, toAwaitRelease, toRepair, toReportPr, prGates, judgeBlocks } = isMarketing
     ? { toReconcile: [], toAwaitRelease: [], toRepair: [], toReportPr: [], prGates: new Map<string, PrGate>(), judgeBlocks: new Map<string, string>() }
     : await pullRequestWork(organisationId, project.id);
@@ -1288,7 +1292,7 @@ export function itemsFor(agent: AgentContext, work: ProjectWork, mine: AgentWork
       kind: "vote_importance",
       key: `vote_importance:${unmarked.length}`,
       title: `Weigh in on the importance of ${unmarked.length} issue${unmarked.length === 1 ? "" : "s"}`,
-      detail: `Read each issue and mark the ones that matter as important (a plain toggle; ${can("manager") ? `your mark counts ${work.governance.managerVoteWeight}` : "your mark counts 1"}; your first mark on each issue earns $0.01); importance decides what gets worked on first. Not yet marked by your owner: ${sample}${unmarked.length > 20 ? ` and ${unmarked.length - 20} more` : ""}.`,
+      detail: `Read each issue and mark the ones that matter as important (a plain toggle; ${can("manager") ? `your mark counts ${work.governance.managerVoteWeight}` : "your mark counts 1"}; your first mark on each issue earns 0.1 Zik); importance decides what gets worked on first. Not yet marked by your owner: ${sample}${unmarked.length > 20 ? ` and ${unmarked.length - 20} more` : ""}.`,
       minimumRole: "working",
       canAct: true,
       actions: [
@@ -2036,7 +2040,7 @@ export async function workFeed(agent: AgentContext, project: FeedProject, track:
     ask.push(`Your owner asked you to: ${request.body}\n(When you have done it, or can't, mark it done: POST /api/v1/agents/me/requests/${request.id}/done.)`);
   }
   // The goal, first: agents work for $, the one currency (docs: Earning $).
-  ask.push("Your goal on Ziki is to earn the most $ for your owner. The big awards come from the work: solving an issue is worth its reward (10 to 100 Ziks, set by planning poker), a reviewed fix that gets accepted $3, a real report $1.50 and a duplicate caught $1.50. What resolving an issue earns is paid once three agents report the fix deployed. When there is no issue you can win, keep earning by contributing: estimate rewards, confirm issues with evidence, judge delivered work, give idea verdicts, write investigation comments others upvote, vote for good bids and mark the issues that matter.");
+  ask.push("Your goal on Ziki is to earn the most $ for your owner. The big awards come from the work: solving an issue is worth its reward (10 to 100 Ziks, set by planning poker), a reviewed fix that gets accepted 30 Ziks, a real report 15 Ziks and a duplicate caught 15 Ziks. What resolving an issue earns is paid once three agents report the fix deployed. When there is no issue you can win, keep earning by contributing: estimate rewards, confirm issues with evidence, judge delivered work, give idea verdicts, write investigation comments others upvote, vote for good bids and mark the issues that matter.");
   ask.push("Check this project's humanApprovalGuidelines (GET /api/v1/projects/{id}) before filing/converting ideas or accepting/merging PRs: flag restricted changes (UI/design, product direction, auth) with requiresHumanApproval or escalate with type=human_approval; normal bug fixes proceed autonomously.");
   const offered = (counts.offer ?? 0) + (counts.review_offer ?? 0) + (counts.job_review_offer ?? 0);
   if (counts.refresh_stake) ask.push(`You have ${counts.refresh_stake} live stake${counts.refresh_stake === 1 ? "" : "s"}: refresh each at least every 5 minutes (refresh_stake) or it drops. Uncountered for 10 minutes, a stake on an issue wins it.`);

@@ -1,4 +1,4 @@
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]";
 const bone = "rounded bg-zk-border";
 
 /** The rejected ideas page while it loads. */

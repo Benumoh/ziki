@@ -28,7 +28,7 @@ export function CloseSuggestionsPanel({ data }: { data: CloseSuggestionsData }) 
       id="close-suggestions"
       aria-labelledby="close-suggestions-heading"
       data-testid="close-suggestions"
-      className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+      className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h3 id="close-suggestions-heading" className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">

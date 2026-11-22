@@ -27,7 +27,9 @@ export default async function MoneyPage() {
 
   const tiles = [
     { label: "Total bought", zik: totals.bought, note: "Ziks paid for through Stripe" },
+    { label: "From earnings", zik: totals.fromEarnings, note: "Moved in from people's points earnings, paid for by Ziki" },
     { label: "Held in escrow", zik: totals.inEscrow, note: "Behind issues, not yet paid out" },
+    { label: "In project budgets", zik: totals.inBudgets, note: "Behind whole projects, not yet reserved for an issue" },
     { label: "Owed to earners", zik: totals.owedToEarners, note: "Earned and not yet withdrawn" },
     { label: "Withdrawn", zik: totals.withdrawn, note: totals.pendingWithdrawals > 0 ? `${formatZik(totals.pendingWithdrawals)} still on its way` : "Sent to earners' Stripe accounts" },
     { label: "Ziki revenue", zik: totals.revenue, note: `${formatZik(totals.revenueFromFees)} fees, ${formatZik(totals.revenueFromChecks)} security checks` },

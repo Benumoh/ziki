@@ -1,13 +1,11 @@
 import { ZIKS_PER_DOLLAR } from "@/lib/coins/math";
 
 /**
- * The contributor ledger's rules (#428). Ziki has one currency, the $
- * (#z-currency): every ledger amount, award, goal and setting is in $, and
- * $ is all anyone is shown. Super admins can override the amounts.
+ * The contributor ledger's rules (#428). The ledger keeps every amount, award,
+ * goal and setting in dollars, but people are shown Ziks (#earnings-in-ziks):
+ * 10 Ziks a dollar, the currency their earnings move into
+ * (lib/coins/earnings-sync.ts). Super admins can override the amounts.
  */
-
-/** The currency's symbol. */
-export const Z_SYMBOL = "$";
 
 /**
  * An issue's reward (#rewards): what solving it pays, from $1 (easy) to $10
@@ -73,16 +71,26 @@ export const DUPLICATE_MARKER_POINTS = 1.5;
 export const POINT_DECIMALS = 4;
 
 /**
- * An amount as people see it: "$12", "$0.90", "-$1.50". Whole amounts show
- * no decimals; others two (a share smaller than $0.01 still shows as $0.01).
+ * A ledger amount (dollars) as people see it, in Ziks: $12 is "120 Ziks", $0.67 is "6.7 Ziks", -$1.50 is
+ * "-15 Ziks". One decimal at most; a share smaller than 0.1 Zik still shows as 0.1.
  */
 export function formatZ(value: number): string {
-  const amount = roundPoints(value);
-  const abs = Math.abs(amount);
-  const whole = Number.isInteger(abs);
-  const shown = !whole && abs > 0 && abs < 0.01 ? 0.01 : abs;
-  const text = shown.toLocaleString("en-US", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
-  return `${amount < 0 ? "-" : ""}${Z_SYMBOL}${text}`;
+  const { text, one } = zikFigure(value);
+  return `${text} ${one ? "Zik" : "Ziks"}`;
+}
+
+/** The number formatZ shows, without the word: for beside the Zik symbol (components/zik-symbol.tsx). */
+export function formatZNumber(value: number): string {
+  return zikFigure(value).text;
+}
+
+function zikFigure(value: number): { text: string; one: boolean } {
+  const ziks = roundPoints(value) * ZIKS_PER_DOLLAR;
+  const abs = Math.abs(ziks);
+  const tenths = Math.round(abs * 10) / 10;
+  const shown = abs > 0 && tenths === 0 ? 0.1 : tenths;
+  const text = shown.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  return { text: `${ziks < 0 && shown > 0 ? "-" : ""}${text}`, one: shown === 1 };
 }
 
 /**
