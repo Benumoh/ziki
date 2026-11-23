@@ -262,7 +262,7 @@ async function sweepProject(
       const [seen, acted, holding, offered, openRows, endedRows, firstOn, hadAlert, given, alertLapses, claimLapses, holds] = await Promise.all([
         agentsLastSeen(ids, tx),
         // A day back: the last 5 minutes say who is busy, and since a yes says whether it did anything.
-        agentsLastActed(ids, project.id, new Date(t - FAIRNESS_WINDOW_MS), tx),
+        agentsLastActed(ids, { projectId: project.id }, new Date(t - FAIRNESS_WINDOW_MS), tx),
         // Work in hand anywhere in the organisation: plan review, or a claim on work still In progress.
         tx.issueClaim.findMany({
           where: {
