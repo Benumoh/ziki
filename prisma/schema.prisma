@@ -1337,6 +1337,13 @@ model Membership {
   userId         String
   role           MembershipRole @default(member)
   createdAt      DateTime       @default(now())
+  /// Join questions (#join-questions, lib/join-questions.ts): why they joined ("team", "user", "helper",
+  /// "looking"), what they're good at, and how much time they have ("minutes", "hour", "daily"). Null or
+  /// empty when skipped. `joinAnsweredAt` is when they answered or closed the card; null means it is still to ask.
+  joinReason     String?
+  strengths      String[]       @default([])
+  weeklyTime     String?
+  joinAnsweredAt DateTime?
   organisation   Organisation   @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
