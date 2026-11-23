@@ -178,6 +178,8 @@ export function projectAgentState({
 
 export type ProjectAgentClaim = {
   id: string;
+  /** The issue's id. */
+  bugId: string;
   status: "offered" | "planning" | "active";
   issueNumber: number;
   issueTitle: string;
@@ -257,20 +259,28 @@ export function focusOf(agent: ProjectAgent): { text: string; claim: ProjectAgen
 /** Where an owner answers their agents' questions. */
 export const QUESTIONS_HREF = "/inbox?tab=escalations";
 
+/** The note a nudge sends a stuck agent: a steer note (sendIssueSteer), read on its next poll. */
+export function nudgeNote(issueNumber: number): string {
+  return `You've gone quiet on #${issueNumber}. Send a heartbeat saying where you are and what's next, or release the issue if you can't finish it.`;
+}
+
+/** The viewer's one step: a link to where it is taken, or a nudge sent from the row itself. */
+export type AgentStep = { kind: "link"; label: string; href: string } | { kind: "nudge"; label: string; claim: ProjectAgentClaim };
+
 /**
  * The one thing the viewer can do about the agent, if any (#owner-control: people act through their agents).
- * Its owner answers its question, accepts an offer it hasn't, or checks on work it is stuck on (more time, or
- * stop it); anyone else can review work it delivered. Each step is taken where it already lives: the inbox,
- * or the issue's Your turn card and ⋯ menu.
+ * Its owner answers its question, accepts an offer it hasn't, or nudges it when it is stuck (a steer note,
+ * as on the issue page: only the owner may steer their agent); anyone else can review work it delivered.
+ * The links go where each step already lives: the inbox, or the issue's Your turn card.
  */
-export function stepFor(agent: ProjectAgent, viewerId: string): { label: string; href: string } | null {
+export function stepFor(agent: ProjectAgent, viewerId: string): AgentStep | null {
   const own = agent.ownerUserId === viewerId;
-  if (own && agent.status === "waiting") return { label: "Answer it", href: QUESTIONS_HREF };
+  if (own && agent.status === "waiting") return { kind: "link", label: "Answer it", href: QUESTIONS_HREF };
   const { claim } = focusOf(agent);
   if (!claim) return null;
-  if (own && claim.status === "offered") return { label: "Accept the offer", href: claim.href };
-  if (own && claim.stuck) return { label: "Check on it", href: claim.href };
-  if (!own && agent.status === "delivered") return { label: "Review it", href: claim.href };
+  if (own && claim.status === "offered") return { kind: "link", label: "Accept the offer", href: claim.href };
+  if (own && claim.stuck) return { kind: "nudge", label: "Nudge it", claim };
+  if (!own && agent.status === "delivered") return { kind: "link", label: "Review it", href: claim.href };
   return null;
 }
 
@@ -306,6 +316,7 @@ export async function loadProjectAgents({
         waitingOnOwnerSince: true,
         bug: {
           select: {
+            id: true,
             number: true,
             title: true,
             status: true,
@@ -384,6 +395,7 @@ export async function loadProjectAgents({
       openBids,
       claims: own.map((claim, index) => ({
         id: claim.id,
+        bugId: claim.bug.id,
         status: signals[index]!.status,
         issueNumber: claim.bug.number,
         issueTitle: claim.bug.title,

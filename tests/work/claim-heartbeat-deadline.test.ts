@@ -34,7 +34,7 @@ import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { currentHold } from "@/lib/issue-holders";
 import { staleHold } from "@/lib/agent-api/stale-hold";
 import { classifyAgentStatus, isClaimStalled, loadOwnAgents } from "@/lib/dashboard-overview";
-import { focusOf, holdsWork, isOnlineNow, projectAgentState, stepFor, NOT_RESPONDING_AFTER_MS, QUESTIONS_HREF, type HeldClaimSignal, type ProjectAgent, type ProjectAgentClaim } from "@/lib/agents/project-agents";
+import { focusOf, holdsWork, isOnlineNow, nudgeNote, projectAgentState, stepFor, NOT_RESPONDING_AFTER_MS, QUESTIONS_HREF, type HeldClaimSignal, type ProjectAgent, type ProjectAgentClaim } from "@/lib/agents/project-agents";
 import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -547,7 +547,7 @@ describe("agents at work in a project (#online-agents)", () => {
   });
 
   const held = (extra: Partial<ProjectAgentClaim> = {}): ProjectAgentClaim => ({
-    id: "c", status: "active", issueNumber: 7, issueTitle: "Fix login", issueStatus: "in_progress", href: "/acme/web/7", stuck: false, unanswered: false, ...extra,
+    id: "c", bugId: "bug-7", status: "active", issueNumber: 7, issueTitle: "Fix login", issueStatus: "in_progress", href: "/acme/web/7", stuck: false, unanswered: false, ...extra,
   });
   const agent = (extra: Partial<ProjectAgent> = {}): ProjectAgent => ({
     id: "a", name: "Ada's Claude", username: "ada-claude", avatar: null, ownerUserId: "ada", ownerName: "Ada",
@@ -572,17 +572,20 @@ describe("agents at work in a project (#online-agents)", () => {
   });
 
   it("offers the viewer one step, only where they can take it", () => {
-    // Its owner answers its question, accepts its offer, or checks on work it is stuck on.
-    expect(stepFor(agent({ status: "waiting" }), "ada")).toEqual({ label: "Answer it", href: QUESTIONS_HREF });
+    // Its owner answers its question, accepts its offer, or nudges it when it is stuck.
+    expect(stepFor(agent({ status: "waiting" }), "ada")).toEqual({ kind: "link", label: "Answer it", href: QUESTIONS_HREF });
     const offered = agent({ status: "offered", claims: [held({ status: "offered", issueStatus: "open" })] });
-    expect(stepFor(offered, "ada")).toEqual({ label: "Accept the offer", href: "/acme/web/7" });
-    expect(stepFor(agent({ status: "stuck", claims: [held({ stuck: true })] }), "ada")?.label).toBe("Check on it");
-    // Someone else can't answer for it, accept for it or unstick it…
+    expect(stepFor(offered, "ada")).toEqual({ kind: "link", label: "Accept the offer", href: "/acme/web/7" });
+    const stuck = agent({ status: "stuck", claims: [held({ stuck: true })] });
+    expect(stepFor(stuck, "ada")).toMatchObject({ kind: "nudge", label: "Nudge it", claim: { bugId: "bug-7" } });
+    expect(nudgeNote(7)).toContain("#7");
+    // Someone else can't answer for it, accept for it or nudge it (only an owner may steer their agent)…
     expect(stepFor(agent({ status: "waiting" }), "bo")).toBeNull();
     expect(stepFor(offered, "bo")).toBeNull();
+    expect(stepFor(stuck, "bo")).toBeNull();
     // …but can review what it delivered; its owner can't review their own agent's work.
     const delivered = agent({ status: "delivered", claims: [held({ issueStatus: "done" })] });
-    expect(stepFor(delivered, "bo")).toEqual({ label: "Review it", href: "/acme/web/7" });
+    expect(stepFor(delivered, "bo")).toEqual({ kind: "link", label: "Review it", href: "/acme/web/7" });
     expect(stepFor(delivered, "ada")).toBeNull();
     // Working along with nothing wrong: nothing to do.
     expect(stepFor(agent(), "ada")).toBeNull();

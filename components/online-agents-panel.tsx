@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { formatAgo } from "@/lib/activity/board";
-import { focusOf, holdsWork, isOnlineNow, stepFor, type ProjectAgent } from "@/lib/agents/project-agents";
+import { focusOf, holdsWork, isOnlineNow, nudgeNote, stepFor, type ProjectAgent } from "@/lib/agents/project-agents";
 import { agentPageHref } from "@/lib/header-nav";
+import { NudgeButton } from "@/components/nudge-button";
 
 /** The first this many show; the rest sit behind "Show N more". */
 const SHOWN = 8;
+
+/** A row's one step: a small secondary button. */
+const STEP_BUTTON =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center rounded-control border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue disabled:cursor-default disabled:opacity-60";
 
 function AgentRow({ agent, viewerId, online, now }: { agent: ProjectAgent; viewerId: string; online: boolean; now: Date }) {
   const { text, claim } = focusOf(agent);
@@ -42,13 +47,12 @@ function AgentRow({ agent, viewerId, online, now }: { agent: ProjectAgent; viewe
           ) : null}
         </p>
       </div>
-      {step ? (
-        <Link
-          href={step.href}
-          className="inline-flex h-8 shrink-0 items-center rounded-control border border-zk-border bg-zk-surface px-3 text-[13px] font-semibold text-zk-text hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
-        >
+      {step?.kind === "link" ? (
+        <Link href={step.href} className={STEP_BUTTON}>
           {step.label}
         </Link>
+      ) : step?.kind === "nudge" ? (
+        <NudgeButton agentId={agent.id} issueId={step.claim.bugId} note={nudgeNote(step.claim.issueNumber)} label={step.label} className={STEP_BUTTON} />
       ) : null}
     </li>
   );

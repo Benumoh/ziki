@@ -264,8 +264,10 @@ export async function WorkQueue({
   const now = at.getTime();
   const several = projects.length > 1;
 
+  // The Overview and Online tabs are cards, as wide as the Overview page and the lists (max-w-[920px]) so they
+  // line up from page to page; the issue tables keep the room their ten columns need.
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4">
+    <div className={`mx-auto w-full space-y-4 ${overview || online ? "max-w-[920px]" : "max-w-6xl"}`}>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="sr-only">Work queue</h1>
         {/* Where you are: the project's lists, then this page. */}
