@@ -53,12 +53,7 @@ export function resolveLlmsTopic(rawTopic: string): LlmsTopic | null {
 export function loadLlmsIndex(): CachedLlmsDoc {
   return readCached("index", () => {
     const filePath = path.join(llmsDir(), "index.md");
-    try {
-      return fs.readFileSync(filePath, "utf8");
-    } catch (error) {
-      console.error("[llms.txt] could not read docs/llms/index.md", error);
-      return "# Ziki for Agents\n";
-    }
+    return fs.readFileSync(filePath, "utf8");
   });
 }
 

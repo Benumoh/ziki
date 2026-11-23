@@ -26,9 +26,9 @@ describe("Modular /llms.txt and /llms/*.md documentation routes", () => {
     expect(byteLength).toBeGreaterThan(2_000);
     expect(byteLength).toBeLessThan(12_000);
 
-    // Every /llms/*.md link referenced in index.md must resolve to a valid topic
+    // Every topic in LLMS_TOPICS must be linked in index.md and resolve cleanly
     const matches = [...body.matchAll(/\/llms\/([a-z0-9-]+\.md)/g)].map((m) => m[1]);
-    expect(matches.length).toBeGreaterThanOrEqual(LLMS_TOPICS.length);
+    expect(new Set(matches)).toEqual(new Set(LLMS_TOPICS.map((t) => `${t}.md`)));
     for (const filename of matches) {
       expect(resolveLlmsTopic(filename)).not.toBeNull();
     }
@@ -97,6 +97,52 @@ describe("Modular /llms.txt and /llms/*.md documentation routes", () => {
     });
     const body = await res.text();
     expect(body).toContain("## Agent profile");
+    expect(body).not.toContain('"help_url": "https://ziki.dev/llms.txt"');
+    expect(body).not.toContain('"profile_help_url": "https://ziki.dev/llms.txt#agent-profile"');
+  });
+
+  it("ensures every same-file and cross-file #anchor link in docs/llms/*.md resolves", async () => {
+    const slugify = (heading: string) =>
+      heading
+        .trim()
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/ /g, "-");
+
+    const bodies = new Map<string, string>();
+    const headingsByFile = new Map<string, Set<string>>();
+
+    for (const slug of LLMS_TOPICS) {
+      const filename = `${slug}.md`;
+      const res = await getLlmsTopic(new Request(`https://ziki.dev/llms/${filename}`), {
+        params: Promise.resolve({ topic: filename }),
+      });
+      const text = await res.text();
+      bodies.set(filename, text);
+      const headings = new Set<string>();
+      for (const line of text.split(/\r?\n/)) {
+        const match = /^#{1,6}\s+(.+)$/.exec(line);
+        if (match) headings.add(slugify(match[1]));
+      }
+      headingsByFile.set(filename, headings);
+    }
+
+    const broken: string[] = [];
+    for (const [filename, text] of bodies) {
+      const ownHeadings = headingsByFile.get(filename)!;
+      for (const m of text.matchAll(/\[[^\]]+\]\(#([a-z0-9-]+)\)/g)) {
+        if (!ownHeadings.has(m[1])) {
+          broken.push(`${filename}: same-file #${m[1]}`);
+        }
+      }
+      for (const m of text.matchAll(/\[[^\]]+\]\(\/llms\/([a-z0-9-]+\.md)#([a-z0-9-]+)\)/g)) {
+        const targetHeadings = headingsByFile.get(m[1]);
+        if (!targetHeadings || !targetHeadings.has(m[2])) {
+          broken.push(`${filename}: cross-file /llms/${m[1]}#${m[2]}`);
+        }
+      }
+    }
+    expect(broken).toEqual([]);
   });
 
   it("allows /llms.txt, /llms-full.txt, and /llms/*.md through public auth middleware", () => {
