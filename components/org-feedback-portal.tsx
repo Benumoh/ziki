@@ -1,100 +1,24 @@
 "use client";
-
-import { FeedbackPageHeader } from "@/components/feedback-page-header";
-import { feedbackTextLink, feedbackBackLink } from "@/components/feedback-portal-styles";
-
-import { PortalSearch } from "@/components/portal-search";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import Link from "next/link";
+import { FeedbackPageHeader } from "@/components/feedback-page-header";
+import { FeedbackPortalSidebar } from "@/components/feedback-portal-sidebar";
+import { PortalSearch } from "@/components/portal-search";
 import { publicFeedbackPath } from "@/lib/public-project-paths";
-
-export type OrgFeedbackProjectCardItem = {
-  id: string;
-  slug: string;
-  name: string;
-  description: string;
-  platforms?: string[];
-};
-
-export function OrgFeedbackPortal({
-  orgSlug,
-  orgName,
-  projects,
-  initialQuery = "",
-  returnHref,
-}: {
-  orgSlug: string;
-  orgName: string;
-  projects: OrgFeedbackProjectCardItem[];
-  initialQuery?: string;
-  returnHref?: string;
-}) {
+import { TILE_TONES, toneForName } from "@/lib/pill-tones";
+export type OrgFeedbackProjectCardItem = { id: string; slug: string; name: string; description: string; platforms?: string[] };
+export function OrgFeedbackPortal({ orgSlug, orgName, projects, initialQuery = "" }: { orgSlug: string; orgName: string; projects: OrgFeedbackProjectCardItem[]; initialQuery?: string; returnHref?: string }) {
   const [query, setQuery] = useState(initialQuery);
+  const [visibleCount, setVisibleCount] = useState(7);
   const needle = query.trim().toLowerCase();
-  const filtered = projects.filter(project =>
-    (!needle || [project.name, project.description, project.slug].some(value => value.toLowerCase().includes(needle)))
-  );
-
-  return (
-    <div className="mx-auto -mt-1 w-full max-w-[920px] pb-6 sm:-mt-4">
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Link
-            href={returnHref ?? `/${encodeURIComponent(orgSlug)}`}
-            className={feedbackBackLink}
-          >
-            <span aria-hidden="true">←</span> {returnHref === "/discover" ? "Back to Discover" : "Back to projects"}
-          </Link>
-          <FeedbackPageHeader title="Feedback portal" identity={orgName} description="Choose a project to browse its feedback, report a problem, or suggest an improvement." />
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="flex min-w-8 flex-1 items-center"><PortalSearch label="Search projects" placeholder="Search by project name…" value={query} onValueChange={setQuery} /></div>
-          <Link href={`/${encodeURIComponent(orgSlug)}/feedback?view=ideas`} className={feedbackTextLink}>View all feedback ideas →</Link>
-        </div>
-
-
-        {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-zk-border bg-zk-surface p-10 text-center">
-            <h2 className="text-base font-semibold text-zk-text">No projects found</h2>
-            <p className="mt-1 text-sm text-zk-text2">
-              {needle
-                ? "Try searching with a different project name."
-                : "No projects are available for feedback right now."}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <caption className="sr-only">Products available in the {orgName} feedback portal</caption>
-                <thead className="border-b border-zk-border bg-zk-chip/50 text-xs font-semibold text-zk-text2">
-                  <tr><th scope="col" className="px-5 py-3 sm:w-1/4">Product</th><th scope="col" className="hidden px-5 py-3 sm:table-cell">About</th><th scope="col" className="w-[148px] px-5 py-3 text-left">Explore</th></tr>
-                </thead>
-                <tbody className="divide-y divide-zk-divider">
-                  {filtered.map(project => (
-                    <tr key={project.id} className="transition hover:bg-zk-chip/40">
-                      <td className="px-5 py-4 align-middle">
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <Link href={publicFeedbackPath({ orgSlug, projectSlug: project.slug })} className="rounded-sm text-sm font-semibold text-zk-text hover:text-zk-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent">{project.name}</Link>
-                            <p className="mt-1 line-clamp-2 max-w-48 text-xs text-zk-muted sm:hidden">{project.description}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="hidden max-w-sm px-5 py-4 align-middle text-sm leading-6 text-zk-text2 sm:table-cell"><p className="line-clamp-2">{project.description}</p></td>
-                      <td className="whitespace-nowrap px-5 py-4 text-left align-middle">
-                        <Link href={publicFeedbackPath({ orgSlug, projectSlug: project.slug })} aria-label={`View details for ${project.name}`} className={feedbackTextLink}>View details <span aria-hidden="true">→</span></Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-    </div>
-  );
+  const filtered = projects.filter(project => [project.name, project.description, project.slug].some(value => value.toLowerCase().includes(needle)));
+  return <div className="space-y-4 pb-6"><FeedbackPageHeader title="Feedback portal" identity={orgName} description="Explore products, share feedback, and follow progress." />
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <section aria-label="Products" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface p-4">
+        <PortalSearch label="Search projects" placeholder="Search projects" value={query} onValueChange={value => { setQuery(value); setVisibleCount(7); }} muted alwaysExpanded />
+        {filtered.length ? <ul className="mt-3 divide-y divide-zk-divider">{filtered.slice(0, visibleCount).map(project => <li key={project.id}><Link href={publicFeedbackPath({ orgSlug, projectSlug: project.slug })} aria-label={`Open ${project.name}`} className="group flex items-center gap-3 rounded-lg px-2 py-5 transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-zk-accent"><span aria-hidden="true" style={TILE_TONES[toneForName(project.name)]} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-medium">{project.name.charAt(0).toUpperCase()}</span><div className="min-w-0 flex-1"><h2 className="text-[15px] font-medium group-hover:text-zk-accent">{project.name}</h2><p className="mt-1 line-clamp-2 text-sm leading-5 text-zk-muted">{project.description}</p></div><span aria-hidden="true" className="text-lg text-zk-muted">›</span></Link></li>)}</ul> : <div className="px-2 py-8"><h2 className="text-sm font-medium">No projects found</h2><p className="mt-1 text-sm text-zk-muted">{needle ? "Try another project name." : "No projects are available for feedback right now."}</p></div>}
+        {visibleCount < filtered.length ? <div className="mt-3 flex justify-center"><Button variant="secondary" onClick={() => setVisibleCount(count => count + 7)}>Show more</Button></div> : null}
+      </section><FeedbackPortalSidebar orgSlug={orgSlug} guide />
+    </div></div>;
 }

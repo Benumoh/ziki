@@ -2,17 +2,18 @@ import type { ReactNode } from "react";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 
 /** The same compact app strip used above Ziki's work feed. */
-export function FeedbackPageHeader({ title, description, identity, actions, surface = "muted" }: {
+export function FeedbackPageHeader({ title, description, identity, actions, surface = "muted", compact = false }: {
   title: string;
   description: ReactNode;
   identity: string;
   actions?: ReactNode;
   surface?: "muted" | "white";
+  compact?: boolean;
 }) {
   return (
-    <header className={`flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-zk-border px-5 py-4 ${surface === "white" ? "bg-zk-surface" : "bg-zk-text/[0.045]"}`}>
+    <header className={`flex w-full flex-wrap items-center justify-between gap-3 rounded-panel border border-zk-border px-5 ${compact ? "py-3" : "py-4"} ${surface === "white" ? "bg-zk-surface" : "bg-zk-text/[0.045]"}`}>
       <div className="flex min-w-0 flex-1 items-center gap-3.5">
-        <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] text-[16px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[toneForName(identity)]}>
+        <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-control text-[16px] font-medium ${compact ? "h-8 w-8" : "h-10 w-10"}`} style={TILE_TONES[toneForName(identity)]}>
           {identity.charAt(0).toUpperCase()}
         </span>
         <div className="min-w-0">

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { FeedbackPageHeader } from "@/components/feedback-page-header";
 import { feedbackPrimaryAction, feedbackSecondaryAction, feedbackTextLink } from "@/components/feedback-portal-styles";
 import { Input } from "@/components/ui/input";
@@ -285,38 +286,29 @@ export function PublicContributorForm({
         : submittedData.trackingPath;
 
     return (
-      <section aria-labelledby="report-received-title" className="w-full overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <header className="border-b border-zk-divider px-5 py-4 sm:px-6">
-          <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zk-tint text-zk-accent" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6" /></svg>
-            </span>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs font-medium text-zk-muted">{project.name} · Feedback submitted</p>
-              <h2 id="report-received-title" className="text-lg font-semibold tracking-tight text-zk-text">Report received</h2>
-              <p className="text-sm leading-6 text-zk-text2">Thank you for helping improve {project.name}. Your feedback is now an idea for agents to review.</p>
-            </div>
-          </div>
-        </header>
+      <div className="mx-auto w-full max-w-[920px] space-y-3">
+        <FeedbackPageHeader compact title="Feedback received" identity={project.name} description={`${project.name} · Your feedback has been submitted.`} />
+        <section aria-label="Submission confirmation" className="mx-auto w-full max-w-[920px] overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
+          <div role="status" className="flex items-center gap-3 px-5 pt-5 text-sm sm:px-6"><span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zk-ok-bg text-zk-ok-fg">✓</span><p>Your feedback is now an Idea in the {project.name} project.</p></div>
 
         <div className="space-y-4 px-5 py-4 sm:px-6">
-          <div className="space-y-2 rounded-xl bg-zk-chip/50 p-4">
+          <div className="space-y-2 rounded-panel bg-zk-chip/50 p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zk-muted">Your feedback</h3>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-zk-tint px-2.5 py-1 text-xs font-semibold text-zk-accent"><span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />{submittedData.status ?? "Awaiting review"}</span>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-zk-muted">Your feedback</h3>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-zk-tint px-2.5 py-1 text-xs font-medium text-zk-accent"><span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />{submittedData.status ?? "Awaiting review"}</span>
             </div>
             <p className="break-words text-sm font-medium leading-6 text-zk-text">{submittedData.title}</p>
           </div>
 
-          <div className="rounded-xl border border-zk-border bg-zk-chip/50 p-4 sm:p-5">
-            <label htmlFor="tracking-link-input" className="block text-sm font-semibold text-zk-text">{privateTracking ? "Your private tracking link" : "Your submission link"}</label>
+          <div className="rounded-panel border border-zk-border bg-zk-chip/50 p-4 sm:p-5">
+            <label htmlFor="tracking-link-input" className="block text-sm font-medium text-zk-text">{privateTracking ? "Your private tracking link" : "Your submission link"}</label>
             <p className="mt-1 text-sm leading-6 text-zk-text2">{privateTracking ? "Keep this link to check progress. Anyone with it can view your report." : "Return to your submission while signed in to check its progress."}</p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <Input id="tracking-link-input" readOnly value={fullTrackingUrl} className="min-w-0 flex-1 border-zk-border bg-zk-surface font-mono text-xs text-zk-text2 shadow-none! focus:border-zk-accent focus:ring-zk-accent/20" />
-              <button type="button" aria-label={copiedTrackingLink ? "Tracking link copied" : "Copy tracking link"} onClick={async () => { setCopiedTrackingLink(await copyText(fullTrackingUrl)); setTimeout(() => setCopiedTrackingLink(false), 2000); }} className={`${feedbackSecondaryAction} shrink-0`}>
+              <Button variant="secondary" type="button" aria-label={copiedTrackingLink ? "Tracking link copied" : "Copy tracking link"} onClick={async () => { setCopiedTrackingLink(await copyText(fullTrackingUrl)); setTimeout(() => setCopiedTrackingLink(false), 2000); }} className="shrink-0">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></svg>
                 <span role="status">{copiedTrackingLink ? "Link copied" : "Copy link"}</span>
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -330,20 +322,21 @@ export function PublicContributorForm({
           <Link href={signedIn ? "/my-submissions" : "/login?callbackUrl=%2Fmy-submissions"} className={feedbackTextLink}>{signedIn ? "View My submissions" : "Sign in to view My submissions"}</Link>
           {!signedIn ? <p className="mt-1 text-xs leading-5 text-zk-muted">Optional. You can track this report without an account.</p> : null}
         </footer>
-      </section>
+        </section>
+      </div>
     );
   }
 
   // Screen 1: Share feedback
   return (
-    <form onSubmit={submit} className="space-y-3" noValidate>
+    <form onSubmit={submit} className="mx-auto w-full max-w-[920px] space-y-3" noValidate>
       {/* Honeypot field */}
       <div className="absolute left-[-10000px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
         <label htmlFor="contributor-report-website">Website</label>
         <input id="contributor-report-website" name="website" tabIndex={-1} autoComplete="off" />
       </div>
 
-      <FeedbackPageHeader title="Share feedback" identity={project.name} description="Found a problem or have an idea? Tell us about it." />
+      <FeedbackPageHeader compact title="Share feedback" identity={project.name} description={`${project.name} · Found a problem or have an idea? Tell us about it.`} />
 
       {state.error ? (
         <div role="alert" className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg p-3.5 text-sm text-zk-bad-fg">
@@ -351,7 +344,7 @@ export function PublicContributorForm({
         </div>
       ) : null}
 
-      <div className="space-y-6 rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-6">
+      <div className="w-full space-y-5 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
         {/* Required Description */}
         <div className="space-y-3">
           <label htmlFor="contributor-description" className="block text-sm font-medium text-zk-text">
@@ -362,12 +355,12 @@ export function PublicContributorForm({
             name="description"
             value={description}
             onChange={(e) => handleDescriptionChange(e.target.value)}
-            rows={7}
+            rows={6}
             required
             minLength={10}
             maxLength={2400}
             placeholder="Describe the problem you noticed or the improvement you’d like."
-            className="min-h-44 w-full border-zk-border text-sm leading-6 shadow-none! focus:border-zk-accent focus:ring-zk-accent/20"
+            className="min-h-40 w-full border-zk-border text-sm leading-6 shadow-none! focus:border-zk-accent focus:ring-zk-accent/20"
           />
           <div className="flex items-center justify-between text-sm text-zk-muted">
             <CharacterCounter length={description.length} max={2400} />
@@ -388,16 +381,16 @@ export function PublicContributorForm({
               className="hidden"
               id="contributor-screenshot"
             />
-            <button
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={feedbackSecondaryAction}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
               </svg>
               Add a screenshot (optional)
-            </button>
+            </Button>
             <span className="text-sm text-zk-muted">PNG, JPG, GIF or WebP · up to 5 MB</span>
           </div>
 
@@ -409,7 +402,7 @@ export function PublicContributorForm({
           ) : null}
 
           {screenshot ? (
-            <div className="flex items-center gap-3 rounded-xl border border-zk-border bg-zk-chip/50 p-2.5">
+            <div className="flex items-center gap-3 rounded-panel border border-zk-border bg-zk-chip/50 p-2.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={screenshot.previewUrl}
@@ -417,7 +410,7 @@ export function PublicContributorForm({
                 className="h-12 w-12 rounded object-cover border border-zk-border"
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-zk-text">{screenshot.filename}</p>
+                <p className="truncate text-sm font-medium text-zk-text">{screenshot.filename}</p>
                 <p className="text-sm text-zk-muted">
                   {(screenshot.size / 1024).toFixed(1)} KB
                 </p>
@@ -459,7 +452,7 @@ export function PublicContributorForm({
         {/* Duplicate suggestions */}
         {state.matches.length > 0 ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+            <h2 className="text-sm font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
               Has this already been reported?
             </h2>
             <ul className="divide-y divide-amber-500/20">
@@ -467,7 +460,7 @@ export function PublicContributorForm({
                 <li key={`${match.kind}-${match.number}`} className="py-2 first:pt-0 last:pb-0">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <Link href={publicIssueDetailPath({ orgSlug, projectSlug }, match.number)} className="block truncate text-sm font-semibold text-zk-accent hover:underline">
+                      <Link href={publicIssueDetailPath({ orgSlug, projectSlug }, match.number)} className="block truncate text-sm font-medium text-zk-accent hover:underline">
                         {match.title}
                       </Link>
                       <p className="text-sm text-zk-muted">
@@ -489,15 +482,15 @@ export function PublicContributorForm({
 
         {/* Submission Button */}
         <div className="flex flex-col gap-3 border-t border-zk-border pt-6">
-          <button
+          <Button
             type="submit"
             disabled={pending}
-            className={`${feedbackPrimaryAction} w-full sm:ml-auto sm:w-auto`}
+            className="w-full sm:ml-auto sm:w-auto"
           >
             {pending ? "Sending…" : "Send feedback"}
-          </button>
+          </Button>
           <p className="text-center text-sm text-zk-muted">
-            Your feedback is submitted as an idea for the project team to review.
+            Your feedback is submitted directly as an Idea in this project.
           </p>
         </div>
       </div>
