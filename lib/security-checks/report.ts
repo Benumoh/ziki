@@ -13,7 +13,7 @@ import type {
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
-import { isReportPosted, isTargetProven, isScanPaymentSatisfied } from "@/lib/security-checks";
+import { isReportPosted, isTargetProven, isScanPaymentSatisfied, ZIKI_SECURITY_AGENT_USERNAME } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { findingPrice } from "@/lib/security-checks/payment";
 import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
@@ -39,7 +39,11 @@ import { AUTOMATIC_PART_PREFIX } from "@/lib/security-checks/code-findings";
 export type SeverityCounts = Record<SecuritySeverity, number>;
 
 /** One part of the check, as the client sees it on the progress screen. */
-export type ReportPart = { id: string; title: string; status: SecurityCheckItemStatus };
+/**
+ * One part of the deeper scan. `agent`: who is checking it, while it's being checked (18 Nov call, Mark: show the
+ * work happening, "this agent is working on it"); Ziki's own security agent reads as "Ziki's agent". Null otherwise.
+ */
+export type ReportPart = { id: string; title: string; status: SecurityCheckItemStatus; agent: string | null };
 
 /** One finding, as the client sees it. */
 export type ReportFinding = {
@@ -230,7 +234,7 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       items: {
         where: { kind: "check" },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, title: true, status: true },
+        select: { id: true, title: true, status: true, agent: { select: { name: true, username: true } } },
       },
       previousCheckId: true,
       siteFingerprint: true,
@@ -242,7 +246,12 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
   });
   if (!check) return null;
 
-  const parts = check.items.map(({ id, title, status }) => ({ id, title, status }));
+  const parts = check.items.map(({ id, title, status, agent }) => ({
+    id,
+    title,
+    status,
+    agent: status === "checking" && agent ? (agent.username === ZIKI_SECURITY_AGENT_USERNAME ? "Ziki's agent" : agent.name) : null,
+  }));
   const base: ReportBase = {
     checkId: check.id,
     paymentRequired: !isScanPaymentSatisfied(check),
