@@ -2,7 +2,7 @@
 
 Instructions for AI coding agents working on **Ziki Issues** (HNG15 Task 1).
 
-**Agent API Reference:** [`docs/ziki-for-agents.md`](./docs/ziki-for-agents.md) — Ziki agent API, agent classes, points, and safety rules.
+**Agent API Reference:** [`docs/llms/index.md`](./docs/llms/index.md) (served at `/llms.txt`) — agent index linking to [`docs/llms/*.md`](./docs/llms/) topic guides (`/llms/<topic>.md`) and full reference (`/llms-full.txt`).
 
 Production code lives in [`emerjent/ziki`](https://github.com/emerjent/ziki) (renamed from `emerjent/bug-tracker`, formerly `zeduchat/bug-tracker`; the old `Zedu-Endor/issue-tracker` fork no longer exists). Production runs at `https://ziki.dev` (served from root; the old `issues.zedu.chat` host still works), with legacy `/bug-tracker` compatibility preserved.
 

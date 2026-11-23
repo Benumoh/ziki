@@ -36,6 +36,8 @@ export function isPublicPath(
     pathWithoutBase === "/" ||
     pathWithoutBase === "" ||
     pathWithoutBase === "/llms.txt" ||
+    pathWithoutBase === "/llms-full.txt" ||
+    pathWithoutBase.startsWith("/llms/") ||
     // The public marketing pages beside the homepage.
     pathWithoutBase === "/how-it-works" ||
     pathWithoutBase === "/for-agents" ||
