@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { SecuritySeverity } from "@prisma/client";
 import "@/components/security-finding.css";
 import { FixPanel } from "@/components/security-checks/fix-panel";
+import { ZikAmount } from "@/components/zik-symbol";
 import { MakeFixable } from "@/components/security-checks/make-fixable";
 import { type ListFinding, type ListTab } from "@/lib/security-checks/check-list";
 import { SEVERITY_LABEL } from "@/lib/security-severity";
@@ -21,7 +22,26 @@ const FIX_STATE: Record<ResultFix["bucket"], string> = { fixing: "Being fixed", 
  * `initialFix`: findings to tick with the fix panel already open, when a finding's "Fix it for me" brings the person
  * here (`?fix=id1,id2`).
  */
-export function CheckList({ checkId, tab, show, initialFix = [] }: { checkId: string; tab: ListTab; show: "quick" | "deeper"; initialFix?: string[] }) {
+export function CheckList({
+  checkId,
+  tab,
+  show,
+  initialFix = [],
+  code = false,
+  price,
+}: {
+  checkId: string;
+  tab: ListTab;
+  show: "quick" | "deeper";
+  initialFix?: string[];
+  /**
+   * A code scan's lists, on its website's Code scan page (18 Nov call): Ziki's first look at the code, then what the
+   * full check covers, not checked yet until it's paid for (23 Nov, Sheyi: show there's more to find).
+   */
+  code?: boolean;
+  /** The full code check's price, on its button. */
+  price?: number;
+}) {
   const [picked, setPicked] = useState<string[]>(initialFix);
   const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
   // Every finding not already in the app can be sent from here, a rescan's earlier ones still there included (18 Nov, Tolu).
@@ -58,7 +78,19 @@ export function CheckList({ checkId, tab, show, initialFix = [] }: { checkId: st
       >
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 sm:px-6">
           <h2 id={quick ? "quick-scan-heading" : "deeper-scan-heading"} className="m-0 text-base font-semibold text-zk-text">
-            {quick ? `Quick scan · ${tab.count} ${tab.count === 1 ? "finding" : "findings"}` : "Deeper scan"}
+            {/* On the Code scan page, Ziki's first look has no count: there's more to find, and the full check gives its
+                count once it's done (23 Nov, Sheyi). Before it's paid for, the full check's list is what's not checked yet. */}
+            {quick
+              ? code
+                ? "First look · what Ziki found so far"
+                : `Quick scan · ${tab.count} ${tab.count === 1 ? "finding" : "findings"}`
+              : code
+                ? tab.startable
+                  ? `Not checked yet · ${tab.notChecked?.length ?? 0}`
+                  : tab.state.tone === "done"
+                    ? `Full code check · ${tab.count} ${tab.count === 1 ? "finding" : "findings"}`
+                    : "Full code check"
+                : "Deeper scan"}
           </h2>
           {quick ? null : tab.startable ? (
             // Not started: the one Start on this page (18 Nov call, Mark: one call to action). It opens the checkout.
@@ -70,7 +102,13 @@ export function CheckList({ checkId, tab, show, initialFix = [] }: { checkId: st
                 onClick={() => window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"))}
                 className="inline-flex h-9 items-center rounded-xl bg-electric-blue-strong px-4 text-sm font-semibold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
               >
-                Run deeper scan
+                {code ? (
+                  <>
+                    Get the full check{price !== undefined ? <>&nbsp;·&nbsp;<ZikAmount amount={price} /></> : null}
+                  </>
+                ) : (
+                  "Run deeper scan"
+                )}
               </button>
             </span>
           ) : (
@@ -79,7 +117,7 @@ export function CheckList({ checkId, tab, show, initialFix = [] }: { checkId: st
         </div>
         {/* An older scan (before 18 Nov) has only titles here: make them real, fixable findings once. */}
         {quick && tab.scanRows?.length && !tab.findings?.length ? <MakeFixable checkId={checkId} /> : null}
-        <TabRows tab={tab} selected={selected} onToggle={toggle} onSelectAll={tab.findings?.length ? selectAll : undefined} />
+        <TabRows tab={tab} selected={selected} onToggle={toggle} onSelectAll={tab.findings?.length ? selectAll : undefined} code={code} />
         {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
         {selected.length && !panelOpen ? (
           <div className="flex items-center justify-between gap-3 border-t border-zk-border bg-zk-tint px-4 py-3 sm:px-6">
@@ -106,7 +144,7 @@ export function CheckList({ checkId, tab, show, initialFix = [] }: { checkId: st
   );
 }
 
-function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selected: string[]; onToggle: (id: string) => void; onSelectAll?: (ids: string[]) => void }) {
+function TabRows({ tab, selected, onToggle, onSelectAll, code = false }: { tab: ListTab; selected: string[]; onToggle: (id: string) => void; onSelectAll?: (ids: string[]) => void; code?: boolean }) {
   const scanRows = tab.scanRows ?? [];
   const findings = tab.findings ?? [];
   const fixed = tab.fixed ?? [];
@@ -148,7 +186,8 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
         </li>
       ))}
       {/* Before the deeper scan is paid for (#deeper-scan-gate): what the 20 Ziks buys, each not checked yet. */}
-      {notChecked.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">What agents check that the quick scan can&apos;t · {notChecked.length}</li> : null}
+      {/* On the Code scan page the section's own heading already says "Not checked yet". */}
+      {notChecked.length && !code ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">What agents check that the quick scan can&apos;t · {notChecked.length}</li> : null}
       {notChecked.map((item) => (
         <li key={item.title}>
           <Row

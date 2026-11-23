@@ -6,11 +6,12 @@ import type { CheckReport } from "@/lib/security-checks/report";
 const CRUMB = "block truncate rounded-md px-1.5 py-0.5 font-bold text-zk-text hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-zk-accent";
 
 /**
- * The top of a scan's two pages, the quick scan's and the deeper scan's (18 Nov call): the breadcrumb, More
- * actions, and, for a scan scanned again since, the way to the newest one. `deeper`: the breadcrumb
- * goes one step further, Security / site / Deeper scan, and the site links back to the quick scan.
+ * The top of a scan's pages, the quick scan's and its further steps' (18 Nov call): the breadcrumb, More actions,
+ * and, for a scan scanned again since, the way to the newest one. `step`: one of the further steps' pages, so the
+ * breadcrumb goes one step further (Security / site / Deeper scan, or Code scan) and the site links back to the quick
+ * scan.
  */
-export function ScanPageTop({ report, deeper = false }: { report: CheckReport; deeper?: boolean }) {
+export function ScanPageTop({ report, step }: { report: CheckReport; step?: "Deeper scan" | "Code scan" }) {
   const scanHref = `/security/checks/${encodeURIComponent(report.checkId)}`;
   return (
     <>
@@ -24,13 +25,13 @@ export function ScanPageTop({ report, deeper = false }: { report: CheckReport; d
                   <Link href="/security" className={CRUMB}>Security</Link>
                 </li>
                 <li aria-hidden="true" className="text-zk-muted">/</li>
-                {deeper ? (
+                {step ? (
                   <>
                     <li className="min-w-0">
                       <Link href={scanHref} className={CRUMB}>{report.target.value}</Link>
                     </li>
                     <li aria-hidden="true" className="text-zk-muted">/</li>
-                    <li aria-current="page" className="truncate px-1.5">Deeper scan</li>
+                    <li aria-current="page" className="truncate px-1.5">{step}</li>
                   </>
                 ) : (
                   <li aria-current="page" className="truncate px-1.5">{report.target.value}</li>

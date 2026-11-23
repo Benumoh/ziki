@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { appendRows, CoinError, lockUser, walletBalance } from "@/lib/coins/ledger";
 import { assertCanSpendOnSecurity, loanState } from "@/lib/coins/loan";
-import { DEEPER_SCAN_PRICE_ZIKS, isTargetProven } from "@/lib/security-checks";
+import { CODE_SCAN_PRICE_ZIKS, DEEPER_SCAN_PRICE_ZIKS, isTargetProven } from "@/lib/security-checks";
 import { readQuickScan } from "./entry";
 
 export type DeeperScanFailure =
@@ -16,10 +16,18 @@ export type DeeperScanQuote =
   | DeeperScanFailure;
 
 const select = {
-  id: true, status: true, free: true, paidAt: true,
+  id: true, status: true, free: true, paidAt: true, codeScanForId: true,
   target: { select: { value: true, verifiedAt: true, previewSummary: true } },
 } as const;
 const notFound = { ok: false, reason: "not_found", error: "That scan isn't in your scans." } as const;
+
+/**
+ * What the agents' scan costs: a website's deeper scan, or a code scan connected from a website's Code scan step
+ * (18 Nov call, Mark: connect first, pay later). Connecting is free; the code scan is paid for here, like a deeper scan.
+ */
+function priceOf(check: { codeScanForId: string | null }) {
+  return check.codeScanForId ? CODE_SCAN_PRICE_ZIKS : DEEPER_SCAN_PRICE_ZIKS;
+}
 
 function eligibility(check: NonNullable<Awaited<ReturnType<typeof ownCheck>>>): DeeperScanFailure | null {
   if (check.status === "cancelled") return notFound;
@@ -43,7 +51,7 @@ export async function deeperScanQuote(organisationId: string, userId: string, ch
   if (failure) return failure;
   const [balance, loan] = await Promise.all([walletBalance(prisma, userId), loanState(prisma, userId)]);
   const started = check.free || check.paidAt !== null;
-  return { ok: true, checkId, site: check.target.value, price: started ? 0 : DEEPER_SCAN_PRICE_ZIKS, balance, canBorrow: loan.canBorrow, state: started ? "started" : "payment_required" };
+  return { ok: true, checkId, site: check.target.value, price: started ? 0 : priceOf(check), balance, canBorrow: loan.canBorrow, state: started ? "started" : "payment_required" };
 }
 
 class ScanChanged extends Error {}
@@ -58,25 +66,26 @@ export async function payAndStartDeeperScan(organisationId: string, userId: stri
       const failure = eligibility(check);
       if (failure) return failure;
       if (check.free || check.paidAt) return { ok: true, checkId, charged: 0, reused: true };
+      const price = priceOf(check);
       try {
-        await assertCanSpendOnSecurity(tx, userId, DEEPER_SCAN_PRICE_ZIKS);
+        await assertCanSpendOnSecurity(tx, userId, price);
       } catch (error) {
         if (!(error instanceof CoinError) || error.code !== "insufficient_ziks") throw error;
         const [balance, loan] = await Promise.all([walletBalance(tx, userId), loanState(tx, userId)]);
-        return { ok: false, reason: "insufficient_ziks", error: `A deeper scan costs ${DEEPER_SCAN_PRICE_ZIKS} Ziks.`, needed: DEEPER_SCAN_PRICE_ZIKS, balance, canBorrow: loan.canBorrow };
+        return { ok: false, reason: "insufficient_ziks", error: `${check.codeScanForId ? "A code scan" : "A deeper scan"} costs ${price} Ziks.`, needed: price, balance, canBorrow: loan.canBorrow };
       }
       const changed = await tx.securityCheck.updateMany({
         where: { id: checkId, organisationId, requestedById: userId, free: false, paidAt: null, status: { in: ["queued", "awaiting_ownership"] } },
-        data: { paidAt: now, priceCoins: DEEPER_SCAN_PRICE_ZIKS, status: "queued" },
+        data: { paidAt: now, priceCoins: price, status: "queued" },
       });
       if (changed.count !== 1) throw new ScanChanged();
       // Never skip duplicate ledger rows: a failed write must roll the payment marker back too.
       const recorded = await appendRows(tx, [
-        { account: "wallet", userId, kind: "check_payment", amount: -DEEPER_SCAN_PRICE_ZIKS, sourceKey: `deeper-scan:${checkId}:wallet` },
-        { account: "revenue", kind: "check_payment", amount: DEEPER_SCAN_PRICE_ZIKS, sourceKey: `deeper-scan:${checkId}:revenue` },
+        { account: "wallet", userId, kind: "check_payment", amount: -price, sourceKey: `deeper-scan:${checkId}:wallet` },
+        { account: "revenue", kind: "check_payment", amount: price, sourceKey: `deeper-scan:${checkId}:revenue` },
       ]);
       if (!recorded) throw new Error("Deeper scan payment ledger conflict");
-      return { ok: true, checkId, charged: DEEPER_SCAN_PRICE_ZIKS, reused: false };
+      return { ok: true, checkId, charged: price, reused: false };
     });
   } catch (error) {
     if (error instanceof ScanChanged) return notFound;

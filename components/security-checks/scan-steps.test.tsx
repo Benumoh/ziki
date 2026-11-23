@@ -1,10 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-// Connect code pays through server actions (#security-code-scan); rendering the steps never calls them.
-vi.mock("@/app/actions/security-code-scan", () => ({ codeScanCost: vi.fn(), startPaidCodeScan: vi.fn() }));
-vi.mock("@/app/actions/ziks-loan", () => ({ borrowZiks: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+import { describe, expect, it } from "vitest";
 
 import { ScanSteps } from "./scan-steps";
 
@@ -23,6 +18,25 @@ describe("ScanSteps (18 Nov call: each scan on its own page)", () => {
     const html = renderToStaticMarkup(<ScanSteps quickFound={6} deepFound={3} phase="done" done={9} total={9} checkId="c1" />);
     expect(html).not.toContain("found");
     expect(html).not.toContain("(in progress)");
+  });
+});
+
+describe("ScanSteps: the code scan, connect first, pay later (18 Nov call)", () => {
+  it("opens the Code scan page at any time, even before the deeper scan is paid for", () => {
+    const html = renderToStaticMarkup(<ScanSteps quickFound={9} phase="planning" done={0} total={0} checkId="c1" paymentRequired />);
+    expect(html).toContain('href="/security/checks/c1/code"');
+  });
+
+  it("always opens the website's own Code scan page, and says in plain words where the code scan stands", () => {
+    const step = (codeScan: { checkId: string; paid: boolean; finished: boolean; found: number } | null) =>
+      renderToStaticMarkup(<ScanSteps quickFound={9} phase="done" done={9} total={9} checkId="c1" codeScan={codeScan} />);
+    expect(step(null)).toContain("Not started");
+    const connected = step({ checkId: "code1", paid: false, finished: false, found: 2 });
+    expect(connected).toContain('href="/security/checks/c1/code"');
+    expect(connected).not.toContain('href="/security/checks/code1"');
+    // Connecting gives a first look, not the whole code scan; a paid full check shows while it runs.
+    expect(connected).toContain("First look done");
+    expect(step({ checkId: "code1", paid: true, finished: false, found: 2 })).toContain("Full check running");
   });
 });
 
