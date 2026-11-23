@@ -263,6 +263,15 @@ export async function WorkQueue({
   });
   const now = at.getTime();
   const several = projects.length > 1;
+  // A column empty on every row (no holder, deadline, judgement or pull request yet, as on Open) is left out,
+  // so the issue titles get its room.
+  const judgedOf = (row: Row) => row.testVerdicts.filter((verdict) => verdict.pullRequestUrl === row.pullRequestUrl);
+  const show = {
+    holder: rows.some((row) => row.claims[0]),
+    deadline: rows.some((row) => row.claims[0]?.deliverBy),
+    tests: rows.some((row) => judgedOf(row).length > 0),
+    pr: rows.some((row) => row.pullRequestUrl),
+  };
 
   // Every tab is as wide as the Overview page and the lists (max-w-[920px]), so the cards line up from page to page.
   return (
@@ -326,7 +335,7 @@ export async function WorkQueue({
       ) : online ? (
         <OnlineAgentsPanel agents={agents} viewerId={user.id} place={filter ? filter.name : "every project"} now={at} />
       ) : (
-      <div className="flex items-start gap-5 max-lg:flex-col max-lg:gap-3">
+      <div className="flex items-start gap-4 max-lg:flex-col max-lg:gap-3">
         {/* The detailed steps of that status down the left, as on the lists. */}
         <StageSidebar
           steps={
@@ -361,10 +370,10 @@ export async function WorkQueue({
                 <th scope="col" className={HEAD}><ColumnHead icon="text">Issue</ColumnHead></th>
                 {several ? <th scope="col" className={HEAD}><ColumnHead icon="tag">Project</ColumnHead></th> : null}
                 {step ? null : <th scope="col" className={HEAD}><ColumnHead icon="arrow">Step</ColumnHead></th>}
-                <th scope="col" className={HEAD}><ColumnHead icon="user">Held by</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="clock">Deadline</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="check">Tests</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="link">PR</ColumnHead></th>
+                {show.holder ? <th scope="col" className={HEAD}><ColumnHead icon="user">Held by</ColumnHead></th> : null}
+                {show.deadline ? <th scope="col" className={HEAD}><ColumnHead icon="clock">Deadline</ColumnHead></th> : null}
+                {show.tests ? <th scope="col" className={HEAD}><ColumnHead icon="check">Tests</ColumnHead></th> : null}
+                {show.pr ? <th scope="col" className={HEAD}><ColumnHead icon="link">PR</ColumnHead></th> : null}
                 <th scope="col" className={HEAD}><ColumnHead icon="arrow">Next</ColumnHead></th>
                 <th scope="col" className={HEAD}><ColumnHead icon="calendar">Moved</ColumnHead></th>
               </tr>
@@ -394,7 +403,7 @@ export async function WorkQueue({
                       </tr>
                       {group.map((row) => {
                         const claim = row.claims[0];
-                        const judged = row.testVerdicts.filter((verdict) => verdict.pullRequestUrl === row.pullRequestUrl);
+                        const judged = judgedOf(row);
                         const good = judged.filter((verdict) => verdict.goodToMerge).length;
                         const notGood = judged.length - good;
                         const next = nextAction(row, now);
@@ -415,7 +424,7 @@ export async function WorkQueue({
                                 <Pill tone={PILL_TONES.grey}>{substatusLabel[row.substatus]}</Pill>
                               </td>
                             )}
-                            <td className={CELL}>
+                            {show.holder ? <td className={CELL}>
                               {holder ? (
                                 <span title={claim?.beneficiary.name ? `For ${claim.beneficiary.name}` : undefined}>
                                   <Outline initial={holder.charAt(0).toUpperCase()}>
@@ -424,24 +433,24 @@ export async function WorkQueue({
                                   </Outline>
                                 </span>
                               ) : <span className="text-zk-muted">–</span>}
-                            </td>
-                            <td className={`${CELL} tabular-nums ${late ? "font-semibold text-zk-bad-fg" : "text-zk-text2"}`}>
+                            </td> : null}
+                            {show.deadline ? <td className={`${CELL} tabular-nums ${late ? "font-semibold text-zk-bad-fg" : "text-zk-text2"}`}>
                               {claim?.deliverBy ? relative(claim.deliverBy, now) : <span className="text-zk-muted">–</span>}
-                            </td>
-                            <td className={CELL}>
+                            </td> : null}
+                            {show.tests ? <td className={CELL}>
                               <span className="flex gap-1" title={judged.length ? `${good} good to merge, ${notGood} not` : undefined}>
                                 {good ? <Pill tone={PILL_TONES.green}>{good} good</Pill> : null}
                                 {notGood ? <Pill tone={PILL_TONES.red}>{notGood} not</Pill> : null}
                                 {judged.length === 0 ? <span className="text-zk-muted">–</span> : null}
                               </span>
-                            </td>
-                            <td className={`${CELL} font-mono text-[12px]`}>
+                            </td> : null}
+                            {show.pr ? <td className={`${CELL} font-mono text-[12px]`}>
                               {row.pullRequestUrl ? (
                                 <a href={row.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-zk-accent hover:underline">
                                   {pr ? `#${pr}` : "PR"}
                                 </a>
                               ) : <span className="text-zk-muted">–</span>}
-                            </td>
+                            </td> : null}
                             <td className={CELL}>
                               <Pill tone={NEXT_TONE[next.tone]}>{next.text}</Pill>
                             </td>

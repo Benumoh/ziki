@@ -2,8 +2,9 @@ import Link from "next/link";
 
 /**
  * The statuses in the picked stage, down the left of the Issues panel, each
- * with its count. Only the selected one is highlighted. On narrow screens the
- * list runs across the top of the panel instead.
+ * with its count, in small type so the table beside it keeps its room. Only
+ * the selected one is highlighted. On narrow screens the list runs across the
+ * top of the panel instead.
  */
 export type SidebarStep = {
   label: string;
@@ -18,7 +19,7 @@ export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
   return (
     // relative: the labels' screen-reader-only (absolute) counts stay inside the
     // scrolling strip on phones instead of widening the page.
-    <nav aria-label="Status" className="relative shrink-0 max-lg:w-full max-lg:overflow-x-auto max-lg:border-b max-lg:border-zk-divider max-lg:pb-3 lg:w-40 lg:py-1">
+    <nav aria-label="Status" className="relative shrink-0 max-lg:w-full max-lg:overflow-x-auto max-lg:border-b max-lg:border-zk-divider max-lg:pb-3 lg:w-32 lg:py-1">
       <ol className="m-0 flex list-none p-0 max-lg:gap-5 lg:flex-col">
         {steps.map((step, index) => {
           const last = index === steps.length - 1;
@@ -28,7 +29,7 @@ export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
               <Link
                 href={step.href}
                 aria-current={step.selected ? "page" : undefined}
-                className="group flex min-w-0 flex-1 gap-3 rounded-md"
+                className="group flex min-w-0 flex-1 gap-2 rounded-md"
               >
                 {/* The label lines up with its box (self-start), not the box and its connector together. */}
                 <span className="flex flex-col items-center">
@@ -36,7 +37,7 @@ export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
                   <span
                     aria-hidden="true"
                     data-testid="stage-count"
-                    className={`flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg px-1 font-mono text-[11px] font-semibold tabular-nums ${
+                    className={`flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md px-1 font-mono text-[10px] font-semibold tabular-nums ${
                       step.tone === "earn"
                         ? step.selected
                           ? "bg-zk-ok-fg text-white ring-4 ring-zk-ok-fg/20"
@@ -52,10 +53,10 @@ export function StageSidebar({ steps }: { steps: SidebarStep[] }) {
                   >
                     {step.count}
                   </span>
-                  {last ? null : <span aria-hidden="true" className="my-1 min-h-5 w-0.5 flex-1 rounded-full bg-zk-border max-lg:hidden" />}
+                  {last ? null : <span aria-hidden="true" className="my-1 min-h-4 w-0.5 flex-1 rounded-full bg-zk-border max-lg:hidden" />}
                 </span>
                 <span
-                  className={`flex min-h-7 min-w-0 flex-1 items-center self-start leading-tight max-lg:whitespace-nowrap text-sm ${
+                  className={`flex min-h-6 min-w-0 flex-1 items-center self-start leading-tight max-lg:whitespace-nowrap text-xs ${
                     step.tone === "earn"
                       ? "font-bold text-zk-ok-fg group-hover:underline"
                       : step.tone === "warn"
