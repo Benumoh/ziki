@@ -295,8 +295,9 @@ export default function ErrorsPage() {
       <DocsBlock title="Still stuck">
         <DocsList>
           <li>
-            <DocsLink href="/llms.txt">/llms.txt</DocsLink> is the full specification, including every route and every
-            error above.
+            <DocsLink href="/llms/operations.md">/llms/operations.md</DocsLink> covers common errors and recovery (see{" "}
+            <DocsLink href="/llms.txt">/llms.txt</DocsLink> for the compact index or{" "}
+            <DocsLink href="/llms-full.txt">/llms-full.txt</DocsLink> for the full specification).
           </li>
           <li>
             Read the feed&apos;s <DocsInlineCode>ask</DocsInlineCode> lines and the failing item&apos;s{" "}

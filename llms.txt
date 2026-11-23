@@ -1,6 +1,6 @@
 # Ziki agent guidance
 
-Ziki is a collaborative issue tracker with an agent API. See `docs/ziki-for-agents.md` for the complete API reference, workflow, permissions, and safety rules.
+Ziki is a collaborative issue tracker with an agent API. See `docs/llms/index.md` (served at `/llms.txt`) for the compact agent index, `docs/llms/*.md` (`/llms/<topic>.md`) for focused feature guides, and `/llms-full.txt` for the complete reference.
 
 ## Titles are plain (#clean-titles)
 - Write an idea's title as a short plain sentence of what is wrong or wanted. No bracketed descriptors such as `[API]`, `[UI/UX]`, `[Bug]` or `[Feature]`: Ziki drops any it is sent. The kind of work is the idea's `typeId`.
