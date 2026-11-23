@@ -20,6 +20,8 @@ import { ProjectWeekPanel } from "@/components/project-week-panel";
 import { StatCards } from "@/components/stat-cards";
 import { readWorkStats } from "@/lib/work-stats";
 import { weeklyDeliveries } from "@/lib/project-week";
+import { isOnlineNow, loadProjectAgents } from "@/lib/agents/project-agents";
+import { OnlineAgentsPanel } from "@/components/online-agents-panel";
 
 
 /** The steps where an issue still has work to move it: everything before Live and Closed. */
@@ -33,6 +35,8 @@ const STAGE_PARAM = "status";
 const MINE = "mine";
 /** The Overview tab's value, the queue's default: the top contributors this week. */
 const OVERVIEW = "overview";
+/** The Online tab's value (#online-agents): the agents online now, what each is on, and what you can do about it. */
+const ONLINE = "online";
 const STEP_PARAM = "step";
 
 type Row = {
@@ -164,7 +168,8 @@ function relative(date: Date, now: number): string {
  * issue that still has a step to go, one dense row each, with its step, who
  * holds it, its deadline, its judgements, its pull request and what it needs
  * next. Every project by default, or one with the project filter; most
- * recently moved first. The agents bar's › opens it.
+ * recently moved first. The Online tab lists the agents online now
+ * (#online-agents). The agents bar's › opens it.
  */
 export async function WorkQueue({
   org,
@@ -197,15 +202,20 @@ export async function WorkQueue({
   const mine = one(query[STAGE_PARAM]) === MINE;
   // Overview, the first tab and the default: who delivered what this week.
   const overview = !one(query[STAGE_PARAM]) || one(query[STAGE_PARAM]) === OVERVIEW;
+  const online = one(query[STAGE_PARAM]) === ONLINE;
   const section = SECTIONS.find((item) => item.status === one(query[STAGE_PARAM])) ?? SECTIONS[0];
   // The Overview's stat cards (#work-stats): this week against last, for the organisation or the picked project.
   const stats = overview ? await readWorkStats({ organisationId, projectId: filter?.id ?? null }) : [];
-  const [grouped, mineGrouped, weekPeople] = await Promise.all([
+  const at = new Date();
+  const [grouped, mineGrouped, weekPeople, agents] = await Promise.all([
     prisma.bug.groupBy({ by: ["substatus"], where: scope, _count: { _all: true } }),
     prisma.bug.groupBy({ by: ["substatus"], where: { AND: [scope, mineWhere] }, _count: { _all: true } }),
     // The top contributors: who delivered what this week, in the project picked (or all of them).
     weeklyDeliveries(organisationId, filter?.id ?? null),
+    // The Online tab (#online-agents): the agents at work in the project picked (or all of them). Every tab shows its count.
+    loadProjectAgents({ projectId: filter?.id ?? null, organisationId, now: at }),
   ]);
+  const onlineCount = agents.filter((agent) => isOnlineNow(agent, at)).length;
   const counts = new Map(grouped.map((row) => [row.substatus, row._count._all]));
   const mineCounts = new Map(mineGrouped.map((row) => [row.substatus, row._count._all]));
   const mineTotal = mineGrouped.reduce((sum, row) => sum + row._count._all, 0);
@@ -228,7 +238,7 @@ export async function WorkQueue({
     if (value) keep.set(key, value);
   }
 
-  const rows: Row[] = overview ? [] : await prisma.bug.findMany({
+  const rows: Row[] = overview || online ? [] : await prisma.bug.findMany({
     where: mine ? { AND: [scope, mineWhere, ...(step ? [{ substatus: step }] : [])] } : { ...scope, substatus: step ?? undefined },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: LIMIT,
@@ -251,7 +261,7 @@ export async function WorkQueue({
       _count: { select: { bids: { where: { withdrawnAt: null, awardedAt: null } } } },
     },
   });
-  const now = new Date().getTime();
+  const now = at.getTime();
   const several = projects.length > 1;
 
   return (
@@ -295,12 +305,13 @@ export async function WorkQueue({
           label="Statuses"
           stages={[
             { label: "Overview", count: weekPeople.length, href: href(OVERVIEW), selected: overview },
+            { label: "Online", count: onlineCount, href: href(ONLINE), selected: online },
             { label: "Your Work", count: mineTotal, href: href(MINE), selected: mine },
             ...SECTIONS.map((item) => ({
               label: statusLabel[item.status],
               count: item.steps.reduce((sum, value) => sum + (counts.get(value) ?? 0), 0),
               href: href(item.status),
-              selected: !mine && !overview && item.status === section.status,
+              selected: !mine && !overview && !online && item.status === section.status,
             })),
           ]}
         />
@@ -311,6 +322,8 @@ export async function WorkQueue({
           <StatCards stats={stats} />
           <ProjectWeekPanel people={weekPeople} viewerId={user.id} />
         </div>
+      ) : online ? (
+        <OnlineAgentsPanel agents={agents} viewerId={user.id} place={filter ? filter.name : "every project"} now={at} />
       ) : (
       <div className="flex items-start gap-5 max-lg:flex-col max-lg:gap-3">
         {/* The detailed steps of that status down the left, as on the lists. */}

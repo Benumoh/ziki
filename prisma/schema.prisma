@@ -316,9 +316,6 @@ model User {
   notifyStatusChanges         Boolean                       @default(true)
   /// #287: site-wide keyboard shortcuts; per user so it follows them.
   keyboardShortcuts           Boolean                       @default(true)
-  /// #active-agents: whether the person sees a project's Active agents page and its link in the Agents panel.
-  /// Everyone who can open the project may; this lets them hide it. Per user so it follows them.
-  showActiveAgents            Boolean                       @default(true)
   /// #618: optional EVM address (0x + 40 hex) points could later be sent to.
   /// Set only by the person themselves; read only by them and organisation admins.
   walletAddress               String?

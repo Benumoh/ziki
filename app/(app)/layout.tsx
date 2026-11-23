@@ -258,16 +258,14 @@ export default async function AppLayout({
   // the wallet on the next sweep (#earnings-in-ziks), so money earned here shows it straight away too.
   const showWithdraw = (earned !== null && earned > 0) || (await hasEarnedZiks(prisma, user.id).catch(() => false));
 
-  // #287 and #active-agents: one primary-key read; a failure leaves both on, the defaults.
+  // #287: one primary-key read; a failure leaves shortcuts on, the default.
   let shortcutsEnabled = true;
-  let showActiveAgents = true;
   try {
     const prefs = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { keyboardShortcuts: true, showActiveAgents: true },
+      select: { keyboardShortcuts: true },
     });
     shortcutsEnabled = prefs?.keyboardShortcuts ?? true;
-    showActiveAgents = prefs?.showActiveAgents ?? true;
   } catch (error) {
     console.error("[layout] shortcut setting failed", error);
   }
@@ -307,7 +305,7 @@ export default async function AppLayout({
         </main>
       </div>
       {/* The agents dock keeps the page's foot clear of its floor line itself, as tall as what stands on it, and draws nothing (no spacer either) where it doesn't help. */}
-      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} showActiveAgents={showActiveAgents} />
+      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} />
       <FocusMainOnNavigate />
       {/* A member of an organisation gets the join questions once, ending on one real thing to do
           (#join-questions); its owner and admins set the project up through First questions instead. The card
