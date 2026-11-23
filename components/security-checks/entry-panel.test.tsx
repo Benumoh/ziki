@@ -39,23 +39,23 @@ const quick: PreviewSummary = {
 } as PreviewSummary;
 
 describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
-  it("shows a new workspace only the big box, with no proof step", () => {
+  it("opens a new workspace on the chat box, as Marketing's, with an empty card under it (23 Nov)", () => {
     const html = renderToStaticMarkup(<SecurityChecksPanel checks={[]} />);
-    expect(html).toContain("What do you want to secure?");
+    expect(html).toContain("Which website should we secure? Paste its address, like https://yourproduct.com");
     expect(html).toContain('name="target"');
+    expect(html).toContain("Nothing checked yet.");
+    expect(html).toContain("0 targets");
+    // No title, subtitle or Add target button on top, and no proof step.
+    expect(html).not.toContain("Add target");
+    expect(html).not.toContain("Your websites, servers and repos");
     expect(html).not.toContain("Show it&#x27;s yours");
-    expect(html).not.toContain("Your scans");
-    expect(html).not.toContain("free");
-    // The three steps under the box, as on the Ideas page you see first.
-    expect(html).toContain("Say what to secure");
-    expect(html).toContain("Get a quick scan");
-    expect(html).toContain("See what&#x27;s wrong");
+    expect(html).not.toContain('role="table"');
   });
 
-  it("shows the welcome again when every scan was removed", () => {
+  it("shows the empty card again when every scan was removed", () => {
     const html = renderToStaticMarkup(<SecurityChecksPanel checks={[row({ status: "cancelled" })]} />);
-    expect(html).toContain("What do you want to secure?");
-    expect(html).not.toContain("No scans here yet");
+    expect(html).toContain("Nothing checked yet.");
+    expect(html).toContain("Which website should we secure?");
   });
 
   it("keeps the box on top and lists the scans as rows, each with its stage, opening its page with one click", () => {
@@ -69,9 +69,11 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
         ]}
       />,
     );
-    // Once there are scans, the chat waits behind "+ Add asset", like "+ Add Idea".
-    expect(html).toContain("Add target");
-    expect(html).not.toContain("What do you want to secure?");
+    // The chat box stays on top once there are scans, as Marketing's: no Add target button, no empty card.
+    expect(html).toContain('name="target"');
+    expect(html).toContain("Tell the security agent what to check");
+    expect(html).not.toContain("Add target");
+    expect(html).not.toContain("Nothing checked yet.");
     expect(html).toContain("Scanning");
     expect(html).toContain("Report ready");
     expect(html).toContain("In your app");
