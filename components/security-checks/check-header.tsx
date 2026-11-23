@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { LocalTime } from "@/components/local-time";
 import { CheckActivity, type CheckPhase } from "@/components/security-checks/check-activity";
 import { statusClass, substatusClass } from "@/lib/labels";
-import { CHECK_STATUS_LABEL, CODE_SCAN_PRICE_ZIKS, DEEPER_SCAN_COVERS, DEEPER_SCAN_PRICE_ZIKS, FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
+import { CHECK_STATUS_LABEL, DEEPER_SCAN_COVERS, DEEPER_SCAN_PRICE_ZIKS, FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
 import { DeeperScanStart } from "@/components/security-checks/deeper-scan-offer";
 import type { CheckReport } from "@/lib/security-checks/report";
 import { firstSentence } from "@/lib/security-checks/short-line";
@@ -95,7 +95,6 @@ export function CheckHeader({
         phase={phase}
         done={done}
         total={total}
-        codePrice={CODE_SCAN_PRICE_ZIKS}
         checkId={report.checkId}
         codeScan={report.codeScan}
         // A repo's own scan is the code scan: no Code scan step on it.

@@ -10,6 +10,7 @@ import { FINISHED_CHECK_STATUSES } from "@/lib/security-checks";
 import { availableAgents } from "@/lib/security-checks/engine";
 import { loadCheckReport } from "@/lib/security-checks/report";
 import { prisma } from "@/lib/prisma";
+import { codeScanPage } from "@/lib/security-checks/code-scan-page";
 
 export const metadata = { title: "Deeper scan" };
 
@@ -30,6 +31,8 @@ export default async function DeeperScanPage({ params, searchParams }: { params:
   if (!report) notFound();
   // Proving ownership comes first, on the scan's own page.
   if (report.status === "awaiting_ownership") redirect(`/security/checks/${encodeURIComponent(report.checkId)}`);
+  // A code scan is paid for and followed on its website's Code scan page (18 Nov call); back from buying Ziks too.
+  if (report.codeScanFor) redirect(codeScanPage(report.codeScanFor.checkId, query));
 
   const working = !FINISHED_CHECK_STATUSES.has(report.status) && !report.paymentRequired;
   // Security agents online now, ready or at work (18 Nov call). Only counted while it can matter.
@@ -40,7 +43,7 @@ export default async function DeeperScanPage({ params, searchParams }: { params:
     <div className="flex w-full flex-col gap-4 pb-10 sm:gap-6">
       {/* Live while agents work: parts move from Waiting to Checking to done as they report. */}
       {working && !report.posted ? <ReportLive /> : null}
-      <ScanPageTop report={report} deeper />
+      <ScanPageTop report={report} step="Deeper scan" />
       <section aria-labelledby="check-headline" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
         {/* Back from buying Ziks (#deeper-scan-gate): the checkout opens again, to press Pay. */}
         <CheckHeader report={report} view="deeper" agentsOnline={agentsOnline} backFromBuying={query.bought === "1"} />

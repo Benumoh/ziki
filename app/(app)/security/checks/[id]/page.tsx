@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
@@ -11,6 +11,7 @@ import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { loadCheckReport, type CheckReport } from "@/lib/security-checks/report";
+import { codeScanPage } from "@/lib/security-checks/code-scan-page";
 import { orgCard } from "../../../[org]/[project]/org/org-ui";
 
 export const metadata = { title: "Security check" };
@@ -29,6 +30,8 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
   if (!access.organisationId) notFound();
   const report = await loadCheckReport(id, access.organisationId, user.id);
   if (!report) notFound();
+  // A code scan lives on its website's Code scan page (18 Nov call), with the same three steps as the website's.
+  if (report.codeScanFor) redirect(codeScanPage(report.codeScanFor.checkId, query));
 
   // While agents work, the steps (and the button below) follow them; waiting for payment, nothing moves.
   const working = !FINISHED_CHECK_STATUSES.has(report.status) && !report.paymentRequired;
