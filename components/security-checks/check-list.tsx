@@ -10,23 +10,22 @@ import { type ListFinding, type ListTab } from "@/lib/security-checks/check-list
 import { SEVERITY_LABEL } from "@/lib/security-severity";
 import type { ResultFix } from "@/lib/security-checks/report";
 
-/** Stack the browser preview and agent results so both are visible from the same page. */
-/** A section heading that opens and closes it: no disclosure arrow, in any browser. */
-const SECTION_HEADING = "cursor-pointer list-none px-4 py-4 font-semibold text-zk-text sm:px-6 [&::-webkit-details-marker]:hidden";
 
 const FIX_STATE: Record<ResultFix["bucket"], string> = { fixing: "Being fixed", fixed: "Fixed", closed: "Closed" };
 
 /**
- * `initialFix`: findings to tick with the fix panel already open, when "Fix the critical one" or a finding's
- * "Fix it for me" brings the person here (`?fix=id1,id2`).
+ * One section of a check's list, on its own page (18 Nov call, Mark: the quick scan and the deeper scan on separate
+ * pages): the **Quick scan** on the scan's page, the **Deeper scan** on its own page. Its findings can be ticked and
+ * sent with Fix selected, which opens the fix panel right under the list.
+ *
+ * `initialFix`: findings to tick with the fix panel already open, when a finding's "Fix it for me" brings the person
+ * here (`?fix=id1,id2`).
  */
-export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string; tabs: [ListTab, ListTab]; initialFix?: string[] }) {
+export function CheckList({ checkId, tab, show, initialFix = [] }: { checkId: string; tab: ListTab; show: "quick" | "deeper"; initialFix?: string[] }) {
   const [picked, setPicked] = useState<string[]>(initialFix);
   const [fixOpen, setFixOpen] = useState(initialFix.length > 0);
-  const [quick, checks] = tabs;
   // Every finding not already in the app can be sent from here, a rescan's earlier ones still there included (18 Nov, Tolu).
-  // The quick scan's findings can be ticked and fixed too, from their own section (18 Nov).
-  const fixable = [...(quick.findings ?? []), ...(checks.findings ?? [])].filter(({ id, fix }) => !fix && picked.includes(id));
+  const fixable = (tab.findings ?? []).filter(({ id, fix }) => !fix && picked.includes(id));
   const selected = fixable.map(({ id }) => id);
   const toggle = (id: string) => {
     const next = picked.includes(id) ? picked.filter((item) => item !== id) : [...picked, id];
@@ -48,52 +47,39 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
     const timer = setTimeout(() => document.getElementById("fix-panel")?.scrollIntoView({ block: "center", behavior: "smooth" }), 400);
     return () => clearTimeout(timer);
   }, [initialFix.length]);
+  const quick = show === "quick";
 
   return (
-    // The id: with the quick scan merged into the list, "View quick scan results" lands here (#deeper-scan-gate).
-    <div id="check-results" className="scroll-mt-24 space-y-5 border-t border-zk-border bg-zk-bg p-4 sm:p-6">
-      {/* Both sections open and close by clicking their heading, with no arrow (17 Nov, Hamzat). */}
-      {/* The quick scan starts closed once the deeper scan has results, so those come first (17 Nov, Hamzat). */}
-      {/* Ziki's code checks (the quick scan) keep their own section at the top, before and after payment (18 Nov):
-          their findings can be ticked and fixed here, and the Deeper scan below lists only the agents' work. */}
-      {/* The id: the deeper scan's checkout jumps here from "View quick scan results" (#deeper-scan-gate). */}
-      {quick.merged ? null : (
-        <details id="quick-scan-results" open={!(checks.findings ?? []).length} className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-          <summary className={SECTION_HEADING}>
-            Quick scan · {quick.count} {quick.count === 1 ? "finding" : "findings"}
-          </summary>
-          {/* An older scan (before 18 Nov) has only titles here: make them real, fixable findings once. */}
-          {quick.scanRows?.length && !quick.findings?.length ? <MakeFixable checkId={checkId} /> : null}
-          <TabRows tab={quick} selected={selected} onToggle={toggle} onSelectAll={quick.findings?.length ? selectAll : undefined} />
-        </details>
-      )}
-      {/* The id: the Deeper scan step at the top of the page jumps here (18 Nov). */}
-      <details id="deeper-scan-results" open className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface">
-        <summary className={`${SECTION_HEADING} flex flex-wrap items-center justify-between gap-2`}>
-          <span>Deeper scan</span>
-          {checks.startable ? (
-            // Not started: a lock and Start, like the steps box at the top (18 Nov, Hamzat). It opens the same
-            // deeper-scan checkout, and doesn't open or close the section.
+    <div className="border-t border-zk-border bg-zk-bg p-4 sm:p-6">
+      <section
+        id={quick ? "quick-scan-results" : "deeper-scan-results"}
+        aria-labelledby={quick ? "quick-scan-heading" : "deeper-scan-heading"}
+        className="scroll-mt-24 overflow-hidden rounded-2xl border border-zk-border bg-zk-surface"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 sm:px-6">
+          <h2 id={quick ? "quick-scan-heading" : "deeper-scan-heading"} className="m-0 text-base font-semibold text-zk-text">
+            {quick ? `Quick scan · ${tab.count} ${tab.count === 1 ? "finding" : "findings"}` : "Deeper scan"}
+          </h2>
+          {quick ? null : tab.startable ? (
+            // Not started: the one Start on this page (18 Nov call, Mark: one call to action). It opens the checkout.
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-zk-text2">
               <LockIcon />
               <button
                 type="button"
                 aria-haspopup="dialog"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"));
-                }}
-                className="inline-flex h-7 items-center rounded-full bg-electric-blue-strong px-3.5 text-xs font-bold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
+                onClick={() => window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"))}
+                className="inline-flex h-9 items-center rounded-xl bg-electric-blue-strong px-4 text-sm font-semibold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
               >
-                Start
+                Run deeper scan
               </button>
             </span>
           ) : (
-            <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{checks.state.label}</span>
+            <span className="rounded-full bg-zk-chip px-2.5 py-1 text-xs font-semibold text-zk-text2">{tab.state.label}</span>
           )}
-        </summary>
-        <TabRows tab={checks} selected={selected} onToggle={toggle} onSelectAll={selectAll} />
+        </div>
+        {/* An older scan (before 18 Nov) has only titles here: make them real, fixable findings once. */}
+        {quick && tab.scanRows?.length && !tab.findings?.length ? <MakeFixable checkId={checkId} /> : null}
+        <TabRows tab={tab} selected={selected} onToggle={toggle} onSelectAll={tab.findings?.length ? selectAll : undefined} />
         {/* Ticking shows the blue bar; "Fix N selected" swaps it for the panel, which keeps the count (17 Nov, Hamzat). */}
         {selected.length && !panelOpen ? (
           <div className="flex items-center justify-between gap-3 border-t border-zk-border bg-zk-tint px-4 py-3 sm:px-6">
@@ -101,7 +87,7 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
             <button
               type="button"
               onClick={() => setFixOpen(true)}
-              className="rounded-full bg-electric-blue-strong px-4 py-2 text-sm font-bold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
+              className="h-9 rounded-xl bg-electric-blue-strong px-4 text-sm font-semibold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
             >
               Fix {selected.length} selected
             </button>
@@ -115,7 +101,7 @@ export function CheckList({ checkId, tabs, initialFix = [] }: { checkId: string;
             onDone={() => { setPicked([]); setFixOpen(false); }}
           />
         ) : null}
-      </details>
+      </section>
     </div>
   );
 }
@@ -157,7 +143,8 @@ function TabRows({ tab, selected, onToggle, onSelectAll }: { tab: ListTab; selec
       {pending.length ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">Still checking · {pending.length}</li> : null}
       {pending.map((part) => (
         <li key={part.id}>
-          <Row severity={null} title={part.title} right={<PartState state={part.state} />} lead={null} />
+          {/* Who is checking it, while it's being checked (18 Nov call, Mark: show the work happening). */}
+          <Row severity={null} title={part.title} sub={part.state === "checking" && part.agent ? `${part.agent} is checking this` : null} right={<PartState state={part.state} />} lead={null} />
         </li>
       ))}
       {/* Before the deeper scan is paid for (#deeper-scan-gate): what the 20 Ziks buys, each not checked yet. */}

@@ -39,9 +39,9 @@ export function DeeperScanStart({ checkId, site, price, covers, backFromBuying =
       {/* In the place and look of "Ziki is checking …" (check-activity.tsx), which shows once it's paid for. */}
       <div className="min-w-0">
         <h1 id="check-headline" className="m-0 wrap-break-word text-2xl font-extrabold tracking-[-0.02em] text-zk-text sm:text-[28px]">
-          Quick scan done on {site}
+          Deeper scan of {site}
         </h1>
-        <p className="m-0 mt-1 text-[15px] font-bold text-zk-accent">Start the deeper scan to have agents check inside.</p>
+        <p className="m-0 mt-1 text-[15px] text-zk-text2">Security agents check inside {site}: what the quick scan can&apos;t see. Press Run deeper scan to begin.</p>
       </div>
       <DeeperScanCheckout checkId={checkId} site={site} price={price} covers={covers} deeper={deeper} />
     </>
@@ -78,7 +78,7 @@ function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId:
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
-      className="m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[760px] overflow-y-auto rounded-2xl border border-zk-border bg-zk-surface p-0 text-zk-text shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[600px] overflow-y-auto rounded-2xl border border-zk-border bg-zk-surface p-0 text-zk-text shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm"
     >
       {open ? (
         <div className="flex flex-col gap-5 p-5 sm:p-6">
