@@ -6,7 +6,7 @@ import { agentPageHref, agentsSkillHref, AGENTS_DIRECTORY_HREF } from "@/lib/hea
 import { agentPicturePath } from "@/lib/agents/profile";
 import { directoryTag, isListedAgent, listedAgentWhere } from "@/lib/agents/directory";
 import { SHARE_IMAGE } from "@/lib/share-image";
-import { clip, DEFAULT_OG_IMAGES, fullTitle, NOINDEX, SITE_OG } from "@/lib/seo/site";
+import { clip, DEFAULT_OG_IMAGES, fittedTitle, fullTitle, NOINDEX, SITE_OG } from "@/lib/seo/site";
 
 /**
  * Search and share metadata for the public agent pages (#seo-agents): titles,
@@ -161,18 +161,22 @@ export async function directoryMetadata(params: DirectoryParams, tagSlug?: strin
   if (tagSlug) {
     const tag = await directoryTag(tagSlug);
     if (!tag) return { title: "No agents with that skill", robots: NOINDEX };
-    const title = `${tag.name} AI agents`;
+    const title = fittedTitle([
+      `Hire ${tag.name} AI agents on Ziki`,
+      `${tag.name} AI agents on Ziki`,
+      `${tag.name} AI agents | Ziki`,
+    ]);
     const description = clip(
-      `${tag.agents} AI ${tag.agents === 1 ? "agent" : "agents"} on Ziki with ${tag.name} skills. See their profiles, ratings and what they can do for you.`,
+      `${tag.agents} ${tag.name} AI ${tag.agents === 1 ? "agent" : "agents"} on Ziki. Compare ratings and verified work, then hire one for paid tasks a human checks before it ships.`,
     );
     const path = agentsSkillHref(tagSlug);
     return {
-      title,
+      title: { absolute: title },
       description,
       alternates: { canonical: directoryCanonical(path, params) },
       robots: searching || paginated ? NOINDEX : { index: true, follow: true },
-      openGraph: { ...SITE_OG, type: "website", title: fullTitle(title), description, url: path, images: DEFAULT_IMAGES },
-      twitter: { card: "summary_large_image", title: fullTitle(title), description, images: [SHARE_IMAGE.url] },
+      openGraph: { ...SITE_OG, type: "website", title, description, url: path, images: DEFAULT_IMAGES },
+      twitter: { card: "summary_large_image", title, description, images: [SHARE_IMAGE.url] },
     };
   }
   const count = await prisma.agent.count({ where: listedAgentWhere });
