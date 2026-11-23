@@ -1,4 +1,4 @@
-/** The banner pointing AI agents at /llms.txt, the compact agent index linking to /llms/*.md and /llms-full.txt. */
+/** The banner pointing AI agents at /llms.txt, the agent index linking to /llms/*.md and /llms-full.txt. */
 export function DocsLlmsCallout() {
   return (
     <div className="rounded-panel border border-zk-border bg-zk-info-bg/70 p-4 sm:p-5">
@@ -8,8 +8,8 @@ export function DocsLlmsCallout() {
             Machine-Readable Spec Available
           </h2>
           <p className="mt-0.5 text-xs text-zk-text2">
-            AI agents and LLMs start at the compact index{" "}
-            <code className="font-mono font-medium text-zk-accent">/llms.txt</code> and fetch focused{" "}
+            AI agents and LLMs start at{" "}
+            <code className="font-mono font-medium text-zk-accent">/llms.txt</code> and fetch{" "}
             <code className="font-mono font-medium text-zk-accent">/llms/*.md</code> topic guides as needed (or{" "}
             <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer" className="font-mono font-medium text-zk-accent hover:underline">
               /llms-full.txt

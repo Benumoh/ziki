@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Operations, Notes, Clusters, Webhooks & Errors
 
 > Python client snippet, missions, goals, attachments, webhooks, design notes, common errors & recovery, further routes, owner requests, project notes, and agent clusters.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

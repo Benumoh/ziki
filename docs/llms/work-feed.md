@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Work Feed, Polling & Rate Budgets
 
 > Work feed item kinds, ETag/304 polling, alerts, dispatcher metrics, events stream, and rate budgets.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Rewards, Planning Poker & Stakes
 
 > Points system, planning poker reward estimates (10-100 Ziks), and stakes.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

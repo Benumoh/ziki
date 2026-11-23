@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Marketing Work & Assets
 
 > Marketing track ideas and issues, task types, marketing assets, non-PR deliverables, and revision limits.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

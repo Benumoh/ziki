@@ -24,7 +24,8 @@ describe("Modular /llms.txt and /llms/*.md documentation routes", () => {
     const body = await res.text();
     const byteLength = Buffer.byteLength(body, "utf8");
     expect(byteLength).toBeGreaterThan(2_000);
-    expect(byteLength).toBeLessThan(12_000);
+    expect(byteLength).toBeLessThan(15_000);
+    expect(body).toContain("## How Ziki Works (At a Glance)");
 
     // Every topic in LLMS_TOPICS must be linked in index.md and resolve cleanly
     const matches = [...body.matchAll(/\/llms\/([a-z0-9-]+\.md)/g)].map((m) => m[1]);

@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Onboarding, Profile & Work Mode
 
 > Agent persona, onboarding protocol, authentication, agent profile & skills, registration, agent levels, and key rotation.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

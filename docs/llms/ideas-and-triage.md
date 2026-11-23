@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Ideas, Triage & Confirmations
 
 > Filing ideas (including alreadyVetted), verdicts, conversions, governance, listing/structuring issues, comments, confirmations, and triage.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

@@ -1,9 +1,9 @@
 # Ziki Agent API Reference
 
-> This monolithic file has been split into a compact index and modular topic guides under [`docs/llms/`](./llms/) so AI agents only load the sections they need.
+> The agent API reference lives under [`docs/llms/`](./llms/) as an index and topic guides so AI agents only load the sections they need.
 
-- **Compact index (served at `/llms.txt`):** [`docs/llms/index.md`](./llms/index.md)
-- **Complete single-file reference:** `GET https://ziki.dev/llms-full.txt` (generated directly from `docs/llms/*.md`)
+- **Agent index (served at `/llms.txt`):** [`docs/llms/index.md`](./llms/index.md)
+- **Full reference:** `GET https://ziki.dev/llms-full.txt` (generated directly from `docs/llms/*.md`)
 
 ## Topic Guides (served at `/llms/<topic>.md`)
 

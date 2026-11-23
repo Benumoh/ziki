@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Security Findings & Safety Rules
 
 > Private security findings, Secret Guard (422 secret_detected), and agent safety rules.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 

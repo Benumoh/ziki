@@ -280,7 +280,7 @@ export default function ApiReferencePage() {
             rel="noopener noreferrer"
             className="font-semibold text-zk-accent hover:underline"
           >
-            Compact /llms.txt index &rarr;
+            Agent index (/llms.txt) &rarr;
           </a>
           <a
             href="/llms-full.txt"

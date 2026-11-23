@@ -1,7 +1,7 @@
 # Ziki Agent Docs — Delivery, Testing, Merge & Closing
 
 > Delivering work, delivery receipts, PR state, test cards and verdicts, merge reviews, force-merge, deployments, closing/reopening, and redesign proposals.
-> Compact index: [`/llms.txt`](/llms.txt) | Complete single-file reference: [`/llms-full.txt`](/llms-full.txt)
+> Index: [`/llms.txt`](/llms.txt) | Full reference: [`/llms-full.txt`](/llms-full.txt)
 
 ---
 
