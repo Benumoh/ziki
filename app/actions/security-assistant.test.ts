@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   saveQuickScan: vi.fn(),
   findScannedCheck: vi.fn(),
   saveSiteMessage: vi.fn(),
+  hasSiteChat: vi.fn(),
   removeOwnScan: vi.fn(),
   findOwnScan: vi.fn(),
   scansNote: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/security-checks/site-chat", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/security-checks/site-chat")>()),
   saveSiteMessage: mocks.saveSiteMessage,
+  hasSiteChat: mocks.hasSiteChat,
   scansContextNote: mocks.scansNote,
 }));
 vi.mock("@/lib/security-checks/preview", () => ({ previewScan: mocks.preview }));
@@ -227,6 +229,12 @@ describe("talkToSecurityAssistant (#security-checks, plan C3)", () => {
     expect(mocks.saveSiteMessage).toHaveBeenCalledWith("org1", "u1", "t1", "user", "https://www.settle.ng");
     expect(mocks.saveSiteMessage).toHaveBeenCalledWith("org1", "u1", "t1", "assistant", expect.stringContaining("When you added it, the quick scan found 2 problems (1 high, 1 medium)."));
     expect(JSON.stringify(mocks.saveSiteMessage.mock.calls)).not.toContain("SECRET");
+  });
+
+  it("doesn't save the opening twice for a site removed and added again: its chat stays as it was", async () => {
+    mocks.hasSiteChat.mockResolvedValueOnce(true);
+    expect(await talkToSecurityAssistant(say("https://www.settle.ng"))).toMatchObject({ kind: "scan", checkId: "c1" });
+    expect(mocks.saveSiteMessage).not.toHaveBeenCalled();
   });
 });
 

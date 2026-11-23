@@ -36,6 +36,7 @@ import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/compone
 import { AppInfoLinks } from "@/components/app-info-links";
 import { ShareMenu } from "@/components/share-menu";
 import { ProjectPendingJoinRequestsBanner, type PendingJoinRequestItem } from "@/components/project-pending-join-requests";
+import { FirstQuestions } from "@/components/get-started/first-questions";
 import { missingProfileFields, type ProfileField } from "@/lib/agents/work-gate";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import type { AppRole } from "@/lib/roles";
@@ -1236,7 +1237,7 @@ export async function IssuesList({
   const rejectedIdeaWhere: Prisma.IdeaWhereInput = { ...ideaWhere, status: { in: ["rejected", "archived"] } };
   // #project-links: the project's site and GitHub repository, and whether you can set them.
   const [projectLinks, canEditProjectLinks] = await Promise.all([
-    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true } }), null),
+    loadOrEmpty("project links", () => prisma.project.findUnique({ where: { id: project.id }, select: { siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true, productKinds: true, productOther: true } }), null),
     organisationId && userId ? loadOrEmpty("project admin", () => isAdminOfOrganisation(user, organisationId), false) : Promise.resolve(false),
   ]);
   // #agent-work-gate: your agents that aren't allowed to work until their profile is set up. The agents bar
@@ -1263,6 +1264,12 @@ export async function IssuesList({
           [] as UnconfiguredAgent[],
         )
       : [];
+  // First questions (#first-questions): setting up a project is the organisation owner's or an admin's, so only
+  // they get it, on a project that has no ideas yet (any status, rejected included). It opens on Overview too,
+  // where /home lands right after creating an organisation. Members who join get the welcome tour instead.
+  const showFirstQuestions =
+    (isIdeasView || isYourWorkView) && !isDeletedView && Boolean(organisationId && userId) && isOrgAdmin &&
+    (await loadOrEmpty("first questions", () => prisma.idea.count({ where: { projectId: project.id } }), 1)) === 0;
   // My Work shows only when you have work in this project: issues you bid on or hold, whatever their status.
   const myWorkCount =
     userId && !isDeletedView
@@ -1477,8 +1484,9 @@ export async function IssuesList({
   // already empty, so a populated list pays nothing for it. It counts the
   // same scope the list shows, including ?project=all, so an empty filter
   // across a busy organisation is "no issues match", not "no issues yet".
+  // A project whose only work is ideas waiting for your OK isn't empty: the Work Feed lists them under Needs your OK.
   let isFirstRun = false;
-  if (totalCount === 0 && !isDeletedView) {
+  if (totalCount === 0 && !isDeletedView && ideasToOkCount === 0) {
     try {
       isFirstRun = (await prisma.bug.count({
         where: {
@@ -1777,6 +1785,18 @@ export async function IssuesList({
 
 
         {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
+
+        {/* First questions: full-screen, one at a time, over a project that has no ideas yet. */}
+        {showFirstQuestions ? (
+          <FirstQuestions
+            projectId={project.id}
+            projectSlug={project.slug}
+            productKinds={projectLinks?.productKinds ?? []}
+            productOther={projectLinks?.productOther ?? null}
+            canEditProject={canEditProjectLinks}
+            firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
+          />
+        ) : null}
 
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}
@@ -2176,7 +2196,16 @@ export async function IssuesList({
           <div className="min-w-0">
             <p className="m-0 truncate text-[15px] font-semibold text-zk-text">{project.name}</p>
             {/* Where it runs and where its code is, each with a pencil to edit it in place. */}
-            <AppInfoLinks slug={slug} siteUrl={projectLinks?.siteUrl ?? null} repoUrl={projectLinks?.repoUrl ?? null} canEdit={canEditProjectLinks} />
+            <AppInfoLinks
+              slug={slug}
+              siteUrl={projectLinks?.siteUrl ?? null}
+              repoUrl={projectLinks?.repoUrl ?? null}
+              appStoreUrl={projectLinks?.appStoreUrl ?? null}
+              playStoreUrl={projectLinks?.playStoreUrl ?? null}
+              downloadUrl={projectLinks?.downloadUrl ?? null}
+              productKinds={projectLinks?.productKinds ?? []}
+              canEdit={canEditProjectLinks}
+            />
           </div>
         </div>
         <div className="flex items-center gap-2">

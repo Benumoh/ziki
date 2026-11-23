@@ -34,7 +34,8 @@ export type ListFinding = {
   price: number;
 };
 
-export type ListPending = { id: string; title: string; state: "checking" | "waiting" };
+/** A part still to do; `agent`: who is checking it right now (18 Nov call: show the work happening). */
+export type ListPending = { id: string; title: string; state: "checking" | "waiting"; agent: string | null };
 
 /** One tab of the check's list. */
 export type ListTab = {
@@ -77,7 +78,7 @@ function codeArea(area: string): string {
 }
 
 /** A finding from Ziki's own code checks (the quick scan), saved in the list since 18 Nov, rather than an agent's. */
-function isQuickScanFinding(finding: ReportFinding): boolean {
+export function isQuickScanFinding(finding: Pick<ReportFinding, "area">): boolean {
   return /^Automatic check:/.test(finding.area);
 }
 
@@ -147,7 +148,7 @@ function deeperScanTab(report: CheckReport): ListTab {
   const pending =
     report.status === "cancelled" || report.previousCheckId !== null
       ? []
-      : parts.filter((part) => !finished(part)).map((part) => ({ id: part.id, title: part.title, state: part.status === "checking" ? ("checking" as const) : ("waiting" as const) }));
+      : parts.filter((part) => !finished(part)).map((part) => ({ id: part.id, title: part.title, state: part.status === "checking" ? ("checking" as const) : ("waiting" as const), agent: part.agent }));
   const clear = parts.filter((part) => part.status === "done" && !withFindings.has(part.id)).map((part) => part.title);
   const state: ListTab["state"] =
     done === parts.length

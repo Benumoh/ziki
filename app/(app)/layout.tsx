@@ -1,4 +1,4 @@
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
@@ -26,6 +26,7 @@ import { AgentsDock, type DockAgent } from "@/components/agents-dock";
 import { appVersionLabel } from "@/lib/deployed-version";
 import { agentActivity, agentEarnings } from "@/lib/points/agent-earnings";
 import { headerEarnings } from "@/lib/earnings";
+import { WelcomeTour } from "@/components/welcome-tour/welcome-tour";
 
 async function getOrganisationProjects(organisationId: string) {
   return prisma.project.findMany({
@@ -297,6 +298,19 @@ export default async function AppLayout({
       {/* The agents dock keeps the page's foot clear of its floor line itself, as tall as what stands on it, and draws nothing (no spacer either) where it doesn't help. */}
       <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} showActiveAgents={showActiveAgents} />
       <FocusMainOnNavigate />
+      {/* Members who joined an organisation get a short tour of how work gets done there; its owner and admins
+          set the project up through First questions instead (#member-tour). It lives here so it survives the
+          move to the new idea's page after a request is sent. */}
+      {organisationRole === "member" && activeOrganisationId ? (
+        <Suspense fallback={null}>
+          <WelcomeTour
+            userId={user.id}
+            organisationId={activeOrganisationId}
+            organisationName={organisationOptions.find((organisation) => organisation.id === activeOrganisationId)?.name ?? null}
+            firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
+          />
+        </Suspense>
+      ) : null}
       <KeyboardShortcuts
         enabled={shortcutsEnabled}
       />
