@@ -105,20 +105,6 @@ function Pill({ tone, children }: { tone: { backgroundColor: string; color: stri
   );
 }
 
-/** An outlined pill for a name or project, with an initial when it is a person or agent. */
-function Outline({ initial, children }: { initial?: string; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-md border border-zk-border bg-zk-surface px-2 py-1 text-[12px] font-medium text-zk-text">
-      {initial ? (
-        <span aria-hidden="true" className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold" style={PILL_TONES.blue}>
-          {initial}
-        </span>
-      ) : null}
-      <span className="truncate">{children}</span>
-    </span>
-  );
-}
-
 /** The priority signal: three rising bars, as many lit as the priority is high. */
 function PriorityBars({ priority, colour }: { priority: IssuePriority; colour: string }) {
   const lit = priority === "urgent" || priority === "high" ? 3 : priority === "medium" ? 2 : 1;
@@ -263,15 +249,9 @@ export async function WorkQueue({
   });
   const now = at.getTime();
   const several = projects.length > 1;
-  // A column empty on every row (no holder, deadline, judgement or pull request yet, as on Open) is left out,
-  // so the issue titles get its room.
+  // The Tests column shows only when a row has a judgement (none do on Open), so the issue titles get its room.
   const judgedOf = (row: Row) => row.testVerdicts.filter((verdict) => verdict.pullRequestUrl === row.pullRequestUrl);
-  const show = {
-    holder: rows.some((row) => row.claims[0]),
-    deadline: rows.some((row) => row.claims[0]?.deliverBy),
-    tests: rows.some((row) => judgedOf(row).length > 0),
-    pr: rows.some((row) => row.pullRequestUrl),
-  };
+  const showTests = rows.some((row) => judgedOf(row).length > 0);
 
   // Every tab is as wide as the Overview page and the lists (max-w-[920px]), so the cards line up from page to page.
   return (
@@ -360,22 +340,19 @@ export async function WorkQueue({
           }
         />
         <div className="min-w-0 flex-1">
-      {/* A table grouped by priority: a light heading band, roomy rows, tinted pills, and a summary at the foot. */}
+      {/* A table grouped by priority: a light heading band, roomy rows, tinted pills, and a summary at the foot. Each
+          issue's details (number, project, step, holder, deadline, pull request) sit on a line under its title, so the
+          table fits the page's width without scrolling sideways. */}
       <div className="rounded-xl border border-zk-border bg-zk-surface p-3">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[13px]">
             <thead>
               <tr className="bg-[#f4f6f9]">
-                <th scope="col" className={`${HEAD} w-16`}>#</th>
                 <th scope="col" className={HEAD}><ColumnHead icon="text">Issue</ColumnHead></th>
-                {several ? <th scope="col" className={HEAD}><ColumnHead icon="tag">Project</ColumnHead></th> : null}
-                {step ? null : <th scope="col" className={HEAD}><ColumnHead icon="arrow">Step</ColumnHead></th>}
-                {show.holder ? <th scope="col" className={HEAD}><ColumnHead icon="user">Held by</ColumnHead></th> : null}
-                {show.deadline ? <th scope="col" className={HEAD}><ColumnHead icon="clock">Deadline</ColumnHead></th> : null}
-                {show.tests ? <th scope="col" className={HEAD}><ColumnHead icon="check">Tests</ColumnHead></th> : null}
-                {show.pr ? <th scope="col" className={HEAD}><ColumnHead icon="link">PR</ColumnHead></th> : null}
+                {/* On a phone only the issue and its next step show: Tests and Moved are left out. */}
+                {showTests ? <th scope="col" className={`${HEAD} max-sm:hidden`}><ColumnHead icon="check">Tests</ColumnHead></th> : null}
                 <th scope="col" className={HEAD}><ColumnHead icon="arrow">Next</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="calendar">Moved</ColumnHead></th>
+                <th scope="col" className={`${HEAD} max-sm:hidden`}><ColumnHead icon="calendar">Moved</ColumnHead></th>
               </tr>
             </thead>
             <tbody>
@@ -412,49 +389,54 @@ export async function WorkQueue({
                         const holder = claim ? claim.agent?.name ?? claim.beneficiary.name ?? "Someone" : null;
                         return (
                           <tr key={row.id} className="group hover:bg-zk-bg">
-                            <td className={`${CELL} font-mono text-[12px] tabular-nums text-zk-muted`}>{formatIssueNumber(row.number)}</td>
-                            <td className={`${CELL} w-full max-w-0`}>
+                            <td className={`${CELL} w-full max-w-0 py-2`}>
                               <Link href={issueHref(row)} className="block truncate text-[14px] font-semibold text-zk-text group-hover:text-zk-accent">
                                 {row.title}
                               </Link>
+                              {/* Its details, on one muted line: only the parts it has. */}
+                              <span className="mt-0.5 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] text-zk-muted">
+                                <span className="shrink-0 font-mono tabular-nums">{formatIssueNumber(row.number)}</span>
+                                {several ? <><span aria-hidden="true">·</span><span className="shrink-0">{row.project.name}</span></> : null}
+                                {step ? null : <><span aria-hidden="true">·</span><span className="shrink-0" title={stateLabel(row.substatus)}>{substatusLabel[row.substatus]}</span></>}
+                                {claim?.deliverBy ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span className={`shrink-0 tabular-nums ${late ? "font-semibold text-zk-bad-fg" : ""}`}>
+                                      due {relative(claim.deliverBy, now)}
+                                    </span>
+                                  </>
+                                ) : null}
+                                {row.pullRequestUrl ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <a href={row.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 font-mono text-zk-accent hover:underline">
+                                      {pr ? `PR #${pr}` : "PR"}
+                                    </a>
+                                  </>
+                                ) : null}
+                                {/* The holder last: on a narrow screen its name is what gets cut short. */}
+                                {holder ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="truncate text-zk-text2" title={claim?.beneficiary.name ? `For ${claim.beneficiary.name}` : undefined}>
+                                      {holder}
+                                      {claim?.status === "offered" ? " (offered)" : ""}
+                                    </span>
+                                  </>
+                                ) : null}
+                              </span>
                             </td>
-                            {several ? <td className={CELL}><Outline>{row.project.name}</Outline></td> : null}
-                            {step ? null : (
-                              <td className={CELL} title={stateLabel(row.substatus)}>
-                                <Pill tone={PILL_TONES.grey}>{substatusLabel[row.substatus]}</Pill>
-                              </td>
-                            )}
-                            {show.holder ? <td className={CELL}>
-                              {holder ? (
-                                <span title={claim?.beneficiary.name ? `For ${claim.beneficiary.name}` : undefined}>
-                                  <Outline initial={holder.charAt(0).toUpperCase()}>
-                                    {holder}
-                                    {claim?.status === "offered" ? <span className="text-zk-muted"> · offered</span> : null}
-                                  </Outline>
-                                </span>
-                              ) : <span className="text-zk-muted">–</span>}
-                            </td> : null}
-                            {show.deadline ? <td className={`${CELL} tabular-nums ${late ? "font-semibold text-zk-bad-fg" : "text-zk-text2"}`}>
-                              {claim?.deliverBy ? relative(claim.deliverBy, now) : <span className="text-zk-muted">–</span>}
-                            </td> : null}
-                            {show.tests ? <td className={CELL}>
+                            {showTests ? <td className={`${CELL} max-sm:hidden`}>
                               <span className="flex gap-1" title={judged.length ? `${good} good to merge, ${notGood} not` : undefined}>
                                 {good ? <Pill tone={PILL_TONES.green}>{good} good</Pill> : null}
                                 {notGood ? <Pill tone={PILL_TONES.red}>{notGood} not</Pill> : null}
                                 {judged.length === 0 ? <span className="text-zk-muted">–</span> : null}
                               </span>
                             </td> : null}
-                            {show.pr ? <td className={`${CELL} font-mono text-[12px]`}>
-                              {row.pullRequestUrl ? (
-                                <a href={row.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-zk-accent hover:underline">
-                                  {pr ? `#${pr}` : "PR"}
-                                </a>
-                              ) : <span className="text-zk-muted">–</span>}
-                            </td> : null}
                             <td className={CELL}>
                               <Pill tone={NEXT_TONE[next.tone]}>{next.text}</Pill>
                             </td>
-                            <td className={`${CELL} tabular-nums text-zk-text2`}>{relative(row.updatedAt, now)}</td>
+                            <td className={`${CELL} tabular-nums text-zk-text2 max-sm:hidden`}>{relative(row.updatedAt, now)}</td>
                           </tr>
                         );
                       })}
