@@ -1978,8 +1978,9 @@ export async function deleteBugAction(bugId: string): Promise<ActionResult> {
         where: { bugId, releasedAt: null, status: { in: ["active", "offered", "planning"] } },
         data: { status: "released", releasedAt: new Date(), releaseReason: "deleted" },
       });
-      // Delete attachments associated with the issue to prevent storage bloat (#658)
-      await tx.attachment.deleteMany({ where: { bugId } });
+      // Attachments stay with the hidden issue so a restore brings them back
+      // (#596). The retention sweep removes them once the issue has been deleted
+      // for DELETED_PARENT_ATTACHMENT_TTL_MS, which still keeps storage in check (#658).
 
       await publishWebEvent(tx, { bugId, type: "issue.deleted", actorUserId: user.id });
 

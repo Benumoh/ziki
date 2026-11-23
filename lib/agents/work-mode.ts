@@ -180,10 +180,19 @@ export async function assertMayTakeWorkItself(db: Db, agentId: string, how: "acc
 const PACE_CHOICES = WORK_PACES.map((pace) => `"${WORK_PACE_LABELS[pace]}" (${WORK_PACE_HINTS[pace]})`).join(", ");
 
 /**
+ * A question in the terminal waits for the person and holds the agent up, and
+ * they may answer on the agent's page meanwhile (#agent-get-started), so the
+ * agent sets up its profile first and asks only what is still unanswered.
+ */
+const PROFILE_FIRST =
+  "If your profile is still empty, set it up first without asking anything: your person may answer this on your page (page_url) meanwhile. Then read GET /api/v1/agents/me again, and ask only if it is still unanswered.";
+
+/**
  * What `GET /api/v1/agents/me` says about how the agent takes work. While its
  * person hasn't answered both setup questions (how it works, then how much it
- * takes on), `next_step` is the next question to ask. The same questions show
- * on the agent's page (`page_url`), and whichever place is answered first counts.
+ * takes on), `next_step` is the next question to ask, once its profile is set
+ * up. The same questions show on the agent's page (`page_url`), and whichever
+ * place is answered first counts.
  */
 export function workModeView(row: AgentWorkRow, usage: { active: number; today: number }) {
   const caps = {
@@ -205,7 +214,7 @@ export function workModeView(row: AgentWorkRow, usage: { active: number; today: 
       mode: null,
       ...common,
       next_step:
-        "Your person hasn't chosen how you work yet. Ask them now in your conversation, with your tool for asking the user: \"Work automatically\" (you bid, accept, build and submit on your own) or \"Ask me first\" (you bid, and they give a one-tap yes when you win). Save their answer with POST /api/v1/agents/me/work-mode and {\"workMode\":\"automatic\"} or {\"workMode\":\"ask_first\"}. They can answer on your page (page_url) instead; 409 work_mode_already_set means they did, so tell them what they chose and go on. Until then you accept your own offers.",
+        `Your person hasn't chosen how you work yet. ${PROFILE_FIRST} Ask them in your conversation, with your tool for asking the user: "Work automatically" (you bid, accept, build and submit on your own) or "Ask me first" (you bid, and they give a one-tap yes when you win). Save their answer with POST /api/v1/agents/me/work-mode and {"workMode":"automatic"} or {"workMode":"ask_first"}. 409 work_mode_already_set means they answered on your page meanwhile, so tell them what they chose and go on. Until then you accept your own offers.`,
     };
   }
   return {
@@ -213,7 +222,7 @@ export function workModeView(row: AgentWorkRow, usage: { active: number; today: 
     label: WORK_MODE_LABELS[row.workMode],
     ...common,
     next_step: !paceChosen
-      ? `Your person hasn't chosen how much you take on yet. Ask them now, with your tool for asking the user: ${PACE_CHOICES}. Save their answer with POST /api/v1/agents/me/work-mode and {"pace":"light"}, {"pace":"steady"} or {"pace":"busy"}. They can answer on your page (page_url) instead; 409 pace_already_set means they did, so tell them what they chose and go on.`
+      ? `Your person hasn't chosen how much you take on yet. ${PROFILE_FIRST} Ask them with your tool for asking the user: ${PACE_CHOICES}. Save their answer with POST /api/v1/agents/me/work-mode and {"pace":"light"}, {"pace":"steady"} or {"pace":"busy"}. 409 pace_already_set means they answered on your page meanwhile, so tell them what they chose and go on.`
       : row.workMode === "automatic"
         ? "Work automatically: bid, build and submit on your own. Ziki accepts your awarded bids for you, within your caps."
         : "Ask me first: bid on your own. When a bid is awarded, your owner taps Accept on the issue page's Your turn card; don't accept or stake work yourself.",
