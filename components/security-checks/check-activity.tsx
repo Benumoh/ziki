@@ -83,6 +83,9 @@ export function CheckActivity({ site, phase, done, total }: { site: string; phas
         <h1 id="check-headline" className="m-0 wrap-break-word text-2xl font-extrabold tracking-[-0.02em] text-zk-text sm:text-[28px]">
           {moving ? `Ziki is checking ${site}` : `Ziki checked ${site}`}
         </h1>
+        {/* Once finished (or stopped), the title and the Done label say it: no "Check finished" and no second line
+            saying it again (18 Nov call, Mark: say things once). While agents work, both lines show the work moving. */}
+        {moving ? (
         <p className="m-0 mt-1 flex items-center gap-2 text-[15px] font-bold text-zk-accent">
           {TITLE[phase]}
           <span aria-hidden="true" className={moving ? "inline-flex items-end gap-1" : "hidden"}>
@@ -95,10 +98,13 @@ export function CheckActivity({ site, phase, done, total }: { site: string; phas
             ))}
           </span>
         </p>
+        ) : null}
         {/* Not announced each time it changes: the title and the numbers say where the check is. */}
+        {moving ? (
         <p key={line} aria-hidden="true" className="m-0 mt-0.5 min-h-5 text-[13px] text-zk-text2 motion-safe:[animation:zk-check-fade_0.4s_ease-out]">
           {line}
         </p>
+        ) : null}
         <p className="sr-only" role="status">
           {TITLE[phase]}.{total > 0 ? ` ${done} of ${total} parts done.` : ""}
         </p>
