@@ -14,6 +14,19 @@ export const UNLINKED_UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Default TTL for orphaned uploads cleanup: 24 hours (#658). */
 export const ORPHANED_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * How long a deleted issue or idea keeps its attachments (#596). Deleting only
+ * hides an issue and owners can restore it, so its files stay for this long and
+ * come back with it; after that the sweep removes them (#658).
+ */
+export const DELETED_PARENT_ATTACHMENT_TTL_DAYS = 30;
+export const DELETED_PARENT_ATTACHMENT_TTL_MS = DELETED_PARENT_ATTACHMENT_TTL_DAYS * 24 * 60 * 60 * 1000;
+
+/** A deleted issue or idea whose attachments are past their grace period. */
+function deletedBefore(cutoff: Date) {
+  return { isDeleted: true, OR: [{ deletedAt: null }, { deletedAt: { lt: cutoff } }] };
+}
+
 /** How often (1 in N uploads) the site-wide sweep also runs. */
 export const SITE_SWEEP_EVERY = 50;
 
@@ -68,7 +81,10 @@ export async function pruneUnlinkedUploads(
 /**
  * Storage cleanup job to purge orphaned attachments (#658):
  * 1. Unattached uploads older than TTL (default 24 hours).
- * 2. Attachments whose parent bug or comment was deleted.
+ * 2. Attachments of an issue or idea deleted more than
+ *    DELETED_PARENT_ATTACHMENT_TTL_MS ago (#596): until then a restore brings
+ *    them back.
+ * 3. Attachments whose parent comment was deleted.
  *
  * Runs in bounded batches to ensure predictable execution time.
  */
@@ -77,6 +93,7 @@ export async function sweepOrphanedAttachments(
   options: {
     now?: Date;
     ttlMs?: number;
+    deletedParentTtlMs?: number;
     sweep?: boolean;
     batchSize?: number;
   } = {},
@@ -84,6 +101,7 @@ export async function sweepOrphanedAttachments(
   const {
     now = new Date(),
     ttlMs = ORPHANED_UPLOAD_TTL_MS,
+    deletedParentTtlMs = DELETED_PARENT_ATTACHMENT_TTL_MS,
     sweep = Math.random() * SITE_SWEEP_EVERY < 1,
     batchSize = SWEEP_BATCH,
   } = options;
@@ -91,6 +109,7 @@ export async function sweepOrphanedAttachments(
   if (!sweep) return { unlinked: 0, deletedParents: 0, total: 0 };
 
   const cutoff = new Date(now.getTime() - ttlMs);
+  const deletedCutoff = new Date(now.getTime() - deletedParentTtlMs);
   let unlinked = 0;
   let deletedParents = 0;
 
@@ -110,15 +129,17 @@ export async function sweepOrphanedAttachments(
     unlinked = removed.count;
   }
 
-  // 2. Purge attachments whose parent bug or idea was marked deleted
+  // 2. Purge attachments of a bug or idea deleted longer ago than its grace
+  // period. The delete re-checks it, so an issue restored in between keeps them.
+  const deletedParent = { OR: [{ bug: deletedBefore(deletedCutoff) }, { idea: deletedBefore(deletedCutoff) }] };
   const staleBugs = await db.attachment.findMany({
-    where: { OR: [{ bug: { isDeleted: true } }, { idea: { isDeleted: true } }] },
+    where: deletedParent,
     select: { id: true },
     take: batchSize,
   });
   if (staleBugs.length > 0) {
     const removed = await db.attachment.deleteMany({
-      where: { id: { in: staleBugs.map((row) => row.id) } },
+      where: { id: { in: staleBugs.map((row) => row.id) }, ...deletedParent },
     });
     deletedParents += removed.count;
   }
