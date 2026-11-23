@@ -1,6 +1,6 @@
 import { FeedbackPageHeader } from "@/components/feedback-page-header";
 import { ToolbarFilterMenu } from "@/components/toolbar-filter-menu";
-import { PortalSearch } from "@/components/portal-search";
+import { FeedbackPortalSearch } from "@/components/feedback-portal-search";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
@@ -47,7 +47,7 @@ export default async function MySubmissionsPage({ searchParams }: { searchParams
     <div className="flex flex-wrap items-center justify-between gap-3">
       <form method="get" action="/my-submissions" className="flex min-w-0 flex-1 items-center">
         {projectId ? <input type="hidden" name="project" value={projectId} /> : null}
-        <PortalSearch label="Search your submissions" placeholder="Search your feedback…" defaultValue={query} muted alwaysExpanded />
+        <FeedbackPortalSearch label="Search your submissions" placeholder="Search your feedback…" defaultValue={query} muted alwaysExpanded />
         <button type="submit" className="sr-only">Search submissions</button>
       </form>
       <ToolbarFilterMenu summary={selectedProject?.name} groups={[{ label: "Project", options: [
