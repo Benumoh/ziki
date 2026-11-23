@@ -8,7 +8,7 @@ import { AGENTS_DOCK_HEIGHT, dockVisibleOn, leaderboardVisible } from "@/lib/age
 import { PAGE_CONTAINER_CLASS } from "@/components/page-container";
 import { orgRefOf, projectPath, queuePath, type ProjectRef } from "@/lib/project-paths";
 import { useProjectRef } from "@/lib/use-project-ref";
-import { formatZ } from "@/lib/points/rules";
+import { formatZik } from "@/lib/coins/math";
 import { updateMood } from "@/components/agent-robots/moods";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentFace } from "@/components/agent-face";
@@ -33,12 +33,12 @@ export type DockAgent = {
   issue: { number: number; href: string } | null;
   /** Its unanswered question to you, word for word. */
   question: string | null;
-  /** What its work has earned, in points (#710). */
-  earnedPoints: number;
-  /** Bids it has placed, comments it has written, and points earned today. */
+  /** What its work has earned, in Ziks (#710). */
+  earnedZiks: number;
+  /** Bids it has placed, comments it has written, and Ziks earned today. */
   bids: number;
   comments: number;
-  pointsToday: number;
+  ziksToday: number;
   /** Things you asked it to do that it hasn't marked done (#agent-requests). */
   pendingRequests: number;
   /** Its profile isn't set up, so it can't work yet (#agent-work-gate): its nameplate says "Set up" and leads there. */
@@ -431,7 +431,7 @@ export function AgentsDock({
               <Link
                 href={agentHref(agent)}
                 onClick={close}
-                aria-label={`${agent.name}, ${agent.needsSetup ? "blocked until its profile is set up" : STATUS_LABEL[agent.status]}: ${plain(agent.activity)}; earned ${formatZ(agent.earnedPoints)}, ${formatZ(agent.pointsToday)} today; ${agent.bids} bids, ${agent.comments} comments`}
+                aria-label={`${agent.name}, ${agent.needsSetup ? "blocked until its profile is set up" : STATUS_LABEL[agent.status]}: ${plain(agent.activity)}; earned ${formatZik(agent.earnedZiks)}, ${formatZik(agent.ziksToday)} today; ${agent.bids} bids, ${agent.comments} comments`}
                 data-agent-trigger
                 className="absolute bottom-0 -translate-x-1/2 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-electric-blue"
                 style={pixelOnFloor ? { width: HIT_W, height: HIT_H } : { width: FIGURE + 8, height: FIGURE + 8, bottom: FIGURE_LIFT - 4 }}
@@ -513,8 +513,8 @@ export function AgentsDock({
                             <span className="min-w-0 flex-1">
                               <span className="flex items-baseline justify-between gap-2">
                                 <span className="truncate font-semibold text-zk-text">{agent.name}</span>
-                                <span className="shrink-0 font-mono font-bold tabular-nums text-zk-ok-fg" title={`Earned ${formatZ(agent.earnedPoints)} in all`}>
-                                  {formatZ(agent.earnedPoints)}
+                                <span className="shrink-0 font-mono font-bold tabular-nums text-zk-ok-fg" title={`Earned ${formatZik(agent.earnedZiks)} in all`}>
+                                  {formatZik(agent.earnedZiks)}
                                 </span>
                               </span>
                               <span className="block truncate text-zk-muted">{plain(agent.activity)}</span>
@@ -1052,12 +1052,12 @@ function Nameplate({ agent, left, centred, shown, open, onPick, onEnter, onLeave
           ref={earned}
           className={`flex items-baseline gap-1 overflow-hidden tabular-nums motion-safe:transition-[max-width,opacity,margin] motion-safe:duration-300 motion-safe:ease-out ${shown ? "ml-2 max-w-40 opacity-100" : "ml-0 max-w-0 opacity-0"}`}
         >
-          <span className="font-mono text-[12px] font-bold text-zk-ok-fg" title={`Earned ${formatZ(agent.earnedPoints)} in all`}>
-            {formatZ(agent.earnedPoints)}
+          <span className="font-mono text-[12px] font-bold text-zk-ok-fg" title={`Earned ${formatZik(agent.earnedZiks)} in all`}>
+            {formatZik(agent.earnedZiks)}
           </span>
           {/* Today's share, in brackets beside the total, as on the site. */}
-          <span className={`font-mono text-[11px] ${agent.pointsToday > 0 ? "font-semibold text-zk-ok-fg" : "text-zk-muted"}`} title={`Earned ${formatZ(agent.pointsToday)} today`}>
-            (+{formatZ(agent.pointsToday)})
+          <span className={`font-mono text-[11px] ${agent.ziksToday > 0 ? "font-semibold text-zk-ok-fg" : "text-zk-muted"}`} title={`Earned ${formatZik(agent.ziksToday)} today`}>
+            (+{formatZik(agent.ziksToday)})
           </span>
         </span>
       </span>
@@ -1098,8 +1098,8 @@ function AgentDetails({ agent, onDone, onHide, inRow = false }: { agent: DockAge
         <p className="m-0 mt-1 line-clamp-3 text-zk-text2">“{agent.question}”</p>
       ) : null}
       <dl className={`grid grid-cols-4 gap-2 text-center ${inRow ? "" : "mt-3 border-t border-zk-divider pt-3"}`}>
-        <Figure label="Earned" value={formatZ(agent.earnedPoints)} title={`${formatZ(agent.earnedPoints)} in all`} tone />
-        <Figure label="Today" value={`+${formatZ(agent.pointsToday)}`} title={`${formatZ(agent.pointsToday)} today`} tone={agent.pointsToday > 0} />
+        <Figure label="Earned" value={formatZik(agent.earnedZiks)} title={`${formatZik(agent.earnedZiks)} in all`} tone />
+        <Figure label="Today" value={`+${formatZik(agent.ziksToday)}`} title={`${formatZik(agent.ziksToday)} today`} tone={agent.ziksToday > 0} />
         <Figure label={agent.bids === 1 ? "Bid" : "Bids"} value={String(agent.bids)} />
         <Figure label={agent.comments === 1 ? "Comment" : "Comments"} value={String(agent.comments)} />
       </dl>

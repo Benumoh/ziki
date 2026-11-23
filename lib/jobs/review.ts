@@ -4,8 +4,6 @@ import type { AgentContext } from "@/lib/agents/require-agent";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { audit } from "@/lib/agents/audit";
 import { publish } from "@/lib/agent-api/events";
-import { award } from "@/lib/points/award";
-import { jobSubmissionSourceKey } from "@/lib/points/rules";
 import {
   DEFAULT_REVIEW_VERDICTS_NEEDED,
   REVIEW_DEADLINE_MS,
@@ -24,8 +22,8 @@ import { activeIn } from "@/lib/agents/active-in";
  * separate so the bug flow stays untouched.
  *
  * A submission is accepted once `reviewsNeeded` owners (distinct from the
- * submitter's owner) accept it; any reject vetoes it immediately. The submitter's
- * owner is paid exactly once via the idempotent `sourceKey`.
+ * submitter's owner) accept it; any reject vetoes it immediately. Accepting a row
+ * pays nothing yet: Ziks are the only payment (#one-payment), and jobs aren't funded in Ziks.
  */
 
 type Db = typeof prisma | Prisma.TransactionClient;
@@ -362,7 +360,6 @@ export async function acceptJobReviewOffer(agent: AgentContext, offerId: string)
 export type ReviewOutcome = {
   submission: { id: string; status: string; reviewsNeeded: number };
   review: { id: string; verdict: string };
-  points_awarded: number;
 };
 
 /**
@@ -371,7 +368,7 @@ export type ReviewOutcome = {
  * The caller must hold an accepted offer for this row (accept it first), be a
  * reviewer, and not be the submitter's owner. A reject vetoes immediately; an
  * accept counts toward `reviewsNeeded` distinct owners, and reaching it accepts
- * the row and pays the submitter's owner once.
+ * the row.
  */
 export async function reviewJobSubmission(
   agent: AgentContext,
@@ -447,7 +444,6 @@ export async function reviewJobSubmission(
     });
 
     let status: JobSubmissionStatus = submission.status;
-    let pointsAwarded = 0;
 
     if (parsed.verdict === "reject") {
       status = "rejected";
@@ -457,18 +453,7 @@ export async function reviewJobSubmission(
         select: { beneficiaryUserId: true },
       });
       const distinctOwners = new Set(accepts.map((a) => a.beneficiaryUserId));
-      if (distinctOwners.size >= submission.reviewsNeeded) {
-        status = "accepted";
-        const written = await award(tx, {
-          organisationId: submission.job.organisationId,
-          userId: submission.beneficiaryUserId,
-          bugId: null,
-          role: "submission",
-          points: Number(submission.job.pointsPerAccepted),
-          sourceKey: jobSubmissionSourceKey(submission.job.id, submission.id),
-        });
-        if (written) pointsAwarded = Number(submission.job.pointsPerAccepted);
-      }
+      if (distinctOwners.size >= submission.reviewsNeeded) status = "accepted";
     }
 
     const updated = await tx.jobSubmission.update({
@@ -493,7 +478,6 @@ export async function reviewJobSubmission(
     return {
       submission: { id: updated.id, status: updated.status, reviewsNeeded: updated.reviewsNeeded },
       review,
-      points_awarded: pointsAwarded,
       kind: "reviewed" as const,
     };
   });
@@ -505,7 +489,6 @@ export async function reviewJobSubmission(
   return {
     submission: result.submission,
     review: result.review,
-    points_awarded: result.points_awarded,
   };
 }
 

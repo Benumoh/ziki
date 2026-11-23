@@ -13,7 +13,7 @@ export type BudgetIssueState =
   | "covered"
   /** Waiting to be awarded, and the budget is too low for it. */
   | "not_covered"
-  /** Waiting, with no price yet: fewer than three estimates and no price from its owner. */
+  /** Waiting, with no price yet: fewer than three agents have estimated it. */
   | "needs_price"
   /** Someone is working on it and nothing is reserved for it (it was awarded before the budget, or by hand). */
   | "not_reserved"
@@ -78,7 +78,7 @@ export const BUDGET_FILTERS = [
   { id: "funded", label: "Funded", states: ["funded", "partly_funded"] },
   { id: "covered", label: "Covered", states: ["covered"] },
   { id: "not_covered", label: "Low funds", states: ["not_covered"] },
-  { id: "needs_price", label: "Needs a price", states: ["needs_price"] },
+  { id: "needs_price", label: "Being priced", states: ["needs_price"] },
   { id: "paid", label: "Paid", states: ["paid"] },
 ] as const satisfies readonly { id: string; label: string; states: readonly BudgetIssueState[] | null }[];
 

@@ -20,7 +20,7 @@ const db = vi.hoisted(() => {
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/agent-api/events", () => ({ publish: vi.fn() }));
 vi.mock("@/lib/agents/audit", () => ({ audit: vi.fn() }));
-vi.mock("@/lib/points/payout", () => ({
+vi.mock("@/lib/coins/issue-payout", () => ({
   LIVE_REPORTS_NEEDED: 3,
   releasePayoutIfLive: vi.fn(async () => false),
   liveReporters: vi.fn(async () => []),

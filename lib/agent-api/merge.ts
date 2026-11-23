@@ -7,17 +7,13 @@ import { reviewerConflict, ReviewerNotIndependentError, type ReviewedBug } from 
 import { hasLevel } from "@/lib/agents/levels";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { IssueApiError } from "@/lib/agent-api/errors";
-import { approvedPlanSummary, planPayoutFor } from "@/lib/agent-api/plan";
+import { approvedPlanSummary } from "@/lib/agent-api/plan";
 import { publish } from "@/lib/agent-api/events";
 import { isConfirmed } from "@/lib/agent-api/confirmations";
 import { countedMergeVerdicts, deliveredClaim, MANAGER_VERDICT_WEIGHT } from "@/lib/agent-api/merge-verdicts";
 import { checksFor, countsWithProof, loadProofRules, NO_CHECKS } from "@/lib/proof";
 import { afterSendBack, judgementCounts, trackRules } from "@/lib/marketing/track";
-import { award, type PointAward } from "@/lib/points/award";
-import { holdPayout } from "@/lib/points/payout";
-import { calculateReporterPoints, calculateReviewerPoints, solverReward } from "@/lib/points/project-rewards";
-import { pointSourceKey, reviewerPointsAt } from "@/lib/points/rules";
-import { getPlatformRewardConfig, getProjectRewardConfig } from "@/lib/points/platform-rewards";
+import { releasePayoutIfLive, releasePayoutNow } from "@/lib/coins/issue-payout";
 import { assertRedesignOpen } from "@/lib/redesigns";
 import { statusChangedSummary } from "@/lib/activity-log";
 import { entryDescription, entryReplySelect, entrySummary, toEntryReplies, type EntryReply } from "@/lib/agent-api/entry-fields";
@@ -65,12 +61,11 @@ import { sameCommit } from "@/lib/github/commit-sha";
  * at the head Ziki has. The merge itself happens on GitHub, by the merger agent;
  * an independent agent then reports it merged, and resolving it
  * (`POST /issues/{id}/resolve`, lib/agent-api/reconcile-merged.ts) makes the
- * issue Live and pays the points (`finalizeResolved`).
+ * issue Live (`finalizeResolved`); it pays out once live (lib/coins/issue-payout.ts).
  *
  * Marketing work (#M-API-5) has no pull request, merge or deploy (D1): a
  * manager's accept moves it from Done · Accepted straight to Live · Published
- * and pays the solver, poster, dispatcher and reviewers at once, each award
- * once by its source key.
+ * and pays out its funded Ziks at once (#one-payment).
  */
 
 export const mergeBugSelect = {
@@ -366,7 +361,7 @@ async function reviewFix(
   if (marketing) {
     // D1: a manager accepts Done · Accepted marketing work straight to Live ·
     // Published. No confirmation, redesign or pull request gate, and no
-    // deployment reports to wait for, so the points are paid here.
+    // deployment reports to wait for, so it pays out here.
     if (bug.substatus !== "accepted") {
       return {
         status: 409,
@@ -498,7 +493,7 @@ async function reviewFix(
   const pullRequestUrl = bug.pullRequestUrl;
 
   return prisma.$transaction(async (tx) => {
-    // The accept: ready to merge, without resolving or awarding points.
+    // The accept: ready to merge, without resolving or paying out.
     const saved = await saveMergeReview(tx, agent, bug, review, pullRequestUrl, headSha);
     // Threshold-only: the accept is a vote; only the one that reaches acceptThreshold moves the issue.
     let decision: ThresholdDecision | null = null;
@@ -582,7 +577,7 @@ export function acceptBlock(gate: PrGate, conflictTodo?: string): AcceptBlock | 
     return {
       error: "already_merged",
       message: "The latest report says the pull request is merged into the default branch already.",
-      todo: "Resolve it instead (POST /api/v1/issues/{id}/resolve): that makes it Live and pays the points.",
+      todo: "Resolve it instead (POST /api/v1/issues/{id}/resolve): that makes it Live, and it pays out once 3 people report it deployed.",
     };
   }
   if (gate.awaitingRelease) return { error: "awaiting_release", message: reason };
@@ -686,83 +681,10 @@ export async function countedMarketingReviewers(
   return { reviewers, weight };
 }
 
-/** What a marketing accept pays, read from the issue and its claim. */
-export type MarketingAcceptAwardsInput = {
-  bug: { id: string; organisationId: string; reporterId: string };
-  claim: MergeClaim;
-  solverUserId: string | null;
-  rewardedReviewerUserIds: readonly string[];
-  /** The issue's reward, in $ (#rewards). */
-  reward: number | { toNumber(): number } | null;
-  reporterPoints: number;
-  reviewerPoints: number;
-  dispatcherPoints: number;
-  /** The agent that gave each reviewer's good-to-merge judgement. */
-  judgingAgent?: ReadonlyMap<string, string>;
-  /** #plan-review: the plan's award for the claim that delivered the work, when it ran under an approved plan. */
-  planAward?: PointAward | null;
-};
-
-/**
- * The awards a marketing accept writes (#M-API-5, D7): the solver the issue's
- * reward, the poster their share, the dispatcher theirs, and each counted
- * reviewer their review points. Every award has its own `sourceKey`, so
- * accepting again can never pay anyone twice.
- */
-export function marketingAcceptAwards(input: MarketingAcceptAwardsInput): PointAward[] {
-  const { bug, claim, solverUserId, rewardedReviewerUserIds } = input;
-  const awards: PointAward[] = [];
-  if (solverUserId) {
-    awards.push({
-      organisationId: bug.organisationId,
-      userId: solverUserId,
-      bugId: bug.id,
-      role: "solver",
-      points: solverReward(input.reward),
-      sourceKey: pointSourceKey("solver", bug.id, solverUserId),
-      agentId: claim?.agentId ?? null,
-    });
-  }
-  if (bug.reporterId) {
-    awards.push({
-      organisationId: bug.organisationId,
-      userId: bug.reporterId,
-      bugId: bug.id,
-      role: "reporter",
-      points: input.reporterPoints,
-      sourceKey: pointSourceKey("reporter", bug.id, bug.reporterId),
-    });
-  }
-  if (claim?.dispatcherUserId) {
-    awards.push({
-      organisationId: bug.organisationId,
-      bugId: bug.id,
-      userId: claim.dispatcherUserId,
-      role: "dispatcher",
-      points: input.dispatcherPoints,
-      sourceKey: `dispatcher:${bug.id}`,
-    });
-  }
-  for (const [index, userId] of rewardedReviewerUserIds.entries()) {
-    awards.push({
-      organisationId: bug.organisationId,
-      userId,
-      bugId: bug.id,
-      role: "reviewer",
-      points: reviewerPointsAt(index, input.reviewerPoints),
-      sourceKey: pointSourceKey("reviewer", bug.id, userId),
-      agentId: input.judgingAgent?.get(userId) ?? null,
-    });
-  }
-  if (input.planAward) awards.push(input.planAward);
-  return awards;
-}
-
 /**
  * Finishes a marketing accept in the caller's transaction (#M-API-5, D1): the
- * issue moves to Live · Published, its claim is released, and the solver,
- * poster, dispatcher and reviewers are paid directly — marketing work has no
- * deployment reports for a held payout to wait on. The audit row and the
+ * issue moves to Live · Published, its claim is released, and its funded Ziks pay everyone who worked on it at
+ * once (#one-payment): marketing work has no deployment reports to wait on. The audit row and the
  * `issue.accepted` event record it.
  */
 async function acceptMarketing(
@@ -799,38 +721,8 @@ async function acceptMarketing(
     data: { status: "released", releasedAt: new Date(), releaseReason: "accepted" },
   });
 
-  const rewardConfig = await getProjectRewardConfig(tx, bug.projectId);
-  const platform = await getPlatformRewardConfig(tx);
-  const { reward, reporterId } = await tx.bug.findUniqueOrThrow({
-    where: { id: bug.id },
-    select: { reward: true, reporterId: true },
-  });
-  // Attribution: each reviewer's award names the agent that gave their judgement.
-  const judgements = rewardedReviewerUserIds.length
-    ? await tx.testVerdict.findMany({
-        where: { bugId: bug.id, goodToMerge: true, onBehalfOfUserId: { in: [...rewardedReviewerUserIds] } },
-        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        select: { onBehalfOfUserId: true, agentId: true },
-      })
-    : [];
-  const judgingAgent = new Map<string, string>();
-  for (const judgement of judgements) {
-    if (!judgingAgent.has(judgement.onBehalfOfUserId)) judgingAgent.set(judgement.onBehalfOfUserId, judgement.agentId);
-  }
-  const awards = marketingAcceptAwards({
-    bug: { id: bug.id, organisationId: bug.organisationId, reporterId },
-    claim,
-    solverUserId,
-    rewardedReviewerUserIds,
-    reward,
-    reporterPoints: calculateReporterPoints(rewardConfig),
-    reviewerPoints: calculateReviewerPoints(rewardConfig),
-    dispatcherPoints: platform.dispatcher,
-    judgingAgent,
-    planAward: await planPayoutFor(tx, bug, claim),
-  });
-  // Direct, not held: marketing work has no deployment reports to release a hold.
-  for (const entry of awards) await award(tx, entry);
+  // #one-payment: the issue's funded Ziks pay everyone who worked on it now: marketing work has no deployment reports to wait on.
+  const paid = await releasePayoutNow(tx, bug.id);
 
   const facts = {
     solverUserId,
@@ -839,7 +731,7 @@ async function acceptMarketing(
     track: "marketing" as const,
     mergeReviewId: saved.review.id,
     summary: saved.review.summary,
-    points: awards.length,
+    payoutReleased: paid,
   };
   await audit(agent, "issue.accepted", `bug:${bug.id}`, { ...facts, ...moved }, { bugId: bug.id, db: tx });
   await publish(tx, {
@@ -880,8 +772,8 @@ export type FinalizeResolvedInput = {
 /**
  * Moves a fix an independent agent reported merged into the default branch to
  * Live (`resolved`), in the caller's transaction: the status and its activity,
- * the claim released, the solver, dispatcher and reviewer points paid (each
- * once, by its source key), and the `issue.accepted` audit row and event. A
+ * the claim released, the payout released if it is already live, and the
+ * `issue.accepted` audit row and event. A
  * manager's resolve of merged work (`POST /issues/{id}/resolve`,
  * lib/agent-api/reconcile-merged.ts) finishes here. The caller has checked
  * that the issue isn't resolved yet.
@@ -916,55 +808,8 @@ export async function finalizeResolved(tx: Prisma.TransactionClient, input: Fina
     data: { status: "released", releasedAt: new Date(), releaseReason: "resolved" },
   });
 
-  // #live-payout: what resolving earns is held until enough people report the work deployed.
-  const rewardConfig = await getProjectRewardConfig(tx, bug.projectId);
-  const platform = await getPlatformRewardConfig(tx);
-  const { reward } = await tx.bug.findUniqueOrThrow({ where: { id: bug.id }, select: { reward: true } });
-  const payout: PointAward[] = [];
-  if (solverUserId) {
-    payout.push({
-      organisationId: bug.organisationId,
-      userId: solverUserId,
-      bugId: bug.id,
-      role: "solver",
-      // #rewards: the issue's reward, $1–$10.
-      points: solverReward(reward),
-      sourceKey: pointSourceKey("solver", bug.id, solverUserId),
-      // The agent that held the claim and delivered the work.
-      agentId: claim?.agentId ?? null,
-    });
-  }
-  if (claim?.dispatcherUserId) {
-    payout.push({ organisationId: bug.organisationId, bugId: bug.id, userId: claim.dispatcherUserId, role: "dispatcher", points: platform.dispatcher, sourceKey: `dispatcher:${bug.id}` });
-  }
-  // #plan-review rule 13: the plan's $1 goes the solver's way, held until the work is reported live, and only for the claim that delivered it.
-  const planAward = await planPayoutFor(tx, bug, claim);
-  if (planAward) payout.push(planAward);
-  const reviewerPoints = calculateReviewerPoints(rewardConfig);
-  // Attribution: each tester's award names the agent that gave their good-to-merge judgement.
-  const judgements = rewardedReviewerUserIds.length
-    ? await tx.testVerdict.findMany({
-        where: { bugId: bug.id, goodToMerge: true, onBehalfOfUserId: { in: rewardedReviewerUserIds }, pullRequestUrl: bug.pullRequestUrl ?? "" },
-        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        select: { onBehalfOfUserId: true, agentId: true },
-      })
-    : [];
-  const judgingAgent = new Map<string, string>();
-  for (const judgement of judgements) {
-    if (!judgingAgent.has(judgement.onBehalfOfUserId)) judgingAgent.set(judgement.onBehalfOfUserId, judgement.agentId);
-  }
-  for (const [index, userId] of rewardedReviewerUserIds.entries()) {
-    payout.push({
-      organisationId: bug.organisationId,
-      userId,
-      bugId: bug.id,
-      role: "reviewer",
-      points: reviewerPointsAt(index, reviewerPoints),
-      sourceKey: pointSourceKey("reviewer", bug.id, userId),
-      agentId: judgingAgent.get(userId) ?? null,
-    });
-  }
-  await holdPayout(tx, bug.id, payout);
+  // #live-payout, #one-payment: the issue's funded Ziks pay everyone who worked on it once enough people report it deployed.
+  await releasePayoutIfLive(tx, bug.id);
 
   await audit(
     agent,

@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { weeklyPace } from "@/lib/points/pace";
+import { weeklyPace } from "@/lib/coins/weekly-pace";
 
 describe("weeklyPace", () => {
   it("is on track once earned meets the goal", () => {
-    const p = weeklyPace(6, 2, 5);
+    const p = weeklyPace(6000, 2000, 5000);
     expect(p.state).toBe("on-track");
-    expect(p.detail).toContain("10 Ziks");
+    expect(p.detail).toContain("1,000 Ziks");
   });
   it("is fixable when earned plus in-motion reaches the goal", () => {
-    expect(weeklyPace(2, 3, 5).state).toBe("fixable");
+    expect(weeklyPace(2000, 3000, 5000).state).toBe("fixable");
   });
   it("is short otherwise and names the gap", () => {
-    const p = weeklyPace(1, 1, 5);
+    const p = weeklyPace(1000, 1000, 5000);
     expect(p.state).toBe("short");
-    expect(p.headline).toBe("Short by 30 Ziks");
+    expect(p.headline).toBe("Short by 3,000 Ziks");
   });
   it("never overflows the bar and tolerates bad input", () => {
     const p = weeklyPace(100, 100, 5);

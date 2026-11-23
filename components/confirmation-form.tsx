@@ -148,7 +148,7 @@ export function ConfirmationForm({
           value={files}
           onChange={(event) => setFiles(event.target.value)}
           aria-describedby={`${id}-files-help`}
-          placeholder="lib/points/award.ts:40-58"
+          placeholder="lib/coins/issue-payout.ts:40-58"
           className={`${fieldClass} font-mono text-[13px]`}
         />
         <p id={`${id}-files-help`} className="m-0 text-xs text-zk-muted">

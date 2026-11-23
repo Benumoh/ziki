@@ -33,7 +33,6 @@ const db = vi.hoisted(() => ({
   mergeReview: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   pullRequestReport: { findFirst: vi.fn() },
   issueConfirmation: { findMany: vi.fn() },
-  pointEntry: { createMany: vi.fn() },
   agentAuditEvent: { create: vi.fn(), findMany: vi.fn() },
   agentEvent: { create: vi.fn() },
   webhookSubscription: { findMany: vi.fn() },
@@ -56,8 +55,11 @@ vi.mock("@/lib/redesigns", () => ({ assertRedesignOpen: redesign.assertRedesignO
 const notify = vi.hoisted(() => ({ notifyMergeFailed: vi.fn() }));
 vi.mock("@/lib/agent-notifications", () => ({ notifyMergeFailed: notify.notifyMergeFailed }));
 
-import { acceptFix as acceptFixRaw, marketingAcceptAwards } from "@/lib/agent-api/merge";
-import { award } from "@/lib/points/award";
+// #one-payment: what an accept pays is the issue's funded Ziks, paid out by lib/coins/issue-payout.ts.
+const payout = vi.hoisted(() => ({ releasePayoutNow: vi.fn(async () => true), releasePayoutIfLive: vi.fn(async () => false) }));
+vi.mock("@/lib/coins/issue-payout", () => payout);
+
+import { acceptFix as acceptFixRaw } from "@/lib/agent-api/merge";
 import { resetWorkflowCache } from "@/lib/workflow";
 
 const PR = "https://github.com/Zedu-Endor/issue-tracker/pull/42";
@@ -184,7 +186,6 @@ beforeEach(() => {
   }));
   // The pull request is reported open, checks passing, mergeable, at the bug's head.
   db.pullRequestReport.findFirst.mockResolvedValue(reportRow());
-  db.pointEntry.createMany.mockResolvedValue({ count: 1 });
   db.agentEvent.create.mockResolvedValue({ id: "e1" });
   db.webhookSubscription.findMany.mockResolvedValue([]);
   db.agentAuditEvent.findMany.mockResolvedValue([]);
@@ -215,7 +216,7 @@ describe("acceptFix: who may merge (#434)", () => {
     expect(db.mergeReview.update).not.toHaveBeenCalled();
     expect(db.bug.update).not.toHaveBeenCalled();
     expect(db.bugActivity.create).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
+    expect(payout.releasePayoutNow).not.toHaveBeenCalled();
     expect(db.agentEvent.create).not.toHaveBeenCalled();
   });
 
@@ -247,7 +248,7 @@ describe("acceptFix: who may accept (#493, #owner-agents)", () => {
     );
     expect(await acceptFix(merger("w1", "ada", "manager"), "bug1")).toMatchObject({ status: 403, error: "not_independent" });
     expect(db.bug.update).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
+    expect(payout.releasePayoutNow).not.toHaveBeenCalled();
   });
 
 });
@@ -269,14 +270,15 @@ describe("acceptFix: the gate (#434)", () => {
 
 describe("acceptFix: a successful accept (#434)", () => {
 
-  it("a manager accepts the fix and marks it ready to merge without resolving or awarding points", async () => {
+  it("a manager accepts the fix and marks it ready to merge without resolving or paying out", async () => {
     confirmWith("rob", "sam");
     verdict("r1", "rob");
     verdict("r2", "sam");
     verdict("r3", "tia");
     const result = await acceptFix(merger("m1", "mo", "manager"), "bug1");
     expect(result).toMatchObject({ status: 200, accepted: true, readyToMerge: true });
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
+    expect(payout.releasePayoutNow).not.toHaveBeenCalled();
+    expect(payout.releasePayoutIfLive).not.toHaveBeenCalled();
     expect(db.bugActivity.create).toHaveBeenCalledWith({
       data: {
         bugId: "bug1",
@@ -384,7 +386,7 @@ describe("acceptFix: the latest pull request report must say it can merge (#pr-r
     expect(db.comment.create).not.toHaveBeenCalled();
     expect(db.bugActivity.create).not.toHaveBeenCalled();
     expect(db.mergeReview.create).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
+    expect(payout.releasePayoutNow).not.toHaveBeenCalled();
   };
 
   it("refuses with needs_pr_report when nobody has reported the pull request", async () => {
@@ -475,21 +477,13 @@ describe("acceptFix: marketing work goes Live (#M-API-5)", () => {
     );
   });
 
-  it("pays the worker, poster and reviewers directly, once each by source key", async () => {
+  it("pays out the task's funded Ziks at the accept, with no deployment to wait for", async () => {
     marketingReady();
 
     await acceptFix(merger("m1", "mo", "manager"), "bug1");
 
-    const awards = db.pointEntry.createMany.mock.calls.flatMap(
-      ([arg]) => arg.data as Array<Record<string, unknown>>,
-    );
-    expect(awards).toEqual(expect.arrayContaining([
-      expect.objectContaining({ userId: "ada", role: "solver", points: 6, sourceKey: "solver:bug1:ada" }),
-      expect.objectContaining({ userId: "poster", role: "reporter", sourceKey: "reporter:bug1:poster" }),
-      expect.objectContaining({ userId: "rob", role: "reviewer", sourceKey: "reviewer:bug1:rob" }),
-      expect.objectContaining({ userId: "sam", role: "reviewer", sourceKey: "reviewer:bug1:sam" }),
-      expect.objectContaining({ userId: "tia", role: "reviewer", sourceKey: "reviewer:bug1:tia" }),
-    ]));
+    expect(payout.releasePayoutNow).toHaveBeenCalledTimes(1);
+    expect(payout.releasePayoutNow).toHaveBeenCalledWith(expect.anything(), "bug1");
   });
 
   it("records the accept as an audit row and an issue.accepted event", async () => {
@@ -531,7 +525,7 @@ describe("acceptFix: marketing work goes Live (#M-API-5)", () => {
       missing: "verdicts",
     });
     expect(db.bug.update).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
+    expect(payout.releasePayoutNow).not.toHaveBeenCalled();
   });
 
   it("refuses a working agent: marketing acceptance is a manager's review", async () => {
@@ -541,49 +535,7 @@ describe("acceptFix: marketing work goes Live (#M-API-5)", () => {
       status: 403,
       error: "insufficient_level",
     });
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
-  });
-
-  it("pays each award once when the same awards are written twice (#sourceKey)", async () => {
-    const rows: Array<Record<string, unknown>> = [];
-    const createMany = vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
-      let count = 0;
-      for (const row of data) {
-        if (rows.some((existing) => existing.sourceKey === row.sourceKey)) continue;
-        rows.push(row);
-        count += 1;
-      }
-      return { count };
-    });
-    const awards = marketingAcceptAwards({
-      bug: { id: "bug1", organisationId: "organisation_zedu", reporterId: "poster" },
-      claim: {
-        id: "claim1",
-        status: "active",
-        claimedAt: new Date("2026-10-20T10:00:00Z"),
-        releasedAt: null,
-        agentId: "solver-agent",
-        beneficiaryUserId: "ada",
-        dispatcherUserId: null,
-        agent: { ownerUserId: "ada", name: "solver-agent" },
-      },
-      solverUserId: "ada",
-      rewardedReviewerUserIds: ["rob", "sam"],
-      reward: 6,
-      reporterPoints: 1.5,
-      reviewerPoints: 3,
-      dispatcherPoints: 0.6,
-    });
-
-    for (const entry of awards) await award({ pointEntry: { createMany } } as never, entry);
-    for (const entry of awards) await award({ pointEntry: { createMany } } as never, entry);
-
-    expect(rows.map((row) => row.sourceKey)).toEqual([
-      "solver:bug1:ada",
-      "reporter:bug1:poster",
-      "reviewer:bug1:rob",
-      "reviewer:bug1:sam",
-    ]);
+    expect(payout.releasePayoutNow).not.toHaveBeenCalled();
   });
 
   it("rejecting marketing work uses up a revision round and keeps the claim", async () => {

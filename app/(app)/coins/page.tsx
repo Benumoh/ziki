@@ -4,9 +4,8 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
 import { hasEarnedZiks, walletSummary, zikOf } from "@/lib/coins/ledger";
-import { syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { owedOf } from "@/lib/coins/loan";
-import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
+import { ZIKS_PER_DOLLAR, ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
 import { paymentsAvailable } from "@/lib/coins/test-mode";
 import { LocalTime } from "@/components/local-time";
@@ -42,6 +41,7 @@ const KIND_LABEL = {
   unreserve: "Returned to a budget",
   budget_return: "Budget returned",
   earning: "Earnings moved in",
+  bonus: "Welcome bonus (to spend, not withdraw)",
 } as const;
 
 /** Scan admission and finding unlocks share an accounting kind, but not an Activity description. */
@@ -50,6 +50,8 @@ function activityLabel(entry: { kind: keyof typeof KIND_LABEL; sourceKey: string
     if (entry.sourceKey.startsWith("deeper-scan:")) return "Deeper scan";
     if (entry.sourceKey.startsWith("rescan:")) return "Scan again";
   }
+  // The welcome bonus moved from earnings to spendable (#welcome-bonus): the row that takes it out of earnings.
+  if (entry.sourceKey.startsWith("earning-to-bonus:")) return "Welcome bonus moved to spendable";
   return KIND_LABEL[entry.kind];
 }
 
@@ -78,8 +80,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
   // Coming back from subscribing: show the plan now rather than when the webhook gets there.
   if (query.subscribed === "1" && stripeConfigured()) await syncUserSubscriptions(user.id).catch(() => undefined);
-  // What they earned on issues is in the wallet before it is shown (#earnings-in-ziks); a failure waits for the sweep.
-  await syncEarnedZiks(user.id).catch(() => 0);
+
   const [subscription, discountPercent] = await Promise.all([liveSubscriptionOf(user.id), discountPercentFor(user.id)]);
 
   const [wallet, entryRows, budgets, earner] = await Promise.all([
@@ -125,7 +126,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
           Back
         </Link>
         <h1 className="m-0 text-[28px] font-extrabold tracking-[-0.02em] text-zk-text">Ziks</h1>
-        <p className="m-0 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. One Zik is {zikToCents(1)}¢.</p>
+        <p className="m-0 text-sm text-zk-text2">Ziks fund issues and unlock security fixes. {ZIKS_PER_DOLLAR.toLocaleString("en-US")} Ziks are $1.</p>
       </div>
 
       {/* One-time notices: shown on arrival, then the query is dropped from the address (UrlNotice) so a refresh does not bring them back. */}
@@ -191,7 +192,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
               <div className="flex flex-col gap-1">
                 <h2 className="m-0 text-lg font-bold text-zk-text">Buy Ziks</h2>
                 <span className="text-[13px] text-zk-muted">
-                  {discountPercent > 0 ? `Your ${plan?.label ?? ""} plan takes ${discountPercent}% off every pack.` : "Every pack is its Ziks at 10¢ each. They go straight into your wallet."}
+                  {discountPercent > 0 ? `Your ${plan?.label ?? ""} plan takes ${discountPercent}% off every pack.` : `Every pack is its Ziks at ${ZIKS_PER_DOLLAR.toLocaleString("en-US")} to the dollar. They go straight into your wallet.`}
                 </span>
               </div>
               <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">

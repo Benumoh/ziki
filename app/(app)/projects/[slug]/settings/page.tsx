@@ -20,15 +20,15 @@ import { repositoryAccessForSettings } from "@/lib/github/settings-access";
 import { PreviewSettingsForm } from "./preview-settings-form";
 import { ProjectGoals } from "@/app/(app)/[org]/[project]/goals/project-goals";
 import { CopyProjectIdButton } from "@/app/(app)/projects/copy-project-id";
+import { SoloButton } from "@/components/coins/solo-button";
+import { SOLO_BLOCK_MESSAGE, soloBlock } from "@/lib/projects/solo";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Button } from "@/components/ui/button";
 import { deleteProjectAction, setProjectArchivedAction } from "@/app/(app)/projects/actions";
 import { workflowValues } from "@/lib/workflow-config";
 import { previewSettingsValues } from "@/lib/validations/preview-settings";
-import {
-  getPlatformRewardConfig,
-  projectDefaultsFromPlatform,
-} from "@/lib/points/platform-rewards";
+import { getPlatformRewardConfig } from "@/lib/rewards/platform";
+import { projectDefaultsFromPlatform } from "@/lib/rewards/config";
 
 export const metadata = { title: "Project settings" };
 
@@ -133,7 +133,7 @@ export default async function ProjectSettingsPage({
     select: {
       id: true, slug: true, name: true, goal: true, repoUrl: true, stagingUrl: true, siteUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true,
       visibility: true, isOpenForContributors: true, acceptsGuestIdeas: true, contributorGuidelines: true, humanApprovalGuidelines: true,
-      githubInstallationId: true, rewardConfig: true, workflow: true, archivedAt: true, organisation: { select: { slug: true } },
+      githubInstallationId: true, rewardConfig: true, workflow: true, archivedAt: true, solo: true, organisation: { select: { slug: true } },
       _count: { select: { bugs: true } },
       repositories: {
         select: { id: true, url: true, label: true, branch: true, githubInstallationId: true },
@@ -160,6 +160,9 @@ export default async function ProjectSettingsPage({
     : null;
   const platformDefaults = section === "details" ? projectDefaultsFromPlatform(await getPlatformRewardConfig(prisma)) : null;
   const base = `/projects/${encodeURIComponent(project.slug)}/settings`;
+  // #solo: why it can't be Solo right now, said before they try.
+  const soloBlocked = section === "details" && !project.solo ? await soloBlock(prisma, project.id) : null;
+  const soloBlockReason = soloBlocked ? SOLO_BLOCK_MESSAGE[soloBlocked] : null;
 
   return (
     <div className="settings-page settings-design mx-auto flex w-full max-w-5xl flex-col gap-6 pb-10">
@@ -225,6 +228,23 @@ export default async function ProjectSettingsPage({
                 <span className="text-[13px] text-zk-muted">What the project is, where it lives, and what its work pays.</span>
               </div>
               <ProjectSettingsForm project={project} defaults={platformDefaults} />
+            </section>
+          ) : null}
+          {/* #solo: just the owner and their own agents, or other people's agents too. */}
+          {section === "details" ? (
+            <section className={card} data-testid="solo-setting">
+              <div className="flex flex-col gap-1">
+                <h2 className="m-0 text-lg font-bold text-zk-text">Who works on it</h2>
+                <span className="text-[13px] text-zk-muted">
+                  {project.solo
+                    ? "Solo: just you and your own agents. Tasks start straight away, with no prices or funding."
+                    : "Solo is off. Turn it on to work with your own agents only: tasks start straight away, with no prices or funding."}
+                </span>
+              </div>
+              {soloBlockReason && !project.solo ? <p className="m-0 text-sm text-zk-muted">{soloBlockReason}</p> : null}
+              <div className="flex flex-wrap items-center gap-3">
+                <SoloButton projectId={project.id} solo={!project.solo} label={project.solo ? "Turn off Solo" : "Work Solo"} primary={!project.solo} />
+              </div>
             </section>
           ) : null}
 

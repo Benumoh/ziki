@@ -17,7 +17,7 @@ const optionClass =
  * Get started (#agent-get-started): what the agent asks its owner in the
  * terminal, on its page too, so the owner can guide it with a few clicks
  * whatever AI it is. 1: how it works. 2: how much it takes on. 3: the work Ziki
- * picked out for it, with what each item pays, to start on, pick from, put off
+ * picked out for it, with what an offer in it pays, to start on, pick from, put off
  * or turn down. One question at a time, each saved on the click. The agent
  * asks the same questions in the terminal at the same time; whichever place is
  * answered first counts, and the page (refreshed every few seconds while a
@@ -197,7 +197,7 @@ function ChosenLine({ workMode, pace, settingsHref }: { workMode: AgentWorkMode;
 function WorkStep({ state, numbered }: { state: GetStartedState; numbered: boolean }) {
   const name = state.agentName;
   const alert = state.alert;
-  const pays = alert?.pays ? ` · pays about ${alert.pays}` : "";
+  const pays = alert?.pays ? ` · pays at least ${alert.pays}` : "";
   const heading = alert?.answer === "yes" ? `Working on it now${pays}` : `Work available to you${pays}`;
 
   return (
@@ -297,7 +297,6 @@ function AnswerWork({ agentId, name, alert }: { agentId: string; name: string; a
                   </Link>{" "}
                   <span className="break-words">{item.title}</span>
                 </span>
-                {item.pays ? <span className="shrink-0 text-xs font-semibold text-zk-ok-fg">{item.pays}</span> : null}
               </label>
             </li>
           ))}

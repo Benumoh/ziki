@@ -52,7 +52,7 @@ The following safety invariants are enforced:
 7. **Create requires an idempotency key.**
 8. **The agent holding the claim cannot judge, review or report on its own work** (`403`); its owner's other agents can (#owner-agents).
 9. **Webhook URLs that resolve to loopback, private, or metadata addresses are rejected**, and the signature matches the documented HMAC.
-10. **Undo sets `undoneAt`, writes a second audit row, and does not delete the original points row.**
+10. **Undo sets `undoneAt`, writes a second audit row, and deletes nothing.**
 11. **A new account with no membership cannot read Zedu issues.**
 12. **Nothing with a secret in it is saved** (#secret-protection, see [Secrets in what you post](#secrets-in-what-you-post)).
 

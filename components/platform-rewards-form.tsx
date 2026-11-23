@@ -4,105 +4,55 @@ import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import type { PlatformRewardConfig } from "@/lib/points/platform-reward-config";
-import { POINT_AWARD_MAX, POINT_TARGET_MAX } from "@/lib/points/rules";
-import {
-  savePlatformRewardsAction,
-  type PlatformRewardsActionResult,
-} from "@/app/(app)/superadmin/rewards/actions";
+import { DEFAULT_TARGET, TARGET_MAX, type PlatformRewardConfig } from "@/lib/rewards/config";
+import { IssueSharesList } from "@/components/issue-shares-list";
+import { savePlatformRewardsAction, type PlatformRewardsActionResult } from "@/app/(app)/superadmin/rewards/actions";
 
 /**
- * Super-admin editor for site-wide ledger amounts. Empty/missing platform
- * settings fall back to the hard-coded defaults shown as placeholders.
+ * Super-admin editor for the site-wide reward settings (#one-payment): the ranking goal and the earning guidelines
+ * projects show when they set none. What an issue pays is its funded price, shared the same way everywhere.
  */
-export function PlatformRewardsForm({
-  initial,
-  hardCoded,
-}: {
-  initial: PlatformRewardConfig;
-  hardCoded: PlatformRewardConfig;
-}) {
-  const hard = hardCoded;
-  const [state, action, pending] = useActionState<PlatformRewardsActionResult, FormData>(
-    savePlatformRewardsAction,
-    {},
-  );
+export function PlatformRewardsForm({ initial, fee }: { initial: PlatformRewardConfig; fee: number }) {
+  const [state, action, pending] = useActionState<PlatformRewardsActionResult, FormData>(savePlatformRewardsAction, {});
 
   return (
     <form action={action} className="space-y-6">
       {state.error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+        <p className="rounded-lg border border-zk-bad-bd bg-zk-bad-bg px-3 py-2 text-sm text-zk-bad-fg" role="alert">
           {state.error}
         </p>
       ) : null}
       {state.message ? (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
+        <p className="rounded-lg border border-zk-ok-fg bg-zk-ok-bg px-3 py-2 text-sm text-zk-ok-fg" role="status">
           {state.message}
         </p>
       ) : null}
 
-      <p className="text-xs text-slate-500">
-        Amounts are in $, Ziki&apos;s one currency. Solving an issue pays that issue&apos;s own reward ($1–$10, set by the agents&apos; planning poker), so it is not set here.
-      </p>
-
-      <section className="grid gap-4 rounded-xl border border-slate-200 bg-card p-4 sm:grid-cols-2 sm:p-6">
-        {(
-          [
-            ["reporterPoints", "Reporter", initial.reporter, hard.reporter],
-            ["reviewerPoints", "Merge reviewer (first)", initial.reviewer, hard.reviewer],
-            [
-              "confirmationReviewerPoints",
-              "Confirmation reviewer (first)",
-              initial.confirmationReviewer,
-              hard.confirmationReviewer,
-            ],
-            ["triagerClearPoints", "Triager clear", initial.triagerClear, hard.triagerClear],
-            [
-              "duplicateMarkerPoints",
-              "Duplicate marker",
-              initial.duplicateMarker,
-              hard.duplicateMarker,
-            ],
-            ["dispatcherPoints", "Dispatcher", initial.dispatcher, hard.dispatcher],
-            ["targetPoints", "Goal ($)", initial.target, hard.target],
-          ] as const
-        ).map(([name, label, value, fallback]) => (
-          <div key={name}>
-            <label htmlFor={name} className="block text-xs font-medium text-slate-600">
-              {label}
-            </label>
-            <Input
-              id={name}
-              name={name}
-              type="number"
-              step="0.01"
-              min={name === "targetPoints" ? 1 : 0}
-              max={name === "targetPoints" ? POINT_TARGET_MAX : POINT_AWARD_MAX}
-              defaultValue={value}
-              placeholder={String(fallback)}
-              className="mt-1"
-            />
-            <p className="mt-1 text-[11px] text-slate-400">Hard-coded default: {fallback}</p>
-          </div>
-        ))}
+      <section className="rounded-xl border border-zk-border bg-zk-surface p-4 sm:p-6">
+        <h2 className="text-sm font-semibold text-zk-text">What an issue pays</h2>
+        <div className="mt-2">
+          <IssueSharesList fee={fee} />
+        </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-card p-4 sm:p-6">
-        <label htmlFor="rewardGuidelines" className="block text-sm font-semibold text-slate-900">
-          Guidelines (optional)
+      <section className="rounded-xl border border-zk-border bg-zk-surface p-4 sm:p-6">
+        <label htmlFor="target" className="block text-sm font-semibold text-zk-text">
+          Ranking goal ($)
         </label>
-        <p className="mt-1 text-xs text-slate-500">Shown as site-wide reward guidance where projects do not set their own.</p>
-        <Textarea
-          id="rewardGuidelines"
-          name="rewardGuidelines"
-          rows={3}
-          defaultValue={initial.guidelines ?? ""}
-          className="mt-2"
-        />
+        <p className="mt-1 text-xs text-zk-muted">What the Workers ranking measures everyone against, shown in Ziks (1,000 a dollar). Default: ${DEFAULT_TARGET}.</p>
+        <Input id="target" name="target" type="number" step="0.01" min={1} max={TARGET_MAX} defaultValue={initial.target} className="mt-2 max-w-xs" />
+      </section>
+
+      <section className="rounded-xl border border-zk-border bg-zk-surface p-4 sm:p-6">
+        <label htmlFor="rewardGuidelines" className="block text-sm font-semibold text-zk-text">
+          Earning guidelines (optional)
+        </label>
+        <p className="mt-1 text-xs text-zk-muted">Shown where projects don&apos;t set their own.</p>
+        <Textarea id="rewardGuidelines" name="rewardGuidelines" rows={3} defaultValue={initial.guidelines ?? ""} className="mt-2" />
       </section>
 
       <Button type="submit" disabled={pending}>
-        {pending ? "Saving…" : "Save platform rewards"}
+        {pending ? "Saving…" : "Save"}
       </Button>
     </form>
   );

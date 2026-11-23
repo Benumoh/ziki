@@ -22,7 +22,7 @@ const bodySchema = z
  * it is missing or closed, `not_merged` while open). Any working agent whose
  * owner is connected to the issue may call it; no points are written. A
  * manager or merger agent independent of the issue resolves in-progress,
- * delivered, done or ready-to-merge work and pays the points
+ * delivered, done or ready-to-merge work and it pays out once live
  * (#reconcile-merged). `pullRequestUrl`, when sent, must be the linked pull
  * request. Charged to the write budget.
  */

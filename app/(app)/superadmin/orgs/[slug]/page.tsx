@@ -3,25 +3,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
-import { agentPointsToReverse } from "@/lib/points/reset-agent-points";
-import { ResetAgentPointsForm } from "@/components/superadmin-reset-points-form";
-import { resetAgentPointsAction } from "../actions";
-
-import { formatZ } from "@/lib/points/rules";
+import { agentEarnings } from "@/lib/coins/agent-earnings";
+import { formatZik } from "@/lib/coins/math";
 import { activeIn } from "@/lib/agents/active-in";
 
 export const metadata: Metadata = { title: "Organisation · Super admin" };
 
-/** $, Ziki's one currency (#z-currency). */
-const formatPoints = formatZ;
-
 type Params = Promise<{ slug: string }>;
-type SearchParams = Promise<{ reversed?: string }>;
 
-export default async function SuperadminOrgPage({ params, searchParams }: { params: Params; searchParams?: SearchParams }) {
+export default async function SuperadminOrgPage({ params }: { params: Params }) {
   await requireSuperAdmin();
   const { slug } = await params;
-  const query = searchParams ? await searchParams : {};
 
   const organisation = await prisma.organisation.findUnique({
     where: { slug },
@@ -29,36 +21,22 @@ export default async function SuperadminOrgPage({ params, searchParams }: { para
   });
   if (!organisation) notFound();
 
-  const [memberCount, projectCount, agents, earnings, reversible] = await Promise.all([
+  const [memberCount, projectCount, agents] = await Promise.all([
     prisma.membership.count({ where: { organisationId: organisation.id } }),
     prisma.project.count({ where: { organisationId: organisation.id } }),
     prisma.agent.findMany({
       where: { ...activeIn(organisation.id) },
       select: { id: true, name: true, owner: { select: { name: true, email: true } } },
     }),
-    prisma.pointEntry.groupBy({
-      by: ["agentId"],
-      where: { organisationId: organisation.id, agentId: { not: null } },
-      _sum: { points: true },
-    }),
-    prisma.pointEntry.aggregate({
-      where: agentPointsToReverse(organisation.id),
-      _count: { _all: true },
-      _sum: { points: true },
-    }),
   ]);
 
-  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
-  const rows = earnings
-    .map((row) => ({
-      agentId: row.agentId as string,
-      agent: agentById.get(row.agentId as string),
-      balance: Number(row._sum.points ?? 0),
-    }))
-    .sort((a, b) => b.balance - a.balance);
-  const totalBalance = rows.reduce((sum, row) => sum + row.balance, 0);
-  const reversibleCount = reversible._count._all;
-  const justReversed = query.reversed !== undefined ? Number(query.reversed) : null;
+  // #one-payment: what each agent's work earned its owner here, in Ziks, from the issues that paid out.
+  const earned = await agentEarnings(prisma, organisation.id, agents.map((agent) => agent.id));
+  const rows = agents
+    .map((agent) => ({ agentId: agent.id, agent, ziks: earned.get(agent.id) ?? 0 }))
+    .filter((row) => row.ziks !== 0)
+    .sort((a, b) => b.ziks - a.ziks);
+  const total = rows.reduce((sum, row) => sum + row.ziks, 0);
 
   return (
     <div className="space-y-6">
@@ -86,19 +64,14 @@ export default async function SuperadminOrgPage({ params, searchParams }: { para
         ))}
       </dl>
 
-      {justReversed !== null ? (
-        <p role="status" className="rounded-lg border border-zk-ok-fg bg-zk-ok-bg px-4 py-3 text-sm text-zk-ok-fg">
-          Reset done: {justReversed} {justReversed === 1 ? "entry was" : "entries were"} reversed.
-        </p>
-      ) : null}
-
       <section className="rounded-xl border border-zk-border bg-zk-surface p-5">
-        <h2 className="text-base font-semibold text-zk-text">Agent $</h2>
+        <h2 className="text-base font-semibold text-zk-text">Agent earnings</h2>
         <p className="mt-1 text-sm text-zk-text2">
-          $ earned by agents&apos; work in this organisation, corrections included. Total: <b className="text-zk-text">{formatPoints(totalBalance)}</b>
+          Ziks paid to owners for their agents&apos; work in this organisation, from funded issues that went live. Total:{" "}
+          <b className="text-zk-text">{formatZik(total)}</b>
         </p>
         {rows.length === 0 ? (
-          <p className="mt-4 text-sm text-zk-muted">No agent has earned $ here.</p>
+          <p className="mt-4 text-sm text-zk-muted">No agent&apos;s work has earned Ziks here yet.</p>
         ) : (
           <table className="mt-4 w-full text-sm">
             <thead>
@@ -111,24 +84,14 @@ export default async function SuperadminOrgPage({ params, searchParams }: { para
             <tbody>
               {rows.map((row) => (
                 <tr key={row.agentId} className="border-b border-zk-divider last:border-0">
-                  <td className="py-2 pr-3 text-zk-text">{row.agent?.name ?? "Deleted agent"}</td>
-                  <td className="py-2 pr-3 text-zk-text2">{row.agent?.owner?.name ?? row.agent?.owner?.email ?? "—"}</td>
-                  <td className="py-2 text-right tabular-nums text-zk-text">{formatPoints(row.balance)}</td>
+                  <td className="py-2 pr-3 text-zk-text">{row.agent.name}</td>
+                  <td className="py-2 pr-3 text-zk-text2">{row.agent.owner?.name ?? row.agent.owner?.email ?? "—"}</td>
+                  <td className="py-2 text-right tabular-nums text-zk-text">{formatZik(row.ziks)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </section>
-
-      <section className="rounded-xl border border-zk-bad-bd bg-zk-bad-bg p-5">
-        <h2 className="text-base font-semibold text-zk-bad-fg">Reset all agent $</h2>
-        <p className="mt-1 text-sm text-zk-text2">
-          Reverses all the $ an agent earned in {organisation.name}: {reversibleCount} {reversibleCount === 1 ? "entry" : "entries"},{" "}
-          {formatPoints(Number(reversible._sum.points ?? 0))}. Nothing is deleted: each entry gets a correcting entry, so the
-          history stays and running it again changes nothing. People&apos;s own $ is not touched.
-        </p>
-        <ResetAgentPointsForm action={resetAgentPointsAction} slug={organisation.slug} name={organisation.name} disabled={reversibleCount === 0} />
       </section>
     </div>
   );

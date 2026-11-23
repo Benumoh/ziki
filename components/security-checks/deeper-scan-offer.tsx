@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { buyZiksHref } from "@/lib/coins/return-to";
+import { ZIKS_LOAN } from "@/lib/coins/loan";
 import { ZikAmount } from "@/components/zik-symbol";
 import { useDeeperScan, type Checkout } from "@/components/security-checks/use-deeper-scan";
 
@@ -183,7 +184,7 @@ function Wallet({ checkout, loading, name, price }: { checkout: Checkout | null;
       ) : checkout.short ? (
         <p className="m-0 mt-3 border-t border-zk-divider pt-3 text-sm text-zk-text2">
           {checkout.canBorrow
-            ? "You don't have enough Ziks. You can borrow 20 once: your wallet can go down to −20 for security, and your first top-up pays it back."
+            ? `You don't have enough Ziks. You can borrow ${ZIKS_LOAN.toLocaleString("en-US")} once: your wallet can go down to −${ZIKS_LOAN.toLocaleString("en-US")} for security, and your first top-up pays it back.`
             : "You don't have enough Ziks for this. Buy Ziks, then come back and run it."}
         </p>
       ) : null}

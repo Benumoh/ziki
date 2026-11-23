@@ -4,17 +4,20 @@ import { useActionState, useRef, useState } from "react";
 import { createProjectAction, type ProjectActionResult } from "@/app/(app)/projects/actions";
 import { PROJECT_NAME_MAX } from "@/app/(app)/projects/validation";
 import { ProjectRewardRulesSection } from "@/components/project-reward-rules-section";
+import { SoloChoice } from "@/components/solo-choice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
+import type { ProjectRewardConfig } from "@/lib/rewards/config";
 
 /**
- * New project: a button that opens the form in a modal, with the name and the
- * public or private choice. On the organisation's Projects pages (`/<org>` and
- * its settings' Projects). Creating it opens the new project.
+ * New project: a button that opens the form in a modal, with the name, who will
+ * work on it (Solo or open, #solo) and the public or private choice. On the
+ * organisation's Projects pages (`/<org>` and its settings' Projects). Creating it
+ * opens the new project. `soloBlockedReason` says why Solo can't be chosen in this
+ * organisation (someone else already works in it). Open is the default.
  */
-export function NewProjectButton({ orgSlug, defaults = null }: { orgSlug?: string; defaults?: ProjectRewardConfig | null }) {
+export function NewProjectButton({ orgSlug, defaults = null, soloBlockedReason = null }: { orgSlug?: string; defaults?: ProjectRewardConfig | null; soloBlockedReason?: string | null }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
 
@@ -50,14 +53,16 @@ export function NewProjectButton({ orgSlug, defaults = null }: { orgSlug?: strin
           </button>
           <h2 id="new-project-title" className="m-0 mb-4 text-base font-bold text-zk-text">New project</h2>
           {/* Mounted only while open, so each opening starts with an empty form. */}
-          {open ? <NewProjectForm orgSlug={orgSlug} defaults={defaults} onCancel={close} /> : null}
+          {open ? <NewProjectForm orgSlug={orgSlug} defaults={defaults} soloBlockedReason={soloBlockedReason} onCancel={close} /> : null}
         </div>
       </dialog>
     </>
   );
 }
 
-function NewProjectForm({ orgSlug, defaults, onCancel }: { orgSlug?: string; defaults: ProjectRewardConfig | null; onCancel: () => void }) {
+function NewProjectForm({ orgSlug, defaults, soloBlockedReason, onCancel }: { orgSlug?: string; defaults: ProjectRewardConfig | null; soloBlockedReason: string | null; onCancel: () => void }) {
+  // Open to other people's agents by default, as projects always were; Solo when chosen and allowed.
+  const [solo, setSolo] = useState(false);
   const [visibility, setVisibility] = useState<"private" | "public">("private");
   const [isOpenForContributors, setIsOpenForContributors] = useState(false);
   const [result, action, pending] = useActionState<ProjectActionResult | undefined, FormData>(createProjectAction, undefined);
@@ -104,6 +109,10 @@ function NewProjectForm({ orgSlug, defaults, onCancel }: { orgSlug?: string; def
         />
       </div>
 
+      <SoloChoice solo={solo} onChange={setSolo} blockedReason={soloBlockedReason} disabled={pending} />
+
+      {/* A Solo project is private: nobody outside the organisation sees or joins it. */}
+      {solo ? null : (
       <fieldset className="space-y-2 rounded-xl border border-zk-border bg-zk-card p-3.5">
         <legend className="px-1 text-xs font-semibold text-zk-text">Who can see it</legend>
         <label className="flex cursor-pointer items-start gap-2 text-sm text-zk-text">
@@ -173,8 +182,10 @@ function NewProjectForm({ orgSlug, defaults, onCancel }: { orgSlug?: string; def
           </div>
         ) : null}
       </fieldset>
+      )}
 
-      <ProjectRewardRulesSection disabled={pending} defaults={defaults} />
+      {/* Solo pays nobody (#solo), so there is nothing to say about what the work pays. */}
+      {solo ? null : <ProjectRewardRulesSection disabled={pending} defaults={defaults} />}
 
       {error ? (
         <p id="new-project-error" role="alert" className="text-sm text-zk-bad-fg">

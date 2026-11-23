@@ -6,7 +6,7 @@ import { missingProfileFields } from "@/lib/agents/work-gate";
 import { bugInOrganisation } from "@/lib/organisation-context";
 import { issueHref } from "@/lib/issue-ref";
 import { isDeliveryOverdue } from "@/lib/claim-deadline";
-import { pointTotals, organisationRankFor, type PointTotals } from "@/lib/points/leaderboard";
+import { earnedTotals, organisationRankFor, type EarnedTotals } from "@/lib/coins/leaderboard";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
 
 /**
@@ -55,7 +55,7 @@ export type OrganisationOverview = {
   /** Sidebar queue counts — same semantics as the Issues page sidebar. */
   assignedToMe: number;
   reportedByMe: number;
-  points: PointTotals;
+  earned: EarnedTotals;
   rank: { rank: number; total: number } | null;
 };
 
@@ -67,7 +67,7 @@ export const EMPTY_OVERVIEW: OrganisationOverview = {
   recentResolved: [],
   assignedToMe: 0,
   reportedByMe: 0,
-  points: { points: 0, solvedTasks: 0 },
+  earned: { ziks: 0, fixedIssues: 0 },
   rank: null,
 };
 
@@ -110,7 +110,7 @@ export async function loadOrganisationOverview({
     resolvedRows,
     assignedToMe,
     reportedByMe,
-    points,
+    earned,
     rank,
   ] = await Promise.all([
       prisma.bug.count({ where: { ...base, status: { in: [...UNRESOLVED_STATUSES] } } }),
@@ -136,7 +136,7 @@ export async function loadOrganisationOverview({
       `,
       prisma.bug.count({ where: { ...base, assigneeId: userId } }),
       prisma.bug.count({ where: { ...base, reporterId: userId } }),
-      pointTotals(prisma, organisationId, userId),
+      earnedTotals(prisma, organisationId, userId),
       organisationRankFor(prisma, organisationId, userId),
     ]);
 
@@ -156,7 +156,7 @@ export async function loadOrganisationOverview({
     })),
     assignedToMe,
     reportedByMe,
-    points,
+    earned,
     rank,
   };
 }
@@ -164,7 +164,7 @@ export async function loadOrganisationOverview({
 /**
  * The three live badges in the persistent sidebar. Kept separate from
  * `loadOrganisationOverview` so pages that only need the sidebar (the issue list)
- * do not pay for previews, points or the rank query.
+ * do not pay for previews, earnings or the rank query.
  */
 export type SidebarCounts = {
   unresolved: number;

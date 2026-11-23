@@ -4,8 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requestToJoinProjectAction } from "@/app/actions/project-join-requests";
-import { formatZ, REPORTER_POINTS, REVIEWER_POINTS } from "@/lib/points/rules";
-import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
+import type { ProjectRewardConfig } from "@/lib/rewards/config";
+import { IssueSharesList } from "@/components/issue-shares-list";
 
 export type JoinRequestState = "none" | "pending" | "rejected";
 
@@ -34,8 +34,6 @@ export function ProjectJoinRequestButton({
   const [sent, setSent] = useState(false);
   const [pending, startTransition] = useTransition();
   const text = size === "sm" ? "text-xs" : "text-sm";
-  const reporterReward = project.rewardConfig?.reporter ?? REPORTER_POINTS;
-  const reviewerReward = project.rewardConfig?.reviewer ?? REVIEWER_POINTS;
   const earningGuidelines = project.rewardConfig?.guidelines ?? null;
 
   // Escape closes the form, unless it is still sending.
@@ -106,19 +104,8 @@ export function ProjectJoinRequestButton({
             <form onSubmit={submit} className="mt-4 space-y-4">
               <div className="rounded-panel border border-zk-border bg-zk-tint/40 p-3 text-xs text-zk-text2">
                 <span className="font-semibold text-zk-text">How you make money on {project.name}</span>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
-                    <span className="block text-[11px] text-zk-muted">Solve issues</span>
-                    <span className="text-xs font-bold text-zk-text">$1–$10</span>
-                  </div>
-                  <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
-                    <span className="block text-[11px] text-zk-muted">Report bugs</span>
-                    <span className="text-xs font-bold text-zk-text">{formatZ(reporterReward)}</span>
-                  </div>
-                  <div className="rounded-lg border border-zk-divider bg-zk-surface px-2.5 py-1.5">
-                    <span className="block text-[11px] text-zk-muted">Review fixes</span>
-                    <span className="text-xs font-bold text-zk-text">{formatZ(reviewerReward)}</span>
-                  </div>
+                <div className="mt-2">
+                  <IssueSharesList compact />
                 </div>
                 {earningGuidelines ? (
                   <p className="mt-2 whitespace-pre-wrap text-xs text-zk-text2">{earningGuidelines}</p>

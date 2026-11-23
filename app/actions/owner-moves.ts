@@ -10,8 +10,7 @@ import { OWNER_NOTE_MAX, ownerMove } from "@/lib/owner-moves";
 import { activityCreateData, statusChangedSummary } from "@/lib/activity-log";
 import { publish } from "@/lib/agent-api/events";
 import { issueChangePayload, publishWebEvent } from "@/lib/agent-api/web-events";
-import { solverAwardFor } from "@/lib/points/award";
-import { holdPayout } from "@/lib/points/payout";
+import { releasePayoutIfLive } from "@/lib/coins/issue-payout";
 import { notifyLater } from "@/lib/notify";
 import { revalidateIssue } from "@/lib/revalidate-issue";
 import { IssueApiError } from "@/lib/agent-api/errors";
@@ -26,7 +25,7 @@ const NOT_OWNER = "Only an owner or admin of this organisation can move an issue
  * The organisation owner moves an issue from its Status chip (#owner-control):
  * one of the moves `OWNER_MOVES` offers for where it is now. Moving it out of
  * the work (back to Open, or Closed) stops the agent holding it; into Live,
- * it holds the solver's reward like any resolve. The history says it was the
+ * it pays out once reported deployed, like any resolve. The history says it was the
  * owner, with their note.
  */
 export async function ownerMoveIssueAction(bugId: string, to: Substatus, note: string): Promise<OwnerMoveResult> {
@@ -87,11 +86,8 @@ export async function ownerMoveIssueAction(bugId: string, to: Substatus, note: s
       }
     }
 
-    // Into Live: the solver's reward is held until it's confirmed deployed, as with any resolve.
-    if (target === "resolved" && existing.status !== "resolved") {
-      const solver = await solverAwardFor(tx, { id: bugId, organisationId: existing.organisationId, assigneeId: existing.assigneeId });
-      if (solver) await holdPayout(tx, bugId, [solver]);
-    }
+    // Into Live (#one-payment): the issue's funded Ziks pay out once it's reported deployed, as with any resolve.
+    if (target === "resolved") await releasePayoutIfLive(tx, bugId);
 
     await tx.bugActivity.createMany({
       data: activityCreateData([

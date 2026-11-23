@@ -491,6 +491,8 @@ export async function awardInTransaction(
       beneficiaryUserId: fresh.beneficiaryUserId,
       agentId: fresh.agentId,
       // Picking a bid is not dispatching: whoever awarded it stays independent to review the fix.
+      // They earn the awarder's share when the issue pays out (#one-payment); Ziki's own hand-over (no agent) earns nobody it.
+      awardedByUserId: by.agentId ? by.userId : null,
       status: planning ? "planning" : "offered",
       offeredAt: now,
     },

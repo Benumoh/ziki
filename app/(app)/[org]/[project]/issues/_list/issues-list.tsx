@@ -2,6 +2,7 @@ import { IssuePriorityBadge } from "@/components/issue-priority-badge";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { IdeasWelcome } from "@/components/ideas-welcome";
 import { IdeaChat } from "@/components/idea-chat";
+import { PricingReachCard } from "@/components/coins/pricing-reach-card";
 import { ProjectFilter } from "@/components/project-filter";
 import { LocalTime } from "@/components/local-time";
 import { POSSIBLY_DELIVERED_STATUS, POSSIBLY_DELIVERED_WHERE, deliverySignals, type DeliverySignals } from "@/lib/possibly-delivered";
@@ -106,6 +107,7 @@ import { PROJECT_REPOSITORIES_SELECT, repoForPullRequest } from "@/lib/github/pr
 import { IssueRowStatus } from "@/components/issue-row-status";
 import { BidsVoteBadge, ImportanceVoteBadge } from "@/components/vote-badge";
 import { RewardBadge } from "@/components/reward-badge";
+import { currentPriceZik } from "@/lib/coins/budget";
 import { escrowByBug } from "@/lib/coins/ledger";
 import { mergePathOf } from "@/lib/merge-history";
 import { IssuesToolsToggle } from "@/components/issues-tools-toggle";
@@ -719,6 +721,8 @@ export async function IssuesList({
           // Delivered work's View (#work-feed): where it was delivered, the newest preview first, else the delivery's link,
           // else the pull request.
           substatus: true, pullRequestUrl: true, liveConfirmedAt: true,
+          // #price-lock: its price, for the card's Ziks amount.
+          reward: true, rewardEstimateCount: true, rewardOverrideZik: true, zikiEstimateZik: true, rewardFixedAt: true, lockedPriceZik: true,
           previewBuilds: { where: { status: "ready", url: { not: null } }, orderBy: { updatedAt: "desc" }, take: 1, select: { url: true } },
           deliveries: { orderBy: { updatedAt: "desc" }, take: 1, select: { deliverableUrls: true, pullRequestUrl: true, screenshots: true, beforeScreenshots: true, updatedAt: true, beneficiary: { select: { name: true } } } },
           // Why accepted work isn't merged yet (#work-feed-sections): the latest pull request report, when it says so.
@@ -758,10 +762,11 @@ export async function IssuesList({
           }
           return merges;
         };
-        type Times = { starts: Map<string, Date>; merges: Map<string, { at: Date; by: string | null }> };
+        type Times = { starts: Map<string, Date>; merges: Map<string, { at: Date; by: string | null }>; held: Map<string, number> };
         const timesFor = async (rows: { id: string }[]): Promise<Times> => {
-          const [starts, merges] = await Promise.all([startsFor(rows), mergesFor(rows)]);
-          return { starts, merges };
+          // With the Ziks each issue holds (#price-lock), so a card can say whether its price is funded.
+          const [starts, merges, held] = await Promise.all([startsFor(rows), mergesFor(rows), escrowByBug(prisma, rows.map((row) => row.id))]);
+          return { starts, merges, held };
         };
         const toItem = (row: Prisma.BugGetPayload<{ select: typeof select }>, section: FeedSection | null, times: Times): WorkFeedItem => {
           const href = issueHref(row);
@@ -806,6 +811,8 @@ export async function IssuesList({
             justDelivered: false,
             stallReason: section === "stalled" ? stallReason(row.substatus, claim ? { agent: claim.agent?.name ?? null, due: claim.deliverBy, heartbeat: claim.lastHeartbeatAt } : null, currentTime()) : null,
             mergeHold: mergeHold(row.substatus, row.pullRequestReports[0] ?? null),
+            price: currentPriceZik(row),
+            priceHeld: times.held.get(row.id) ?? 0,
             // Opened (#work-feed): what it is, its files, and the decision it asks of you.
             reporter: row.reporter?.name ?? null,
             summary: row.summary ?? null,
@@ -1135,10 +1142,12 @@ export async function IssuesList({
           take: 2,
         },
         area: { select: { id: true, name: true } },
-        // #rewards: what solving it pays, in $, and whether the estimating is done.
+        // #rewards, #price-lock: what solving it pays, in $, and its price once agents have priced it.
         reward: true,
         rewardEstimateCount: true,
         rewardFixedAt: true,
+        rewardOverrideZik: true, zikiEstimateZik: true,
+        lockedPriceZik: true,
         _count: {
           select: {
             comments: true,
@@ -1182,7 +1191,7 @@ export async function IssuesList({
       pullRequestUrl: true, type: { select: { name: true } }, reporter: { select: { name: true, role: true, image: true } },
       assignee: { select: { name: true, role: true, image: true } },
       claims: { where: { status: { in: ["active", "offered", "planning"] }, releasedAt: null }, select: { status: true, claimedAt: true, createdAt: true, deliverBy: true, beneficiaryUserId: true, beneficiary: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 2 },
-      area: { select: { id: true, name: true } }, reward: true, rewardEstimateCount: true, rewardFixedAt: true,
+      area: { select: { id: true, name: true } }, reward: true, rewardEstimateCount: true, rewardFixedAt: true, rewardOverrideZik: true, zikiEstimateZik: true, lockedPriceZik: true,
       duplicateOf: showDuplicates ? { select: { number: true } } : false,
       _count: { select: { comments: true, attachments: true, bids: { where: OPEN_BID_WHERE } } },
     }, orderBy: getBugOrderBy(currentSort, { boostFirst: !isWatchingView }), skip: pagination.skip, take: pagination.take })
@@ -2006,7 +2015,7 @@ export async function IssuesList({
                         details={liveFix ? <LiveRowDetails check={liveFix} confirmations={liveConfirmations.get(bug.id) ?? []} /> : null}
                       >
                         <div className="issues-vote w-[76px] shrink-0">
-                          <RewardBadge reward={Number(bug.reward)} estimates={bug.rewardEstimateCount} fixed={Boolean(bug.rewardFixedAt)} funded={funded.has(bug.id)} />
+                          <RewardBadge price={currentPriceZik(bug)} held={funded.get(bug.id) ?? 0} />
                         </div>
                         {isMyWorkTab ? (
                           <span className="hidden w-10 shrink-0 items-center lg:flex">
@@ -2272,6 +2281,9 @@ export async function IssuesList({
         />
       </section>
     ) : null}
+    {/* #price-lock: once there is work and nobody can price it (a private project with only the owners' own agents),
+        the owner is told, and can open it to agents on Ziki in one click. */}
+    {withOverviewLook && isOrgAdmin ? <PricingReachCard projectId={project.id} /> : null}
     {/* Every list is the same narrow, centred panel (#simple-lists). */}
     {/* The Overview has no title row, so its tabs start a panel's padding (20px) from the top. */}
     <div className="issues-page mx-auto w-full space-y-5 max-w-[920px]" style={withOverviewLook ? { paddingTop: 20 } : undefined}>

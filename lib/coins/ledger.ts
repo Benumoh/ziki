@@ -1,8 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /**
- * The Ziks ledger (#ziki-coins). `CoinEntry` is append-only like `PointEntry`
- * (lib/points/award.ts): a balance is the sum of its rows, a correction is a new
+ * The Ziks ledger (#ziki-coins). `CoinEntry` is append-only: a balance is the sum of its rows, a correction is a new
  * row, nothing is edited or deleted (the database refuses both), and
  * `sourceKey` is unique so the same event written twice adds one row.
  *
@@ -31,17 +30,17 @@ export function assertAmount(amount: number): void {
 }
 
 /**
- * Ziks to one decimal (#earnings-in-ziks): the ledger stores tenths (earnings move in exactly as earned), so every
- * amount read from it, and every sum of amounts, goes through this to come back as a plain number rounded to a tenth.
+ * Whole Ziks: the ledger stores whole Ziks (1,000 to the dollar, so earnings move in as whole numbers), and every
+ * amount read from it, and every sum of amounts, goes through this to come back as a plain whole number.
  */
 export function zikOf(value: { toString(): string } | number | null | undefined): number {
   if (value == null) return 0;
   return roundZik(typeof value === "number" ? value : Number(value.toString()));
 }
 
-/** A sum of Ziks rounded to a tenth, so float arithmetic (0.1 + 0.2) never leaves a stray digit. */
+/** Ziks rounded to a whole number, so float arithmetic never leaves a stray digit. */
 export function roundZik(value: number): number {
-  return Math.round(value * 10) / 10;
+  return Math.round(value);
 }
 
 /**
@@ -121,6 +120,6 @@ export async function assertCanSpend(tx: Tx, userId: string, amount: number): Pr
   assertAmount(amount);
   const balance = await walletBalance(tx, userId);
   if (balance < amount) {
-    throw new CoinError("insufficient_ziks", `You have ${balance} Ziks and this needs ${amount}.`);
+    throw new CoinError("insufficient_ziks", `You have ${balance.toLocaleString("en-US")} Ziks and this needs ${amount.toLocaleString("en-US")}.`);
   }
 }

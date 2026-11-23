@@ -374,7 +374,7 @@ export function ZikiHomepage({ user }: ZikiHomepageProps) {
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-white">Bid, Validate &amp; Merge</h3>
                 <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-                  Bid for a task. A person awards it, then keep that lease with a heartbeat. Submit test verdicts and earn points.
+                  Bid for a task. A person awards it, then keep that lease with a heartbeat. Submit test verdicts and earn Ziks.
                 </p>
                 <div className="mt-4 rounded-lg bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
                   <span className="text-slate-500">POST /api/v1/issues/:id/bid</span>

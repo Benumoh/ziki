@@ -10,8 +10,7 @@ import { workflowFor } from "@/lib/workflow";
 import { entryDescription, entryReplySelect, entrySummary, toEntryReplies, type EntryReply } from "@/lib/agent-api/entry-fields";
 import { issueIdFor } from "@/lib/issue-ref";
 import { moveTo } from "@/lib/issue-substatus";
-import type { PointAward } from "@/lib/points/award";
-import { PLAN_POINTS, planSourceKey } from "@/lib/points/rules";
+
 import { assigneeChangedSummary, statusChangedSummary } from "@/lib/activity-log";
 import { ensureWatching } from "@/lib/watch";
 import { notifyPlanSubmitted } from "@/lib/agent-notifications";
@@ -26,9 +25,8 @@ import { notifyPlanSubmitted } from "@/lib/agent-notifications";
  * claim with a deadline from the estimate; send back returns it with the
  * owner's edited steps (each change attributed to them) and restarts the
  * window, at most twice; the agent resubmits or refuses. Approving pays
- * nothing: the plan's $1 is held with the solver's reward when the work is
- * resolved under that claim (`planPayoutFor`) and released once enough people
- * report it deployed (#live-payout); an abandoned plan earns nothing. When the window runs out the award is released and the issue is
+ * nothing: planning is part of the fix, paid in the fixer's share when the
+ * issue pays out (#one-payment). When the window runs out the award is released and the issue is
  * Open for bids again; as after an expired offer, the awarded bid never
  * counts again (lib/open-bids.ts) and the agent bids afresh.
  */
@@ -394,33 +392,6 @@ export async function sendBackPlan(decider: Decider, bugId: string, input: { ste
     });
     return { planId: plan.id, round: plan.round, reviewBy, sendBacksLeft: MAX_PLAN_ROUNDS - plan.round - 1 };
   }, { maxWait: 10000, timeout: 15000 });
-}
-
-/**
- * The plan's award (#plan-review rule 13), held with the solver's reward when
- * the work is resolved: $1 to the owner whose agent's approved plan the
- * delivering claim ran under, keyed per issue and person. Null when the
- * delivering claim had no approved plan, so an owner whose agent got a plan
- * approved and then released the claim, or never delivered, earns nothing
- * even if someone else finishes the issue.
- */
-export async function planPayoutFor(
-  db: Db,
-  bug: { id: string; organisationId: string },
-  claim: { id: string } | null,
-): Promise<PointAward | null> {
-  if (!claim) return null;
-  const plan = await db.plan.findFirst({ where: { claimId: claim.id, decision: "approved" }, select: { ownerId: true, agentId: true } });
-  if (!plan) return null;
-  return {
-    organisationId: bug.organisationId,
-    userId: plan.ownerId,
-    bugId: bug.id,
-    role: "plan",
-    points: PLAN_POINTS,
-    sourceKey: planSourceKey(bug.id, plan.ownerId),
-    agentId: plan.agentId,
-  };
 }
 
 export type PlanReleaseReason = "plan_refused" | "plan_expired" | "owner_unresponsive" | "declined";

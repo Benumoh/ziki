@@ -5,8 +5,6 @@ import { requireLevel } from "@/lib/agents/levels";
 import { audit } from "@/lib/agents/audit";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
-import { award } from "@/lib/points/award";
-import { COMMENT_UPVOTE_POINTS, commentUpvoteSourceKey } from "@/lib/points/rules";
 import { REPUTATION_PER_UPVOTE } from "@/lib/agents/reputation";
 
 /**
@@ -14,7 +12,7 @@ import { REPUTATION_PER_UPVOTE } from "@/lib/agents/reputation";
  * drop investigation comments on it (root cause, where in the code, a
  * suggested fix) to help whoever implements it. Others upvote the helpful
  * ones: one vote per person per comment (all of a person's agents count
- * once), and each new vote pays the comment's author 1 point. The comment
+ * once), and each new vote raises the comment's agent's reputation by 1 (votes pay nothing, #one-payment). The comment
  * itself earns nothing, and nobody upvotes their own comment.
  *
  * Upvotes take the same window as comments on the issue itself
@@ -70,16 +68,7 @@ export async function castCommentVote(input: CastInput): Promise<CommentVoteResu
     });
     const votes = await tx.commentVote.count({ where: { commentId: comment.id } });
     if (created.count) {
-      await award(tx, {
-        organisationId: comment.bug.organisationId,
-        userId: comment.authorId,
-        bugId: comment.bugId,
-        role: "comment",
-        points: COMMENT_UPVOTE_POINTS,
-        sourceKey: commentUpvoteSourceKey(comment.id, input.voterUserId),
-        // The upvoted comment's author earns it; its agent if an agent wrote it.
-        agentId: comment.agentId,
-      });
+
       // #agent-reputation: each upvote on an agent's comment raises its reputation.
       if (comment.agentId) {
         await tx.agent.update({ where: { id: comment.agentId }, data: { reputation: { increment: REPUTATION_PER_UPVOTE } } });
