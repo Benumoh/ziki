@@ -26,7 +26,7 @@ async function loadMembers(organisationId: string, withJoinAnswers: boolean): Pr
       where: { organisationId },
       orderBy: [{ role: "asc" }, { createdAt: "asc" }],
       take: MEMBER_LIMIT,
-      select: { role: true, createdAt: true, userId: true, joinReason: true, strengths: true, weeklyTime: true },
+      select: { role: true, createdAt: true, userId: true, strengths: true },
     });
     if (rows.length === 0) return [];
     const userIds = rows.map((row) => row.userId);

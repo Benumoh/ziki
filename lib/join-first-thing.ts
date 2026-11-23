@@ -2,19 +2,18 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { issueHref } from "@/lib/issue-ref";
 import { ideaPath, refOf } from "@/lib/project-paths";
-import type { FirstThing, JoinReason, Strength } from "@/lib/join-questions";
+import type { FirstThing, Strength } from "@/lib/join-questions";
 
 type Kind = "idea" | "confirm" | "judge" | "request";
 
 /**
- * What to look for first, from what the joiner said (#join-questions): a tester
- * confirms an issue, a coder or reviewer judges delivered work, and everyone
- * else votes on an idea. Someone who came to use it starts with a request of
- * their own. The request box is always last, since it is always there.
+ * What to look for first for a member without an agent, from what they're good
+ * at (#join-questions): a tester confirms an issue, a coder or reviewer judges
+ * delivered work, and everyone else votes on an idea. The request box is
+ * always last, since it is always there.
  */
-export function firstThingOrder(reason: JoinReason | null, strengths: readonly Strength[]): Kind[] {
+export function firstThingOrder(strengths: readonly Strength[]): Kind[] {
   const order: Kind[] = [];
-  if (reason === "user") order.push("request");
   if (strengths.includes("testing")) order.push("confirm");
   if (strengths.includes("review") || strengths.includes("code")) order.push("judge");
   order.push("idea", "confirm", "request");
@@ -72,10 +71,9 @@ async function find(kind: Kind, organisationId: string, userId: string): Promise
 export async function pickFirstThing(
   organisationId: string,
   userId: string,
-  reason: JoinReason | null,
   strengths: readonly Strength[],
 ): Promise<FirstThing | null> {
-  for (const kind of firstThingOrder(reason, strengths)) {
+  for (const kind of firstThingOrder(strengths)) {
     const found = await find(kind, organisationId, userId);
     if (found) return found;
   }

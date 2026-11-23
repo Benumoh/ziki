@@ -360,13 +360,11 @@ describe("public lead forms (#how-it-works-leads)", () => {
 });
 
 describe("join answers (#join-questions)", () => {
-  it("keeps skipped answers, drops strengths for Just looking, and refuses anything not offered", () => {
-    const base = { organisationId: "org-1", joinReason: null, strengths: [], weeklyTime: null };
+  it("keeps a skip, orders and de-duplicates strengths, and refuses anything not offered", () => {
+    const base = { organisationId: "org-1", strengths: [] };
     expect(joinAnswersSchema.parse(base)).toEqual(base);
-    expect(joinAnswersSchema.parse({ ...base, joinReason: "looking", strengths: ["code"] }).strengths).toEqual([]);
-    expect(joinAnswersSchema.safeParse({ ...base, joinReason: "boss" }).success).toBe(false);
+    expect(joinAnswersSchema.parse({ ...base, strengths: ["review", "testing", "review"] }).strengths).toEqual(["testing", "review"]);
     expect(joinAnswersSchema.safeParse({ ...base, strengths: ["hacking"] }).success).toBe(false);
-    expect(joinAnswersSchema.safeParse({ ...base, weeklyTime: "always" }).success).toBe(false);
     expect(joinAnswersSchema.safeParse({ ...base, organisationId: "" }).success).toBe(false);
   });
 });
