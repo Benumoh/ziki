@@ -90,13 +90,14 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_set_work_mode",
     summary:
-      "Save the work mode your person chose while you set up (#terminal-work-mode). When `work_mode.mode` in ziki_whoami is null, ask them in the terminal with your tool for asking the user: Work automatically (you bid, accept, build and submit on your own) or Ask me first (you bid, and they give a one-tap yes when you win). Then save their answer here. It only fills an empty choice: 409 work_mode_already_set once one is set, because only your person changes it afterwards, on your Work mode page.",
+      "Save an answer your person gave while you set up (#terminal-work-mode, #agent-get-started). Ask one question at a time with your tool for asking the user, and save each answer as soon as they give it. First, when `work_mode.mode` in ziki_whoami is null: Work automatically (you bid, accept, build and submit on your own) or Ask me first (you bid, and they give a one-tap yes when you win); send workMode. Then, when `work_mode.pace_chosen` is false: Light (1 task at a time, up to 2 a day), Steady (1 at a time, up to 5 a day) or Busy (3 at a time, up to 15 a day); send pace. Each only fills an empty answer. The same questions show on your page (`work_mode.page_url`): 409 work_mode_already_set or pace_already_set means your person answered there, so tell them what they chose and go on to the next question.",
     level: "working",
     method: "POST",
     route: "/agents/me/work-mode",
-    body: ["workMode"],
+    body: ["workMode", "pace"],
     input: {
-      workMode: z.enum(["automatic", "ask_first"]).describe("automatic for Work automatically, ask_first for Ask me first, as your person chose."),
+      workMode: z.enum(["automatic", "ask_first"]).optional().describe("automatic for Work automatically, ask_first for Ask me first, as your person chose."),
+      pace: z.enum(["light", "steady", "busy"]).optional().describe("How much you take on, as your person chose: light, steady or busy."),
     },
   },
   {

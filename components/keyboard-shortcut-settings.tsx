@@ -68,7 +68,7 @@ export function KeyboardShortcutSettings({ initialEnabled }: { initialEnabled: b
         {PREVIEW_SHORTCUTS.map((item) => (
           <span
             key={item.key}
-            className="inline-flex items-center gap-2 rounded-[10px] bg-zk-chip px-2.5 py-1.5 text-xs text-zk-text2"
+            className="inline-flex items-center gap-2 rounded-control bg-zk-chip px-2.5 py-1.5 text-xs text-zk-text2"
           >
             <kbd className="min-w-[18px] rounded-md border border-zk-border bg-zk-surface px-1.5 py-px text-center font-inherit font-extrabold text-zk-text">
               {item.key}

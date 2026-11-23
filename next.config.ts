@@ -55,7 +55,9 @@ const nextConfig: NextConfig = {
         : "https://ziki.dev/api/auth"),
   },
   outputFileTracingIncludes: {
-    "/llms.txt": ["./docs/ziki-for-agents.md"],
+    "/llms.txt": ["./docs/llms/**"],
+    "/llms/[topic]": ["./docs/llms/**"],
+    "/llms-full.txt": ["./docs/llms/**"],
     // The security report PDF embeds its own font (components/security-checks/report-pdf.tsx).
     // pdfkit loads its built-in font files (Helvetica.cjs and the like) by a path the tracer can't follow, so
     // the production image left them out and every download failed with "Cannot find module .../standard-fonts/Helvetica.cjs".
@@ -171,6 +173,8 @@ const nextConfig: NextConfig = {
   experimental: {
     // #447: lets a page answer 403 with `forbidden()` and app/forbidden.tsx.
     authInterrupts: true,
+    // CI's build was killed when the runner ran out of memory; this lowers webpack's peak memory (docs: guides/memory-usage).
+    webpackMemoryOptimizations: true,
     serverActions: {
       bodySizeLimit: "10mb",
     },

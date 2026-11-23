@@ -36,6 +36,7 @@ export function IdeaChat({
   placeholder,
   chatSlug,
   me,
+  onSent,
 }: {
   projectId: string;
   className?: string;
@@ -50,6 +51,8 @@ export function IdeaChat({
   chatSlug?: ProjectRef;
   /** Who is chatting: their picture goes beside their messages. */
   me?: { name: string | null; image: string | null };
+  /** Stay on this page once it's filed, and run this instead of opening the new idea (First questions). */
+  onSent?: () => void;
 }) {
   const [open, setOpen] = useState(alwaysOpen);
   // The empty state and the header may both hold a box on one page.
@@ -172,11 +175,16 @@ export function IdeaChat({
     data.set("projectId", projectId);
     data.set("isReport", "true");
     if (files.ids.length) data.set("attachmentIds", files.ids.join(","));
+    if (onSent) data.set("stay", "true");
     startTransition(async () => {
       try {
-        // On success the action takes you to the new idea.
+        // On success the action takes you to the new idea, unless this box stays where it is.
         const result = await createBugAction(data);
         if (result?.error) setError(result.error);
+        else if (onSent && result?.ok) {
+          setText("");
+          onSent();
+        }
       } catch (thrown) {
         unstable_rethrow(thrown);
         setError("Could not send the idea. Try again.");
@@ -209,7 +217,7 @@ export function IdeaChat({
   // closes with ×.
   const conversation = chatSlug && turns.length ? (
     <div
-      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-[24px] bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
+      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
       style={{ animation: "zk-sheet 0.45s ease-out both" }}
     >
       <style>{`
@@ -289,7 +297,7 @@ export function IdeaChat({
               event.preventDefault();
               boxRef.current?.focus();
             }}
-            className="relative z-[1] cursor-text rounded-[22px] border border-black/[0.06] bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_14px_34px_rgba(16,24,40,0.10),0_3px_8px_rgba(16,24,40,0.06)] focus-within:border-electric-blue-strong/50"
+            className="relative z-[1] cursor-text rounded-panel border border-black/[0.06] bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_14px_34px_rgba(16,24,40,0.10),0_3px_8px_rgba(16,24,40,0.06)] focus-within:border-electric-blue-strong/50"
           >
             <label htmlFor={boxId} className="sr-only">Your idea</label>
             <textarea

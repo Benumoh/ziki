@@ -1,17 +1,22 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "danger-secondary";
+type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "danger-secondary";
 
+/**
+ * Ziki's buttons (#flat-buttons, docs/style-guide.md): flat, never a shadow, gradient or lift; 10px corners; the same
+ * height in every variant. Hover changes only the fill.
+ */
 const variants: Record<Variant, string> = {
-  primary:
-    "bg-teal-700 text-white hover:bg-teal-800 focus-visible:ring-teal-600",
-  secondary:
-    "bg-card text-slate-800 border border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-400",
-  ghost: "bg-transparent text-slate-700 hover:bg-slate-100",
-  danger:
-    "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600",
-  "danger-secondary":
-    "bg-card text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300 focus-visible:ring-red-500",
+  // Dark gray, white text; hover to black. One per view.
+  primary: "bg-electric-blue-strong text-white hover:bg-zk-ink",
+  // Ziki Blue, white text: the one call to action on a public page.
+  accent: "bg-zk-blue text-white hover:bg-teal-600",
+  // White with a thin line, black text.
+  secondary: "bg-zk-surface text-zk-text border border-zk-border hover:bg-zk-chip",
+  // No fill until hovered.
+  ghost: "bg-transparent text-zk-text2 hover:bg-zk-chip hover:text-zk-text",
+  danger: "bg-red-600 text-white hover:bg-red-700",
+  "danger-secondary": "bg-zk-surface text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300",
 };
 
 export function Button({
@@ -25,7 +30,7 @@ export function Button({
 }) {
   return (
     <button
-      className={`inline-flex cursor-pointer items-center justify-center rounded-full px-3.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-control px-4 text-sm font-semibold shadow-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
     >
       {children}

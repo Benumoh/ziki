@@ -6,26 +6,30 @@
 
 :root {
   /* Light canvas: a neutral #f5f5f5 page with white panels on it, each edged by a thin #e8e8e8 line (no shadows),
-     near-black text with gray steps under it, and one clear blue (#1b8ce8). */
+     black text with gray steps under it, dark gray buttons, and one clear blue (#0972d5). docs/style-guide.md. */
   --background: #f5f5f5;
-  --foreground: #15171c;
+  --foreground: #161616;
   --card: #ffffff;
   color-scheme: light;
 
   --zk-bg: #f5f5f5;
   --zk-surface: #ffffff;
-  --zk-text: #15171c;
+  --zk-text: #161616;
   --zk-text2: #384152;
   --zk-muted: #686868;
   --zk-border: #e8e8e8;
   --zk-divider: #f0f0f0;
-  --zk-tint: #eef2fe;
+  --zk-tint: #eef8ff;
   --zk-chip: #f5f5f5;
   --zk-seg: #f1f1f3;
-  /* Accent text and links: the design's blue, deepened to 4.5:1 on white, gray and the tint. */
-  --zk-accent: #2f5fe0;
-  /* Filled buttons: near-black, as the design's New agent and Raise buttons; white text on it. */
-  --zk-primary: #18181b;
+  /* Accent text and links: Ziki Blue (#0972d5) a hair deeper, so small text clears 4.5:1 on white, gray and the tint. */
+  --zk-accent: #086ccc;
+  /* Ziki Blue itself: fills, focus rings, large accents. */
+  --zk-blue: #0972d5;
+  /* Filled buttons: dark gray, with white text (11:1). */
+  --zk-primary: #3d3d3d;
+  /* Black: key chips and the strongest marks (and the text colour above). */
+  --zk-ink: #161616;
   --zk-ok-bg: #edf8f1;
   --zk-ok-fg: #187a42;
   --zk-bad-bg: #fff1ee;
@@ -35,8 +39,8 @@
   --zk-warn-bg: #fff8db;
   --zk-warn-fg: #7a5a00;
   --zk-warn-bd: #f1dc8c;
-  --zk-info-bg: #eef2fe;
-  --zk-info-fg: #2f5fe0;
+  --zk-info-bg: #eef8ff;
+  --zk-info-fg: #086ccc;
 }
 
 @theme inline {
@@ -54,6 +58,8 @@
   --color-zk-chip: var(--zk-chip);
   --color-zk-seg: var(--zk-seg);
   --color-zk-accent: var(--zk-accent);
+  --color-zk-blue: var(--zk-blue);
+  --color-zk-ink: var(--zk-ink);
   --color-zk-ok-bg: var(--zk-ok-bg);
   --color-zk-ok-fg: var(--zk-ok-fg);
   --color-zk-bad-bg: var(--zk-bad-bg);
@@ -75,15 +81,27 @@
   --color-deep-ocean: #0b1733;
   --color-sidebar-navy: #0c1938;
   --color-blue-slate: #263b63;
-  /* The design's indigo blue: focus rings and light accents. */
-  --color-electric-blue: #4f6ef7;
+  /* Ziki Blue: focus rings and light accents. */
+  --color-electric-blue: #0972d5;
   /* Filled buttons and the active sidebar pill: near-black in light (the design's primary buttons), a deep indigo in
      dark, so white text clears 4.5:1 on both. */
   --color-electric-blue-strong: var(--zk-primary);
   --color-sky-tint: #8fc9ff;
   --color-porcelain: #f5f7fc;
   --color-surface-border: rgba(143, 201, 255, 0.12);
-  --color-surface-hover: rgba(57, 120, 246, 0.08);
+  --color-surface-hover: rgba(9, 114, 213, 0.08);
+
+  /* Corners (docs/style-guide.md): panels and cards 12px, buttons and inputs 10px, chips 6px. Tailwind's own steps
+     follow the same scale, so rounded-xl is a control and rounded-2xl a panel everywhere. */
+  --radius-chip: 6px;
+  --radius-control: 10px;
+  --radius-panel: 12px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
 }
 
 body {
@@ -137,6 +155,13 @@ body {
 /* A vote on the issue list's confirmation badge: the count pops, and a +1 or −1
    floats up and fades (components/confirmation-vote-badge.tsx). Used with
    motion-safe:, so reduced motion shows the new count without the movement. */
+/* The first-run arrow (#first-run-arrow): each dash hides in turn, bottom to top, then shows again the same way. */
+@keyframes zk-dash-wave {
+  0%, 15% { opacity: 1; }
+  25%, 60% { opacity: 0; }
+  70%, 100% { opacity: 1; }
+}
+
 @keyframes zk-vote-pop {
   0% { transform: scale(1); }
   35% { transform: scale(1.45); }

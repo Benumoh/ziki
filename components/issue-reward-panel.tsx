@@ -72,7 +72,7 @@ export function IssueRewardPanel({
   };
 
   return (
-    <section aria-labelledby={`${id}-heading`} className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3" data-testid="reward-panel">
+    <section aria-labelledby={`${id}-heading`} className="flex flex-col gap-2 rounded-panel border border-zk-border bg-zk-surface px-4 py-3" data-testid="reward-panel">
       <div className="flex items-baseline justify-between gap-2">
         <h2 id={`${id}-heading`} className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Reward</h2>
         <span className="text-xs text-zk-muted">

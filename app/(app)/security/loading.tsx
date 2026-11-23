@@ -13,10 +13,10 @@ export default function SecurityLoading() {
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-hidden="true">
         {Array.from({ length: 4 }, (_, index) => (
-          <div className="h-24 animate-pulse rounded-[16px] border border-zk-border bg-zk-surface" key={index} />
+          <div className="h-24 animate-pulse rounded-panel border border-zk-border bg-zk-surface" key={index} />
         ))}
       </div>
-      <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5" aria-hidden="true">
+      <section className="rounded-panel border border-zk-border bg-zk-surface p-5" aria-hidden="true">
         <div className="h-6 w-40 animate-pulse rounded bg-zk-border" />
         <div className="mt-4 space-y-3">
           {Array.from({ length: 4 }, (_, index) => (

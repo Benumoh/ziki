@@ -25,7 +25,7 @@ export function ProjectRewardRulesDisplay({
   const isCustom = customized ?? Boolean(rewardConfig);
 
   return (
-    <div className="rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-5">
+    <div className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-zk-text2">
           Reward & $ Rules

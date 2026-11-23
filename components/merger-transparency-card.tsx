@@ -37,7 +37,7 @@ export function MergerTransparencyCard({
   return (
     <div
       data-testid="merger-transparency-card"
-      className="mb-6 rounded-[20px] border border-zk-border bg-zk-surface p-5 shadow-sm"
+      className="mb-6 rounded-panel border border-zk-border bg-zk-surface p-5 shadow-sm"
     >
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zk-border pb-4">

@@ -90,7 +90,7 @@ export default async function ClusterPage({ params, searchParams }: {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-3 caret-transparent [&_input]:[caret-color:auto] [&_textarea]:[caret-color:auto]">
-      {query.error ? <p role="alert" className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{query.error}</p> : null}
+      {query.error ? <p role="alert" className="rounded-panel border border-zk-bad-bd bg-zk-bad-bg px-4 py-3 text-sm text-zk-bad-fg">{query.error}</p> : null}
       <div className={`${CLUSTER_FRAME} ${showInfo && member ? "md:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)_18rem]" : "md:grid-cols-[22rem_minmax(0,1fr)]"}`}>
         <div className={showInfo && member ? "hidden xl:flex xl:min-h-0 xl:flex-col" : "hidden md:flex md:min-h-0 md:flex-col"}>
           <ClusterSidebar clusters={items} currentId={clusterId} searchPath={here} query={query.q} newHref={myAgents.length ? `${listPath}?new=1` : null} />

@@ -199,6 +199,38 @@ describe("work mode and caps (#agent-work-mode)", () => {
     expect(setup.agentAuditEvent.create).toHaveBeenCalledTimes(1);
   });
 
+  it("saves how much it takes on once, from the terminal or its page, as its task caps (#agent-get-started)", async () => {
+    const { chooseWorkModeAtSetup } = await import("@/lib/agents/work-mode-setup");
+    const setup = {
+      agent: { updateMany: vi.fn(), findUnique: vi.fn() },
+      agentAuditEvent: { create: vi.fn() },
+    };
+    const me = { agentId: "agent-1", organisationId: "t1" };
+
+    await expect(chooseWorkModeAtSetup(setup as never, me, {})).resolves.toMatchObject({ ok: false, status: 400 });
+    await expect(chooseWorkModeAtSetup(setup as never, me, { pace: "unlimited" })).resolves.toMatchObject({ ok: false, status: 400 });
+    expect(setup.agent.updateMany).not.toHaveBeenCalled();
+
+    setup.agent.updateMany.mockResolvedValueOnce({ count: 1 });
+    await expect(chooseWorkModeAtSetup(setup as never, me, { pace: "light" }, new Date(), "website")).resolves.toEqual({ ok: true, pace: "light" });
+    // Only an unanswered pace is filled, and it sets the caps it names.
+    expect(setup.agent.updateMany).toHaveBeenCalledWith({
+      where: { id: "agent-1", paceSetAt: null },
+      data: { maxActiveTasks: 1, dailyTaskLimit: 2, paceSetAt: expect.any(Date) },
+    });
+
+    // Answered in the other place first: refused, saying what was chosen.
+    setup.agent.updateMany.mockResolvedValueOnce({ count: 0 });
+    setup.agent.findUnique.mockResolvedValueOnce({ username: "ada-claude", workMode: "ask_first", maxActiveTasks: 1, dailyTaskLimit: 2 });
+    await expect(chooseWorkModeAtSetup(setup as never, me, { pace: "busy" })).resolves.toMatchObject({
+      ok: false,
+      status: 409,
+      error: "pace_already_set",
+      message: expect.stringContaining("Light"),
+    });
+    expect(setup.agentAuditEvent.create).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses at the owner's caps without giving the offer up", async () => {
     db.agent.findUnique.mockResolvedValue(workRow({ maxActiveTasks: 1 }));
     db.issueClaim.count.mockResolvedValueOnce(1).mockResolvedValueOnce(1);

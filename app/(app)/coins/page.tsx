@@ -3,7 +3,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buyZiksAction } from "@/app/actions/coins";
-import { hasEarnedZiks, walletSummary } from "@/lib/coins/ledger";
+import { hasEarnedZiks, walletSummary, zikOf } from "@/lib/coins/ledger";
+import { syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { owedOf } from "@/lib/coins/loan";
 import { ZIK_PACKS, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { stripeConfigured } from "@/lib/coins/stripe";
@@ -21,7 +22,7 @@ import { safeReturnTo } from "@/lib/coins/return-to";
 export const metadata = { title: "Ziks" };
 export const dynamic = "force-dynamic";
 
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-6 flex flex-col gap-4";
 const notice = "m-0 rounded-xl px-4 py-3 text-sm font-semibold";
 const quick =
   "inline-flex min-h-10 items-center justify-center rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-bold text-zk-text transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue";
@@ -40,6 +41,7 @@ const KIND_LABEL = {
   reserve: "Reserved for an issue",
   unreserve: "Returned to a budget",
   budget_return: "Budget returned",
+  earning: "Earnings moved in",
 } as const;
 
 /** Scan admission and finding unlocks share an accounting kind, but not an Activity description. */
@@ -76,9 +78,11 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
   const [user, query] = await Promise.all([requireUser(), searchParams ?? Promise.resolve({} as CoinsQuery)]);
   // Coming back from subscribing: show the plan now rather than when the webhook gets there.
   if (query.subscribed === "1" && stripeConfigured()) await syncUserSubscriptions(user.id).catch(() => undefined);
+  // What they earned on issues is in the wallet before it is shown (#earnings-in-ziks); a failure waits for the sweep.
+  await syncEarnedZiks(user.id).catch(() => 0);
   const [subscription, discountPercent] = await Promise.all([liveSubscriptionOf(user.id), discountPercentFor(user.id)]);
 
-  const [wallet, entries, budgets, earner] = await Promise.all([
+  const [wallet, entryRows, budgets, earner] = await Promise.all([
     walletSummary(prisma, user.id),
     prisma.coinEntry.findMany({
       // Buying and spending only; what was earned and withdrawn is on the Withdraw page.
@@ -91,6 +95,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
     ownedProjectBudgets(user.id).catch(() => ({ projects: [], more: 0 })),
     hasEarnedZiks(prisma, user.id).catch(() => false),
   ]);
+  const entries = entryRows.map((entry) => ({ ...entry, amount: zikOf(entry.amount) }));
   const configured = paymentsAvailable();
   const justCredited = hasRecentPurchase(entries);
   // Came from a deeper scan's checkout (#deeper-scan-gate): after paying, Stripe sends them back to that scan.
@@ -137,7 +142,7 @@ export default async function CoinsPage({ searchParams }: { searchParams?: Promi
       {query.error ? <UrlNotice role="alert" className={`${notice} bg-zk-warn-bg text-zk-warn-fg`}>{query.error}</UrlNotice> : null}
 
       {/* What you hold, and the three things people come here to do. */}
-      <section aria-label="Your Ziks" className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-zk-border bg-zk-surface px-6 py-4">
+      <section aria-label="Your Ziks" className="flex flex-wrap items-center justify-between gap-4 rounded-panel border border-zk-border bg-zk-surface px-6 py-4">
         <div className="min-w-0">
           <p className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-zk-muted">Your Ziks</p>
           <p className="m-0 mt-1 flex flex-wrap items-baseline gap-x-2">

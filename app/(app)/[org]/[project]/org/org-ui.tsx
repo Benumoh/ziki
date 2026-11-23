@@ -1,7 +1,7 @@
 /** Shared pieces of the /org tabs: a heading with helper text, and a page's messages. */
 
-export const orgCard = "rounded-[20px] border border-zk-border bg-zk-surface p-4 sm:p-6";
-export const orgListCard = "overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface";
+export const orgCard = "rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6";
+export const orgListCard = "overflow-hidden rounded-panel border border-zk-border bg-zk-surface";
 export const orgListHeading =
   "border-b border-zk-border bg-zk-tint px-4 py-3 text-base font-semibold text-zk-text sm:px-6";
 

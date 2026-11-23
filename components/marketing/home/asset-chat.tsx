@@ -62,7 +62,7 @@ export function AssetChat({ projectId, typeId, assetId, assetName }: { projectId
   }
 
   return (
-    <div className="rounded-[22px] border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
+    <div className="rounded-panel border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
       <label htmlFor={boxId} className="sr-only">Add work on {assetName}</label>
       <textarea
         id={boxId}

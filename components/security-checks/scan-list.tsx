@@ -662,7 +662,7 @@ export function ScansArea({
           Add target
         </button>
       </header>
-      <section aria-labelledby="security-scans-heading" className="rounded-[20px] border border-zk-border bg-zk-surface">
+      <section aria-labelledby="security-scans-heading" className="rounded-panel border border-zk-border bg-zk-surface">
         {top}
         <ScanList checks={checks} highlightId={highlightId} show={show} page={page} adding={chat} hideId={adding ? inChat : null} />
         {bottom}

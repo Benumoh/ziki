@@ -977,6 +977,15 @@ model Project {
   /// The marketing site (#marketing-url), when it isn't the app itself (a landing page on its own domain). Null: the
   /// marketing site is `siteUrl`.
   marketingUrl            String?
+  /// The product's mobile app (#app-links): its App Store and Google Play pages, kept apart from siteUrl so site checks never scan a store page.
+  appStoreUrl             String?
+  playStoreUrl            String?
+  /// What the project is (#product-kinds), from First questions: any of website, mobile, desktop and other (a game, an extension…), or idea alone (not built yet). Empty until asked.
+  productKinds            String[]                @default([])
+  /// What "other" is, in the owner's words, such as "a Chrome extension" (#product-kinds).
+  productOther            String?
+  /// A desktop app's or other product's download or store page (#product-kinds): Steam, itch.io, the Microsoft Store, its own download page.
+  downloadUrl             String?
   stagingUrl              String?
   /// GitHub App installation used to merge accepted fixes (#452). Never a token.
   githubInstallationId    String?
@@ -1412,6 +1421,10 @@ model Agent {
   workMode             AgentWorkMode?
   /// When its owner last chose the work mode and limits.
   workModeSetAt        DateTime?
+  /// When its owner chose how much it takes on (#agent-get-started): a pace in
+  /// the coding terminal or on its page, or limits on its Work mode page. Null
+  /// until then, so both places ask the question once.
+  paceSetAt            DateTime?
   /// Spending caps its owner set with the work mode (#agent-work-mode); null is no cap.
   /// The most tasks it may hold In progress at once, across organisations.
   maxActiveTasks       Int?
@@ -4088,6 +4101,9 @@ enum CoinKind {
   unreserve
   /// A project's budget back to wallets: the owner took it back, or it was returned when the project went idle.
   budget_return
+  /// What a person earned on the points ledger (PointEntry, dollars), moved into their wallet at 10 Ziks a dollar
+  /// (lib/coins/earnings-sync.ts). Negative when a correction took earnings back.
+  earning
 }
 
 enum WithdrawalStatus {
@@ -4111,8 +4127,9 @@ model CoinEntry {
   /// The project whose budget this row moves; set on budget rows and on the escrow side of a reserve or unreserve.
   projectId    String?
   kind         CoinKind
-  /// Signed whole Ziks, never zero.
-  amount       Int
+  /// Signed Ziks, never zero. Whole except earnings moved in from the points ledger, which keep one decimal
+  /// (#earnings-in-ziks), so balances and withdrawals may carry a tenth.
+  amount       Decimal     @db.Decimal(14, 1)
   sourceKey    String      @unique
   purchaseId   String?
   withdrawalId String?
@@ -4182,7 +4199,8 @@ model CoinSubscription {
 model Withdrawal {
   id               String           @id @default(cuid())
   userId           String
-  zik              Int
+  /// Ziks to one decimal: a withdrawal takes everything withdrawable, earnings' tenths included (#earnings-in-ziks).
+  zik              Decimal          @db.Decimal(14, 1)
   amountCents      Int
   status           WithdrawalStatus @default(pending)
   /// Sent to Stripe as the Transfer's idempotency key, so a retry never pays twice.
@@ -4481,4 +4499,20 @@ model HumanApproval {
   @@index([ideaId])
   @@index([bugId])
   @@index([userId])
+}
+
+/// #how-it-works-leads: someone who left their details on a public page to hear from Ziki. One row per email; a newer
+/// form from the same email updates it. Read by site staff on /superadmin/leads.
+model Lead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  /// What they want done for their app, in their words.
+  goal      String?
+  /// Which form they used (for example `how-it-works:hero`).
+  source    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
 }

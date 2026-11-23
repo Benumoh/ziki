@@ -40,7 +40,7 @@ export function SubmissionEvidence({
   return (
     <section
       aria-label="Submission Evidence"
-      className="flex flex-col gap-3 rounded-[20px] border border-zk-border bg-zk-surface p-4"
+      className="flex flex-col gap-3 rounded-panel border border-zk-border bg-zk-surface p-4"
       data-testid="submission-evidence-section"
     >
       <div className="flex items-center justify-between">

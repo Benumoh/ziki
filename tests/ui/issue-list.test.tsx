@@ -217,7 +217,7 @@ describe("issue list layout", () => {
     // #simple-lists: the stage bar switches status (the status filter is a menu in the toolbar).
     const list = stages(html);
     // #project-urls: a stage opens its Overview tab; the search and scope stay in the query.
-    expect(list).toContain('href="/zedu/acme/issues/your-work?q=login&amp;mine=assigned&amp;view=delivered"');
+    expect(list).toContain('href="/zedu/acme/overview?q=login&amp;mine=assigned&amp;view=delivered"');
     expect(list).not.toContain("page=");
     expect(list).not.toContain("stage=");
     const statusCount = groupBy.mock.calls.find(([args]) => args?.by?.[0] === "status");
@@ -333,6 +333,20 @@ describe("issue list layout", () => {
     count.mockResolvedValue(0);
     const html = await renderList({ status: "open" });
     expect(Object.keys(counted(stages(html)))).toEqual(["Overview", "New", "In Progress", "Delivered"]);
+  });
+
+  it("shows a new project's waiting idea on Overview instead of No tasks yet, and No tasks yet only when there is nothing at all", async () => {
+    count.mockResolvedValue(0);
+    findMany.mockResolvedValue([]);
+    ideaCount.mockResolvedValue(1);
+    ideaFindMany.mockResolvedValue([{ ...IDEA, project: { slug: "acme", organisation: { slug: "zedu" } } }]);
+    const waiting = clean(await renderList({ status: "your_work" }));
+    expect(waiting).toContain("Export activity as CSV");
+    expect(waiting).not.toContain("No tasks yet");
+
+    ideaCount.mockResolvedValue(0);
+    ideaFindMany.mockResolvedValue([]);
+    expect(clean(await renderList({ status: "your_work" }))).toContain("No tasks yet");
   });
 
 });

@@ -96,7 +96,7 @@ export function FundIssueBox({
             <button
               type="submit"
               disabled={!valid || pending}
-              className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-full bg-electric-blue-strong px-4 text-sm font-bold whitespace-nowrap text-white shadow-[0_8px_20px_rgba(46,111,239,0.30)] transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+              className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-control bg-electric-blue-strong px-4 text-sm font-bold whitespace-nowrap text-white transition hover:bg-[#2552af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
             >
               {pending ? "Funding…" : valid ? `Fund ${value.toLocaleString("en-US")} ${value === 1 ? "Zik" : "Ziks"}` : "Fund issue"}
             </button>

@@ -303,21 +303,12 @@ export default async function RankingPanel({
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <p className="max-w-xl text-sm leading-relaxed text-zk-muted">
-          $ earned for solving, reporting and reviewing issues, this week and all time. The goal is {money(targetPoints)}.
+          Ziks earned for solving, reporting and reviewing issues, this week and all time. The goal is {money(targetPoints)}.
         </p>
-        <Link
-          href="/points/disputes"
-          className="inline-flex h-[42px] items-center gap-2 rounded-full border border-zk-border bg-zk-surface px-[18px] text-sm font-bold text-zk-text transition-colors hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m16 16 3-8 3 8c-.9.7-1.9 1-3 1s-2.1-.3-3-1zM2 16l3-8 3 8c-.9.7-1.9 1-3 1s-2.1-.3-3-1zM7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
-          </svg>
-          Disputes
-        </Link>
       </div>
 
       {podium.length === 0 ? (
-        <p className="rounded-[20px] border border-zk-border bg-zk-surface p-6 text-sm text-zk-text2">
+        <p className="rounded-panel border border-zk-border bg-zk-surface p-6 text-sm text-zk-text2">
           No earnings yet. Resolve an assigned issue to earn your first.
         </p>
       ) : (
@@ -330,7 +321,7 @@ export default async function RankingPanel({
               return (
                 <div
                   key={entry.userId}
-                  className="zk-motion group relative flex flex-col gap-4 overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface p-5 motion-safe:animate-[leaderboard-in_0.5s_cubic-bezier(0.2,0.7,0.2,1)_both] motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-250 hover:border-[#BFD6FB] hover:shadow-[0_18px_40px_rgba(11,23,51,0.10),0_2px_6px_rgba(57,120,246,0.10)] motion-safe:hover:-translate-y-1 dark:hover:border-electric-blue-strong dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.45),0_0_0_1px_rgba(57,120,246,0.25)]"
+                  className="zk-motion group relative flex flex-col gap-4 overflow-hidden rounded-panel border border-zk-border bg-zk-surface p-5 motion-safe:animate-[leaderboard-in_0.5s_cubic-bezier(0.2,0.7,0.2,1)_both] motion-safe:transition-[transform,box-shadow,border-color] motion-safe:duration-250 hover:border-[#BFD6FB] hover:shadow-[0_18px_40px_rgba(11,23,51,0.10),0_2px_6px_rgba(57,120,246,0.10)] motion-safe:hover:-translate-y-1 dark:hover:border-electric-blue-strong dark:hover:shadow-[0_18px_40px_rgba(0,0,0,0.45),0_0_0_1px_rgba(57,120,246,0.25)]"
                   style={{ animationDelay: `${i * 70}ms` }}
                 >
                   <div
@@ -394,7 +385,7 @@ export default async function RankingPanel({
             })}
           </div>
 
-          <div className="relative flex min-w-0 flex-[1_1_300px] flex-col gap-4 overflow-hidden rounded-[20px] bg-deep-ocean p-[22px] text-white">
+          <div className="relative flex min-w-0 flex-[1_1_300px] flex-col gap-4 overflow-hidden rounded-panel bg-deep-ocean p-[22px] text-white">
             <div
               aria-hidden="true"
               className="pointer-events-none absolute -right-[90px] -top-[90px] h-60 w-60 rounded-full"
@@ -436,7 +427,7 @@ export default async function RankingPanel({
         </div>
       )}
 
-      <section aria-label="Team" className="flex flex-col gap-3.5 rounded-[20px] border border-zk-border bg-zk-surface p-5">
+      <section aria-label="Team" className="flex flex-col gap-3.5 rounded-panel border border-zk-border bg-zk-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-2.5">
             <h2 className="text-lg font-bold text-zk-text">Team</h2>

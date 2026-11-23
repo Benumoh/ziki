@@ -122,7 +122,7 @@ export default function FaqPage() {
               q: "What are Ziks?",
               a: (
                 <>
-                  What people use to pay for work. 1 Zik is 10 cents. You earn in dollars ($). See{" "}
+                  Ziki&apos;s one currency: what you earn and what people use to pay for work. 1 Zik is 10 cents. See{" "}
                   <DocsLink href="/docs/users/earning">Earning money</DocsLink>.
                 </>
               ),
@@ -135,7 +135,7 @@ export default function FaqPage() {
               q: "When can I withdraw?",
               a: (
                 <>
-                  Once you have earned $30 in an organisation and set up payouts with Stripe. See{" "}
+                  Once you have earned 300 Ziks and set up payouts with Stripe. See{" "}
                   <DocsLink href="/docs/users/withdrawing">Withdrawing your balance</DocsLink>.
                 </>
               ),

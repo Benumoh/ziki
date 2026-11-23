@@ -1,86 +1,47 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { ScanActionsMenu } from "@/components/security-checks/scan-actions-menu";
 import { CheckList } from "@/components/security-checks/check-list";
 import { ReportLive } from "@/components/security-checks/report-live";
-import { CheckHeader } from "@/components/security-checks/check-header";
+import { CheckHeader, phaseOf } from "@/components/security-checks/check-header";
+import { ScanChat, ScanPageTop } from "@/components/security-checks/scan-page-top";
 import { checkListTabs } from "@/lib/security-checks/check-list";
-import { SiteChatButton, SiteChatHolder, SiteChatPanel } from "@/components/security-checks/site-chat-box";
 import { requireUser } from "@/lib/auth-helpers";
 import { substatusClass } from "@/lib/labels";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { CHECK_STATUS_LABEL, FINISHED_CHECK_STATUSES, TARGET_KIND_LABEL } from "@/lib/security-checks";
-import { loadCheckReport } from "@/lib/security-checks/report";
+import { loadCheckReport, type CheckReport } from "@/lib/security-checks/report";
+import { codeScanPage } from "@/lib/security-checks/code-scan-page";
 import { orgCard } from "../../../[org]/[project]/org/org-ui";
 
 export const metadata = { title: "Security check" };
 
 /**
- * One security check (12 and 14 Nov plans, part S): live progress and the
- * quick scan while Ziki checks, then, once the report is posted, Ziki's
- * one-line summary and every finding worst first. The report is free; clients
- * pay only to have findings fixed (14 Nov call).
- * The report never goes away; moved findings are marked. Only the person who
- * asked for the check sees it.
+ * A scan's page: its **quick scan** (18 Nov call, Mark: the quick scan and the deeper scan on separate pages). The
+ * steps at the top open each page; the quick scan's findings can be ticked and fixed here; one button at the bottom
+ * opens the deeper scan's page (`/security/checks/<id>/deeper`), where it is started, followed and fixed. Only the
+ * person who asked for the check sees it.
  */
-export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[]; bought?: string }> }) {
+export default async function SecurityCheckPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string | string[] }> }) {
   const [{ id }, query, user] = await Promise.all([params, searchParams, requireUser()]);
-  // `?fix=id1,id2`: tick these and open the fix panel ("Fix the critical one", a finding's "Fix it for me").
+  // `?fix=id1,id2`: tick these and open the fix panel (a quick scan finding's "Fix it for me").
   const initialFix = (Array.isArray(query.fix) ? query.fix.join(",") : query.fix ?? "").split(",").filter(Boolean).slice(0, 100);
   const access = await currentOrganisationAccess(user.id, user.role);
   if (!access.organisationId) notFound();
   const report = await loadCheckReport(id, access.organisationId, user.id);
   if (!report) notFound();
+  // A code scan lives on its website's Code scan page (18 Nov call), with the same three steps as the website's.
+  if (report.codeScanFor) redirect(codeScanPage(report.codeScanFor.checkId, query));
 
-  const linkClass = "font-semibold text-zk-accent hover:underline";
-  // Waiting for the deeper scan's payment (#deeper-scan-gate) nothing moves, so the page doesn't refresh itself.
+  // While agents work, the steps (and the button below) follow them; waiting for payment, nothing moves.
   const working = !FINISHED_CHECK_STATUSES.has(report.status) && !report.paymentRequired;
   const kind = TARGET_KIND_LABEL[report.target.kind].toLowerCase();
+  const [quick] = checkListTabs(report);
 
   return (
     <div className="flex w-full flex-col gap-4 pb-10 sm:gap-6">
-      {/* Live until the report is posted; a cancelled check has nothing more to show. */}
       {working && !report.posted ? <ReportLive /> : null}
-      {/* The top row and, under it, the site's chat when it's opened from the icon by "More actions" (16 Nov): one block, so a closed chat adds no gap. */}
-      <SiteChatHolder checkId={report.checkId} site={report.target.value}>
-      <div className="flex flex-col">
-      {/* Same look as the issue pages' breadcrumb (components/project-breadcrumb.tsx), with the same "More actions" menu on the right. */}
-      <div className="flex w-full items-center justify-between gap-3">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center px-0.5 text-[13px] text-zk-text2">
-        <ol className="flex min-w-0 flex-wrap items-center gap-0.5">
-          <li className="min-w-0">
-            <Link
-              href="/security"
-              className="block truncate rounded-md px-1.5 py-0.5 font-bold text-zk-text hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-zk-accent"
-            >
-              Security
-            </Link>
-          </li>
-          <li aria-hidden="true" className="text-zk-muted">/</li>
-          <li aria-current="page" className="truncate px-1.5">{report.target.value}</li>
-        </ol>
-      </nav>
-      {/* Scan again, the PDF and Remove sit here, like Delete issue on an issue page, for any scan that isn't removed yet. */}
-      {report.status !== "cancelled" ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <SiteChatButton />
-          <ScanActionsMenu checkId={report.checkId} site={report.target.value} posted={report.posted} nextCheckId={report.nextCheckId} />
-        </div>
-      ) : null}
-      </div>
-      {report.status !== "cancelled" ? <SiteChatPanel /> : null}
-      </div>
-      </SiteChatHolder>
-
-      {/* Scanned again (#security-rescan): an older scan points to the newest. A rescan has no note of its own (18 Nov,
-          Tolu): its Still there and New labels say where each finding came from, with more on hover. */}
-      {report.nextCheckId ? (
-        <p role="status" className="m-0 rounded-2xl border border-zk-border bg-zk-tint px-4 py-3 text-sm text-zk-text">
-          This site was scanned again since.{" "}
-          <Link href={`/security/checks/${encodeURIComponent(report.nextCheckId)}`} className={linkClass}>Open the newest scan</Link>
-        </p>
-      ) : null}
+      <ScanPageTop report={report} />
 
       {/* Only while ownership proof is on: with it off, the report shows such a check as waiting to start. */}
       {report.status === "awaiting_ownership" ? (
@@ -90,22 +51,45 @@ export default async function SecurityCheckPage({ params, searchParams }: { para
             Show {report.target.value} is yours
           </h1>
           <p className="mt-1 text-sm text-zk-text2">Agents start only once you prove this {kind} is yours. You do this once.</p>
-          <Link href={`/security/targets/${report.target.id}/verify`} className={`mt-3 inline-block ${linkClass}`}>
+          <Link href={`/security/targets/${report.target.id}/verify`} className="mt-3 inline-block font-semibold text-zk-accent hover:underline">
             Prove ownership
           </Link>
         </section>
       ) : (
-        <>
-          {/* Where the check stands, then one list in phases (16 Nov call): quick scan, quick checks, deeper checks, code scan. */}
-          <section aria-labelledby="check-headline" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
-            {/* Back from buying Ziks (#deeper-scan-gate): the checkout opens again, to press Pay. */}
-            <CheckHeader report={report} backFromBuying={query.bought === "1"} />
-            {/* Keyed by `?fix`, so "Fix the critical one" on this same page ticks its findings afresh. */}
-            <CheckList key={initialFix.join(",")} checkId={report.checkId} tabs={checkListTabs(report)} initialFix={initialFix} />
-          </section>
-
-        </>
+        <section aria-labelledby="check-headline" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
+          <CheckHeader report={report} view="quick" />
+          {/* Keyed by `?fix`, so "Fix it for me" on this same page ticks its findings afresh. */}
+          <CheckList key={initialFix.join(",")} checkId={report.checkId} tab={quick} show="quick" initialFix={initialFix} />
+          <DeeperScanNext report={report} />
+        </section>
       )}
+      <ScanChat report={report} />
+    </div>
+  );
+}
+
+/** The one button on the quick scan's page (18 Nov call, Mark: one call to action): on to the deeper scan's page. */
+function DeeperScanNext({ report }: { report: CheckReport }) {
+  const phase = phaseOf(report);
+  const { done, total } = report.progress;
+  const line = report.paymentRequired
+    ? "Agents check what the quick scan can't see: exposed files, admin pages, forms and more."
+    : phase === "done"
+      ? "The deeper scan is done."
+      : phase === "stopped"
+        ? "The deeper scan was stopped."
+        : total
+          ? `Agents are checking: ${done} of ${total} parts done.`
+          : "Agents are planning the checks.";
+  return (
+    <div className="flex flex-col gap-3 border-t border-zk-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <p className="m-0 text-sm text-zk-text2">{line}</p>
+      <Link
+        href={`/security/checks/${encodeURIComponent(report.checkId)}/deeper`}
+        className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-electric-blue-strong px-4 text-sm font-semibold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent"
+      >
+        {report.paymentRequired ? "Go to the deeper scan" : "See the deeper scan"} &rarr;
+      </Link>
     </div>
   );
 }

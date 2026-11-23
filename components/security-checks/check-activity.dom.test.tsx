@@ -23,7 +23,7 @@ describe("a security check at work (#security-checks)", () => {
   });
 
   it("keeps the bar moving while parts are still being checked, and stops when the check is over", () => {
-    const parts = [{ id: "p1", title: "Headers", status: "checking" as const }];
+    const parts = [{ id: "p1", title: "Headers", status: "checking" as const, agent: null }];
     const { container, rerender } = render(<ReportProgress progress={{ done: 0, total: 1, percent: 0 }} parts={parts} working />);
     expect(container.querySelector('[class*="zk-check-slide"]')).not.toBeNull();
 

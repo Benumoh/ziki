@@ -46,7 +46,6 @@ describe("lib/points/ledger", () => {
                 title: "Fix bug",
                 status: "resolved",
               },
-              disputes: [],
             },
             {
               id: "e2",
@@ -61,7 +60,6 @@ describe("lib/points/ledger", () => {
                 title: "Fix bug",
                 status: "resolved",
               },
-              disputes: [],
             },
           ])
           .mockResolvedValueOnce([{ points: 40 }, { points: -10 }]),

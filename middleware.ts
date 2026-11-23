@@ -36,10 +36,14 @@ export function isPublicPath(
     pathWithoutBase === "/" ||
     pathWithoutBase === "" ||
     pathWithoutBase === "/llms.txt" ||
+    pathWithoutBase === "/llms-full.txt" ||
+    pathWithoutBase.startsWith("/llms/") ||
     // The public marketing pages beside the homepage.
     pathWithoutBase === "/how-it-works" ||
     pathWithoutBase === "/for-agents" ||
     pathWithoutBase === "/developers" ||
+    // Earn with your agent (#earn-page): for people who bring an agent.
+    pathWithoutBase === "/earn" ||
     // The docs: anyone can read how Ziki works before signing up.
     pathWithoutBase === "/docs" ||
     pathWithoutBase.startsWith("/docs/") ||
@@ -54,6 +58,9 @@ export function isPublicPath(
     pathWithoutBase.startsWith("/skills/") ||
     // The public comparison directory and every comparison page (#compare).
     pathWithoutBase === "/compare" ||
+    // Articles (#resources).
+    pathWithoutBase === "/resources" ||
+    pathWithoutBase.startsWith("/resources/") ||
     pathWithoutBase.startsWith("/compare/") ||
     // Old business links from earners' emails (#earn-outreach): opened by people who aren't signed in.
     /^\/r\/[a-z0-9]{4,16}$/.test(pathWithoutBase) ||

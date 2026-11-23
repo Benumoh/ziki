@@ -13,9 +13,25 @@ type Cover = { title: string; why: string };
  * The top of a scan's page while its deeper scan waits for payment (#deeper-scan-gate, 18 Nov). Chloe's steps box
  * (scan-steps.tsx) shows the Deeper scan step locked with a Start button; Start sends "zk:start-deeper-scan", which
  * opens this checkout. Her rule: the price shows only once the checkout opens. Back from buying Ziks (`?bought=1`),
- * the checkout opens again by itself, to press Pay. It never pays by itself.
+ * the checkout opens again by itself, to press Pay. It never pays by itself. `name`: "Full code check" on a website's
+ * Code scan page (18 Nov call: connect first, pay later): the page has its own headline (Ziki's first look at the
+ * code), so this adds only the checkout.
  */
-export function DeeperScanStart({ checkId, site, price, covers, backFromBuying = false }: { checkId: string; site: string; price: number; covers: Cover[]; backFromBuying?: boolean }) {
+export function DeeperScanStart({
+  checkId,
+  site,
+  name = "Deeper scan",
+  price,
+  covers,
+  backFromBuying = false,
+}: {
+  checkId: string;
+  site: string;
+  name?: "Deeper scan" | "Full code check";
+  price: number;
+  covers: Cover[];
+  backFromBuying?: boolean;
+}) {
   const deeper = useDeeperScan(checkId);
   const router = useRouter();
   const pathname = usePathname();
@@ -37,13 +53,15 @@ export function DeeperScanStart({ checkId, site, price, covers, backFromBuying =
   return (
     <>
       {/* In the place and look of "Ziki is checking …" (check-activity.tsx), which shows once it's paid for. */}
-      <div className="min-w-0">
-        <h1 id="check-headline" className="m-0 wrap-break-word text-2xl font-extrabold tracking-[-0.02em] text-zk-text sm:text-[28px]">
-          Quick scan done on {site}
-        </h1>
-        <p className="m-0 mt-1 text-[15px] font-bold text-zk-accent">Start the deeper scan to have agents check inside.</p>
-      </div>
-      <DeeperScanCheckout checkId={checkId} site={site} price={price} covers={covers} deeper={deeper} />
+      {name === "Deeper scan" ? (
+        <div className="min-w-0">
+          <h1 id="check-headline" className="m-0 wrap-break-word text-2xl font-extrabold tracking-[-0.02em] text-zk-text sm:text-[28px]">
+            Deeper scan of {site}
+          </h1>
+          <p className="m-0 mt-1 text-[15px] text-zk-text2">Security agents check inside {site}: what the quick scan can&apos;t see. Press Run deeper scan to begin.</p>
+        </div>
+      ) : null}
+      <DeeperScanCheckout checkId={checkId} site={site} name={name} price={price} covers={covers} deeper={deeper} />
     </>
   );
 }
@@ -53,7 +71,7 @@ export function DeeperScanStart({ checkId, site, price, covers, backFromBuying =
  * scan (18 Nov, the team: the quick scan is already done, so it isn't offered again): what agents check, then the
  * price, the wallet and Pay. Paying happens only from here.
  */
-function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId: string; site: string; price: number; covers: Cover[]; deeper: ReturnType<typeof useDeeperScan> }) {
+function DeeperScanCheckout({ checkId, site, name, price, covers, deeper }: { checkId: string; site: string; name: string; price: number; covers: Cover[]; deeper: ReturnType<typeof useDeeperScan> }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { open, checkout, loading, paying, close, pay } = deeper;
 
@@ -78,13 +96,13 @@ function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId:
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
-      className="m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[760px] overflow-y-auto rounded-2xl border border-zk-border bg-zk-surface p-0 text-zk-text shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[600px] overflow-y-auto rounded-2xl border border-zk-border bg-zk-surface p-0 text-zk-text shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm"
     >
       {open ? (
         <div className="flex flex-col gap-5 p-5 sm:p-6">
           <div className="flex items-start justify-between gap-3 border-b border-zk-divider pb-4">
             <div className="min-w-0">
-              <h2 id="deeper-checkout-title" className="m-0 text-lg font-bold text-zk-text sm:text-xl">Run the deeper scan</h2>
+              <h2 id="deeper-checkout-title" className="m-0 text-lg font-bold text-zk-text sm:text-xl">{name === "Full code check" ? "Get the full code check" : "Run the deeper scan"}</h2>
               <p className="m-0 mt-0.5 truncate text-sm text-zk-text2">{site}</p>
             </div>
             <button
@@ -101,10 +119,10 @@ function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId:
           {/* The deeper scan: what agents check (the agents' own parts), with its price. */}
           <section aria-labelledby="deeper-checkout-card" className="rounded-xl border-2 border-electric-blue-strong p-4">
             <div className="flex items-center justify-between gap-2">
-              <h3 id="deeper-checkout-card" className="m-0 text-sm font-bold text-zk-text">Deeper scan</h3>
+              <h3 id="deeper-checkout-card" className="m-0 text-sm font-bold text-zk-text">{name}</h3>
               <span className="rounded-full bg-zk-tint px-2.5 py-0.5 text-xs font-bold text-zk-accent"><ZikAmount amount={price} /></span>
             </div>
-            <p className="m-0 mt-2 text-sm text-zk-text2">Security agents check inside:</p>
+            <p className="m-0 mt-2 text-sm text-zk-text2">{name === "Full code check" ? "It also checks for:" : "Security agents check inside:"}</p>
             <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
               {covers.map((cover) => (
                 <li key={cover.title} className="flex gap-2 text-sm">
@@ -116,7 +134,7 @@ function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId:
           </section>
 
           <div aria-live="polite">
-            <Wallet checkout={checkout} loading={loading} price={price} />
+            <Wallet checkout={checkout} loading={loading} name={name} price={price} />
           </div>
 
           {checkout?.error ? (
@@ -146,14 +164,14 @@ function DeeperScanCheckout({ checkId, site, price, covers, deeper }: { checkId:
 const PRIMARY = "inline-flex min-h-11 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white hover:brightness-105 disabled:opacity-60";
 
 /** Picked the deeper scan: the price and the wallet, and the one-time loan when the wallet is short. */
-function Wallet({ checkout, loading, price }: { checkout: Checkout | null; loading: boolean; price: number }) {
+function Wallet({ checkout, loading, name, price }: { checkout: Checkout | null; loading: boolean; name: string; price: number }) {
   if (loading || !checkout) {
     return <p className="m-0 text-sm text-zk-muted">Checking your Ziks…</p>;
   }
   return (
     <div className="rounded-xl border border-zk-border px-4 py-3">
       <dl className="m-0 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-        <dt className="text-zk-text2">Deeper scan</dt>
+        <dt className="text-zk-text2">{name}</dt>
         <dd className="m-0 font-bold text-zk-text"><ZikAmount amount={price} /></dd>
         <dt className="text-zk-text2">Your Ziks</dt>
         <dd className="m-0 font-semibold text-zk-text"><ZikAmount amount={checkout.balance} /></dd>

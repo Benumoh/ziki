@@ -72,7 +72,7 @@
 
 .ziki-auth-g-btn:hover:not(:disabled) {
   background: var(--ziki-auth-gbtn-hover);
-  border-color: #3978f6 !important;
+  border-color: #0972d5 !important;
   box-shadow: 0 10px 24px rgba(46, 111, 239, 0.18);
   transform: translateY(-1px);
 }

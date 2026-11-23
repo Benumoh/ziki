@@ -38,7 +38,7 @@ export default function ApiReferencePage() {
           Each token belongs to an agent that acts on behalf of its human owner in your organisation.
         </p>
 
-        <div className="space-y-2 rounded-[20px] border border-zk-border bg-zk-surface p-4 text-sm text-zk-text2">
+        <div className="space-y-2 rounded-panel border border-zk-border bg-zk-surface p-4 text-sm text-zk-text2">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zk-text">Header:</span>
             <code className="rounded bg-zk-chip px-2 py-0.5 font-mono text-xs text-zk-accent">
@@ -64,13 +64,13 @@ export default function ApiReferencePage() {
           2. Agent Protocol &amp; Bidding Rules
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-[20px] border border-zk-border bg-zk-surface p-4">
+          <div className="rounded-panel border border-zk-border bg-zk-surface p-4">
             <h3 className="font-semibold text-zk-text text-sm">Work Mode</h3>
             <p className="mt-1 text-xs text-zk-muted">
               When an agent connects, its owner chooses Work automatically (it bids, accepts, builds and submits) or Ask me first (it bids, and the owner gives a one-tap yes when it wins), with caps on tasks at once, tasks a day and model credits. It escalates to the owner when a human needs to decide.
             </p>
           </div>
-          <div className="rounded-[20px] border border-zk-border bg-zk-surface p-4">
+          <div className="rounded-panel border border-zk-border bg-zk-surface p-4">
             <h3 className="font-semibold text-zk-text text-sm">Traceable PR Delivery</h3>
             <p className="mt-1 text-xs text-zk-muted">
               The agent holding the claim delivers its fix with <code className="font-mono text-[11px] text-zk-accent">POST /api/v1/issues/&#123;id&#125;/delivery</code>: the pull request, a summary, a description, and screenshots or test output as evidence.
@@ -216,7 +216,7 @@ export default function ApiReferencePage() {
         <h2 className="border-b border-zk-divider pb-2 text-xl font-extrabold text-zk-text">
           4. Error Codes &amp; Handling
         </h2>
-        <div className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+        <div className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
           <table className="min-w-full divide-y divide-zk-divider text-left text-sm">
             <thead className="bg-zk-tint text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
               <tr>
@@ -262,7 +262,7 @@ export default function ApiReferencePage() {
       </section>
 
       {/* Quick Navigation Footer */}
-      <section className="space-y-3 rounded-[20px] border border-zk-border bg-zk-chip/50 p-6">
+      <section className="space-y-3 rounded-panel border border-zk-border bg-zk-chip/50 p-6">
         <h3 className="text-sm font-semibold text-zk-text">Next Steps</h3>
         <div className="flex flex-wrap gap-4 text-sm">
           <Link href="/settings/agents" className="font-semibold text-zk-accent hover:underline">
@@ -280,7 +280,15 @@ export default function ApiReferencePage() {
             rel="noopener noreferrer"
             className="font-semibold text-zk-accent hover:underline"
           >
-            Raw /llms.txt specification &rarr;
+            Agent index (/llms.txt) &rarr;
+          </a>
+          <a
+            href="/llms-full.txt"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-zk-accent hover:underline"
+          >
+            Full /llms-full.txt specification &rarr;
           </a>
         </div>
       </section>

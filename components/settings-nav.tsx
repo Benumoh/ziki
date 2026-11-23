@@ -76,7 +76,7 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
                   <Link
                     href={href}
                     aria-current={on ? "page" : undefined}
-                    className={`flex min-h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-sm transition ${
+                    className={`flex min-h-9 items-center gap-2.5 rounded-control px-2.5 text-sm transition ${
                       on ? "bg-zk-tint font-bold text-zk-accent" : "font-medium text-zk-text2 hover:bg-zk-chip hover:text-zk-text"
                     }`}
                   >

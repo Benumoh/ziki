@@ -88,7 +88,7 @@ pnpm build`}</DocsCode>
       </DocsBlock>
 
       <DocsBlock title="Settings">
-        <div className="overflow-x-auto rounded-[20px] border border-zk-border bg-zk-surface">
+        <div className="overflow-x-auto rounded-panel border border-zk-border bg-zk-surface">
           <table className="min-w-full divide-y divide-zk-divider text-left text-sm">
             <thead className="bg-zk-tint text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
               <tr>

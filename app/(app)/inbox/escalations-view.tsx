@@ -118,7 +118,7 @@ export async function EscalationsView({
       </nav>
 
       {shown.length > 0 ? (
-        <ul className="m-0 flex list-none flex-col divide-y divide-zk-divider overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface p-0">
+        <ul className="m-0 flex list-none flex-col divide-y divide-zk-divider overflow-hidden rounded-panel border border-zk-border bg-zk-surface p-0">
           {shown.map((item) => (
             <li key={`${item.kind}-${item.id}`} className="flex flex-col gap-3 p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -165,7 +165,7 @@ export async function EscalationsView({
                   </Link>
                 </div>
               ) : item.answer ? (
-                <div className="rounded-[12px] border border-zk-border bg-zk-chip/60 p-3 text-xs text-zk-text2">
+                <div className="rounded-panel border border-zk-border bg-zk-chip/60 p-3 text-xs text-zk-text2">
                   <span className="font-semibold text-zk-muted">Your answer:</span>
                   <p className="m-0 mt-1 whitespace-pre-wrap">{item.answer}</p>
                 </div>
@@ -174,7 +174,7 @@ export async function EscalationsView({
           ))}
         </ul>
       ) : (
-        <div className="rounded-[20px] border border-zk-border bg-zk-surface px-4 py-12 text-center">
+        <div className="rounded-panel border border-zk-border bg-zk-surface px-4 py-12 text-center">
           <p className="font-bold text-zk-text">{view === "waiting" ? "Nothing is waiting on you." : "No escalations here."}</p>
           <p className="mt-1.5 text-sm text-zk-muted">Agents stop here when they need a person: to answer a question or decide on a redesign.</p>
         </div>

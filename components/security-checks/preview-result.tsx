@@ -8,32 +8,29 @@ const CHIP = "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-
 const OK_CHIP = `bg-zk-ok-bg text-zk-ok-fg ${CHIP}`;
 
 /**
- * A quick scan's result (#security-checks). Everything the first design showed
- * (whether HTTPS is set up, how many problems and of what kind, the risk
- * level, what a quick scan can't see, and every area it looked at with Fine or
- * its problems), drawn in the app's own look: the report's card, headings and
- * severity chips (report-results.tsx, security-finding.css). Only what any
- * browser can see, so the titles are shown; never the detail or the fix. The
- * agents' report replaces it once it's ready. `children` holds the next step.
+ * A quick scan's result (#security-checks): whether HTTPS is set up, how many
+ * problems and of what kind, and the risk level, red when anything was found.
+ * Just the summary (23 Nov, Sheyi): each area and its problems are on the
+ * scan's page, opened with See progress. Drawn in the app's own look (the
+ * report's card and headings). The agents' report replaces it once it's
+ * ready. `children` holds the next step.
  */
 export function PreviewResult({ summary, children }: { summary: PreviewSummary; children?: ReactNode }) {
   const { counts, total, risk } = summary;
-  const rank = (severity: SecuritySeverity) => SECURITY_SEVERITIES.indexOf(severity);
-  const rows = [...(summary.rows ?? [])].sort((a, b) => rank(a.severity) - rank(b.severity));
   const https = summary.areas.find((area) => area.area === "https");
   const certificate = summary.areas.find((area) => area.area === "certificate");
   const secure = (https?.problems ?? 0) + (certificate?.problems ?? 0) === 0;
   const worst = SECURITY_SEVERITIES.find((severity) => counts[severity] > 0) ?? null;
-  const worstIn = (area: string) => SECURITY_SEVERITIES.find((severity) => rows.some((row) => row.area === area && row.severity === severity)) ?? worst ?? "medium";
   const breakdown = SECURITY_SEVERITIES.filter((severity) => counts[severity] > 0)
     .map((severity) => `${counts[severity]} ${severity}`)
     .join(", ");
 
   return (
-    <section aria-label="Scan summary" className="w-full overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface text-left">
-      <div className="px-4 pt-4 sm:px-6 sm:pt-5">
+    <section aria-label="Scan summary" className={`w-full overflow-hidden rounded-panel text-left ${total ? "border-2 border-zk-bad-bd bg-zk-surface" : "border border-zk-border bg-zk-surface"}`}>
+      {/* Problems found: the top turns red, as the scan page's findings box did (18 Nov call, moved here from the scan page). */}
+      <div className={`px-4 py-4 sm:px-6 sm:py-5 ${total ? "bg-zk-bad-bg" : ""}`}>
         {/* Named after the site, like other scanners' results ("SSL Report: go.dev", "Website test: go.dev"). */}
-        <h3 className="m-0 wrap-break-word text-base font-semibold text-zk-text">Scan summary: {summary.target}</h3>
+        <h3 className={`m-0 wrap-break-word text-base font-semibold ${total ? "text-zk-bad-fg" : "text-zk-text"}`}>Scan summary: {summary.target}</h3>
         <p className="m-0 text-xs text-zk-muted">What any browser can see. The agents check much more, and their report replaces this.</p>
         {summary.ip ? (
           // The site's facts the way other scanners write them: a bold label, then the value, on one line
@@ -62,46 +59,6 @@ export function PreviewResult({ summary, children }: { summary: PreviewSummary; 
         />
       </div>
 
-      {/* Every area it looked at, Fine or with its problems, worst first. */}
-      <ol className="m-0 mt-4 list-none divide-y divide-zk-border border-t border-zk-border p-0">
-        {summary.areas.map((area) => {
-          const found = rows.filter((row) => row.area === area.area);
-          return (
-            <li key={area.area} className="relative px-4 py-3 sm:px-6">
-              {/* A coloured stripe: green when fine, the worst problem's colour otherwise. */}
-              <span
-                aria-hidden="true"
-                className={`absolute inset-y-2 left-0 w-1 rounded-r ${area.problems ? `security-severity security-severity--${worstIn(area.area)}` : "bg-zk-ok-fg"}`}
-                style={area.problems ? { background: "var(--sev-dot)" } : undefined}
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="m-0 text-sm font-semibold text-zk-text">{area.label}</h4>
-                {area.problems ? (
-                  <span className={`security-severity security-severity--${worstIn(area.area)} ${CHIP}`}>
-                    {area.problems} {area.problems === 1 ? "problem" : "problems"}
-                  </span>
-                ) : (
-                  <span className={OK_CHIP}>✓ Fine</span>
-                )}
-              </div>
-              {found.length ? (
-                <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
-                  {found.map((row, index) => (
-                    <li key={index} className="flex items-center gap-3 text-sm">
-                      <span className={`security-severity security-severity--${row.severity} ${CHIP} w-[72px] justify-center`}>{SEVERITY_LABEL[row.severity]}</span>
-                      {/* What any browser can see, so it's shown: the title only, never the detail or the fix. */}
-                      <span className="min-w-0 flex-1 wrap-break-word text-zk-text">{row.title ?? "A problem in this area"}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : area.problems ? (
-                <p className="m-0 mt-1 text-xs text-zk-muted">Scan again to see what was found here.</p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
-
       {children ? <div className="border-t border-zk-border px-4 py-3 sm:px-6">{children}</div> : null}
     </section>
   );
@@ -121,7 +78,7 @@ export function QuickScanList({ summary }: { summary: PreviewSummary }) {
   const areaLabel = new Map(summary.areas.map((area) => [area.area, area.label]));
 
   return (
-    <section aria-labelledby="quick-scan-heading" className="overflow-hidden rounded-[20px] border border-zk-border bg-zk-surface">
+    <section aria-labelledby="quick-scan-heading" className="overflow-hidden rounded-panel border border-zk-border bg-zk-surface">
       <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-5">
         <div className="min-w-0">
           <h2 id="quick-scan-heading" className="text-base font-semibold text-zk-text">Scan summary</h2>

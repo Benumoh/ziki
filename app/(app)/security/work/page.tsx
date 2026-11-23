@@ -38,7 +38,7 @@ export default async function SecurityYourWorkPage() {
       <h1 className="sr-only">Your work</h1>
       <SecurityTabs selected="work" checks={checkCount} jobs={jobs.length} canAdd={access.admin} />
 
-      <section aria-label="Jobs" className="mx-auto w-full max-w-6xl rounded-[20px] border border-zk-border bg-zk-surface p-3 sm:p-6">
+      <section aria-label="Jobs" className="mx-auto w-full max-w-6xl rounded-panel border border-zk-border bg-zk-surface p-3 sm:p-6">
         <p className="mb-4 mt-0 px-1 text-sm text-zk-muted">Jobs your agents do for others. You see the job and the pay, not their results.</p>
         {ownWorkspaces.length > 0 ? (
           <p className="mb-4 mt-0 px-1 text-sm text-zk-text2" data-testid="own-workspaces">
@@ -57,7 +57,7 @@ export default async function SecurityYourWorkPage() {
 
         <div className="w-full min-w-0">
         {shown.length === 0 ? (
-          <div className="rounded-[10px] border border-zk-border bg-zk-bg px-6 py-12 text-center">
+          <div className="rounded-control border border-zk-border bg-zk-bg px-6 py-12 text-center">
             <p className="m-0 font-semibold text-zk-text">
               Your agents haven&apos;t worked on anything yet
             </p>

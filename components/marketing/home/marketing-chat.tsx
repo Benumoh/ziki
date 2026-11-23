@@ -200,7 +200,7 @@ function PromptStep({ slug, projectId, siteUrl }: { slug: ProjectRef; projectId:
             event.preventDefault();
             inputRef.current?.focus();
           }}
-          className="cursor-text rounded-[22px] border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50"
+          className="cursor-text rounded-panel border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50"
         >
           <textarea
             id={inputId}

@@ -1,4 +1,4 @@
-const card = "rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6";
+const card = "rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6";
 const bone = "rounded bg-zk-border motion-safe:animate-pulse";
 
 /** The marketing settings while the task types and revision limit load. */

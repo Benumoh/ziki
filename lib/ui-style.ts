@@ -4,7 +4,7 @@
  *
  * - Section titles are 16px, regular weight, near-black, with an optional 14px gray line under them.
  * - Panels are white with a thin line and 12px corners; inside, 20px padding and 16px between blocks.
- * - Toolbar controls (Filter, New …, period pickers) are quiet: white, a thin line, 9px corners, 14px gray text.
+ * - Toolbar controls (Filter, New …, period pickers) are quiet, flat buttons: white, a thin line, 10px corners.
  */
 
 /** A section's title: 16px, regular, slightly tight. */
@@ -14,14 +14,14 @@ export const SECTION_TITLE = "m-0 text-[16px] font-normal leading-6 tracking-[-0
 export const SECTION_SUB = "m-0 text-[14px] leading-5 text-zk-muted";
 
 /** A white panel: a thin line, 12px corners, 20px padding. */
-export const PANEL = "rounded-xl border border-zk-border bg-zk-surface p-5";
+export const PANEL = "rounded-panel border border-zk-border bg-zk-surface p-5";
 
 /** The space between blocks inside a panel, and between panels. */
 export const GAP = "gap-4";
 
-/** A toolbar control: a white pill with a thin line, an optional icon, and dark text (#toolbar-pill). */
+/** A toolbar control: a flat white button with a thin line, 10px corners, an optional icon, and dark text. */
 export const TOOL_BUTTON =
-  "inline-flex h-9 shrink-0 cursor-pointer list-none items-center gap-2 rounded-full border border-zk-border bg-zk-surface px-4 text-[14px] font-medium text-zk-text transition hover:bg-zk-chip [&::-webkit-details-marker]:hidden [&>svg]:text-zk-text2";
+  "inline-flex h-9 shrink-0 cursor-pointer list-none items-center gap-2 rounded-control border border-zk-border bg-zk-surface px-4 text-[14px] font-medium text-zk-text transition hover:bg-zk-chip [&::-webkit-details-marker]:hidden [&>svg]:text-zk-text2";
 
 /** A toolbar control while it is on (a filter is picked): the same, in the accent. */
 export const TOOL_BUTTON_ON = "border-zk-accent/40 bg-zk-tint text-zk-accent [&>svg]:text-zk-accent";

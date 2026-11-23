@@ -234,7 +234,7 @@ export default async function DiscoverPage(props: DiscoverPageProps) {
 
       {/* Project Grid */}
       {cardsData.length === 0 ? (
-        <div className="rounded-[20px] border border-zk-border bg-zk-surface p-12 text-center">
+        <div className="rounded-panel border border-zk-border bg-zk-surface p-12 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zk-chip text-zk-muted">
             <svg
               width="24"

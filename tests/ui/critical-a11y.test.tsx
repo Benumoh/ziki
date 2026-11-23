@@ -20,8 +20,6 @@ import type { RejectedIdea } from "@/components/marketing/rejected-ideas/model";
 import { MarketingDeliverablesPanel } from "@/components/marketing/marketing-deliverables-panel";
 import { MarketingReviewsPanel } from "@/components/marketing/marketing-reviews-panel";
 import { createWebhookAction, listWebhooksAction } from "@/app/actions/webhooks";
-import { OnScreenGuide } from "@/components/support-guide/on-screen-guide";
-import { getPageGuidance, searchSupportAnswers } from "@/components/support-guide/support-guide-data";
 import { ActiveSessions } from "@/components/active-sessions";
 import { LoginHistory } from "@/components/login-history";
 import { projectRef } from "@/lib/project-paths";
@@ -72,9 +70,6 @@ vi.mock("@/app/actions/idea-verdicts", () => ({
 }));
 vi.mock("@/app/(app)/[org]/[project]/notes/actions", () => ({ voteNoteCommentAction: vi.fn() }));
 
-vi.mock("@/app/(app)/points/disputes/actions", () => ({
-  openDisputeAction: vi.fn(),
-}));
 
 vi.mock("@/app/(app)/questions/actions", () => ({
   answerQuestionAction: vi.fn(),
@@ -539,53 +534,5 @@ describe("component accessibility (axe)", () => {
       }
     }
   }, 15000);
-
-  describe("Customer Support Guide", () => {
-    it("resolves route context guidance for homepage, issues, ideas, and tickets", () => {
-      const home = getPageGuidance("/");
-      expect(home.contextKey).toBe("home");
-      expect(home.pageName).toContain("Homepage");
-
-      const issues = getPageGuidance("/acme/issues");
-      expect(issues.contextKey).toBe("issues");
-      expect(issues.pageName).toContain("Issues");
-
-      const ideas = getPageGuidance("/acme/ideas");
-      expect(ideas.contextKey).toBe("ideas");
-      expect(ideas.pageName).toContain("Ideas");
-
-      const ticket = getPageGuidance("/acme/123");
-      expect(ticket.contextKey).toBe("issue-detail");
-    });
-
-    it("answers user questions about agents, issues, your call, and feeling lost", () => {
-      expect(searchSupportAnswers("I feel lost where do I start?").text).toContain("Ziki is designed for humans");
-      expect(searchSupportAnswers("What are agents doing?").text).toContain("Autonomous agents in Ziki");
-      expect(searchSupportAnswers("What does Your Call mean?").text).toContain("Your Call");
-      expect(searchSupportAnswers("How do points and rewards work?").text).toContain("Rewards in Ziki");
-    });
-
-    it("returns direct page navigation shortcuts for page queries", () => {
-      const issuesNav = searchSupportAnswers("take me to issues", projectRef("demo", "demo"));
-      expect(issuesNav.actions).toBeDefined();
-      expect(issuesNav.actions?.[0].href).toBe("/demo/demo/issues/your-work");
-
-      const ideasNav = searchSupportAnswers("take me to ideas", projectRef("demo", "demo"));
-      expect(ideasNav.actions).toBeDefined();
-      expect(ideasNav.actions?.[0].href).toBe("/demo/demo/new");
-    });
-
-    it("renders the support guide with accessible ARIA label and toggle button", async () => {
-      render(<OnScreenGuide />);
-      const guide = screen.getByRole("complementary", { name: "Customer Support Guide" });
-      expect(guide).toBeInTheDocument();
-
-      const toggleBtn = screen.getByRole("button", { name: /ask support/i });
-      expect(toggleBtn).toBeInTheDocument();
-
-      fireEvent.click(toggleBtn);
-      expect(screen.getAllByText(/Ziki Support Guide/i).length).toBeGreaterThanOrEqual(1);
-    });
-  });
 
 });

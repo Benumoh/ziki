@@ -32,7 +32,7 @@ export function DocsArticle({
           ← {section.label}
         </Link>
         <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">{page.title}</h1>
-        <div className="rounded-[20px] border border-zk-border bg-zk-info-bg/70 p-4 sm:p-5">
+        <div className="rounded-panel border border-zk-border bg-zk-info-bg/70 p-4 sm:p-5">
           <p className="text-sm font-extrabold text-zk-info-fg">In short</p>
           <div className="mt-1 text-sm text-zk-text2">{inShort}</div>
         </div>
@@ -41,7 +41,7 @@ export function DocsArticle({
       {children}
 
       {related.length > 0 ? (
-        <section className="space-y-3 rounded-[20px] border border-zk-border bg-zk-chip/50 p-6">
+        <section className="space-y-3 rounded-panel border border-zk-border bg-zk-chip/50 p-6">
           <h2 className="text-sm font-semibold text-zk-text">Related</h2>
           <div className="flex flex-wrap gap-4 text-sm">
             {related.map((link) => (
@@ -56,7 +56,7 @@ export function DocsArticle({
       {previous || next ? (
         <nav aria-label="More in this section" className="grid gap-4 sm:grid-cols-2">
           {previous ? (
-            <Link href={previous.href} className="rounded-[20px] border border-zk-border bg-zk-surface p-4 transition hover:bg-zk-chip">
+            <Link href={previous.href} className="rounded-panel border border-zk-border bg-zk-surface p-4 transition hover:bg-zk-chip">
               <span className="block text-xs text-zk-muted">Previous</span>
               <span className="block text-sm font-semibold text-zk-accent">&larr; {previous.title}</span>
             </Link>
@@ -64,7 +64,7 @@ export function DocsArticle({
             <span className="hidden sm:block" />
           )}
           {next ? (
-            <Link href={next.href} className="rounded-[20px] border border-zk-border bg-zk-surface p-4 text-right transition hover:bg-zk-chip">
+            <Link href={next.href} className="rounded-panel border border-zk-border bg-zk-surface p-4 text-right transition hover:bg-zk-chip">
               <span className="block text-xs text-zk-muted">Next</span>
               <span className="block text-sm font-semibold text-zk-accent">{next.title} &rarr;</span>
             </Link>
@@ -141,7 +141,7 @@ export function DocsLink({ href, children }: { href: string; children: React.Rea
 /** A tip or warning set apart from the text. */
 export function DocsNote({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[20px] border border-zk-border bg-zk-surface p-4">
+    <div className="rounded-panel border border-zk-border bg-zk-surface p-4">
       <p className="text-sm font-semibold text-zk-text">{title}</p>
       <div className="mt-1 text-xs leading-5 text-zk-muted">{children}</div>
     </div>
@@ -153,7 +153,7 @@ export function DocsQA({ items }: { items: { q: string; a: React.ReactNode }[] }
   return (
     <dl className="space-y-4">
       {items.map((item) => (
-        <div key={item.q} className="rounded-[20px] border border-zk-border bg-zk-surface p-4">
+        <div key={item.q} className="rounded-panel border border-zk-border bg-zk-surface p-4">
           <dt className="text-sm font-semibold text-zk-text">{item.q}</dt>
           <dd className="mt-1 text-sm leading-6 text-zk-text2">{item.a}</dd>
         </div>

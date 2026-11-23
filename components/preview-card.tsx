@@ -259,7 +259,7 @@ export function PreviewCard({ bugId, pullNumber, build: initialBuild, lastReadyU
   const frame = <BrowserFrame address={shownUrl ? hostOf(shownUrl) : null}>{screen}</BrowserFrame>;
 
   return (
-    <section aria-label="Preview" data-testid="preview" data-status={build?.status ?? "none"} className="flex flex-col gap-3 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
+    <section aria-label="Preview" data-testid="preview" data-status={build?.status ?? "none"} className="flex flex-col gap-3 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
       <header className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-bold text-zk-text">Preview</span>
         <span role="status" className={`rounded-full px-2 py-0.5 text-xs font-bold ${status.tone}`}>{status.text}</span>

@@ -75,7 +75,7 @@ export function TestCardPanel({
   const bench = card.rows.filter((r) => r.bench);
   const blackout = card.total > 0 && card.stamped === card.total;
   return (
-    <section id="test-card" aria-labelledby="test-card-heading" className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
+    <section id="test-card" aria-labelledby="test-card-heading" className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h2 id="test-card-heading" className="m-0 text-xs font-bold tracking-[0.08em] text-zk-muted uppercase">
           Test card

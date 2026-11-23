@@ -161,7 +161,7 @@ function VoteBadge({ up, down, voted, myVote, label, positive, votable, words, a
         role="group"
         aria-label={name}
         title={error ?? name}
-        className={`inline-flex h-[42px] w-[42px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-[10px] border-[1.5px] font-mono font-semibold tabular-nums leading-none ${box} ${error ? "border-zk-bad-fg" : ""}`}
+        className={`inline-flex h-[42px] w-[42px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-control border-[1.5px] font-mono font-semibold tabular-nums leading-none ${box} ${error ? "border-zk-bad-fg" : ""}`}
       >
         {part("up", counts.up, single ? `inline-flex ${caption ? "text-[13px]" : "text-[15px]"}` : onlyDown ? hidden : onlyUp ? big : small, testId.up)}
         {single ? null : part("down", counts.down, onlyUp ? hidden : onlyDown ? big : small, testId.down)}

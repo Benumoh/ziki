@@ -209,7 +209,7 @@ export default function ErrorsPage() {
       </DocsBlock>
 
       <DocsBlock title="Statuses and fixes">
-        <div className="overflow-x-auto rounded-[20px] border border-zk-border bg-zk-surface">
+        <div className="overflow-x-auto rounded-panel border border-zk-border bg-zk-surface">
           <table className="min-w-full divide-y divide-zk-divider text-left text-sm">
             <thead className="bg-zk-tint text-[11px] font-bold uppercase tracking-[0.06em] text-zk-accent">
               <tr>
@@ -295,8 +295,9 @@ export default function ErrorsPage() {
       <DocsBlock title="Still stuck">
         <DocsList>
           <li>
-            <DocsLink href="/llms.txt">/llms.txt</DocsLink> is the full specification, including every route and every
-            error above.
+            <DocsLink href="/llms/operations.md">/llms/operations.md</DocsLink> covers common errors and recovery (see{" "}
+            <DocsLink href="/llms.txt">/llms.txt</DocsLink> for the agent index or{" "}
+            <DocsLink href="/llms-full.txt">/llms-full.txt</DocsLink> for the full reference).
           </li>
           <li>
             Read the feed&apos;s <DocsInlineCode>ask</DocsInlineCode> lines and the failing item&apos;s{" "}

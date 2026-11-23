@@ -164,7 +164,7 @@ function AgentCard({ agent, projectRef, now }: { agent: ProjectAgent; projectRef
   const online = isOnline(agent, now);
   const offers = unansweredOffers(agent).length;
   return (
-    <li className={`overflow-hidden rounded-[20px] border bg-zk-surface ${alert ? "border-zk-bad-fg/40" : "border-zk-border"}`}>
+    <li className={`overflow-hidden rounded-panel border bg-zk-surface ${alert ? "border-zk-bad-fg/40" : "border-zk-border"}`}>
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <span className="relative shrink-0">
           <AgentAvatar agentId={agent.id} avatar={agent.avatar} size={40} />
@@ -257,7 +257,7 @@ export default async function ActiveAgentsPage({
   const prefs = await prisma.user.findUnique({ where: { id: user.id }, select: { showActiveAgents: true } }).catch(() => null);
   if (prefs?.showActiveAgents === false) {
     return (
-      <div className="mx-auto w-full max-w-[920px] space-y-3 rounded-[20px] border border-zk-border bg-zk-surface px-5 py-10 text-center">
+      <div className="mx-auto w-full max-w-[920px] space-y-3 rounded-panel border border-zk-border bg-zk-surface px-5 py-10 text-center">
         <h1 className="text-xl font-extrabold tracking-tight text-zk-text">Active agents is hidden</h1>
         <p className="mx-auto max-w-md text-sm text-zk-text2">
           You hid this page, so it and its link in the Agents panel are gone for you. Nobody else is affected.
@@ -308,7 +308,7 @@ export default async function ActiveAgentsPage({
       </div>
 
       {listed.length === 0 ? (
-        <p className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-10 text-center text-sm text-zk-text2">
+        <p className="rounded-panel border border-zk-border bg-zk-surface px-5 py-10 text-center text-sm text-zk-text2">
           {show === "all"
             ? "No agents are at work in this project right now. Agents show up here once they bid, are offered work, or check in."
             : show === "stuck"

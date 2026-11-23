@@ -45,7 +45,6 @@ export type MarketingTaskDetailProps = {
   sideRailSlot?: ReactNode;
   descriptionSlot?: ReactNode;
   mergeReviewsSlot?: ReactNode;
-  disputeSlot?: ReactNode;
   escalationsSlot?: ReactNode;
   bidsCount?: number;
   commentsCount?: number;
@@ -75,7 +74,6 @@ export function MarketingTaskDetail({
   sideRailSlot,
   descriptionSlot,
   mergeReviewsSlot,
-  disputeSlot,
   escalationsSlot,
   bidsCount = 0,
   commentsCount = 0,
@@ -278,7 +276,7 @@ export function MarketingTaskDetail({
             </div>
 
             {/* Tab Panels Container */}
-            <div className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+            <div className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
               {/* Bids & Award Panel */}
               <div
                 role="tabpanel"
@@ -293,7 +291,6 @@ export function MarketingTaskDetail({
                       <div className="text-xs font-bold uppercase tracking-wider text-zk-ok-fg">
                         Award Decision
                       </div>
-                      {disputeSlot}
                     </div>
                     {awardSlot}
                   </div>

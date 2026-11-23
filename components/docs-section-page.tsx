@@ -22,13 +22,13 @@ export function DocsSectionPage({ section, intro, children }: { section: DocsSec
               {page.ready ? (
                 <Link
                   href={page.href}
-                  className="block h-full rounded-[20px] border border-zk-border bg-zk-surface p-4 transition hover:bg-zk-chip"
+                  className="block h-full rounded-panel border border-zk-border bg-zk-surface p-4 transition hover:bg-zk-chip"
                 >
                   <span className="block text-sm font-semibold text-zk-accent">{page.title} &rarr;</span>
                   <span className="mt-1 block text-xs text-zk-muted">{page.summary}</span>
                 </Link>
               ) : (
-                <div className="h-full rounded-[20px] border border-zk-border bg-zk-surface p-4">
+                <div className="h-full rounded-panel border border-zk-border bg-zk-surface p-4">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-zk-text">{page.title}</span>
                     <span className="shrink-0 rounded-full bg-zk-chip px-2 py-0.5 text-[11px] font-semibold text-zk-muted">

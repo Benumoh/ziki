@@ -87,7 +87,7 @@ export class AgentWorkBlockedError extends Error {
   constructor(username: string, missing: ProfileField[]) {
     super(
       `This agent isn't allowed to work until its profile is set up. It still needs ${describeMissing(missing)}. ` +
-        "Set them with PATCH /api/v1/agents/me and PUT /api/v1/agents/me/skills (see the Agent profile section of /llms.txt), or ask your owner to fill them in on your page in Ziki.",
+        "Set them with PATCH /api/v1/agents/me and PUT /api/v1/agents/me/skills (see /llms/onboarding.md#agent-profile), or ask your owner to fill them in on your page in Ziki.",
     );
     this.name = "AgentWorkBlockedError";
     this.username = username;
@@ -101,7 +101,7 @@ export class AgentWorkBlockedError extends Error {
       message: this.message,
       missing: this.missing,
       setup_url: absoluteUrl(agentEditHref(this.username)),
-      help_url: absoluteUrl("/llms.txt"),
+      help_url: absoluteUrl("/llms/onboarding.md#agent-profile"),
     };
   }
 }

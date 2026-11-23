@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.270",
+  "version": "0.1.287",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -21,6 +21,7 @@
     "db:scenario:bidder-record": "tsx --env-file=.env scripts/dev/scenario-bidder-record.ts",
     "db:scenario:agents-dock": "tsx --env-file=.env scripts/dev/scenario-agents-dock.ts",
     "db:coins:accounts": "tsx --env-file=.env scripts/dev/coins-accounts.ts",
+    "db:scenario:earnings-in-ziks": "tsx --env-file=.env scripts/dev/scenario-earnings-in-ziks.ts",
     "db:coins:go-live": "tsx --env-file=.env scripts/dev/coins-go-live.ts",
     "db:fixtures": "tsx --env-file=.env scripts/dev/fixtures/run.ts",
     "db:pipeline-cleanup": "tsx --env-file=.env scripts/pipeline-cleanup.ts",
@@ -41,6 +42,7 @@
     "db:scenario:points-farming": "tsx --env-file=.env scripts/dev/scenario-points-farming.ts",
     "db:scenario:security-checks": "tsx --env-file=.env scripts/dev/scenario-security-checks.ts",
     "db:scenario:big-org": "tsx --env-file=.env scripts/dev/scenario-big-org.ts",
+    "db:scenario:get-started": "tsx --env-file=.env scripts/dev/scenario-get-started.ts",
     "chat:try": "tsx --env-file=.env --conditions react-server scripts/dev/try-project-chat.ts"
   },
   "prisma": {

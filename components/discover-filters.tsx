@@ -52,7 +52,7 @@ export function DiscoverFilters({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-[16px] border border-zk-border bg-zk-surface p-4 sm:flex-row sm:items-center"
+      className="flex flex-col gap-3 rounded-panel border border-zk-border bg-zk-surface p-4 sm:flex-row sm:items-center"
     >
       <div className="relative flex-1">
         <input
@@ -91,7 +91,7 @@ export function DiscoverFilters({
         type="submit"
         disabled={isPending}
         aria-label={isPending ? "Searching" : "Search"}
-        className="inline-flex min-h-[38px] min-w-[80px] cursor-pointer items-center justify-center rounded-xl bg-electric-blue-strong px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:brightness-110 focus:outline-none disabled:cursor-not-allowed disabled:opacity-75"
+        className="inline-flex min-h-[38px] min-w-[80px] cursor-pointer items-center justify-center rounded-control bg-electric-blue-strong px-5 py-2 text-sm font-bold text-white transition hover:bg-zk-ink focus:outline-none disabled:cursor-not-allowed disabled:opacity-75"
       >
         {isPending ? (
           <svg

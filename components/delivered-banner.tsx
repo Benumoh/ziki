@@ -44,7 +44,7 @@ export function DeliveredBanner({
       aria-label={sentBack ? "Delivered work, sent back" : "Delivered work"}
       data-testid="delivered-banner"
       data-state={sentBack ? "sent-back" : "delivered"}
-      className={`flex items-start gap-3.5 rounded-[20px] border-2 px-5 py-4 ${tone}`}
+      className={`flex items-start gap-3.5 rounded-panel border-2 px-5 py-4 ${tone}`}
     >
       <span aria-hidden="true" className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${sentBack ? "bg-zk-warn-fg" : "bg-zk-ok-fg"} text-white`}>
         {sentBack ? (

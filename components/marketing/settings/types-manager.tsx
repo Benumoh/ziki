@@ -122,7 +122,7 @@ export function TypesManager({ slug, types }: { slug: ProjectRef; types: Marketi
   const formOpen = isCreating || editing !== null;
 
   return (
-    <section aria-labelledby="marketing-types" className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+    <section aria-labelledby="marketing-types" className="rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="marketing-types" className="m-0 text-base font-bold text-zk-text">
@@ -188,7 +188,7 @@ export function TypesManager({ slug, types }: { slug: ProjectRef; types: Marketi
       ) : null}
 
       {formOpen ? (
-        <form onSubmit={save} className="mt-4 rounded-[16px] border border-zk-divider p-4" aria-label={editing ? `Edit ${editing.name}` : "New task type"}>
+        <form onSubmit={save} className="mt-4 rounded-panel border border-zk-divider p-4" aria-label={editing ? `Edit ${editing.name}` : "New task type"}>
           <h3 className="m-0 text-sm font-bold text-zk-text">{editing ? `Edit “${editing.name}”` : "New task type"}</h3>
           <div className="mt-3 flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">

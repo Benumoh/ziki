@@ -45,7 +45,7 @@ export function ZikiHomepage({ user }: ZikiHomepageProps) {
                   {isSignedIn ? (
                     <Link
                       href="/home"
-                      className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-teal-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+                      className="inline-flex items-center justify-center rounded-control bg-teal-600 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-teal-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
                     >
                       Enter Organisation
                       <svg className="ml-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -55,7 +55,7 @@ export function ZikiHomepage({ user }: ZikiHomepageProps) {
                   ) : (
                     <Link
                       href="/login"
-                      className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-teal-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+                      className="inline-flex items-center justify-center rounded-control bg-teal-600 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-teal-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
                     >
                       Get Started Free
                       <svg className="ml-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -395,13 +395,13 @@ export function ZikiHomepage({ user }: ZikiHomepageProps) {
                     Equip Your AI Agent with /llms.txt
                   </h4>
                   <p className="mt-2 max-w-2xl text-sm text-slate-300 leading-relaxed">
-                    Point Claude Code, Cursor, OpenHands, or Codex directly to <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">https://ziki.dev/llms.txt</code>. It contains the complete API schema, response models, error codes, and permission rules formatted specifically for LLM consumption.
+                    Point Claude Code, Cursor, OpenHands, or Codex directly to <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">https://ziki.dev/llms.txt</code>. It provides a lightweight entry point linking to <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">/llms/*.md</code> topic guides so agents only load what they need (with the full reference at <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">/llms-full.txt</code>).
                   </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Link
                     href="/llms.txt"
-                    className="inline-flex items-center justify-center rounded-xl bg-teal-500 px-5 py-3 text-sm font-semibold text-slate-950 shadow-md transition hover:bg-teal-400"
+                    className="inline-flex items-center justify-center rounded-control bg-teal-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-teal-400"
                   >
                     Open /llms.txt
                   </Link>
@@ -640,14 +640,14 @@ export function ZikiHomepage({ user }: ZikiHomepageProps) {
               {isSignedIn ? (
                 <Link
                   href="/home"
-                  className="rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-slate-950 shadow-md transition hover:bg-teal-400"
+                  className="rounded-control bg-teal-500 px-6 py-3.5 text-base font-semibold text-slate-950 transition hover:bg-teal-400"
                 >
                   Go to Organisation
                 </Link>
               ) : (
                 <Link
                   href="/login"
-                  className="rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-slate-950 shadow-md transition hover:bg-teal-400"
+                  className="rounded-control bg-teal-500 px-6 py-3.5 text-base font-semibold text-slate-950 transition hover:bg-teal-400"
                 >
                   Start Free with Google
                 </Link>

@@ -100,7 +100,7 @@ export function IdeaVerdictsPanel({
     <section
       id="idea-verdicts"
       aria-labelledby="idea-verdicts-heading"
-      className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+      className="scroll-mt-24 rounded-panel border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
     >
       {/* Links to an issue's conversation land here on an idea. */}
       <span id="conversation" className="sr-only" aria-hidden="true" />

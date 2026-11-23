@@ -64,6 +64,11 @@ export function isProjectFirstPath(path: string): boolean {
   return PROJECT_PAGES.has(second) || /^[0-9]+$/.test(second);
 }
 
+/** The Overview's path segment (#overview-url): `/<org>/overview` and `/<org>/<project>/overview`. */
+export const OVERVIEW_SEGMENT = "overview";
+/** Where the Overview used to be, `/issues/your-work`: it redirects to /overview, query and all. */
+export const OLD_OVERVIEW_SEGMENT = "your-work";
+
 /** The path segment of each issue list, by the status it shows. */
 const STATUS_SEGMENT: Record<string, string> = {
   open: "open",
@@ -74,7 +79,6 @@ const STATUS_SEGMENT: Record<string, string> = {
   error: "error",
   possibly_delivered: "possibly-delivered",
   your_call: "your-call",
-  your_work: "your-work",
   closed: "closed",
   all: "all",
   rejected: "rejected",
@@ -102,7 +106,7 @@ function withQuery(path: string, query?: URLSearchParams | string): string {
 
 /**
  * The work's stages are the Overview's tabs and Status filter (#work-feed), not lists of their own: each stage's
- * place on the Overview (`/issues/your-work`, with `view` for the tab and `state` for the status).
+ * place on the Overview (`/overview`, #overview-url, with `view` for the tab and `state` for the status).
  */
 const OVERVIEW_PLACE: Record<string, Record<string, string>> = {
   all: {},
@@ -125,7 +129,7 @@ export function overviewPlaceFor(status: string): Record<string, string> | null 
 }
 
 /**
- * An issue list: a stage opens its place on the Overview (`/<org>/<project>/issues/your-work?view=…&state=…`); the
+ * An issue list: a stage opens its place on the Overview (`/<org>/<project>/overview?view=…&state=…`); the
  * lists that are still pages of their own (closed, rejected, duplicates, possibly delivered, your call) are
  * `/<org>/<project>/issues/<status>`. `all` when no status is given.
  */
@@ -134,7 +138,7 @@ export function issuesPath(slug: ProjectRef, status: string | null = "all", quer
   if (place) {
     const params = new URLSearchParams(typeof query === "string" ? query.replace(/^\?/, "") : query ?? "");
     for (const [key, value] of Object.entries(place)) params.set(key, value);
-    return withQuery(projectPath(slug, "/issues/your-work"), params);
+    return withQuery(projectPath(slug, `/${OVERVIEW_SEGMENT}`), params);
   }
   const segment = STATUS_SEGMENT[status ?? "all"] ?? "all";
   return withQuery(projectPath(slug, `/issues/${segment}`), query);

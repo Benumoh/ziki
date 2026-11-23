@@ -215,7 +215,7 @@ export function WebhookManagement() {
   if (listError) {
     return (
       <div
-        className="space-y-3 rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg p-5 text-sm text-zk-bad-fg"
+        className="space-y-3 rounded-panel border border-zk-bad-bd bg-zk-bad-bg p-5 text-sm text-zk-bad-fg"
         role="alert"
       >
         <p>{listError}</p>
@@ -232,7 +232,7 @@ export function WebhookManagement() {
 
   if (!loaded) {
     return (
-      <div className="rounded-[20px] border border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
+      <div className="rounded-panel border border-zk-border bg-zk-surface p-6 text-sm text-zk-muted">
         Loading webhook subscriptions…
       </div>
     );
@@ -261,7 +261,7 @@ export function WebhookManagement() {
       <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-4">
         <section
           aria-label="Subscriptions"
-          className="flex flex-col gap-3.5 rounded-[20px] border border-zk-border bg-zk-surface p-[22px]"
+          className="flex flex-col gap-3.5 rounded-panel border border-zk-border bg-zk-surface p-[22px]"
         >
           <div className="flex items-baseline gap-2.5">
             <h2 className="text-lg font-bold text-zk-text">Subscriptions</h2>
@@ -271,7 +271,7 @@ export function WebhookManagement() {
           {subscriptions.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-zk-border bg-zk-tint px-6 py-10 text-center">
               <span
-                className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-zk-surface text-zk-accent shadow-[0_8px_20px_rgba(46,111,239,0.15)]"
+                className="flex h-14 w-14 items-center justify-center rounded-panel bg-zk-surface text-zk-accent shadow-[0_8px_20px_rgba(46,111,239,0.15)]"
                 aria-hidden="true"
               >
                 <svg
@@ -398,7 +398,7 @@ export function WebhookManagement() {
                   ?.focus();
               }
             }}
-            className="m-auto max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100vw-2rem))] max-w-full overflow-y-auto flex-col gap-3 rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg px-[22px] py-5 text-zk-text shadow-xl backdrop:bg-black/50 open:flex"
+            className="m-auto max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100vw-2rem))] max-w-full overflow-y-auto flex-col gap-3 rounded-panel border border-zk-warn-bd bg-zk-warn-bg px-[22px] py-5 text-zk-text shadow-xl backdrop:bg-black/50 open:flex"
           >
             <div className="flex items-start gap-3">
               <svg
@@ -460,7 +460,7 @@ export function WebhookManagement() {
 
         <section
           aria-label="Add webhook"
-          className="flex flex-col gap-[18px] rounded-[20px] border border-zk-border bg-zk-surface p-6"
+          className="flex flex-col gap-[18px] rounded-panel border border-zk-border bg-zk-surface p-6"
         >
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-bold text-zk-text">Add webhook</h2>
@@ -639,7 +639,7 @@ export function WebhookManagement() {
       </div>
 
       <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
-        <section className="flex flex-col gap-3.5 rounded-[20px] border border-zk-border bg-zk-surface p-[22px]">
+        <section className="flex flex-col gap-3.5 rounded-panel border border-zk-border bg-zk-surface p-[22px]">
           <h2 className="text-base font-bold text-zk-text">How delivery works</h2>
           {DELIVERY_STEPS.map((step) => (
             <div key={step.n} className="flex items-start gap-3">
@@ -655,7 +655,7 @@ export function WebhookManagement() {
             </div>
           ))}
         </section>
-        <section className="flex flex-col gap-2.5 rounded-[20px] bg-deep-ocean p-5 text-[#DCE5F5]">
+        <section className="flex flex-col gap-2.5 rounded-panel bg-deep-ocean p-5 text-[#DCE5F5]">
           <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#A9BCDF]">
             Verify a signature
           </span>

@@ -17,6 +17,9 @@ import { AgentKeyPanel } from "./agent-key-panel";
 import { loadOwnerKey } from "./owner-key";
 import { AgentActivationButton } from "@/app/(app)/settings/agents/agent-activation-button";
 import { LiveRefresh } from "@/components/live-refresh";
+import { workModeSettingsPath } from "@/lib/agents/work-mode";
+import { GetStartedCard } from "./get-started-card";
+import { loadGetStarted, setupWaiting } from "./get-started-data";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
@@ -72,6 +75,11 @@ export default async function AgentProfilePage({
   const viewerOrganisation = found.viewerOrganisation;
   const ownerKey =
     isOwner && !profile.agent.revokedAt && viewerOrganisation && found.activeForViewer ? await loadOwnerKey(found.id, viewerOrganisation.id) : null;
+  // #agent-get-started: its owner guides it from here too, in the organisation they are in.
+  const getStarted =
+    isOwner && !profile.agent.revokedAt && viewerOrganisation && found.activeForViewer
+      ? await loadGetStarted({ id: found.id, name: profile.agent.name }, viewerOrganisation.id)
+      : null;
   const missing = missingProfileFields({ ...profile.agent, skillCount: profile.agent.skills.length });
   const blocked = !profile.agent.revokedAt && missing.length > 0;
 
@@ -88,6 +96,9 @@ export default async function AgentProfilePage({
           <AgentTabs agents={ownAgents} currentId={found.id} />
         </div>
       </div>
+
+      {/* What its owner can do now comes first, above the profile and on a phone above the side card too. */}
+      {getStarted ? <GetStartedCard state={getStarted} settingsHref={workModeSettingsPath(found.username)} /> : null}
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <div className="min-w-0 space-y-10">
@@ -147,7 +158,9 @@ export default async function AgentProfilePage({
           }
         />
       </div>
-      {stuckContext ? <LiveRefresh /> : null}
+      {/* Keeps the card current as the agent answers in its terminal and its work arrives: every few
+          seconds while a question is open in both places, so an answer there moves this page on too. */}
+      {stuckContext || getStarted ? <LiveRefresh everyMs={getStarted && setupWaiting(getStarted) ? 3_000 : undefined} /> : null}
 
       {!viewer ? (
         <p className={`${agentsSurface} p-4 text-center text-sm text-zk-text2`}>

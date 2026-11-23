@@ -13,7 +13,7 @@ import type {
 import { issuePath } from "@/lib/issue-ref";
 import { prisma } from "@/lib/prisma";
 import { refOf } from "@/lib/project-paths";
-import { isReportPosted, isTargetProven, isScanPaymentSatisfied } from "@/lib/security-checks";
+import { isReportPosted, isTargetProven, isScanPaymentSatisfied, ZIKI_SECURITY_AGENT_USERNAME } from "@/lib/security-checks";
 import { SECURITY_SEVERITIES } from "@/lib/security-severity";
 import { findingPrice } from "@/lib/security-checks/payment";
 import { fixBucketOf, type FixBucket } from "@/lib/security-checks/fix-bucket";
@@ -39,7 +39,11 @@ import { AUTOMATIC_PART_PREFIX } from "@/lib/security-checks/code-findings";
 export type SeverityCounts = Record<SecuritySeverity, number>;
 
 /** One part of the check, as the client sees it on the progress screen. */
-export type ReportPart = { id: string; title: string; status: SecurityCheckItemStatus };
+/**
+ * One part of the deeper scan. `agent`: who is checking it, while it's being checked (18 Nov call, Mark: show the
+ * work happening, "this agent is working on it"); Ziki's own security agent reads as "Ziki's agent". Null otherwise.
+ */
+export type ReportPart = { id: string; title: string; status: SecurityCheckItemStatus; agent: string | null };
 
 /** One finding, as the client sees it. */
 export type ReportFinding = {
@@ -136,10 +140,13 @@ type ReportBase = {
   previousCheckId: string | null;
   nextCheckId: string | null;
   /**
-   * The code scan started from this website scan's Code scan step (#security-code-scan), for the step's state:
-   * its page, whether agents are still at it, and how many problems it found. Null until it's paid for.
+   * The code scan connected from this website scan's Code scan step (#security-code-scan), for the step's state: its
+   * page, whether it's paid for (connecting is free, 18 Nov call: connect first, pay later), whether agents are still
+   * at it, and how many problems it found. Null until the code is connected.
    */
-  codeScan: { checkId: string; finished: boolean; found: number } | null;
+  codeScan: { checkId: string; paid: boolean; finished: boolean; stopped: boolean; found: number } | null;
+  /** On a code scan: the website scan it was connected from, so its pages can name it a code scan and link back. */
+  codeScanFor: { checkId: string; site: string } | null;
   /** On a rescan, whether the site changed since the earlier scan (18 Nov); null when that can't be told. */
   siteChange: SiteChange | null;
 };
@@ -230,19 +237,25 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
       items: {
         where: { kind: "check" },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, title: true, status: true },
+        select: { id: true, title: true, status: true, agent: { select: { name: true, username: true } } },
       },
       previousCheckId: true,
       siteFingerprint: true,
       previousCheck: { select: { siteFingerprint: true } },
       nextCheck: { select: { id: true } },
-      codeScan: { select: { id: true, status: true, postedAt: true, _count: { select: { results: true } } } },
+      codeScan: { select: { id: true, status: true, postedAt: true, free: true, paidAt: true, _count: { select: { results: true } } } },
+      codeScanFor: { select: { id: true, target: { select: { value: true } } } },
       _count: { select: { items: { where: { kind: "automatic" } } } },
     },
   });
   if (!check) return null;
 
-  const parts = check.items.map(({ id, title, status }) => ({ id, title, status }));
+  const parts = check.items.map(({ id, title, status, agent }) => ({
+    id,
+    title,
+    status,
+    agent: status === "checking" && agent ? (agent.username === ZIKI_SECURITY_AGENT_USERNAME ? "Ziki's agent" : agent.name) : null,
+  }));
   const base: ReportBase = {
     checkId: check.id,
     paymentRequired: !isScanPaymentSatisfied(check),
@@ -263,8 +276,15 @@ export async function loadCheckReport(checkId: string, organisationId: string, u
     previousCheckId: check.previousCheckId,
     nextCheckId: check.nextCheck?.id ?? null,
     codeScan: check.codeScan
-      ? { checkId: check.codeScan.id, finished: check.codeScan.postedAt !== null || check.codeScan.status === "done", found: check.codeScan._count.results }
+      ? {
+          checkId: check.codeScan.id,
+          paid: isScanPaymentSatisfied(check.codeScan),
+          finished: check.codeScan.postedAt !== null || check.codeScan.status === "done",
+          stopped: check.codeScan.status === "cancelled",
+          found: check.codeScan._count.results,
+        }
       : null,
+    codeScanFor: check.codeScanFor ? { checkId: check.codeScanFor.id, site: check.codeScanFor.target.value } : null,
     siteChange: check.previousCheck ? siteChangeBetween(check.previousCheck.siteFingerprint, check.siteFingerprint) : null,
   };
 

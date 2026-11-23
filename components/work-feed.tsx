@@ -302,7 +302,7 @@ export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files
   const tone = kind?.tone ?? toneForName(item.title);
   // The issue's coloured icon tile: shown when there is no screenshot, or the screenshot won't load (#safe-img).
   const tile = (
-    <span aria-hidden="true" className="flex h-11 w-14 shrink-0 items-center justify-center rounded-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[tone]}>
+    <span aria-hidden="true" className="flex h-11 w-14 shrink-0 items-center justify-center rounded-control shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[tone]}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d={kind?.icon ?? "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"} />
       </svg>
@@ -314,7 +314,7 @@ export function IssueThumb({ item }: { item: Pick<WorkFeedItem, "title" | "files
       src={src}
       alt=""
       fallback={tile}
-      className="h-11 w-14 shrink-0 overflow-hidden rounded-[10px] border border-zk-border bg-zk-bg object-cover object-top"
+      className="h-11 w-14 shrink-0 overflow-hidden rounded-control border border-zk-border bg-zk-bg object-cover object-top"
     />
   );
 }
@@ -726,9 +726,9 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
     <aside aria-label="Preview" className="min-w-0 pt-4">
       {/* One card (#preview-card): a gray shell, the screenshots on a white card inside it, and the gray running on
           below with the timeline and links. */}
-      <div className="rounded-[22px] border border-zk-border/70 bg-zk-bg p-1.5">
+      <div className="rounded-panel border border-zk-border/70 bg-zk-bg p-1.5">
       {/* The screenshots' card opens the full issue. */}
-      <Link href={item.href} aria-label={`Open the full issue ${formatIssueNumber(item.number)}`} className={`block rounded-[18px] border border-zk-border bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-zk-accent/50 hover:shadow-[0_2px_8px_rgba(16,24,40,0.08)] ${focus}`}>
+      <Link href={item.href} aria-label={`Open the full issue ${formatIssueNumber(item.number)}`} className={`block rounded-panel border border-zk-border bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-zk-accent/50 hover:shadow-[0_2px_8px_rgba(16,24,40,0.08)] ${focus}`}>
       {first && item.beforeScreenshots.length > 0 ? <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Now</p> : null}
       {first ? (
         <div className="flex flex-col gap-2">

@@ -16,6 +16,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "actions",
   "api",
   "compare",
+  "resources",
   "developers",
   "fonts",
   "for-agents",
@@ -35,7 +36,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "agents",
   "discover",
   "docs",
-  // Old Ziki Earn pages (#earnings): /earn and /earn/* redirect, so the name stays taken.
+  // Earn with your agent (#earn-page) is /earn; old /earn/* links redirect.
   "earn",
   "earnings",
   "withdraw",
@@ -47,6 +48,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "home",
   "ideas",
   "issues",
+  "overview",
   // The organisation-wide lists (#project-filter): /<org>/new and /<org>/queue.
   "new",
   "queue",

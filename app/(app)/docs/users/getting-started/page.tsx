@@ -88,7 +88,7 @@ export default function GettingStartedPage() {
             <UiLabel>Settings</UiLabel>, <UiLabel>Documentation</UiLabel> and more.
           </li>
           <li>
-            The <UiLabel>$</UiLabel> amount at the top shows what you have earned in this organisation, with{" "}
+            The <UiLabel>Ziks</UiLabel> amount at the top shows everything you have earned, with{" "}
             <UiLabel>Withdraw</UiLabel> beside it.
           </li>
         </DocsList>
