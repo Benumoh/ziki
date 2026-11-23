@@ -36,7 +36,9 @@ vi.mock("@/lib/organisation-context", async (importOriginal) => ({
   currentOrganisationIdFor: vi.fn(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/points/signup-bonus", () => ({ awardSignupBonus: vi.fn(async () => undefined) }));
+vi.mock("@/lib/coins/welcome-bonus", () => ({ giveWelcomeBonus: vi.fn(async () => true) }));
+const addOnCallGuests = vi.hoisted(() => vi.fn(async () => [] as string[]));
+vi.mock("@/lib/on-call-guests", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/on-call-guests")>()), addOnCallGuests }));
 vi.mock("next/navigation", () => navigation);
 vi.mock("@/lib/notify", () => ({ notifyLater: vi.fn() }));
 // Tidying an idea with Claude is a network call: as with no API key, it leaves the text as typed.
@@ -119,7 +121,20 @@ describe("creating an organisation", () => {
     expect(result).toMatchObject({ ok: true, organisation: { id: "org-new" } });
     const data = (create.mock.calls[0][0] as { data: Record<string, unknown> }).data;
     expect(data.memberships).toEqual({ create: { userId: "ada", role: "owner" } });
-    expect(data.projects).toEqual({ create: { name: "Web", slug: "web", workflow: { create: {} } } });
+    expect(data.projects).toEqual({ create: { name: "Web", slug: "web", solo: false, workflow: { create: {} } } });
+    // Open to others: free on-call agents join it to give a quick win.
+    expect(addOnCallGuests).toHaveBeenCalledWith(db, { organisationId: "org-new", creatorId: "ada" });
+  });
+
+  it("starts its Web project Solo when the creator chose it, with no on-call guests, whose agents would end Solo (#solo)", async () => {
+    const { createOrganisation } = await import("@/lib/organisations");
+    addOnCallGuests.mockClear();
+    const create = vi.fn(async ({ data }: { data: { slug: string; name: string } }) => ({ id: "org-solo", slug: data.slug, name: data.name }));
+    const db = { membership: { findFirst: vi.fn(async () => null) }, organisation: { create } };
+    expect(await createOrganisation(db as never, { id: "ada" }, { name: "Ada Solo", solo: true })).toMatchObject({ ok: true });
+    const data = (create.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+    expect(data.projects).toEqual({ create: { name: "Web", slug: "web", solo: true, workflow: { create: {} } } });
+    expect(addOnCallGuests).not.toHaveBeenCalled();
   });
 });
 

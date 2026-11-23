@@ -262,7 +262,7 @@ async function main() {
           targetId,
           requestedById: owner.id,
           status: scenario.status,
-          priceCoins: 50,
+          priceCoins: 5000,
           free: true,
           paidAt: scenario.paid ? new Date(now - 90 * MIN) : null,
           startedAt: scenario.verified ? started : null,

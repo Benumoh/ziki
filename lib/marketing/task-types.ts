@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Marketing task types (M-API-7): the `IssueType`s with `track: "marketing"`.
- * They have no points (D5), because each task is paid its own reward. Types
+ * They have no price (D5), because each task pays out its own funded price. Types
  * belong to the organisation, so the name is unique across both tracks, and these
  * functions never read or change a product type. The agent routes and the
  * Marketing settings page both call these functions.

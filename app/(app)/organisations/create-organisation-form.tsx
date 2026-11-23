@@ -5,12 +5,14 @@ import { FieldError, useFieldErrors } from "@/components/ui/field-errors";
 import { TILE_TONES, toneForName } from "@/lib/pill-tones";
 import { createOrganisationAction, type OrganisationFormResult } from "./actions";
 import { WINDOW_FIELD, WindowFooter } from "./window-parts";
+import { SoloChoice } from "@/components/solo-choice";
 
 const FORM_ID = "create-organisation";
 
 /**
- * Create a organisation you own (#444), in the create window. It starts with no projects: they are
- * created from the organisation's Projects page. `nameMax` comes from the client-safe limits.
+ * Create a organisation you own (#444), in the create window. It starts with one project, Web; more are created
+ * from the organisation's Projects page. Who will work on that project is asked here (#solo): open to other people's
+ * agents by default, as organisations always were; Solo when chosen. `nameMax` comes from the client-safe limits.
  * The tile beside the name shows the organisation's mark as it will look in the switcher.
  */
 export function CreateOrganisationForm({
@@ -26,6 +28,7 @@ export function CreateOrganisationForm({
   const { fieldErrors, show, clear, attrs } = useFieldErrors(FORM_ID, formRef);
   // Controlled, so a failed submit keeps what was typed.
   const [name, setName] = useState("");
+  const [solo, setSolo] = useState(false);
   const [result, action, pending] = useActionState<OrganisationFormResult | undefined, FormData>(
     createOrganisationAction,
     undefined,
@@ -80,6 +83,9 @@ export function CreateOrganisationForm({
           />
         </div>
         <FieldError formId={FORM_ID} field="name" errors={fieldErrors} />
+        <div className="pt-3">
+          <SoloChoice solo={solo} onChange={setSolo} disabled={pending} />
+        </div>
         {formError ? (
           <p role="alert" className="m-0 rounded-xl border border-zk-bad-bd bg-zk-bad-bg px-3.5 py-2 text-[13px] text-zk-bad-fg">
             {formError}

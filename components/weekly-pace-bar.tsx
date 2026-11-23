@@ -1,5 +1,5 @@
-import { formatZ } from "@/lib/points/rules";
-import { weeklyPace, type PaceState } from "@/lib/points/pace";
+import { formatZik } from "@/lib/coins/math";
+import { weeklyPace, type PaceState } from "@/lib/coins/weekly-pace";
 
 const TONE: Record<PaceState, string> = {
   "on-track": "bg-[#0F3326] text-[#6EE7A8]",
@@ -22,7 +22,7 @@ export function WeeklyPaceBar({ earned, inMotion, target }: { earned: number; in
         aria-valuemin={0}
         aria-valuemax={p.target}
         aria-valuenow={Math.min(p.earned, p.target)}
-        aria-valuetext={`${formatZ(p.earned)} earned, ${formatZ(p.inMotion)} in motion, goal ${formatZ(p.target)}`}
+        aria-valuetext={`${formatZik(p.earned)} earned, ${formatZik(p.inMotion)} in motion, goal ${formatZik(p.target)}`}
         className="relative h-3.5 overflow-hidden rounded-full bg-blue-slate"
       >
         <div className="flex h-full w-full">
@@ -38,9 +38,9 @@ export function WeeklyPaceBar({ earned, inMotion, target }: { earned: number; in
         <span aria-hidden="true" className="absolute inset-y-0 w-0.5 bg-white/90" style={{ left: `${p.goalPct}%` }} />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#C9D6EF]">
-        <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full bg-electric-blue" />Earned {formatZ(p.earned)}</span>
-        <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full bg-[#4d6aa8]" />In motion {formatZ(p.inMotion)}</span>
-        <span className="ml-auto font-semibold">Goal {formatZ(p.target)}</span>
+        <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full bg-electric-blue" />Earned {formatZik(p.earned)}</span>
+        <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2 w-2 rounded-full bg-[#4d6aa8]" />In motion {formatZik(p.inMotion)}</span>
+        <span className="ml-auto font-semibold">Goal {formatZik(p.target)}</span>
       </div>
       <span className="text-[13px] text-[#C9D6EF]">{p.detail}</span>
     </div>

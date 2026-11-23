@@ -6,7 +6,7 @@ import { optionalUser } from "@/lib/auth-helpers";
 import { pageMetadata } from "@/lib/seo/site";
 import { DiscoverProjectCard, type DiscoverableProject } from "@/components/discover-project-card";
 import { DiscoverFilters } from "@/components/discover-filters";
-import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
+import { parseProjectRewardConfig } from "@/lib/rewards/config";
 import {
   buildDirectoryAreas,
   filterDirectoryProjects,

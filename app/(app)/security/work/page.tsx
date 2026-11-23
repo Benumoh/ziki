@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth-helpers";
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { listAgentJobs, listOwnWorkspaces, type AgentJobRow } from "@/lib/security-checks/your-work";
-import { formatZ } from "@/lib/points/rules";
+import { formatZik } from "@/lib/coins/math";
 import { KindIcon } from "@/components/security-checks/entry-box";
 import { SecurityTabs } from "@/components/security-checks/security-tabs";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
@@ -97,8 +97,8 @@ function JobRow({ job, last }: { job: AgentJobRow; last: boolean }) {
       {/* A finding pays its price once the client unlocks it: until then, nothing is earned yet. */}
       <span className="flex w-[76px] shrink-0 justify-center">
         {job.earned > 0 ? (
-          <span className="font-mono text-[14px] font-bold tabular-nums text-zk-ok-fg" title={`Earned ${formatZ(job.earned)} from unlocked findings`}>
-            {formatZ(job.earned)}
+          <span className="font-mono text-[14px] font-bold tabular-nums text-zk-ok-fg" title={`Earned ${formatZik(job.earned)} from unlocked findings`}>
+            {formatZik(job.earned)}
           </span>
         ) : (
           <span className="text-sm text-zk-muted" title="Earns once the client unlocks its findings">–</span>

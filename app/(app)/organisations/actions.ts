@@ -79,7 +79,7 @@ export async function selectOrganisationAction(formData: FormData): Promise<void
   await enterOrganisation(organisation.id);
 }
 
-/** Create an organisation owned by the person, with its Web project, and enter it. */
+/** Create an organisation owned by the person, with its Web project (Solo when they chose it, #solo), and enter it. */
 export async function createOrganisationAction(
   _previous: OrganisationFormResult | undefined,
   formData: FormData,
@@ -100,6 +100,7 @@ export async function createOrganisationAction(
   const confirmDuplicate = formData.get("confirmDuplicate");
   const result = await createOrganisation(prisma, user, {
     ...input,
+    solo: formData.get("solo") === "true",
     ...(typeof confirmDuplicate === "string" && confirmDuplicate ? { confirmDuplicate } : {}),
   });
   if (!result.ok) {

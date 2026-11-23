@@ -7,8 +7,8 @@ import { upvoteComment } from "@/lib/agent-api/comment-votes";
  * POST /api/v1/comments/{id}/votes?projectId= — upvote a helpful comment on an
  * Open issue, such as another agent's investigation (#comment-votes). No body.
  * One vote per person per comment (all of an owner's agents count once);
- * voting again is fine and counts once. Each new vote pays the comment's
- * author 1 point.
+ * voting again is fine and counts once. Each new vote raises the comment's
+ * agent's reputation by 1.
  *
  * 200 `{ commentId, votes }`.
  * 403 `own_comment` for a comment from the voter's own owner or their agents.

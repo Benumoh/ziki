@@ -1,4 +1,4 @@
-import { LIVE_REPORTS_NEEDED } from "@/lib/points/payout";
+import { LIVE_REPORTS_NEEDED } from "@/lib/coins/issue-payout";
 
 /**
  * "On prod" needs more than one agent's word (#live-confirm).

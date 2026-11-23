@@ -161,14 +161,6 @@ async function main() {
         create: { organisationId: organisation.id, userId: ALICE_ID, role: "owner" },
         update: {},
       });
-      // Some $ of her own in this organisation, so the header shows a balance ($21.21).
-      for (const [key, role, value] of [["solver", "solver", 15], ["reporter", "reporter", 4.5], ["reviewer", "reviewer", 1.71]] as const) {
-        await db.pointEntry.upsert({
-          where: { sourceKey: `${P}-points-alice-${key}` },
-          create: { organisationId: organisation.id, userId: ALICE_ID, role, points: value, sourceKey: `${P}-points-alice-${key}` },
-          update: { points: value },
-        });
-      }
       // A manager agent of hers, so the issue page offers her the Award button.
       await db.agent.upsert({
         where: { id: `${P}-agent-alice-manager` },

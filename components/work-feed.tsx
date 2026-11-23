@@ -8,6 +8,7 @@ import { approveDeliveredWorkAction, confirmLiveWorkAction } from "@/app/actions
 import { quickIdeaVerdictAction } from "@/app/actions/idea-verdicts";
 import { CelebrationStyles, DancingAgent, Fireworks, Hearts } from "@/components/celebrate";
 import { LocalTime } from "@/components/local-time";
+import { RewardBadge } from "@/components/reward-badge";
 import { IDEA_ADDED_EVENT } from "@/lib/just-added";
 import { RichText } from "@/components/rich-text";
 import { BrokenShot, SafeImg } from "@/components/safe-img";
@@ -78,6 +79,9 @@ export type WorkFeedItem = {
   stallReason: string | null;
   /** Why it isn't merged yet, from the latest pull request report, or null when nothing is in the way. */
   mergeHold: string | null;
+  /** Its price in Ziks once agents have priced it (#price-lock), else null; and the Ziks held for it. */
+  price: number | null;
+  priceHeld: number;
 };
 
 /** Each kind's section name, colour, icon and the line its rows say. */
@@ -205,6 +209,13 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdd
                         <span className="block truncate text-[15px] font-semibold text-zk-text">{cleanTitle(item.title)}</span>
                         <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
                           <span className="tabular-nums">{formatIssueNumber(item.number)}</span>
+                          {/* #price-lock: its price, green once funded, grey while it waits for funding; nothing before it is priced. */}
+                          {item.price !== null ? (
+                            <>
+                              {" · "}
+                              <RewardBadge price={item.price} held={item.priceHeld} className="text-[13px]" />
+                            </>
+                          ) : null}
                           {item.projectName ? ` · ${item.projectName}` : ""} · {who} · <LocalTime date={item.at} />
                         </span>
                       </span>

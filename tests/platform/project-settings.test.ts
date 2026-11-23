@@ -52,6 +52,8 @@ vi.mock("@/lib/organisation-context", () => ({
   NO_ORGANISATION_MESSAGE: "You're not a member of a organisation yet.",
 }));
 vi.mock("@/lib/workflow", () => ({ invalidateWorkflow }));
+const organisationSoloBlock = vi.hoisted(() => vi.fn(async (): Promise<"members" | "agents" | null> => null));
+vi.mock("@/lib/projects/solo", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/projects/solo")>()), organisationSoloBlock }));
 vi.mock("@/lib/github/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/github/client")>()),
   installationIdForRepo,
@@ -330,7 +332,31 @@ describe("createProjectAction", () => {
     data.set("visibility", "private");
     await expect(createProjectAction(undefined, data)).rejects.toThrow("redirect:");
     expect(projectCreate).toHaveBeenCalledOnce();
-    expect(projectCreate.mock.calls[0][0].data).toMatchObject({ name: "Mobile app", slug: "mobile-app", contributorGuidelines: null });
+    expect(projectCreate.mock.calls[0][0].data).toMatchObject({ name: "Mobile app", slug: "mobile-app", contributorGuidelines: null, solo: false });
+  });
+
+  it("creates a Solo project, always private, while nobody else works in the organisation, and refuses it once someone does (#solo)", async () => {
+    requireUser.mockResolvedValue({ id: "owner", role: "user" });
+    currentOrganisationIdFor.mockResolvedValue("org");
+    isAdminOfOrganisation.mockResolvedValue(true);
+    projectFindMany.mockResolvedValue([]);
+    projectCreate.mockClear();
+    projectCreate.mockResolvedValue({ id: "p2" });
+    organisationFindUnique.mockResolvedValue({ slug: "acme" });
+    const data = new FormData();
+    data.set("name", "Side project");
+    data.set("solo", "true");
+    data.set("visibility", "public");
+    data.set("isOpenForContributors", "true");
+
+    organisationSoloBlock.mockResolvedValueOnce(null);
+    await expect(createProjectAction(undefined, data)).rejects.toThrow("redirect:");
+    expect(projectCreate.mock.calls[0][0].data).toMatchObject({ solo: true, visibility: "private", isOpenForContributors: false });
+
+    projectCreate.mockClear();
+    organisationSoloBlock.mockResolvedValueOnce("members");
+    expect(await createProjectAction(undefined, data)).toMatchObject({ error: expect.stringContaining("Other people are members here") });
+    expect(projectCreate).not.toHaveBeenCalled();
   });
 });
 

@@ -9,7 +9,7 @@ import { TEST_CURRENCY } from "./test-mode";
 
 export type MoneyTotals = {
   bought: number;
-  /** Ziks moved in from people's points earnings (#earnings-in-ziks): like a purchase, they come into the ledger from outside. */
+  /** Ziks moved in from people's points earnings and welcome bonuses (#earnings-in-ziks): like a purchase, they come into the ledger from outside. */
   fromEarnings: number;
   inEscrow: number;
   owedToEarners: number;
@@ -65,7 +65,8 @@ export async function moneyTotals(db: PrismaClient): Promise<MoneyTotals> {
   const withdrawn = roundZik(-kind("withdrawal") - kind("withdrawal_reversal"));
   return {
     bought: kind("purchase"),
-    fromEarnings: kind("earning"),
+    // Welcome bonuses come in from the points ledger too; they are spendable, not earned (counted in `spendable`).
+    fromEarnings: roundZik(kind("earning") + kind("bonus")),
     inEscrow: account("escrow"),
     owedToEarners,
     spendable,

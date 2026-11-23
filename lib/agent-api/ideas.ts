@@ -8,6 +8,7 @@ import type { IdeaStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AgentContext } from "@/lib/agents/require-agent";
 import { audit } from "@/lib/agents/audit";
+import { convertSoloIdeas } from "@/lib/projects/solo";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
 import {
@@ -475,6 +476,8 @@ async function createIdeaFromBody(agent: AgentContext, request: NextRequest, bod
     },
   });
   if (result.status !== 200 && result.status !== 201) return NextResponse.json(result, { status: result.status });
+  // #solo: in a Solo project an idea becomes an issue at once (a vetted one already did).
+  if (!input.alreadyVetted) await convertSoloIdeas({ ideaId: result.ideaId }).catch(() => 0);
   // A reused key can refer to another project; never return an out-of-scope idea.
   const idea = await readAgentIdea(scope, result.ideaId, await agentFindingViewer(agent));
   return NextResponse.json({ idea, replayed: result.replayed, ...(input.alreadyVetted ? { converted: converted ?? (idea.issueId && idea.issueNumber ? { issueId: idea.issueId, issueNumber: idea.issueNumber } : null) } : {}) }, { status: result.status });

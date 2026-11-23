@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
-import { formatZ as money } from "@/lib/points/rules";
+import { formatZik as money } from "@/lib/coins/math";
 
 /**
  * One person on Ranking: their standing, then the Team details (role, active
@@ -18,8 +18,8 @@ export function RankingRow({
   pct,
   goalMet,
   solved,
-  points,
-  recentPoints,
+  ziks,
+  ziksThisWeek,
   claims,
   claimLimit,
   agentCount,
@@ -36,8 +36,8 @@ export function RankingRow({
   pct: number;
   goalMet: boolean;
   solved: number;
-  points: number;
-  recentPoints: number;
+  ziks: number;
+  ziksThisWeek: number;
   claims: number;
   claimLimit: number;
   agentCount: number;
@@ -83,10 +83,10 @@ export function RankingRow({
         <span className="w-[70px] text-right text-sm text-zk-text2">{solved}</span>
         <span className="flex w-[110px] flex-col items-end leading-tight">
           <span className="text-[15px] font-extrabold text-zk-text" title="Earned all time">
-            {money(points)}
+            {money(ziks)}
           </span>
           <span className="text-[11px] text-zk-muted" title="Earned this week (since Monday)">
-            {money(recentPoints)} this week
+            {money(ziksThisWeek)} this week
           </span>
         </span>
         <span className="w-[90px] text-right text-sm font-semibold tabular-nums text-zk-text">

@@ -1,23 +1,45 @@
 /**
  * Ziki Coins arithmetic (#ziki-coins). Pure functions, no database: every amount
- * is a whole number of Ziks, and every split hands out exactly what it was
- * given, so no Zik is ever created or lost by rounding.
+ * is a whole number of Ziks (1,000 to the dollar), and every split hands out
+ * exactly what it was given, so no Zik is ever created or lost by rounding.
  */
 
-/** What one Zik is worth in US cents. The one place this lives. */
-export const ZIK_CENTS = 10;
+/**
+ * How many Ziks make a dollar: 1,000, so a Zik is a tenth of a cent. The one place the rate lives: every price, pack,
+ * limit and conversion in Ziks is derived from it. At this rate a cent is 10 whole Ziks, so earnings, fees and splits
+ * stay whole numbers.
+ */
+export const ZIKS_PER_DOLLAR = 1000;
 
-/** Ziks as whole cents. A tenth of a Zik is exactly one cent, so this never loses anything. */
-export function zikToCents(zik: number): number {
-  return Math.round(zik * ZIK_CENTS);
+/** How many Ziks make a cent: 10. */
+export const ZIKS_PER_CENT = ZIKS_PER_DOLLAR / 100;
+
+/** Dollars as whole Ziks: what a price set in dollars costs. */
+export function ziksFor(dollars: number): number {
+  return Math.round(dollars * ZIKS_PER_DOLLAR);
 }
 
-/** How many Ziks make a dollar: 10, because a Zik is 10 cents. */
-export const ZIKS_PER_DOLLAR = 100 / ZIK_CENTS;
+/**
+ * Ziks as whole cents, rounded down: a bank pays whole cents, so the Ziks short of a cent stay where they are
+ * (a withdrawal takes only whole cents' worth, lib/coins/withdraw.ts).
+ */
+export function zikToCents(zik: number): number {
+  return Math.floor(zik / ZIKS_PER_CENT);
+}
+
+/** Whole cents as Ziks: exact. */
+export function centsToZik(cents: number): number {
+  return Math.round(cents * ZIKS_PER_CENT);
+}
+
+/** The part of `zik` that whole cents can pay out: the rest, under 10 Ziks, stays in the wallet. */
+export function payableZik(zik: number): number {
+  return zikToCents(zik) * ZIKS_PER_CENT;
+}
 
 /** An issue's reward estimate in dollars (the average of the planning-poker estimates), as whole Ziks. At least one. */
 export function estimateToZik(dollars: number): number {
-  return Math.max(1, Math.round((dollars * 100) / ZIK_CENTS));
+  return Math.max(1, Math.round(dollars * ZIKS_PER_DOLLAR));
 }
 
 /** Ziks as the dollars the points economy stores an estimate in. `ziksToDollars(dollarsToZiks(n)) === n` for whole dollars. */
@@ -30,21 +52,21 @@ export function dollarsToZiks(dollars: number): number {
   return Math.round(dollars * ZIKS_PER_DOLLAR);
 }
 
-/** Ziks as people read them: whole, or with one decimal when there is a tenth (earnings move in exactly, #earnings-in-ziks). */
+/** Ziks as people read them: whole numbers. */
 export function formatZik(zik: number): string {
-  return `${zik.toLocaleString("en-US", { maximumFractionDigits: 1 })} Zik${zik === 1 ? "" : "s"}`;
+  return `${Math.round(zik).toLocaleString("en-US")} Zik${zik === 1 ? "" : "s"}`;
 }
 
 export function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-/** The packs on the Buy Ziks page. Priced at the Zik's value, so a pack is exactly its Ziks in dollars. */
+/** The packs on the Buy Ziks page, by their price in dollars. Priced at the Zik's value, so a pack is exactly its Ziks in dollars. */
 export const ZIK_PACKS = [
-  { id: "starter", zik: 50, label: "Starter" },
-  { id: "builder", zik: 150, label: "Builder" },
-  { id: "team", zik: 500, label: "Team" },
-  { id: "studio", zik: 1500, label: "Studio" },
+  { id: "starter", zik: 5 * ZIKS_PER_DOLLAR, label: "Starter" },
+  { id: "builder", zik: 15 * ZIKS_PER_DOLLAR, label: "Builder" },
+  { id: "team", zik: 50 * ZIKS_PER_DOLLAR, label: "Team" },
+  { id: "studio", zik: 150 * ZIKS_PER_DOLLAR, label: "Studio" },
 ] as const;
 
 export type ZikPack = (typeof ZIK_PACKS)[number];
@@ -53,8 +75,8 @@ export function findPack(id: unknown): ZikPack | null {
   return ZIK_PACKS.find((pack) => pack.id === id) ?? null;
 }
 
-/** The largest amount that moves in one go: a typo can't fund a million Ziks. */
-export const MAX_FUND_ZIK = 100_000;
+/** The largest amount that moves in one go ($10,000): a typo can't fund a fortune. */
+export const MAX_FUND_ZIK = 10_000 * ZIKS_PER_DOLLAR;
 
 /** Ziki's share of released escrow, a whole percent from `ZIKI_FEE_PERCENT` (0–100, default 10). */
 export function feePercent(raw: string | undefined = process.env.ZIKI_FEE_PERCENT): number {
@@ -97,21 +119,3 @@ export function splitByWeight(total: number, weights: ReadonlyMap<string, number
   return shares;
 }
 
-export type EscrowRelease = {
-  fee: number;
-  /** What each earner gets, summing to `escrow - fee`. */
-  shares: Map<string, number>;
-};
-
-/**
- * What releasing an issue's escrow pays: Ziki's fee first, then the rest split
- * among the earners by what each earned under Ziki's reward roles (solver,
- * reviewers, dispatcher). With nobody to pay, nothing is released.
- */
-export function planRelease(escrow: number, earnerWeights: ReadonlyMap<string, number>, percent: number = feePercent()): EscrowRelease | null {
-  if (escrow <= 0) return null;
-  const hasEarner = [...earnerWeights.values()].some((weight) => weight > 0);
-  if (!hasEarner) return null;
-  const fee = feeOf(escrow, percent);
-  return { fee, shares: splitByWeight(escrow - fee, earnerWeights) };
-}

@@ -366,6 +366,7 @@ model User {
   beneficiaryBugs             Bug[]                         @relation("BugBeneficiary")
   claims                      IssueClaim[]
   dispatchedClaims            IssueClaim[]                  @relation("ClaimDispatcher")
+  awardedClaims               IssueClaim[]                  @relation("ClaimAwardedBy")
   issueBids                   IssueBid[]                    @relation("IssueBidBeneficiary")
   deliveries                  Delivery[]                    @relation("DeliveryBeneficiary")
   plansOwned                  Plan[]                        @relation("PlanOwner")
@@ -563,15 +564,27 @@ model Bug {
   duplicateCloseSuggestions CloseSuggestion[]       @relation("CloseSuggestionDuplicateOf")
   /// What solving it pays, in $ (#rewards): the average of agents' estimates, $1–$10; $1 until the first.
   reward                    Decimal                 @default(1) @db.Decimal(6, 2)
-  /// How many estimates the reward averages; at 15 it is fixed.
+  /// How many estimates the reward averages.
   rewardEstimateCount       Int                     @default(0)
+  /// When the price was locked (#price-lock): once funded, or at 15 estimates. A locked price takes no more estimates.
   rewardFixedAt             DateTime?
-  /// A price in Ziks the owner set above the estimate (#project-budget). It only goes up, and it counts as a price even before three estimates are in.
+  /// When the last estimate came in. Three estimates and a quiet minute after the last one settle the price (#price-lock).
+  rewardEstimatedAt         DateTime?
+  /// The price in Ziks the issue was locked at when it was funded (#price-lock): kept as it was, never worked out again
+  /// from the estimates, so what is held and what the price says can't drift apart. Null until it is locked by funding.
+  lockedPriceZik            Int?
+  /// Ziki's own estimate (#ziki-estimate): when fewer than three agents have estimated an issue a day after it was
+  /// filed, Ziki's AI estimates it from its description, so it can't wait for a price forever. It counts as one
+  /// estimate and gives the issue a price even with fewer than three. Ziki neither pays nor is paid, so it is neutral.
+  zikiEstimateZik           Int?
+  zikiEstimateReason        String?
+  zikiEstimatedAt           DateTime?
+  /// A price in Ziks the owner raised the settled price to, so the issue is picked up sooner (#price-lock). It only
+  /// goes up, and only counts once agents have priced the issue (three estimates).
   rewardOverrideZik         Int?
   rewardEstimates           RewardEstimate[]
-  /// What resolving it earned, held until enough agents report it deployed (#live-payout).
-  heldPayout                Json?
-  /// When the held payout was paid.
+  /// When its funded Ziks were paid out to everyone who worked on it, once enough agents reported it deployed
+  /// (#live-payout, lib/coins/issue-payout.ts).
   payoutReleasedAt          DateTime?
   /// Live · Confirmed (#live-confirmed): when a person clicked "Looks fine" on live work. It then leaves the Overview's
   /// Work Feed for the Delivered tab. Null while nobody has confirmed it.
@@ -1013,13 +1026,15 @@ model Project {
   contributorGuidelines   String?
   /// #human-approval-gate: per-project criticality guidelines telling agents what requires human approval. Null falls back to DEFAULT_HUMAN_APPROVAL_GUIDELINES.
   humanApprovalGuidelines String?
-  /// Whether this project pays its issues from a Ziks budget (#project-budget): awards need the budget to cover the price.
-  /// Switched on by the first funding; off means work is free or funded issue by issue.
-  budgetEnabled           Boolean                 @default(false)
   /// The last budget warning sent to the owners ("low" or "empty"), so each is sent once per change; null when fine.
   budgetAlert             String?
   /// Set while the owner has paused the budget (#project-budget): no new issue is awarded or offered, the money stays put and work already under way carries on.
   budgetPausedAt          DateTime?
+  /// Solo (#solo): the owner works on this project with their own agents only, nobody else. Ideas become issues at
+  /// once, one confirmation and one judgement by the owner's own agents (or the owner) are enough, and there are no
+  /// prices, funding or payments: no money moves, so nothing has to be protected. Ends when the project is opened to
+  /// other people or agents.
+  solo                    Boolean                 @default(false)
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   organisation            Organisation            @relation(fields: [organisationId], references: [id], onDelete: Cascade)
@@ -1662,6 +1677,10 @@ model IssueClaim {
   beneficiary         User        @relation(fields: [beneficiaryUserId], references: [id], onDelete: Cascade)
   agent               Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
   dispatcher          User?       @relation("ClaimDispatcher", fields: [dispatcherUserId], references: [id], onDelete: SetNull)
+  /// Whose agent awarded the bid this claim came from (#one-payment): they earn the awarder's share when the issue
+  /// pays out. Null when Ziki handed the issue on itself, or the claim came from an offer, an assignment or a stake.
+  awardedByUserId     String?
+  awardedBy           User?       @relation("ClaimAwardedBy", fields: [awardedByUserId], references: [id], onDelete: SetNull)
 
   awardedBid   IssueBid?
   abandonVotes AbandonVote[]
@@ -4104,6 +4123,29 @@ enum CoinKind {
   /// What a person earned on the points ledger (PointEntry, dollars), moved into their wallet at 10 Ziks a dollar
   /// (lib/coins/earnings-sync.ts). Negative when a correction took earnings back.
   earning
+  /// The welcome bonus, moved in from the points ledger like an earning but spendable only: never withdrawable.
+  bonus
+}
+
+/// What a person was paid for (#one-payment), on the `release` rows that pay them. An issue's funded Ziks pay
+/// everyone who worked on it once it is live (lib/coins/issue-payout.ts); a security finding's unlock pays its finder.
+enum PayoutRole {
+  /// The agent's owner who held the claim and delivered the fix.
+  fixer
+  /// Those whose good-to-merge judgements counted.
+  tester
+  /// The manager whose merge review accepted it.
+  merge_reviewer
+  /// Who reported it (or who it was reported for).
+  reporter
+  /// Those whose confirmations counted.
+  confirmer
+  /// Those who estimated its price.
+  estimator
+  /// Whose agent awarded the bid.
+  awarder
+  /// Who found a security finding the client paid to unlock.
+  security_finder
 }
 
 enum WithdrawalStatus {
@@ -4127,9 +4169,13 @@ model CoinEntry {
   /// The project whose budget this row moves; set on budget rows and on the escrow side of a reserve or unreserve.
   projectId    String?
   kind         CoinKind
-  /// Signed Ziks, never zero. Whole except earnings moved in from the points ledger, which keep one decimal
-  /// (#earnings-in-ziks), so balances and withdrawals may carry a tenth.
-  amount       Decimal     @db.Decimal(14, 1)
+  /// Signed whole Ziks (1,000 to the dollar), never zero.
+  amount       Decimal     @db.Decimal(18, 0)
+  /// What a `release` row paid its person for (#one-payment); null on every other row.
+  payoutRole   PayoutRole?
+  /// The agent whose work a `release` row paid for, when an agent did it. No foreign key: ledger rows are never
+  /// updated, so a deleted agent leaves its id behind.
+  agentId      String?
   sourceKey    String      @unique
   purchaseId   String?
   withdrawalId String?
@@ -4142,6 +4188,7 @@ model CoinEntry {
   @@index([account, bugId])
   @@index([account, projectId])
   @@index([kind])
+  @@index([agentId])
 }
 
 /// One Stripe payment, written once when Stripe says it was paid: a pack of Ziks bought through Checkout (it has a
@@ -4199,8 +4246,8 @@ model CoinSubscription {
 model Withdrawal {
   id               String           @id @default(cuid())
   userId           String
-  /// Ziks to one decimal: a withdrawal takes everything withdrawable, earnings' tenths included (#earnings-in-ziks).
-  zik              Decimal          @db.Decimal(14, 1)
+  /// Whole Ziks: a withdrawal takes everything withdrawable in whole cents (10 Ziks); the rest stays in the wallet.
+  zik              Decimal          @db.Decimal(18, 0)
   amountCents      Int
   status           WithdrawalStatus @default(pending)
   /// Sent to Stripe as the Transfer's idempotency key, so a retry never pays twice.

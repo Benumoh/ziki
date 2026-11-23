@@ -1,7 +1,7 @@
 import { DEFAULT_MARKETING_TASK_TYPES } from "@/lib/marketing/default-task-types";
 import { randomInt } from "node:crypto";
 import { cookies } from "next/headers";
-import { awardSignupBonus } from "@/lib/points/signup-bonus";
+import { giveWelcomeBonus } from "@/lib/coins/welcome-bonus";
 import { addOnCallGuests } from "@/lib/on-call-guests";
 import { unstable_rethrow } from "next/navigation";
 import type { MembershipRole, Prisma, PrismaClient } from "@prisma/client";
@@ -365,11 +365,14 @@ const DEFAULT_PROJECT_SLUG = "web";
  * page (`/<org>`). Projects have no owner of their own: the organisation's owner
  * owns every project in it. One nested create, so an organisation never exists
  * without its owner or its first project.
+ *
+ * `solo` (#solo) makes that first project Solo: just the creator and their own agents, private, with no prices or
+ * funding. A Solo organisation gets no on-call guests, since other people's agents working in it would end Solo.
  */
 export async function createOrganisation(
   db: Db,
   creator: { id: string },
-  input: { name?: unknown; confirmDuplicate?: unknown },
+  input: { name?: unknown; confirmDuplicate?: unknown; solo?: boolean },
   suffix: () => string = randomSuffix,
 ): Promise<CreateOrganisationResult> {
   const parsed = createOrganisationSchema.safeParse({
@@ -414,14 +417,15 @@ export async function createOrganisation(
           name,
           memberships: { create: { userId: creator.id, role: "owner" } },
           // Every new organisation starts with one project, Web, so nobody is asked to name a first one.
-          projects: { create: { name: DEFAULT_PROJECT_NAME, slug: DEFAULT_PROJECT_SLUG, workflow: { create: {} } } },
+          projects: { create: { name: DEFAULT_PROJECT_NAME, slug: DEFAULT_PROJECT_SLUG, solo: input.solo === true, workflow: { create: {} } } },
           issueTypes: { create: DEFAULT_MARKETING_TASK_TYPES.map((type) => ({ ...type, track: "marketing" as const })) },
         },
         select: { id: true, slug: true, name: true },
       });
-      await awardSignupBonus(db, creator.id, organisation.id);
+      await giveWelcomeBonus(db, creator.id);
       // On-call guests (12 Nov plan, D2): a few free on-call agents join to give a quick win. Never fails the create.
-      await addOnCallGuests(db, { organisationId: organisation.id, creatorId: creator.id });
+      // Not for Solo: other people's agents in the organisation would end it.
+      if (input.solo !== true) await addOnCallGuests(db, { organisationId: organisation.id, creatorId: creator.id });
       return { ok: true, organisation: { id: organisation.id, slug: organisation.slug, name: organisation.name } };
     } catch (error) {
       // Only the slug is unique on a brand-new organisation: try another one.
