@@ -24,9 +24,15 @@ export const DEFAULT_OG_IMAGES = [{ ...SHARE_IMAGE }];
 
 export const NOINDEX = { index: false, follow: true } as const;
 
-/** Search engines show about this much of a description. */
-const DESCRIPTION_MAX = 158;
+/**
+ * How much of a title and description search results show (#seo-ctr). Both are
+ * kept one character under the usual limits, so nothing is cut off mid-sentence
+ * on a phone; every generated title and description goes through `clip`.
+ */
+export const TITLE_MAX = 59;
+export const DESCRIPTION_MAX = 154;
 
+/** Shorten to at most `max` characters, on a word boundary, with an ellipsis. */
 export function clip(text: string, max = DESCRIPTION_MAX): string {
   const flat = text.replace(/\s+/g, " ").trim();
   if (flat.length <= max) return flat;
@@ -35,9 +41,22 @@ export function clip(text: string, max = DESCRIPTION_MAX): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:–-]+$/, "")}…`;
 }
 
-/** A page's full title as search results and link previews show it. */
-export function fullTitle(title: string): string {
-  return title === SITE_NAME ? title : `${title} | ${SITE_NAME}`;
+/** A page's full title as search results and link previews show it, never past `TITLE_MAX`. */
+export function fullTitle(title: string, max = TITLE_MAX): string {
+  if (title === SITE_NAME) return clip(title, max);
+  const suffix = ` | ${SITE_NAME}`;
+  if (suffix.length >= max) return clip(title, max);
+  return `${clip(title, max - suffix.length)}${suffix}`;
+}
+
+/**
+ * The first title that fits in `max` characters; if none does, the last one,
+ * clipped. Templates list their wording from richest to plainest, so a long
+ * project or skill name drops the extra words before it loses any letters.
+ */
+export function fittedTitle(candidates: string[], max = TITLE_MAX): string {
+  const fitting = candidates.find((candidate) => candidate.length <= max);
+  return clip(fitting ?? candidates[candidates.length - 1], max);
 }
 
 /**
@@ -64,15 +83,36 @@ export function pageMetadata({
   absoluteTitle?: boolean;
 }): Metadata {
   const url = absoluteUrl(path);
-  const shown = absoluteTitle ? title : fullTitle(title);
+  const shown = absoluteTitle ? clip(title, TITLE_MAX) : fullTitle(title);
+  const summary = clip(description);
   const images = image ? [{ url: image }] : DEFAULT_OG_IMAGES;
   return {
-    title: absoluteTitle ? { absolute: title } : title,
-    description,
+    // The full shown title, so the root layout's template never pushes it past TITLE_MAX.
+    title: { absolute: shown },
+    description: summary,
     alternates: { canonical: url },
     robots: noindex ? NOINDEX : { index: true, follow: true },
-    openGraph: { ...SITE_OG, type, title: shown, description, url, images },
-    twitter: { card: "summary_large_image", title: shown, description, images: images.map((i) => i.url) },
+    openGraph: { ...SITE_OG, type, title: shown, description: summary, url, images },
+    twitter: { card: "summary_large_image", title: shown, description: summary, images: images.map((i) => i.url) },
+  };
+}
+
+/**
+ * FAQPage structured data for a question list the page already shows (#seo-ctr):
+ * the rich result Google reads from the homepage's FAQ section.
+ */
+export function faqPageJsonLd(items: ReadonlyArray<{ q: string; a: string }>, path = "/"): object {
+  const url = absoluteUrl(path);
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${url}#faq`,
+    url,
+    mainEntity: items.map(({ q, a }) => ({
+      "@type": "Question",
+      name: q,
+      acceptedAnswer: { "@type": "Answer", text: a },
+    })),
   };
 }
 

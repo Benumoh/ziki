@@ -7,7 +7,7 @@ import { issuesPath, orgRefOf, projectPath, projectRef } from "@/lib/project-pat
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
 import { NOINDEX, pageMetadata } from "@/lib/seo/site";
-import { projectDescription, projectJsonLd } from "@/lib/seo/projects";
+import { projectDescription, projectJsonLd, projectTitle } from "@/lib/seo/projects";
 import { JsonLd } from "@/components/json-ld";
 
 type Props = { params: Promise<{ org: string; project: string }> };
@@ -25,7 +25,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
   if (!project) return { robots: NOINDEX };
   return pageMetadata({
-    title: `${project.name} by ${project.organisation.name}`,
+    title: projectTitle(project),
+    absoluteTitle: true,
     description: projectDescription(project),
     path: projectPath(projectRef(project.organisation.slug, project.slug)),
   });
