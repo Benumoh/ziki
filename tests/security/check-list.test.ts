@@ -25,10 +25,12 @@ const base = {
   clearParts: ["Cookies"],
 } as const;
 
-function report(parts: CheckReport["parts"], findings: Partial<CheckReport["findings"][number]>[] = []): CheckReport {
+type TestPart = Omit<CheckReport["parts"][number], "agent"> & { agent?: string | null };
+
+function report(parts: TestPart[], findings: Partial<CheckReport["findings"][number]>[] = []): CheckReport {
   return {
     ...base,
-    parts,
+    parts: parts.map((part) => ({ agent: null, ...part })),
     progress: { done: 0, total: parts.length, percent: 0 },
     findings: findings.map((f, i) => ({ id: `r${i}`, partId: "p1", severity: "critical", area: "Login", title: "Admin open", description: "The admin page opens without a password.", howToFix: null, fix: null, checkId: "c1", recheck: null, recheckNote: null, ...f })),
     fixed: [],
@@ -50,16 +52,17 @@ describe("the check's list: Quick scan and Deeper scan tabs (16 Nov)", () => {
       report([
         { id: "p1", title: "Login", status: "done" },
         { id: "p2", title: "Cookies", status: "done" },
-        { id: "p3", title: "Forms", status: "checking" },
+        { id: "p3", title: "Forms", status: "checking", agent: "Ada" },
         { id: "p4", title: "Admin", status: "waiting" },
       ], [{}]),
     );
     expect(deep.findings!.map((f) => f.title)).toEqual(["Admin open"]);
     expect(deep.count).toBe(1);
     expect(deep.clear).toEqual(["Cookies"]);
+    // A part being checked says which agent has it (18 Nov call: show the work happening).
     expect(deep.pending).toEqual([
-      { id: "p3", title: "Forms", state: "checking" },
-      { id: "p4", title: "Admin", state: "waiting" },
+      { id: "p3", title: "Forms", state: "checking", agent: "Ada" },
+      { id: "p4", title: "Admin", state: "waiting", agent: null },
     ]);
     expect(deep.state).toEqual({ label: "2 of 4 done", tone: "working" });
   });

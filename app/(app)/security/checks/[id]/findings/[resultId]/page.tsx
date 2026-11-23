@@ -6,6 +6,7 @@ import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { THREAT_LABEL } from "@/lib/security-checks/check-list";
 import { loadCheckFinding } from "@/lib/security-checks/finding-page";
 import { ZikAmount } from "@/components/zik-symbol";
+import { isQuickScanFinding } from "@/lib/security-checks/check-list";
 
 export const metadata = { title: "Security finding" };
 
@@ -32,7 +33,9 @@ export default async function SecurityFindingPage({ params }: { params: Promise<
   const finding = await loadCheckFinding(id, resultId, access.organisationId, user.id);
   if (!finding) notFound();
 
-  const fixHref = `/security/checks/${encodeURIComponent(finding.checkId)}?fix=${encodeURIComponent(finding.id)}#fix-panel`;
+  // A quick scan finding is fixed from the scan's page, an agent's from the deeper scan's page (18 Nov call: separate pages).
+  const scanPage = `/security/checks/${encodeURIComponent(finding.checkId)}${isQuickScanFinding(finding) ? "" : "/deeper"}`;
+  const fixHref = `${scanPage}?fix=${encodeURIComponent(finding.id)}#fix-panel`;
   const connected = finding.projects.some((project) => project.codeConnected);
   const firstProject = finding.projects[0];
 

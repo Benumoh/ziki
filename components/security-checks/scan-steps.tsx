@@ -24,68 +24,55 @@ const CHIP_NOW = "border-electric-blue-strong/40 bg-zk-tint";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zk-accent";
 
 export function ScanSteps({
-  site,
   quickFound,
-  deepFound,
   phase,
   done,
   total,
-  codePrice,
   paymentRequired = false,
   checkId,
   codeScan = null,
   codeStep = true,
+  current,
 }: {
-  site: string;
+  site?: string;
   /** Problems the quick scan found, or null when no quick scan ran. */
   quickFound: number | null;
-  /** Problems the agents have reported so far. */
-  deepFound: number;
+  /** Problems the agents have reported so far (kept for callers; the steps no longer show counts). */
+  deepFound?: number;
   phase: CheckPhase;
   done: number;
   total: number;
-  /** What the code scan costs, in Ziks. */
-  codePrice: number;
-  /** The deeper scan waits for payment (PR 827): the step is locked with a Start button. */
+  /** What the code scan costs, in Ziks (kept for callers; Connect code isn't on the step for now). */
+  codePrice?: number;
+  /** The deeper scan waits for payment (PR 827): the step says Not started; Start is on the deeper scan's page. */
   paymentRequired?: boolean;
-  /** This website scan, for Connect code (#security-code-scan). */
+  /** This website scan: each step opens its own page. */
   checkId?: string;
   /** Its code scan once paid for: the step shows where it stands and opens it. */
   codeScan?: { checkId: string; finished: boolean; found: number } | null;
   /** False on a code scan's own page (a repo): it is the code scan, so there's no code to connect. */
   codeStep?: boolean;
+  /** The page you're on, shown as the current step. */
+  current?: "quick" | "deeper";
 }) {
   const deepDone = phase === "done";
-  const deepState =
-    phase === "planning" ? "Planning" : phase === "stopped" ? "Stopped" : deepDone ? `Done · ${deepFound} found` : phase === "writing" ? "Writing the report" : `Agents checking · ${done} of ${total}`;
+  // The steps say where each step stands, not how much it found (18 Nov call, Mark: don't repeat the same counts).
+  const deepState = paymentRequired
+    ? "Not started"
+    : phase === "planning" ? "Planning" : phase === "stopped" ? "Stopped" : deepDone ? "Done" : phase === "writing" ? "Writing the report" : `Agents checking · ${done} of ${total}`;
+  const base = checkId ? `/security/checks/${encodeURIComponent(checkId)}` : undefined;
   return (
     <ol aria-label="Steps of this security check" className="mt-0 flex list-none flex-col p-0 sm:flex-row sm:items-center">
-      <Step state="done" name="Quick scan" detail={quickFound === null ? "Not run" : `Done · ${quickFound} found`} jumpTo="quick-scan-results" />
+      {/* Each step is its own page (18 Nov call, Mark): Quick scan is the scan's page, Deeper scan has its own. */}
+      <Step state="done" name="Quick scan" detail={quickFound === null ? "Not run" : "Done"} href={base} current={current === "quick"} />
       <Joint done />
-      {paymentRequired ? (
-        <li className="flex min-w-0 sm:flex-1">
-          <span className={`${CHIP} ${CHIP_REST} text-zk-text`}>
-            <LockIcon />
-            {/* Its name jumps to the Deeper scan section (18 Nov); Start opens the checkout. */}
-            <button type="button" onClick={() => jumpTo("deeper-scan-results")} className={`rounded hover:underline ${FOCUS}`}>
-              Deeper scan
-            </button>
-            {/* The price shows only once the start pop-up opens (18 Nov, Chloe). The pop-up and payment are the
-                deeper-scan checkout's (PR 827): it opens on this button's "zk:start-deeper-scan" event. */}
-            <button
-              type="button"
-              aria-haspopup="dialog"
-              aria-label="Start the deeper scan"
-              onClick={() => window.dispatchEvent(new CustomEvent("zk:start-deeper-scan"))}
-              className={`ml-auto inline-flex h-9 shrink-0 items-center rounded-full bg-electric-blue-strong px-4 text-[13px] font-bold text-white hover:brightness-105 ${FOCUS}`}
-            >
-              Start
-            </button>
-          </span>
-        </li>
-      ) : (
-        <Step state={deepDone ? "done" : phase === "stopped" ? "locked" : "now"} name="Deeper scan" detail={deepState} jumpTo="deeper-scan-results" />
-      )}
+      <Step
+        state={paymentRequired ? "locked" : deepDone ? "done" : phase === "stopped" ? "locked" : "now"}
+        name="Deeper scan"
+        detail={deepState}
+        href={base ? `${base}/deeper` : undefined}
+        current={current === "deeper"}
+      />
       {codeStep ? <Joint done={deepDone} /> : null}
       {!codeStep ? null : codeScan ? (
         // Paid for (#security-code-scan): the code scan is its own scan; the step says where it stands and opens it.
@@ -103,17 +90,17 @@ export function ScanSteps({
             )}
             <span className="shrink-0 whitespace-nowrap">Code scan</span>
             <span aria-live="polite" className={`min-w-0 truncate text-[13px] tabular-nums ${codeScan.finished ? "font-medium text-zk-muted" : "font-semibold text-zk-accent"}`}>
-              {codeScan.finished ? `Done · ${codeScan.found} found` : "Agents reading the code"}
+              {codeScan.finished ? "Done" : "Agents reading the code"}
             </span>
             <span aria-hidden="true" className="ml-auto shrink-0 text-zk-muted">&rarr;</span>
           </Link>
         </li>
       ) : (
+        // Just the step's name for now (18 Nov call, Mark: no Connect code button on the step; connecting comes later).
         <li className="flex min-w-0 sm:flex-1">
           <span className={`${CHIP} ${CHIP_REST} text-zk-muted`}>
             <LockIcon />
             Code scan
-            <ConnectCode site={site} price={codePrice} checkId={checkId} />
           </span>
         </li>
       )}
@@ -121,44 +108,38 @@ export function ScanSteps({
   );
 }
 
-/**
- * Clicking a step takes you to its section further down the page (18 Nov, Seyi): it opens the section if it was
- * folded and scrolls to it. The quick scan's own section, or the list it sits in when there's no section of its own.
- */
-function jumpTo(id: string) {
-  const section = document.getElementById(id) ?? document.getElementById("check-results");
-  if (section instanceof HTMLDetailsElement) section.open = true;
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  section?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
-}
-
-function Step({ state, name, detail, jumpTo: target }: { state: "done" | "now" | "locked"; name: string; detail: string; jumpTo?: string }) {
-  const chip = `${CHIP} ${state === "now" ? CHIP_NOW : CHIP_REST} text-zk-text`;
-  const Box = target ? "button" : "span";
+/** One step: a link to its page, marked when it's the page you're on. */
+function Step({ state, name, detail, href, current = false }: { state: "done" | "now" | "locked"; name: string; detail: string; href?: string; current?: boolean }) {
+  const chip = `${CHIP} ${state === "now" ? CHIP_NOW : CHIP_REST} ${current ? "ring-2 ring-electric-blue-strong/60" : ""} text-zk-text`;
+  const inner = (
+    <>
+      {state === "done" ? (
+        <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-green-600 text-white">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+        </span>
+      ) : state === "now" ? (
+        <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-full border-2 border-electric-blue-strong border-r-zk-tint motion-safe:animate-spin" />
+      ) : (
+        <LockIcon />
+      )}
+      <span className="shrink-0 whitespace-nowrap">{name}</span>
+      <span aria-live="polite" className={`min-w-0 truncate text-[13px] tabular-nums ${state === "now" ? "font-semibold text-zk-accent" : "font-medium text-zk-muted"}`}>{detail}</span>
+      <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (in progress)" : " (locked)"}</span>
+    </>
+  );
   return (
     <li className="flex min-w-0 sm:flex-1">
-      <Box
-        {...(target ? { type: "button" as const, onClick: () => jumpTo(target), title: `Go to ${name}` } : {})}
-        className={target ? `${chip} cursor-pointer text-left ${state === "now" ? "hover:brightness-[0.98]" : "hover:bg-zk-chip"} ${FOCUS}` : chip}
-      >
-        {state === "done" ? (
-          <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-green-600 text-white">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-          </span>
-        ) : state === "now" ? (
-          <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-full border-2 border-electric-blue-strong border-r-zk-tint motion-safe:animate-spin" />
-        ) : (
-          <LockIcon />
-        )}
-        <span className="shrink-0 whitespace-nowrap">{name}</span>
-        <span aria-live="polite" className={`min-w-0 truncate text-[13px] tabular-nums ${state === "now" ? "font-semibold text-zk-accent" : "font-medium text-zk-muted"}`}>{detail}</span>
-        <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (in progress)" : " (locked)"}</span>
-      </Box>
+      {href ? (
+        <Link href={href} aria-current={current ? "page" : undefined} className={`${chip} ${state === "now" ? "hover:brightness-[0.98]" : "hover:bg-zk-chip"} ${FOCUS}`}>
+          {inner}
+        </Link>
+      ) : (
+        <span className={chip}>{inner}</span>
+      )}
     </li>
   );
 }
 
-/** The line joining two steps: across between them on wider screens, down from the icon when they stack on a phone (18 Nov, Chloe). */
 function Joint({ done }: { done: boolean }) {
   return <li aria-hidden="true" className={`ml-[26px] h-3 w-0.5 shrink-0 sm:ml-0 sm:h-0.5 sm:w-6 ${done ? "bg-green-600" : "bg-zk-muted/50"}`} />;
 }
@@ -180,7 +161,7 @@ function LockIcon() {
  * - Connect GitHub and fix for me: a project with GitHub connected. Its repo is scanned and the findings go to it,
  *   where agents fix them in pull requests.
  */
-function ConnectCode({ site, price, checkId }: { site: string; price: number; checkId?: string }) {
+export function ConnectCode({ site, price, checkId }: { site: string; price: number; checkId?: string }) {
   const router = useRouter();
   const dialog = useRef<HTMLDialogElement>(null);
   const [mode, setMode] = useState<"read" | "github">("read");
