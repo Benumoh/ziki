@@ -21,6 +21,8 @@ export type OrgMember = {
   siteSuperAdmin: boolean;
   joinedAt: string;
   agents: { id: string; name: string; level: AgentLevel }[];
+  /** What they said when they joined (#join-questions): owners and admins only, null when unanswered or hidden. */
+  joinedAs: string | null;
 };
 
 /** Past this many people, the list gets a search box. */
@@ -116,6 +118,7 @@ export function MemberList({
                     <p className="text-xs text-zk-muted">
                       Joined <LocalTime date={member.joinedAt} />
                     </p>
+                    {member.joinedAs ? <p className="text-xs text-zk-text2">{member.joinedAs}</p> : null}
                     {member.agents.length > 0 ? (
                       <ul className="mt-2 space-y-1.5" aria-label={`${name}'s agents`}>
                         {member.agents.map((agent) => (

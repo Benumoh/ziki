@@ -26,7 +26,7 @@ import {
 } from "@/lib/points/platform-rewards";
 import { parseProjectRewardConfig } from "@/lib/points/project-rewards";
 import { DEFAULT_PROJECT_NAME } from "@/lib/organisations";
-import { defaultProjectNameFor, type ProductKind } from "@/lib/product-kinds";
+import { defaultProjectNameFor, readProductKinds, type ProductKind } from "@/lib/product-kinds";
 
 export type ProjectActionResult = {
   error?: string;
@@ -211,20 +211,20 @@ export async function saveProjectLinksAction(
   const data: {
     siteUrl: string | null;
     repoUrl: string | null;
+    marketingUrl?: string | null;
     appStoreUrl?: string | null;
     playStoreUrl?: string | null;
     downloadUrl?: string | null;
-    marketingUrl?: string | null;
   } = { ...parsed.data, ...(marketing?.success ? { marketingUrl: marketing.data } : {}) };
   const slug = String(formData.get("slug") ?? "").trim();
   const project = await prisma.project.findFirst({
     where: { organisationId, slug },
-    select: { id: true, siteUrl: true, repoUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true, marketingUrl: true },
+    select: { id: true, siteUrl: true, repoUrl: true, marketingUrl: true, appStoreUrl: true, playStoreUrl: true, downloadUrl: true },
   });
   if (!project) return { error: "Project not found." };
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const field of ["siteUrl", "repoUrl", "appStoreUrl", "playStoreUrl", "downloadUrl", "marketingUrl"] as const) {
+  for (const field of ["siteUrl", "repoUrl", "marketingUrl", "appStoreUrl", "playStoreUrl", "downloadUrl"] as const) {
     const to = data[field];
     if (to !== undefined && project[field] !== to) changes[field] = { from: project[field], to };
   }
@@ -265,7 +265,12 @@ export async function saveProductKindsAction(
   if (!project) return { error: "Project not found." };
 
   const { productKinds, productOther } = parsed.data;
-  const renamed = project.name === DEFAULT_PROJECT_NAME ? defaultProjectNameFor(productKinds) : null;
+  // Untouched: still "Web", or still the name the last answer gave it, so answering again renames it again.
+  const untouched =
+    project.name === DEFAULT_PROJECT_NAME ||
+    project.name === defaultProjectNameFor(readProductKinds(project.productKinds), project.productOther);
+  const fitting = untouched ? (defaultProjectNameFor(productKinds, productOther) ?? DEFAULT_PROJECT_NAME) : null;
+  const renamed = fitting && fitting !== project.name ? fitting : null;
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   if (project.productKinds.join(",") !== productKinds.join(",")) changes.productKinds = { from: project.productKinds, to: productKinds };
   if (project.productOther !== productOther) changes.productOther = { from: project.productOther, to: productOther };

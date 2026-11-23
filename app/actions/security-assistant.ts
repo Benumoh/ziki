@@ -20,7 +20,7 @@ import {
   askSecurityAssistant,
   type AssistantTurn,
 } from "@/lib/security-checks/assistant";
-import { loadSiteChat, saveSiteMessage, scansContextNote, SITE_CHAT_MESSAGE_MAX, siteChatScan, siteContextNote } from "@/lib/security-checks/site-chat";
+import { hasSiteChat, loadSiteChat, saveSiteMessage, scansContextNote, SITE_CHAT_MESSAGE_MAX, siteChatScan, siteContextNote } from "@/lib/security-checks/site-chat";
 import { after } from "next/server";
 import { kickCheck } from "@/lib/security-checks/engine";
 import { prisma } from "@/lib/prisma";
@@ -270,10 +270,14 @@ async function scanAndAdd(organisationId: string, userId: string, target: Parsed
 
 /**
  * Save the chat that led to a scan, and the reply with what the quick scan found, as the start of that site's chat.
- * The agents' report later replaces the quick scan's numbers, so the saved line says when it was true.
+ * The agents' report later replaces the quick scan's numbers, so the saved line says when it was true. Only once
+ * per site: a site that already has a chat keeps it as it is.
  */
 async function keepConversation(organisationId: string, userId: string, targetId: string, conversation: AssistantTurn[], reply: string, summary: PreviewSummary | null) {
   if (!conversation.length) return;
+  // A site removed and added again already has its chat, opening included: don't save the opening twice (23 Nov).
+  // The old messages stay as they are.
+  if (await hasSiteChat(organisationId, userId, targetId)) return;
   const counts = summary
     ? (["critical", "high", "medium", "low"] as const).filter((s) => summary.counts[s]).map((s) => `${summary.counts[s]} ${s}`).join(", ")
     : "";

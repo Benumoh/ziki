@@ -506,8 +506,13 @@ describe("saying what a project is (#product-kinds)", () => {
     await saveProductKindsAction("web", ["desktop", "other"], "  a game ");
     expect(projectUpdate).toHaveBeenLastCalledWith({
       where: { id: "project-1" },
-      data: { productKinds: ["desktop", "other"], productOther: "a game", name: "App" },
+      data: { productKinds: ["desktop", "other"], productOther: "a game", name: "Game" },
     });
+
+    // Still the name the last answer gave it: answering again renames it to fit.
+    findFirst.mockResolvedValueOnce({ id: "project-1", name: "App", productKinds: ["mobile"], productOther: null });
+    await saveProductKindsAction("web", ["other"], "a game");
+    expect(projectUpdate).toHaveBeenLastCalledWith({ where: { id: "project-1" }, data: { productKinds: ["other"], productOther: "a game", name: "Game" } });
   });
 
   it("keeps a name someone chose and a website's Web, and refuses idea with a built kind or a member", async () => {

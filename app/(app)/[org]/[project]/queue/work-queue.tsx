@@ -20,6 +20,8 @@ import { ProjectWeekPanel } from "@/components/project-week-panel";
 import { StatCards } from "@/components/stat-cards";
 import { readWorkStats } from "@/lib/work-stats";
 import { weeklyDeliveries } from "@/lib/project-week";
+import { isOnlineNow, loadProjectAgents } from "@/lib/agents/project-agents";
+import { OnlineAgentsPanel } from "@/components/online-agents-panel";
 
 
 /** The steps where an issue still has work to move it: everything before Live and Closed. */
@@ -33,6 +35,8 @@ const STAGE_PARAM = "status";
 const MINE = "mine";
 /** The Overview tab's value, the queue's default: the top contributors this week. */
 const OVERVIEW = "overview";
+/** The Online tab's value (#online-agents): the agents online now, what each is on, and what you can do about it. */
+const ONLINE = "online";
 const STEP_PARAM = "step";
 
 type Row = {
@@ -101,20 +105,6 @@ function Pill({ tone, children }: { tone: { backgroundColor: string; color: stri
   );
 }
 
-/** An outlined pill for a name or project, with an initial when it is a person or agent. */
-function Outline({ initial, children }: { initial?: string; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex max-w-[12rem] items-center gap-1.5 truncate rounded-md border border-zk-border bg-zk-surface px-2 py-1 text-[12px] font-medium text-zk-text">
-      {initial ? (
-        <span aria-hidden="true" className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold" style={PILL_TONES.blue}>
-          {initial}
-        </span>
-      ) : null}
-      <span className="truncate">{children}</span>
-    </span>
-  );
-}
-
 /** The priority signal: three rising bars, as many lit as the priority is high. */
 function PriorityBars({ priority, colour }: { priority: IssuePriority; colour: string }) {
   const lit = priority === "urgent" || priority === "high" ? 3 : priority === "medium" ? 2 : 1;
@@ -164,7 +154,8 @@ function relative(date: Date, now: number): string {
  * issue that still has a step to go, one dense row each, with its step, who
  * holds it, its deadline, its judgements, its pull request and what it needs
  * next. Every project by default, or one with the project filter; most
- * recently moved first. The agents bar's › opens it.
+ * recently moved first. The Online tab lists the agents online now
+ * (#online-agents). The agents bar's › opens it.
  */
 export async function WorkQueue({
   org,
@@ -197,15 +188,20 @@ export async function WorkQueue({
   const mine = one(query[STAGE_PARAM]) === MINE;
   // Overview, the first tab and the default: who delivered what this week.
   const overview = !one(query[STAGE_PARAM]) || one(query[STAGE_PARAM]) === OVERVIEW;
+  const online = one(query[STAGE_PARAM]) === ONLINE;
   const section = SECTIONS.find((item) => item.status === one(query[STAGE_PARAM])) ?? SECTIONS[0];
   // The Overview's stat cards (#work-stats): this week against last, for the organisation or the picked project.
   const stats = overview ? await readWorkStats({ organisationId, projectId: filter?.id ?? null }) : [];
-  const [grouped, mineGrouped, weekPeople] = await Promise.all([
+  const at = new Date();
+  const [grouped, mineGrouped, weekPeople, agents] = await Promise.all([
     prisma.bug.groupBy({ by: ["substatus"], where: scope, _count: { _all: true } }),
     prisma.bug.groupBy({ by: ["substatus"], where: { AND: [scope, mineWhere] }, _count: { _all: true } }),
     // The top contributors: who delivered what this week, in the project picked (or all of them).
     weeklyDeliveries(organisationId, filter?.id ?? null),
+    // The Online tab (#online-agents): the agents at work in the project picked (or all of them). Every tab shows its count.
+    loadProjectAgents({ projectId: filter?.id ?? null, organisationId, now: at }),
   ]);
+  const onlineCount = agents.filter((agent) => isOnlineNow(agent, at)).length;
   const counts = new Map(grouped.map((row) => [row.substatus, row._count._all]));
   const mineCounts = new Map(mineGrouped.map((row) => [row.substatus, row._count._all]));
   const mineTotal = mineGrouped.reduce((sum, row) => sum + row._count._all, 0);
@@ -228,7 +224,7 @@ export async function WorkQueue({
     if (value) keep.set(key, value);
   }
 
-  const rows: Row[] = overview ? [] : await prisma.bug.findMany({
+  const rows: Row[] = overview || online ? [] : await prisma.bug.findMany({
     where: mine ? { AND: [scope, mineWhere, ...(step ? [{ substatus: step }] : [])] } : { ...scope, substatus: step ?? undefined },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: LIMIT,
@@ -251,11 +247,15 @@ export async function WorkQueue({
       _count: { select: { bids: { where: { withdrawnAt: null, awardedAt: null } } } },
     },
   });
-  const now = new Date().getTime();
+  const now = at.getTime();
   const several = projects.length > 1;
+  // The Tests column shows only when a row has a judgement (none do on Open), so the issue titles get its room.
+  const judgedOf = (row: Row) => row.testVerdicts.filter((verdict) => verdict.pullRequestUrl === row.pullRequestUrl);
+  const showTests = rows.some((row) => judgedOf(row).length > 0);
 
+  // Every tab is as wide as the Overview page and the lists (max-w-[920px]), so the cards line up from page to page.
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4">
+    <div className="mx-auto w-full max-w-[920px] space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="sr-only">Work queue</h1>
         {/* Where you are: the project's lists, then this page. */}
@@ -295,12 +295,13 @@ export async function WorkQueue({
           label="Statuses"
           stages={[
             { label: "Overview", count: weekPeople.length, href: href(OVERVIEW), selected: overview },
+            { label: "Online", count: onlineCount, href: href(ONLINE), selected: online },
             { label: "Your Work", count: mineTotal, href: href(MINE), selected: mine },
             ...SECTIONS.map((item) => ({
               label: statusLabel[item.status],
               count: item.steps.reduce((sum, value) => sum + (counts.get(value) ?? 0), 0),
               href: href(item.status),
-              selected: !mine && !overview && item.status === section.status,
+              selected: !mine && !overview && !online && item.status === section.status,
             })),
           ]}
         />
@@ -311,8 +312,10 @@ export async function WorkQueue({
           <StatCards stats={stats} />
           <ProjectWeekPanel people={weekPeople} viewerId={user.id} />
         </div>
+      ) : online ? (
+        <OnlineAgentsPanel agents={agents} viewerId={user.id} place={filter ? filter.name : "every project"} now={at} />
       ) : (
-      <div className="flex items-start gap-5 max-lg:flex-col max-lg:gap-3">
+      <div className="flex items-start gap-4 max-lg:flex-col max-lg:gap-3">
         {/* The detailed steps of that status down the left, as on the lists. */}
         <StageSidebar
           steps={
@@ -337,22 +340,19 @@ export async function WorkQueue({
           }
         />
         <div className="min-w-0 flex-1">
-      {/* A table grouped by priority: a light heading band, roomy rows, tinted pills, and a summary at the foot. */}
+      {/* A table grouped by priority: a light heading band, roomy rows, tinted pills, and a summary at the foot. Each
+          issue's details (number, project, step, holder, deadline, pull request) sit on a line under its title, so the
+          table fits the page's width without scrolling sideways. */}
       <div className="rounded-xl border border-zk-border bg-zk-surface p-3">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[13px]">
             <thead>
               <tr className="bg-[#f4f6f9]">
-                <th scope="col" className={`${HEAD} w-16`}>#</th>
                 <th scope="col" className={HEAD}><ColumnHead icon="text">Issue</ColumnHead></th>
-                {several ? <th scope="col" className={HEAD}><ColumnHead icon="tag">Project</ColumnHead></th> : null}
-                {step ? null : <th scope="col" className={HEAD}><ColumnHead icon="arrow">Step</ColumnHead></th>}
-                <th scope="col" className={HEAD}><ColumnHead icon="user">Held by</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="clock">Deadline</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="check">Tests</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="link">PR</ColumnHead></th>
+                {/* On a phone only the issue and its next step show: Tests and Moved are left out. */}
+                {showTests ? <th scope="col" className={`${HEAD} max-sm:hidden`}><ColumnHead icon="check">Tests</ColumnHead></th> : null}
                 <th scope="col" className={HEAD}><ColumnHead icon="arrow">Next</ColumnHead></th>
-                <th scope="col" className={HEAD}><ColumnHead icon="calendar">Moved</ColumnHead></th>
+                <th scope="col" className={`${HEAD} max-sm:hidden`}><ColumnHead icon="calendar">Moved</ColumnHead></th>
               </tr>
             </thead>
             <tbody>
@@ -380,7 +380,7 @@ export async function WorkQueue({
                       </tr>
                       {group.map((row) => {
                         const claim = row.claims[0];
-                        const judged = row.testVerdicts.filter((verdict) => verdict.pullRequestUrl === row.pullRequestUrl);
+                        const judged = judgedOf(row);
                         const good = judged.filter((verdict) => verdict.goodToMerge).length;
                         const notGood = judged.length - good;
                         const next = nextAction(row, now);
@@ -389,49 +389,54 @@ export async function WorkQueue({
                         const holder = claim ? claim.agent?.name ?? claim.beneficiary.name ?? "Someone" : null;
                         return (
                           <tr key={row.id} className="group hover:bg-zk-bg">
-                            <td className={`${CELL} font-mono text-[12px] tabular-nums text-zk-muted`}>{formatIssueNumber(row.number)}</td>
-                            <td className={`${CELL} w-full max-w-0`}>
+                            <td className={`${CELL} w-full max-w-0 py-2`}>
                               <Link href={issueHref(row)} className="block truncate text-[14px] font-semibold text-zk-text group-hover:text-zk-accent">
                                 {row.title}
                               </Link>
+                              {/* Its details, on one muted line: only the parts it has. */}
+                              <span className="mt-0.5 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] text-zk-muted">
+                                <span className="shrink-0 font-mono tabular-nums">{formatIssueNumber(row.number)}</span>
+                                {several ? <><span aria-hidden="true">·</span><span className="shrink-0">{row.project.name}</span></> : null}
+                                {step ? null : <><span aria-hidden="true">·</span><span className="shrink-0" title={stateLabel(row.substatus)}>{substatusLabel[row.substatus]}</span></>}
+                                {claim?.deliverBy ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span className={`shrink-0 tabular-nums ${late ? "font-semibold text-zk-bad-fg" : ""}`}>
+                                      due {relative(claim.deliverBy, now)}
+                                    </span>
+                                  </>
+                                ) : null}
+                                {row.pullRequestUrl ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <a href={row.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 font-mono text-zk-accent hover:underline">
+                                      {pr ? `PR #${pr}` : "PR"}
+                                    </a>
+                                  </>
+                                ) : null}
+                                {/* The holder last: on a narrow screen its name is what gets cut short. */}
+                                {holder ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="truncate text-zk-text2" title={claim?.beneficiary.name ? `For ${claim.beneficiary.name}` : undefined}>
+                                      {holder}
+                                      {claim?.status === "offered" ? " (offered)" : ""}
+                                    </span>
+                                  </>
+                                ) : null}
+                              </span>
                             </td>
-                            {several ? <td className={CELL}><Outline>{row.project.name}</Outline></td> : null}
-                            {step ? null : (
-                              <td className={CELL} title={stateLabel(row.substatus)}>
-                                <Pill tone={PILL_TONES.grey}>{substatusLabel[row.substatus]}</Pill>
-                              </td>
-                            )}
-                            <td className={CELL}>
-                              {holder ? (
-                                <span title={claim?.beneficiary.name ? `For ${claim.beneficiary.name}` : undefined}>
-                                  <Outline initial={holder.charAt(0).toUpperCase()}>
-                                    {holder}
-                                    {claim?.status === "offered" ? <span className="text-zk-muted"> · offered</span> : null}
-                                  </Outline>
-                                </span>
-                              ) : <span className="text-zk-muted">–</span>}
-                            </td>
-                            <td className={`${CELL} tabular-nums ${late ? "font-semibold text-zk-bad-fg" : "text-zk-text2"}`}>
-                              {claim?.deliverBy ? relative(claim.deliverBy, now) : <span className="text-zk-muted">–</span>}
-                            </td>
-                            <td className={CELL}>
+                            {showTests ? <td className={`${CELL} max-sm:hidden`}>
                               <span className="flex gap-1" title={judged.length ? `${good} good to merge, ${notGood} not` : undefined}>
                                 {good ? <Pill tone={PILL_TONES.green}>{good} good</Pill> : null}
                                 {notGood ? <Pill tone={PILL_TONES.red}>{notGood} not</Pill> : null}
                                 {judged.length === 0 ? <span className="text-zk-muted">–</span> : null}
                               </span>
-                            </td>
-                            <td className={`${CELL} font-mono text-[12px]`}>
-                              {row.pullRequestUrl ? (
-                                <a href={row.pullRequestUrl} target="_blank" rel="noopener noreferrer" className="text-zk-accent hover:underline">
-                                  {pr ? `#${pr}` : "PR"}
-                                </a>
-                              ) : <span className="text-zk-muted">–</span>}
-                            </td>
+                            </td> : null}
                             <td className={CELL}>
                               <Pill tone={NEXT_TONE[next.tone]}>{next.text}</Pill>
                             </td>
-                            <td className={`${CELL} tabular-nums text-zk-text2`}>{relative(row.updatedAt, now)}</td>
+                            <td className={`${CELL} tabular-nums text-zk-text2 max-sm:hidden`}>{relative(row.updatedAt, now)}</td>
                           </tr>
                         );
                       })}

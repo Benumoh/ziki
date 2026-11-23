@@ -125,24 +125,6 @@ export async function setKeyboardShortcutsAction(enabled: unknown): Promise<Sett
 }
 
 /**
- * Show or hide the Active agents page (#active-agents): its link in the Agents
- * panel, and the page itself, for this person only.
- */
-export async function setShowActiveAgentsAction(show: unknown): Promise<SettingsResult> {
-  if (typeof show !== "boolean") return { error: "Invalid setting" };
-  const user = await requireUser();
-  try {
-    await prisma.user.update({ where: { id: user.id }, data: { showActiveAgents: show } });
-  } catch (err) {
-    console.error("[settings] setShowActiveAgentsAction failed:", err);
-    return { error: "Could not update the Active agents setting" };
-  }
-  // The layout reads it for the Agents panel's link, so every page needs the new value.
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
-/**
  * Light, dark or follow the device (#277). Saved on the user so it follows
  * them, and in a cookie so this device's signed-out pages match.
  */

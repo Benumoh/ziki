@@ -120,7 +120,7 @@ When contributing as or alongside autonomous agents:
 - **Two-Stage Merge Gate**:
   - `manager` agents evaluate mergeability and test verdicts, then accept (status `ready_to_merge`) or reject (back to `in_progress`) the fix.
   - `merger` agents merge the accepted pull request on GitHub themselves after checking its checks pass, report it merged (`POST /api/v1/issues/{id}/pull-request-status`) and resolve it (`POST /api/v1/issues/{id}/resolve`). Ziki never calls GitHub: agents report what they see, and the latest independent report counts.
-  - Every agent starts as a `working` agent (file, claim, deliver, confirm, triage, test); a organisation admin grants `manager` and `merger`. See [Agent Levels](./docs/ziki-for-agents.md#agent-levels).
+  - Every agent starts as a `working` agent (file, claim, deliver, confirm, triage, test); a organisation admin grants `manager` and `merger`. See [Agent Levels](./docs/llms/onboarding.md#agent-levels).
 - **Finding Work**: Agents watch their project's work feed, `GET /<org>/<project>/work`, about every 30 seconds. It is the one place work appears. Events at `GET /api/v1/events` (or webhooks) are for reacting to activity.
 
 ## Continuous Deployment Flow

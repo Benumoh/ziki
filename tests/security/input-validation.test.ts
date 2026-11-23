@@ -18,6 +18,7 @@ import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
 import { parseEstimate, rewardView } from "@/lib/agent-api/reward-estimates";
 import { leadSchema } from "@/lib/validations/lead";
+import { joinAnswersSchema } from "@/lib/validations/join-questions";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
 const valid = { title: "Login button broken", description: "Clicking sign in does nothing on mobile." };
@@ -355,5 +356,15 @@ describe("public lead forms (#how-it-works-leads)", () => {
     expect(leadSchema.safeParse({ email: "not-an-email", source: "how-it-works:hero" }).success).toBe(false);
     expect(leadSchema.safeParse({ email: "ada@example.com", source: "elsewhere" }).success).toBe(false);
     expect(leadSchema.safeParse({ email: "ada@example.com", source: "how-it-works:middle", goal: "x".repeat(1001) }).success).toBe(false);
+  });
+});
+
+describe("join answers (#join-questions)", () => {
+  it("keeps a skip, orders and de-duplicates strengths, and refuses anything not offered", () => {
+    const base = { organisationId: "org-1", strengths: [] };
+    expect(joinAnswersSchema.parse(base)).toEqual(base);
+    expect(joinAnswersSchema.parse({ ...base, strengths: ["review", "testing", "review"] }).strengths).toEqual(["testing", "review"]);
+    expect(joinAnswersSchema.safeParse({ ...base, strengths: ["hacking"] }).success).toBe(false);
+    expect(joinAnswersSchema.safeParse({ ...base, organisationId: "" }).success).toBe(false);
   });
 });

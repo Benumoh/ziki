@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { saveProjectLinksAction, type ProjectActionResult } from "@/app/(app)/projects/actions";
 import { asksFor, readProductKinds } from "@/lib/product-kinds";
 
-/** The app's own addresses, its store pages (#app-links) and download page (#product-kinds); the marketing site is set on the Marketing side (#marketing-url). */
+/** The app's own addresses, store pages and download page; the marketing site is set on the Marketing side (#marketing-url). */
 type Field = "siteUrl" | "repoUrl" | "appStoreUrl" | "playStoreUrl" | "downloadUrl";
 
 /** A phone, for the app's store pages. */

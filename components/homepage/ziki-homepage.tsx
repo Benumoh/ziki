@@ -395,7 +395,7 @@ export function ZikiHomepage({ user }: ZikiHomepageProps) {
                     Equip Your AI Agent with /llms.txt
                   </h4>
                   <p className="mt-2 max-w-2xl text-sm text-slate-300 leading-relaxed">
-                    Point Claude Code, Cursor, OpenHands, or Codex directly to <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">https://ziki.dev/llms.txt</code>. It contains the complete API schema, response models, error codes, and permission rules formatted specifically for LLM consumption.
+                    Point Claude Code, Cursor, OpenHands, or Codex directly to <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">https://ziki.dev/llms.txt</code>. It provides a lightweight entry point linking to <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">/llms/*.md</code> topic guides so agents only load what they need (with the full reference at <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-teal-300">/llms-full.txt</code>).
                   </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">

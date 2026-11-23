@@ -2,6 +2,7 @@ import type { MembershipRole } from "@prisma/client";
 import { isOrganisationAdmin } from "@/lib/organisation-role";
 import type { AppRole } from "@/lib/roles";
 import type { BugVoterSummary } from "@/lib/voters";
+import { DELETED_PARENT_ATTACHMENT_TTL_DAYS } from "@/lib/attachment-retention";
 
 export const TICKET_DELETION_ERRORS = {
   unauthorized: "Only an owner or admin of this organisation can delete issues",
@@ -42,24 +43,34 @@ export function retainedSummary(counts?: TicketDeletionCounts): string {
 }
 
 /**
+ * What happens to a deleted issue's attachments (#596): they are kept, and
+ * come back with a restore, for DELETED_PARENT_ATTACHMENT_TTL_DAYS; then the
+ * retention sweep removes them for good.
+ */
+export const ATTACHMENTS_KEPT_SUMMARY = `Its attachments are kept for ${DELETED_PARENT_ATTACHMENT_TTL_DAYS} days, then removed for good.`;
+
+/**
  * What deleting does, before it happens. The confirm dialog and the danger
  * zone both print this string, so they cannot drift apart.
  */
 export function deleteSummary(counts?: TicketDeletionCounts): string {
-  return `It will be hidden from regular users. ${retainedSummary(counts)} Owners and admins of this organisation can restore it from "View deleted issues".`;
+  return `It will be hidden from regular users. ${retainedSummary(counts)} ${ATTACHMENTS_KEPT_SUMMARY} Owners and admins of this organisation can restore it from "View deleted issues".`;
 }
 
 /** The same facts, once the issue has been deleted (the banner on a deleted issue). */
 export function deletedSummary(counts?: TicketDeletionCounts): string {
-  return `It is hidden from regular users. ${retainedSummary(counts)} Owners and admins of this organisation can restore it.`;
+  return `It is hidden from regular users. ${retainedSummary(counts)} ${ATTACHMENTS_KEPT_SUMMARY} Owners and admins of this organisation can restore it.`;
 }
 
-/** What restoring does. Mirrors {@link deleteSummary}: what was hidden comes back as it was. */
+/**
+ * What restoring does. Mirrors {@link deleteSummary}: what was hidden comes
+ * back as it was, and its attachments too while they are kept (#596).
+ */
 export function restoreSummary(counts?: TicketDeletionCounts): string {
   const kept = counts
     ? `its ${plural(counts.comments, "comment")}, ${plural(counts.votes, "importance mark")} and history`
     : "its comments, importance marks and history";
-  return `It will be visible to everyone who can see this organisation's issues again, with ${kept} as they were.`;
+  return `It will be visible to everyone who can see this organisation's issues again, with ${kept} as they were. Its attachments come back too if it was deleted less than ${DELETED_PARENT_ATTACHMENT_TTL_DAYS} days ago.`;
 }
 
 /**

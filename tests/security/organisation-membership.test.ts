@@ -8,6 +8,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const membershipFindUnique = vi.hoisted(() => vi.fn());
 const membershipFindFirst = vi.hoisted(() => vi.fn());
+const membershipUpdate = vi.hoisted(() => vi.fn());
+const pickFirstThing = vi.hoisted(() => vi.fn());
+const activateAgent = vi.hoisted(() => vi.fn());
 const projectMembershipFindUnique = vi.hoisted(() => vi.fn());
 const projectMembershipFindFirst = vi.hoisted(() => vi.fn());
 const bugFindUnique = vi.hoisted(() => vi.fn());
@@ -51,6 +54,10 @@ vi.mock("@/lib/rate-limit", async (importOriginal) => ({
   consumeRateLimit: vi.fn(async () => ({ allowed: true })),
 }));
 vi.mock("@/lib/agent-api/web-events", () => ({ publishWebEvent: vi.fn() }));
+vi.mock("@/lib/join-first-thing", () => ({ pickFirstThing }));
+vi.mock("@/lib/agents/registry", () => ({ activateAgent, createAgent: vi.fn() }));
+vi.mock("@/lib/feature-flags", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/feature-flags")>()), isAgentPlatformEnabled: () => true }));
+vi.mock("@/app/(app)/agent/[username]/get-started-data", () => ({ loadGetStarted: vi.fn() }));
 vi.mock("@/lib/organisation-access", () => ({
   currentOrganisationAccess: vi.fn(async () => ({
     organisationId: "own-organisation-id",
@@ -79,6 +86,7 @@ vi.mock("@/lib/prisma", () => ({
     membership: {
       findFirst: membershipFindFirst,
       findUnique: membershipFindUnique,
+      update: membershipUpdate,
     },
     projectMembership: { findUnique: projectMembershipFindUnique, findFirst: projectMembershipFindFirst },
     issueWatch: { upsert: issueWatchUpsert, updateMany: vi.fn(), createMany: issueWatchCreateMany },
@@ -94,6 +102,7 @@ import { currentOrganisationIdFor, NO_ORGANISATION_MESSAGE } from "@/lib/organis
 import { canContributeToProject } from "@/lib/project-permissions";
 import { createBugAction, requestRetestAction, updateBugAction } from "@/app/actions/issues";
 import { setWatchingAction } from "@/app/actions/watch";
+import { joinAgentConnectAction, saveJoinAnswersAction } from "@/app/actions/join-questions";
 
 const organisationOf = currentOrganisationIdFor as unknown as ReturnType<typeof vi.fn>;
 
@@ -303,3 +312,34 @@ describe("canContributeToProject permissions", () => {
   });
 });
 
+describe("join questions (#join-questions)", () => {
+  it("saves a member's answers on their own membership only, and refuses where they aren't a member", async () => {
+    (requireUser as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "joiner-1", role: "user" });
+    pickFirstThing.mockResolvedValue({ kind: "request", projectId: "project-1" });
+    membershipFindFirst.mockResolvedValueOnce({ id: "membership-1", organisation: { id: "org-1", name: "Org" } });
+    const answers = { organisationId: "org-1", strengths: ["review", "testing"] };
+    await expect(saveJoinAnswersAction(answers)).resolves.toEqual({ ok: true, firstThing: { kind: "request", projectId: "project-1" } });
+    expect(membershipFindFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ organisationId: "org-1", userId: "joiner-1" }) }));
+    expect(membershipUpdate).toHaveBeenCalledWith({
+      where: { id: "membership-1" },
+      data: { strengths: ["testing", "review"], joinAnsweredAt: expect.any(Date) },
+    });
+
+    membershipUpdate.mockClear();
+    membershipFindFirst.mockResolvedValueOnce(null);
+    await expect(saveJoinAnswersAction({ ...answers, organisationId: "other-org" })).resolves.toEqual({ error: expect.any(String) });
+    expect(membershipUpdate).not.toHaveBeenCalled();
+  });
+
+  it("brings an agent in only where its owner is a member, with that organisation's key", async () => {
+    (requireUser as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "joiner-1", role: "user" });
+    membershipFindFirst.mockResolvedValueOnce(null);
+    await expect(joinAgentConnectAction({ organisationId: "other-org", agentId: "agent-1" })).resolves.toEqual({ error: expect.any(String) });
+    expect(activateAgent).not.toHaveBeenCalled();
+
+    membershipFindFirst.mockResolvedValueOnce({ id: "membership-1", organisation: { id: "org-1", name: "Org" } });
+    activateAgent.mockResolvedValueOnce({ ok: true, key: { agentId: "agent-1", name: "Claude", rawKey: "zk_live_raw", prefix: "zk_live" } });
+    await expect(joinAgentConnectAction({ organisationId: "org-1", agentId: "agent-1" })).resolves.toMatchObject({ ok: true, agentId: "agent-1", setupText: expect.stringContaining("zk_live_raw") });
+    expect(activateAgent).toHaveBeenCalledWith(expect.objectContaining({ id: "joiner-1" }), "agent-1", "org-1");
+  });
+});

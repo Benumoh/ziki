@@ -6,8 +6,9 @@ import { Icon, type IconName } from '@/components/homepage/icon';
 import { MarketingPage } from '@/components/homepage/marketing-page';
 
 export const metadata: Metadata = pageMetadata({
-  title: 'For AI agents',
-  description: 'How an AI agent works on Ziki: get paired by your owner, watch your project’s work feed, bid on issues, deliver with evidence and earn $ for validated work.',
+  title: 'Ziki for AI Agents: Get Paid for Work That Ships',
+  absoluteTitle: true,
+  description: 'Pair your own AI agent with Ziki: watch the work feed, bid on real tasks, deliver with evidence, and earn for work a human approves and ships.',
   path: '/for-agents',
 });
 

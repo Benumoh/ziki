@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 
 const db = vi.hoisted(() => {
   const fake = {
-    securityCheck: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+    securityCheck: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     securityCheckResult: { findMany: vi.fn(), findUnique: vi.fn() },
     // Connect code (#security-code-scan): projects with GitHub, and the repo stored as a target.
     project: { findMany: vi.fn() },
@@ -43,7 +43,7 @@ vi.mock("next/navigation", () => ({
 
 import { fixOf, loadCheckReport } from "@/lib/security-checks/report";
 import { deeperScanQuote, payAndStartDeeperScan } from "@/lib/security-checks/deeper-scan";
-import { codeScanQuote, startCodeScan } from "@/lib/security-checks/code-scan";
+import { connectCode, connectRefusal, nameRepo } from "@/lib/security-checks/code-scan";
 import { RESCAN_PRICE_ZIKS, startRescan } from "@/lib/security-checks/rescan";
 import { GET as downloadReportPdf } from "@/app/(app)/security/checks/[id]/report.pdf/route";
 import {
@@ -518,7 +518,7 @@ describe("the 12 Nov plan's rules (#security-checks, #on-call)", () => {
 });
 
 function unpaid() {
-  return { id: "c1", free: false, paidAt: null as Date | null, status: "queued", target: { value: "example.test", verifiedAt: new Date(), previewSummary: { target: "example.test", total: 0, areas: [], counts: { critical: 0, high: 0, medium: 0, low: 0 }, risk: "minimal" } } };
+  return { id: "c1", free: false, paidAt: null as Date | null, codeScanForId: null as string | null, status: "queued", target: { value: "example.test", verifiedAt: new Date(), previewSummary: { target: "example.test", total: 0, areas: [], counts: { critical: 0, high: 0, medium: 0, low: 0 }, risk: "minimal" } } };
 }
 let check: ReturnType<typeof unpaid>;
 let gate: Promise<unknown>;
@@ -549,6 +549,16 @@ describe("first deeper scan payment", () => {
     expect(await deeperScanQuote("org", "user", "c1")).toMatchObject({ ok: true, price: 20, state: "payment_required", balance: 100 });
     expect(db.$transaction).not.toHaveBeenCalled();
     expect(coins.appendRows).not.toHaveBeenCalled();
+  });
+  it("a code scan, connected free from a website's Code scan step, is paid for here at its own price (18 Nov call)", async () => {
+    check.codeScanForId = "site1";
+    expect(await deeperScanQuote("org", "user", "c1")).toMatchObject({ ok: true, price: 50, state: "payment_required" });
+    expect(await payAndStartDeeperScan("org", "user", "c1")).toMatchObject({ ok: true, charged: 50 });
+    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 50);
+    expect(coins.appendRows).toHaveBeenCalledWith(expect.anything(), [
+      expect.objectContaining({ account: "wallet", userId: "user", amount: -50 }),
+      expect.objectContaining({ account: "revenue", amount: 50 }),
+    ]);
   });
   it("scopes access to the requesting user and workspace", async () => {
     db.securityCheck.findFirst.mockResolvedValue(null);
@@ -630,7 +640,7 @@ describe("first deeper scan payment", () => {
 
 });
 
-describe("Connect code: paying for a code scan (#security-code-scan, 18 Nov)", () => {
+describe("Connect code: connect first, pay later (#security-code-scan; 18 Nov call)", () => {
   const site = { id: "c1", target: { value: "shop.test" }, codeScan: null as { id: string } | null };
   beforeEach(() => {
     vi.resetAllMocks();
@@ -642,63 +652,57 @@ describe("Connect code: paying for a code scan (#security-code-scan, 18 Nov)", (
     ]);
     db.securityTarget.upsert.mockResolvedValue({ id: "t-repo", verifiedAt: null });
     db.securityCheck.create.mockResolvedValue({ id: "code1" });
-    coins.walletBalance.mockResolvedValue(70);
-    coins.loanState.mockResolvedValue({ canBorrow: false });
-    coins.appendRows.mockResolvedValue(true);
     db.$transaction.mockImplementation((run: (tx: unknown) => unknown) => run(db));
   });
 
-  it("quotes 50 Ziks and the projects with GitHub connected, charging nothing", async () => {
-    expect(await codeScanQuote("org", "user", "c1")).toEqual({ ok: true, site: "shop.test", price: 50, balance: 70, canBorrow: false, projects: [{ id: "p1", name: "Shop", repo: "acme/shop" }] });
+  it("names the repo from a GitHub link, or from a project of theirs with GitHub connected, and refuses anything else", async () => {
+    expect(await nameRepo("org", { kind: "link", repo: "https://github.com/Acme/Web.git" })).toEqual({ repo: "acme/web", projectId: null });
+    expect(await nameRepo("org", { kind: "project", projectId: "p1" })).toEqual({ repo: "acme/shop", projectId: "p1" });
     expect(db.project.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organisationId: "org", githubInstallationId: { not: null } }) }));
-    expect(coins.appendRows).not.toHaveBeenCalled();
+    expect(await nameRepo("org", { kind: "project", projectId: "p2" })).toMatchObject({ ok: false, reason: "no_github" });
+    expect(await nameRepo("org", { kind: "link", repo: "https://example.com" })).toMatchObject({ ok: false, reason: "bad_repo" });
   });
 
-  it("read-only: pays 50 Ziks and opens the repo's paid scan, linked to the website scan, in one transaction", async () => {
-    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "https://github.com/Acme/Web.git" })).toEqual({ ok: true, checkId: "code1" });
-    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 50);
+  it("connects for free: the repo's own scan, linked to the website's, unpaid, so agents don't start and nothing is charged", async () => {
+    expect(await connectCode("org", "user", "c1", { repo: "acme/web", projectId: "p1" })).toEqual({ ok: true, checkId: "code1" });
     expect(db.securityTarget.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { organisationId_kind_value: { organisationId: "org", kind: "repo", value: "acme/web" } } }));
-    expect(db.securityCheck.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ targetId: "t-repo", requestedById: "user", codeScanForId: "c1", projectId: null, free: false, priceCoins: 50, paidAt: expect.any(Date), status: "queued" }),
-      select: { id: true },
-    });
-    expect(coins.appendRows).toHaveBeenCalledWith(expect.anything(), [
-      expect.objectContaining({ account: "wallet", userId: "user", amount: -50, sourceKey: "code-scan:code1:wallet" }),
-      expect.objectContaining({ account: "revenue", amount: 50, sourceKey: "code-scan:code1:revenue" }),
-    ]);
-  });
-
-  it("Connect GitHub: scans the chosen project's repo and sends its findings to that project; a project without GitHub is refused", async () => {
-    expect(await startCodeScan("org", "user", "c1", { kind: "project", projectId: "p1" })).toEqual({ ok: true, checkId: "code1" });
-    expect(db.securityCheck.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ projectId: "p1" }) }));
-    vi.mocked(db.securityCheck.create).mockClear();
-    vi.mocked(coins.appendRows).mockClear();
-    expect(await startCodeScan("org", "user", "c1", { kind: "project", projectId: "p2" })).toMatchObject({ ok: false, reason: "no_github" });
-    expect(db.securityCheck.create).not.toHaveBeenCalled();
+    const created = db.securityCheck.create.mock.calls[0]![0].data;
+    expect(created).toMatchObject({ targetId: "t-repo", requestedById: "user", codeScanForId: "c1", projectId: "p1", free: false, priceCoins: 50 });
+    expect(created.paidAt).toBeUndefined();
+    expect(coins.assertCanSpendOnSecurity).not.toHaveBeenCalled();
     expect(coins.appendRows).not.toHaveBeenCalled();
   });
 
-  it("charges nothing for a link that isn't a GitHub repo, a short wallet, someone else's scan, or a scan whose code is already being scanned", async () => {
-    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "https://example.com" })).toMatchObject({ reason: "bad_repo" });
+  it("counts towards the free-scan limits when they're on, like adding a site on the Security page", async () => {
+    db.securityCheck.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+    expect(await connectRefusal("org", "acme/web")).toBeNull();
+    vi.stubEnv("SECURITY_SCAN_LIMITS_ENABLED", "true");
+    try {
+      db.securityCheck.count.mockResolvedValueOnce(0).mockResolvedValueOnce(3);
+      expect(await connectRefusal("org", "acme/web")).toMatch(/this month's 3 scans/);
+      db.securityCheck.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+      expect(await connectRefusal("org", "acme/web")).toMatch(/already been scanned/);
+      db.securityCheck.count.mockResolvedValueOnce(0).mockResolvedValueOnce(2);
+      expect(await connectRefusal("org", "acme/web")).toBeNull();
+      expect(db.securityCheck.count).toHaveBeenLastCalledWith({ where: expect.objectContaining({ organisationId: "org", previousCheckId: null }) });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
-    coins.assertCanSpendOnSecurity.mockRejectedValueOnce(new coins.CoinError("insufficient_ziks", "Not enough"));
-    coins.walletBalance.mockResolvedValue(10);
-    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ reason: "insufficient_ziks", needed: 50, balance: 10 });
-
+  it("refuses someone else's scan, and a website whose code is already connected opens that one instead", async () => {
     db.securityCheck.findFirst.mockResolvedValueOnce(null);
-    expect(await startCodeScan("other-org", "stranger", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ reason: "not_found" });
+    expect(await connectCode("other-org", "stranger", "c1", { repo: "acme/web", projectId: null })).toMatchObject({ ok: false, reason: "not_found" });
     expect(db.securityCheck.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "c1", organisationId: "other-org", requestedById: "stranger" }) }));
 
     site.codeScan = { id: "code0" };
-    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ reason: "already_started", checkId: "code0" });
-
+    expect(await connectCode("org", "user", "c1", { repo: "acme/web", projectId: null })).toMatchObject({ ok: false, reason: "already_connected", checkId: "code0" });
     expect(db.securityCheck.create).not.toHaveBeenCalled();
-    expect(coins.appendRows).not.toHaveBeenCalled();
   });
 
-  it("a second click that loses the race pays nothing and finds the first one", async () => {
+  it("a second click that loses the race finds the first one", async () => {
     db.securityCheck.create.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "test" }));
     db.securityCheck.findFirst.mockResolvedValueOnce(site).mockResolvedValueOnce({ id: "code1" });
-    expect(await startCodeScan("org", "user", "c1", { kind: "link", repo: "github.com/acme/web" })).toMatchObject({ ok: false, reason: "already_started", checkId: "code1" });
+    expect(await connectCode("org", "user", "c1", { repo: "acme/web", projectId: null })).toMatchObject({ ok: false, reason: "already_connected", checkId: "code1" });
   });
 });

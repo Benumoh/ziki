@@ -33,11 +33,19 @@ export function asksFor(kinds: readonly ProductKind[]) {
   };
 }
 
+/** The owner's words for "something else" as a name: "a game" reads "Game", "my Discord bot" "Discord bot". */
+function nameFromWords(other: string | null | undefined): string | null {
+  const words = (other ?? "").trim().replace(/^(a|an|the|my|our)\s+/i, "").replace(/[.!]+$/, "").trim();
+  if (words.length < 2) return null;
+  return (words[0].toUpperCase() + words.slice(1)).slice(0, 60).trim();
+}
+
 /**
  * What the untouched first project ("Web") is renamed to once you say what it is,
- * or null to keep it: a website keeps "Web", any other built thing becomes "App". Nothing changes for an idea.
+ * or null to keep it: a website keeps "Web"; something else is named in the owner's
+ * own words ("a game" becomes "Game"); any other built thing becomes "App". Nothing changes for an idea.
  */
-export function defaultProjectNameFor(kinds: readonly ProductKind[]): string | null {
+export function defaultProjectNameFor(kinds: readonly ProductKind[], other?: string | null): string | null {
   if (kinds.length === 0 || kinds.includes("idea") || kinds.includes("website")) return null;
-  return "App";
+  return (kinds.includes("other") ? nameFromWords(other) : null) ?? "App";
 }

@@ -1,11 +1,16 @@
 import { z } from "zod";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TOOLS, buildRequest } from "./tools.js";
 
 const repo = path.resolve(import.meta.dirname, "../../..");
-const docs = readFileSync(path.join(repo, "docs/ziki-for-agents.md"), "utf8");
+const llmsDir = path.join(repo, "docs/llms");
+const docs = readdirSync(llmsDir)
+  .filter((name) => name.endsWith(".md"))
+  .sort()
+  .map((name) => readFileSync(path.join(llmsDir, name), "utf8"))
+  .join("\n\n");
 
 // `/issues/{id}/bid` lives at app/api/v1/issues/[id]/bid/route.ts. A site-root
 // route such as the work feed `/{org}/{projectId}/work` lives at app/[org]/[project]/work/route.ts.

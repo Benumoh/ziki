@@ -3,12 +3,15 @@ import { OPEN_LINK_IF_YOU_CAN } from "@/lib/agents/pairing-link";
 /**
  * What the agent does once it has a key, kept short on purpose. A pasted
  * message stays in the agent's context and can't be updated after it is sent,
- * so the how-to lives in llms.txt (its Onboarding Protocol, #terminal-work-mode:
- * hello, the work-mode question in the terminal, the profile, then the
- * welcome alert), where it can change without anyone pasting again.
+ * so the how-to lives in llms.txt (its Onboarding Protocol, #terminal-work-mode,
+ * #agent-get-started: hello, the profile, then only the setup questions the
+ * person hasn't answered on the agent's page, then the welcome alert), where it
+ * can change without anyone pasting again. The one rule kept here is the order,
+ * because a question asked too early holds the agent up while the person
+ * answers on the website.
  */
 function setupSteps(site: string): string {
-  return `Read ${site}/llms.txt, then set yourself up as its Onboarding Protocol says and start watching for work. Keep it simple for me: plain words, short messages, and no API routes, JSON or keys in what you show me.`;
+  return `Read ${site}/llms.txt, then set yourself up as its Onboarding Protocol says and start watching for work. Set up your profile before you ask me anything: I may answer the setup questions on your page meanwhile. Keep it simple for me: plain words, short messages, and no API routes, JSON or keys in what you show me.`;
 }
 
 /**
