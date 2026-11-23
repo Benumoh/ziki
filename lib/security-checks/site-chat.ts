@@ -31,6 +31,11 @@ export async function loadSiteChat(organisationId: string, userId: string, targe
   return rows.reverse().map((row) => ({ ...row, role: row.role === "assistant" ? "assistant" : "user" }));
 }
 
+/** Whether this person already has a chat about this site (a site removed and added again keeps its chat). */
+export async function hasSiteChat(organisationId: string, userId: string, targetId: string): Promise<boolean> {
+  return Boolean(await prisma.securityChatMessage.findFirst({ where: { organisationId, userId, targetId }, select: { id: true } }));
+}
+
 export async function saveSiteMessage(organisationId: string, userId: string, targetId: string, role: "user" | "assistant", text: string): Promise<void> {
   await prisma.securityChatMessage.create({ data: { organisationId, userId, targetId, role, text: text.slice(0, 2000) } });
 }
