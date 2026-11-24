@@ -102,6 +102,9 @@ async function main() {
       organisationId: organisation.id,
       userId: user.id,
       role: user.role === "super_admin" ? "owner" : user.role === "admin" ? "admin" : "member",
+      // Already answered the join questions (#join-questions), or their dialog
+      // opens over every page and blocks the suite's clicks.
+      joinAnsweredAt: new Date(),
     })),
   });
   // An organisation none of the test accounts belong to (#access-control): one public project and one private,
