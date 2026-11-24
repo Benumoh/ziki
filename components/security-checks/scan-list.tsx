@@ -21,7 +21,7 @@ import { SecurityChat, forgetChatAfterRemove } from "./security-chat";
 const PAGE = 10;
 
 const STAGE: Record<ScanStage, { label: string; text: string; dot: string }> = {
-  quick_only: { label: "Quick scan done", text: "text-zk-text2", dot: "bg-zk-muted" },
+  quick_only: { label: "Scanned", text: "text-zk-text2", dot: "bg-zk-muted" },
   scanning: { label: "Scanning", text: "text-zk-accent", dot: "bg-electric-blue-strong" },
   report: { label: "Report ready", text: "text-zk-ok-fg", dot: "bg-zk-ok-fg" },
   in_app: { label: "In your app", text: "text-zk-text2", dot: "bg-zk-muted" },
@@ -35,7 +35,7 @@ type Severity = (typeof SEVERITIES)[number];
 type Filter = "all" | "quick_only" | "scanning" | "report" | "in_app" | "severe" | "clear" | "website" | "server" | "repo";
 const STAGE_FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "quick_only", label: "Quick scan done" },
+  { id: "quick_only", label: "Scanned" },
   { id: "scanning", label: "Scanning" },
   { id: "report", label: "Report ready" },
   { id: "in_app", label: "In your app" },
