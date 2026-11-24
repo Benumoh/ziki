@@ -171,7 +171,7 @@ jobs:
     # chromium` fails ("does not support chromium on ubuntu26.04-x64").
     # Go back to ubuntu-latest once Playwright supports it.
     runs-on: [self-hosted, emerjent]
-    timeout-minutes: 30
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -260,10 +260,6 @@ jobs:
         run: pnpm build
 
       - name: Run end-to-end tests
-        env:
-          # 4 workers instead of the default 2: the self-hosted runner has more cores
-          # than the old 15-minute cap allowed it to use.
-          PLAYWRIGHT_WORKERS: 4
         run: pnpm e2e
 
       - name: Upload screenshots and traces
@@ -275,6 +271,3 @@ jobs:
             test-results/
             playwright-report/
           retention-days: 7
-
-
-

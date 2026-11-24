@@ -16,13 +16,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  // PLAYWRIGHT_WORKERS overrides the default so CI can tune parallelism for
-  // the self-hosted runner (e.g. 4) without editing this file.
-  workers: process.env.PLAYWRIGHT_WORKERS
-    ? Number(process.env.PLAYWRIGHT_WORKERS)
-    : process.env.CI
-      ? 2
-      : undefined,
+  workers: process.env.CI ? 2 : undefined,
   timeout: 30_000,
   expect: { timeout: 7_000 },
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
