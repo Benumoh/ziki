@@ -49,7 +49,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain("See progress");
     expect(html).toContain("Agents are checking it");
     expect(html).toContain('href="/security/checks/c2"');
-    expect(html).not.toContain('role="table"');
+    expect(html).not.toContain("<table");
     // Nothing to vote on, and no "Fix it" or "Needs fixing" (24 Nov, Chloe).
     expect(html).not.toMatch(/Vote on it|Fix it|Needs fixing/);
   });
@@ -60,13 +60,13 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain('name="target"');
     expect(html).toContain("Nothing checked yet.");
     // How many on the left, Filter and search on the right; no status tabs.
-    expect(html).toContain("0 targets");
+    expect(html).toContain('aria-label="Kinds of target"');
     expect(html).not.toContain('aria-label="Targets by status"');
     // No title, subtitle or Add target button on top, and no proof step.
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Your websites, servers and repos");
     expect(html).not.toContain("Show it&#x27;s yours");
-    expect(html).not.toContain('role="table"');
+    expect(html).not.toContain("<table");
   });
 
   it("shows the empty card again when every scan was removed", () => {
@@ -91,7 +91,10 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain("Which website should we secure?");
     expect(html).not.toContain('aria-label="Targets by status"');
     // The repo is under Repos, so Websites shows three.
-    expect(html).toContain("3 targets");
+    expect(html).toMatch(/All (<!-- -->)?Websites/);
+    // Marketing's table, with the site's own icon and no line under the name (24 Nov, Chloe).
+    expect(html).toContain("Last scanned</th>");
+    expect(html).not.toContain("Agents are checking it");
     expect(html).toContain("Search your targets");
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Nothing checked yet.");
@@ -112,8 +115,8 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).not.toContain('href="/security/checks/c4/pay"');
     expect(html).toContain('href="/security/checks/c4"');
     // A targets table with headings that sort; the row opens the page, so no See progress or Open report button.
-    expect(html).toContain('role="table"');
-    expect(html).toContain("Sort by problems");
+    expect(html).toContain('<table aria-label="Your targets"');
+    expect(html).toContain("Problems</th>");
     expect(html).not.toContain("See progress");
     expect(html).not.toContain("Open report");
     expect(html).not.toContain('aria-label="Status"');

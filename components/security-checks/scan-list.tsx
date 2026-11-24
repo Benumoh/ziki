@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { TARGET_KIND_LABEL } from "@/lib/security-checks";
 import type { ScanStage, WorkspaceCheckRow } from "@/lib/security-checks/entry";
 import { LocalTime } from "@/components/local-time";
 import { ToolbarFilterMenu } from "@/components/toolbar-filter-menu";
@@ -51,8 +50,6 @@ const KIND_FILTERS: { id: Filter; label: string }[] = [
 ];
 const ALL_FILTERS = [...STAGE_FILTERS, ...ATTENTION_FILTERS, ...KIND_FILTERS];
 
-type SortKey = "target" | "problems" | "added";
-
 /** Where a scan is: the same rule as scanStage in lib/security-checks/entry.ts, kept here so this client file needs no server code. */
 function stageOf(check: Pick<WorkspaceCheckRow, "status" | "posted" | "moved" | "paymentRequired">): ScanStage {
   if (check.status === "cancelled") return "cancelled";
@@ -92,14 +89,6 @@ function lastScanned(check: WorkspaceCheckRow): Date {
   return at && !Number.isNaN(at.getTime()) ? at : new Date(check.createdAt);
 }
 
-/** Where the name takes you: the website itself, or the repo on GitHub. A server address has no page to open. */
-function siteUrl(check: WorkspaceCheckRow): string | null {
-  if (check.kind === "repo") return `https://github.com/${check.value.replace(/^https?:\/\/(www\.)?github\.com\//i, "")}`;
-  if (check.kind !== "website") return null;
-  const host = hostOf(check.value);
-  return host ? (/^[a-z]+:\/\//i.test(check.value) ? check.value : `https://${check.value}`) : null;
-}
-
 /** The site's address without its scheme or path, for its icon. */
 function hostOf(value: string): string | null {
   try {
@@ -110,11 +99,12 @@ function hostOf(value: string): string | null {
 }
 
 /**
- * The person's targets (#security-checks), as security tools list theirs (Intruder's Targets,
- * Tenable's Applications, Detectify's Domains): a count and Filter and search above a table; a
- * box on each row to scan again or remove several at once (the actions appear next to Filter only
- * once something is ticked, as on Intruder); each site with its own icon; columns that sort;
- * a "…" menu per row; the whole row opens the target. Ziki's Filter menu and colours throughout.
+ * The person's targets (#security-checks), laid out as Marketing's (24 Nov, Chloe; Mark: Security in the style set on
+ * the other pages). Pills for Feed and each kind of target (Websites, Servers, Repos), as Marketing's Feed and task
+ * types. The Feed is one plain list of cards, newest first: each site, where it is, and "See progress". A kind's tab is
+ * Marketing's table: "All Websites" with Filter and search, then Name (the site's own icon and name), Problems (the four
+ * severity boxes, where Marketing has Score), Last scanned (its Updated) and Status (our stages, as a solid pill), and a
+ * "…" per row for Scan again and Remove. Security is one person's own: nothing here to vote on.
  */
 export function ScanList({
   checks,
@@ -138,8 +128,6 @@ export function ScanList({
   const filter: Filter = ALL_FILTERS.some(({ id }) => id === show) ? (show as Filter) : "all";
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "added", dir: "desc" });
-  const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const searchBox = useRef<HTMLInputElement>(null);
   // Opening the search puts the cursor in it.
   useEffect(() => {
@@ -150,21 +138,20 @@ export function ScanList({
   const live = useMemo(() => checks.filter((check) => check.status !== "cancelled" && check.id !== hideId), [checks, hideId]);
   const count = (id: Filter) => live.filter((check) => matchesFilter(check, id)).length;
   const words = query.trim().toLowerCase();
-  const matching = useMemo(() => {
-    const rows = live.filter((check) => matchesFilter(check, filter) && (!words || check.value.toLowerCase().includes(words)));
-    const order = sort.dir === "asc" ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      if (sort.key === "target") return a.value.localeCompare(b.value) * order;
-      if (sort.key === "problems") return (problemsOf(a).weight - problemsOf(b).weight) * order;
-      return (lastScanned(a).getTime() - lastScanned(b).getTime()) * order;
-    });
-  }, [live, filter, words, sort]);
+  // Newest scan first.
+  const matching = useMemo(
+    () =>
+      live
+        .filter((check) => matchesFilter(check, filter) && (!words || check.value.toLowerCase().includes(words)))
+        .sort((a, b) => lastScanned(b).getTime() - lastScanned(a).getTime()),
+    [live, filter, words],
+  );
+  // The Feed is the cards; every other choice (a kind, or a status from Filter) is the table.
+  const feed = filter === "all";
   // Numbered pages like the app's issue lists; a search looks through every page.
   const totalPages = Math.max(1, Math.ceil(matching.length / PAGE));
   const current = words ? 1 : Math.min(Math.max(1, page), totalPages);
   const visible = words ? matching : matching.slice((current - 1) * PAGE, current * PAGE);
-  const ticked = visible.filter((check) => picked.has(check.id));
-  const allTicked = visible.length > 0 && ticked.length === visible.length;
   const pageHref = (n: number) => {
     const params = new URLSearchParams();
     if (filter !== "all") params.set("show", filter);
@@ -172,248 +159,176 @@ export function ScanList({
     const text = params.toString();
     return text ? `/security?${text}` : "/security";
   };
-
-  function toggle(id: string) {
-    setPicked((now) => {
-      const next = new Set(now);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function sortBy(key: SortKey) {
-    setSort((now) => (now.key === key ? { key, dir: now.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "target" ? "asc" : "desc" }));
-  }
+  const heading = KIND_PILLS.find(({ id }) => id === filter)?.label ?? "targets";
 
   // Scan again with agents (#security-rescan): paid, after one confirm, for scans whose report is in.
-  function scanAgain(rows: WorkspaceCheckRow[]) {
-    const finished = rows.filter((row) => row.posted);
-    if (!finished.length) {
-      toast(rows.length === 1 ? "Scan this again once its report is in." : "None of these has its report in yet.", "error");
+  function scanAgain(row: WorkspaceCheckRow) {
+    if (!row.posted) {
+      toast("Scan this again once its report is in.", "error");
       return;
     }
-    setPicked(new Set());
-    rescan(finished.map((row) => row.id));
+    rescan([row.id]);
   }
 
-  async function remove(rows: WorkspaceCheckRow[]) {
-    const one = rows.length === 1;
+  async function remove(row: WorkspaceCheckRow) {
     const confirmed = await confirm({
-      title: one ? `Remove ${rows[0].value}?` : `Remove ${rows.length} targets?`,
+      title: `Remove ${row.value}?`,
       body: "Agents stop checking, and any report goes too. Anything you moved to your app stays there.",
-      confirmLabel: one ? "Remove scan" : `Remove ${rows.length}`,
+      confirmLabel: "Remove scan",
       tone: "danger",
     });
     if (!confirmed) return;
     start(async () => {
-      let failed = 0;
-      for (const row of rows) {
-        const answer = await removeScan(row.id);
-        if (!answer.ok) failed += 1;
-      }
+      const answer = await removeScan(row.id);
       // A removed scan's result never waits in the chat: it starts fresh and closed (18 Nov).
-      if (failed < rows.length) forgetChatAfterRemove();
-      setPicked(new Set());
+      if (answer.ok) forgetChatAfterRemove();
       router.refresh();
-      toast(failed ? `${rows.length - failed} removed; ${failed} couldn't be.` : one ? "Scan removed." : `${rows.length} targets removed.`, failed ? "error" : undefined);
+      toast(answer.ok ? "Scan removed." : "Couldn't remove it.", answer.ok ? undefined : "error");
     });
   }
 
-  const sortButton = (key: SortKey, label: string) => {
-    const on = sort.key === key;
-    return (
-      <button
-        type="button"
-        onClick={() => sortBy(key)}
-        aria-label={`Sort by ${label.toLowerCase()}`}
-        className={`inline-flex items-center gap-1 rounded hover:text-zk-text focus-visible:outline-2 focus-visible:outline-electric-blue ${on ? "text-zk-text" : ""}`}
-      >
-        {label}
-        <span aria-hidden="true" className={`text-[11px] ${on ? "text-zk-accent" : "text-zk-muted/70"}`}>{on ? (sort.dir === "asc" ? "↑" : "↓") : "⇅"}</span>
-      </button>
-    );
-  };
-
-  // Feed (24 Nov, Chloe): Marketing's Feed, the sites as cards, newest first; a kind's pill (or a Filter status) shows the table.
-  const feed = filter === "all";
-  const pills = (
-    <nav aria-label="Kinds of target" className="flex flex-wrap items-center gap-1.5 px-4 pt-4 sm:px-5 sm:pt-5">
-      {KIND_PILLS.map(({ id, label }) => {
-        const on = filter === id;
-        return (
-          <Link
-            key={id}
-            href={id === "all" ? "/security" : `/security?show=${id}`}
-            scroll={false}
-            aria-current={on ? "page" : undefined}
-            className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${on ? "bg-white text-zk-text shadow-[0_1px_3px_rgba(16,24,40,0.12)] ring-1 ring-black/[0.04]" : "bg-zk-bg text-zk-text2 hover:bg-zk-chip"}`}
-          >
-            {label}
-            <span className="text-[12px] tabular-nums text-zk-muted">
-              {count(id)}
-              <span className="sr-only">{count(id) === 1 ? " target" : " targets"}</span>
-            </span>
-          </Link>
-        );
-      })}
-    </nav>
+  const empty = (
+    // Nothing checked yet: an empty card, as Marketing's (23 Nov, Chloe); the chat box above is where to start.
+    <div className="mt-4 rounded-xl bg-zk-bg p-4 sm:p-5">
+      <div className="rounded-2xl border border-zk-border bg-zk-surface px-4 py-14 text-center">
+        <p className="m-0 text-base font-semibold text-zk-text">Nothing checked yet.</p>
+        <p className="m-0 mt-1.5 text-sm text-zk-muted">Websites you add show up here, with what the agents find.</p>
+      </div>
+    </div>
   );
-  if (feed && live.length) {
-    const newest = [...live].sort((a, b) => lastScanned(b).getTime() - lastScanned(a).getTime());
-    return (
-      <div className="flex flex-col">
-        {pills}
-        <ul aria-label="Feed" className="m-4 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-3 sm:m-5 sm:p-4">
-          {newest.map((check) => (
+
+  return (
+    <div className="flex flex-col p-4 sm:p-5">
+      {/* Marketing's row: Feed, then each kind of target, as pills with their counts. */}
+      <nav aria-label="Kinds of target" className="flex flex-wrap items-center gap-1.5">
+        {KIND_PILLS.map(({ id, label }) => {
+          const on = filter === id;
+          return (
+            <Link
+              key={id}
+              href={id === "all" ? "/security" : `/security?show=${id}`}
+              scroll={false}
+              aria-current={on ? "page" : undefined}
+              className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${on ? "bg-white text-zk-text shadow-[0_1px_3px_rgba(16,24,40,0.12)] ring-1 ring-black/[0.04]" : "bg-zk-bg text-zk-text2 hover:bg-zk-chip"}`}
+            >
+              {label}
+              <span className="text-[12px] tabular-nums text-zk-muted">
+                {count(id)}
+                <span className="sr-only">{count(id) === 1 ? " target" : " targets"}</span>
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {live.length === 0 ? (
+        empty
+      ) : feed ? (
+        // The Feed: one plain list, newest first, as Marketing's Feed.
+        <ul aria-label="Feed" className="m-0 mt-4 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-3 sm:p-4">
+          {matching.map((check) => (
             <FeedCard key={check.id} check={check} highlighted={highlightId === check.id} />
           ))}
         </ul>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col">
-      {pills}
-      {/* The list's own toolbar (24 Nov, Chloe): how many on the left; Filter and search on the right, and once something
-          is ticked, its actions next to Filter. No status tabs above the table. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
-        <p className="m-0 text-sm font-bold text-zk-text">
-          {matching.length} {matching.length === 1 ? "target" : "targets"}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {ticked.length ? <span className="text-[13px] font-medium text-zk-muted">{ticked.length} selected</span> : null}
-          {ticked.length ? (
-            <>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => scanAgain(ticked)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] font-medium text-zk-text2 hover:bg-zk-chip hover:text-zk-text disabled:opacity-60"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
-                Scan again
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => remove(ticked)}
-                className="inline-flex h-8 items-center rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] font-medium text-[#b42318] hover:bg-zk-chip disabled:opacity-60"
-              >
-                Remove
-              </button>
-              <span aria-hidden="true" className="mx-1 h-5 w-px bg-zk-border" />
-            </>
-          ) : null}
-          {searching ? (
-            <input
-              ref={searchBox}
-              type="search"
-              aria-label="Search your targets"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onBlur={() => {
-                if (!query.trim()) setSearching(false);
-              }}
-              placeholder="Search by site"
-              className="h-8 w-44 rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] text-zk-text placeholder:text-zk-muted focus:border-electric-blue-strong/60 focus:outline-none sm:w-60"
-            />
-          ) : null}
-          <ToolbarFilterMenu
-            // A kind is already its pill above, so the button only names a status it filters by.
-            summary={filter === "all" || KIND_PILLS.some(({ id }) => id === filter) ? "" : ALL_FILTERS.find(({ id }) => id === filter)?.label}
-            groups={[
-              { label: "Status", options: STAGE_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: id === "all" ? "/security" : `/security?show=${id}`, selected: filter === id })) },
-              { label: "Needs attention", options: ATTENTION_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
-              { label: "Type", options: KIND_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
-            ]}
-          />
-          <button
-            type="button"
-            aria-label="Search your targets"
-            aria-pressed={searching}
-            onClick={() => setSearching((open) => !open)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-          </button>
-        </div>
-      </div>
-
-      {visible.length ? (
-        <div role="table" aria-label="Your targets" className="border-t border-zk-border">
-          <div role="row" className="grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-border px-3 py-3 text-xs font-semibold text-zk-muted sm:px-5">
-            <span role="columnheader" className="flex justify-center">
-              <input
-                type="checkbox"
-                aria-label={allTicked ? "Untick all targets on this page" : "Tick all targets on this page"}
-                checked={allTicked}
-                ref={(box) => {
-                  if (box) box.indeterminate = ticked.length > 0 && !allTicked;
-                }}
-                onChange={() => setPicked(allTicked ? new Set() : new Set(visible.map((check) => check.id)))}
-                className="h-4 w-4 accent-electric-blue-strong"
-              />
-            </span>
-            <span role="columnheader" className="min-w-0">{sortButton("target", "Target")}</span>
-            <span role="columnheader" className="hidden md:block">Type</span>
-            <span role="columnheader">{sortButton("problems", "Problems")}</span>
-            <span role="columnheader" className="hidden md:block">{sortButton("added", "Last scanned")}</span>
-            <span role="columnheader" className="hidden md:block">Status</span>
-            <span role="columnheader"><span className="sr-only">More</span></span>
-          </div>
-          {visible.map((check) => (
-            <TargetRow
-              key={check.id}
-              check={check}
-              highlighted={highlightId === check.id}
-              ticked={picked.has(check.id)}
-              onTick={() => toggle(check.id)}
-              onScanAgain={() => scanAgain([check])}
-              onRemove={() => remove([check])}
-              busy={busy}
-            />
-          ))}
-        </div>
-      ) : live.length === 0 ? (
-        // Nothing checked yet: an empty card, as Marketing's (23 Nov, Chloe); the chat box above is where to start.
-        <div className="border-t border-zk-border bg-zk-bg p-4 sm:p-5">
-          <div className="rounded-2xl border border-zk-border bg-zk-surface px-4 py-14 text-center">
-            <p className="m-0 text-base font-semibold text-zk-text">Nothing checked yet.</p>
-            <p className="m-0 mt-1.5 text-sm text-zk-muted">Websites you add show up here, with what the agents find.</p>
-          </div>
-        </div>
       ) : (
-        <p className="m-4 rounded-2xl border border-dashed border-zk-border px-4 py-8 text-center text-sm text-zk-muted sm:m-5">
-          {words ? `No targets match "${query.trim()}".` : "No targets here yet."}
-        </p>
+        <section aria-labelledby="security-all" className="mt-4 rounded-xl bg-zk-bg p-3 sm:p-4">
+          {/* The table's heading, with Filter and search on its right, as Marketing's "All Landing Pages". */}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+            <h2 id="security-all" className="m-0 flex items-center gap-2 text-[16px] font-medium text-zk-text">
+              All {heading}
+              <span className="text-[13px] font-normal tabular-nums text-zk-muted">{matching.length}</span>
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {searching ? (
+                <input
+                  ref={searchBox}
+                  type="search"
+                  aria-label="Search your targets"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onBlur={() => {
+                    if (!query.trim()) setSearching(false);
+                  }}
+                  placeholder="Search by site"
+                  className="h-8 w-44 rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] text-zk-text placeholder:text-zk-muted focus:border-electric-blue-strong/60 focus:outline-none sm:w-60"
+                />
+              ) : null}
+              <ToolbarFilterMenu
+                summary={STAGE_FILTERS.some(({ id }) => id === filter) || ATTENTION_FILTERS.some(({ id }) => id === filter) ? ALL_FILTERS.find(({ id }) => id === filter)?.label : ""}
+                // The kinds are the pills above; the menu keeps the statuses and what needs attention.
+                groups={[
+                  { label: "Status", options: STAGE_FILTERS.filter(({ id }) => id !== "all").map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
+                  { label: "Needs attention", options: ATTENTION_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
+                ]}
+              />
+              <button
+                type="button"
+                aria-label="Search your targets"
+                aria-pressed={searching}
+                onClick={() => setSearching((open) => !open)}
+                className="grid h-8 w-8 place-items-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-zk-border bg-zk-surface">
+            <table aria-label="Your targets" className="w-full min-w-[620px] table-fixed border-collapse text-[13.5px]">
+              <colgroup>
+                <col />
+                <col className="w-[160px]" />
+                <col className="w-[112px]" />
+                <col className="w-[150px]" />
+                <col className="w-[44px]" />
+              </colgroup>
+              <thead className="bg-[#f7f8fa]">
+                <tr>
+                  <th scope="col" className={HEAD}>Name</th>
+                  <th scope="col" className={HEAD}>Problems</th>
+                  <th scope="col" className={HEAD}>Last scanned</th>
+                  <th scope="col" className={HEAD}>Status</th>
+                  <th scope="col" className={HEAD}><span className="sr-only">More</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-zk-muted">{words ? `No targets match "${query.trim()}".` : "Nothing here in that status."}</td>
+                  </tr>
+                ) : (
+                  visible.map((check) => (
+                    <TargetTableRow key={check.id} check={check} highlighted={highlightId === check.id} onScanAgain={() => scanAgain(check)} onRemove={() => remove(check)} busy={busy} />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {matching.length > PAGE && !words ? (
+            <div className="mt-3 px-1">
+              {/* A computer gets Ziki's numbered pages; a phone gets "1–10 of 20 ‹ ›", as Gmail does on a phone. */}
+              <div className="hidden md:block">
+                <PaginationControls
+                  page={current}
+                  totalPages={totalPages}
+                  totalCount={matching.length}
+                  from={(current - 1) * PAGE + 1}
+                  to={Math.min(current * PAGE, matching.length)}
+                  basePath="/security"
+                  queryParams={{ show: filter === "all" ? undefined : filter }}
+                  itemLabel="target"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 md:hidden">
+                <span className="mr-1 text-[13px] text-zk-text2 tabular-nums">
+                  {(current - 1) * PAGE + 1}–{Math.min(current * PAGE, matching.length)} of {matching.length}
+                </span>
+                <PageArrow href={current > 1 ? pageHref(current - 1) : null} label="Previous page" glyph="‹" />
+                <PageArrow href={current < totalPages ? pageHref(current + 1) : null} label="Next page" glyph="›" />
+              </div>
+            </div>
+          ) : null}
+        </section>
       )}
-
-      {matching.length && !words ? (
-        <div className="border-t border-zk-border px-4 py-3 sm:px-5">
-          {/* A computer gets Ziki's numbered pages; a phone gets "1–10 of 20 ‹ ›", as Gmail does on a phone. */}
-          <div className="hidden md:block">
-            <PaginationControls
-              page={current}
-              totalPages={totalPages}
-              totalCount={matching.length}
-              from={(current - 1) * PAGE + 1}
-              to={Math.min(current * PAGE, matching.length)}
-              basePath="/security"
-              queryParams={{ show: filter === "all" ? undefined : filter }}
-              itemLabel="target"
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2 md:hidden">
-            <span className="mr-1 text-[13px] text-zk-text2 tabular-nums">
-              {(current - 1) * PAGE + 1}–{Math.min(current * PAGE, matching.length)} of {matching.length}
-            </span>
-            <PageArrow href={current > 1 ? pageHref(current - 1) : null} label="Previous page" glyph="‹" />
-            <PageArrow href={current < totalPages ? pageHref(current + 1) : null} label="Next page" glyph="›" />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -426,22 +341,33 @@ const KIND_PILLS: { id: Filter; label: string }[] = [
   { id: "repo", label: "Repos" },
 ];
 
-/** Where a site is, in a few words, for its Feed card: our stages, how far the agents are, and what was found. */
+/** Marketing's table cells (marketing-home.tsx). */
+const HEAD = "border-b border-zk-border px-3 py-2.5 text-left text-[12px] font-semibold text-zk-muted";
+const CELL = "border-b border-zk-divider px-3 py-3 align-middle";
+
+/** Each stage's pill, in Ziki's pill colours: solid in the table, as Marketing's Status. */
+const STAGE_TONE: Record<ScanStage, keyof typeof PILL_TONES> = {
+  quick_only: "grey",
+  scanning: "blue",
+  report: "green",
+  in_app: "purple",
+  cancelled: "grey",
+};
+
+/** Where a site is, in a sentence: under its name in the table, and on its Feed card. */
 function whereItIs(check: WorkspaceCheckRow): string {
   const stage = stageOf(check);
   const { total, nothing } = problemsOf(check);
+  const found = nothing ? "nothing found" : total ? `${total} ${total === 1 ? "problem" : "problems"} found` : "";
   if (stage === "scanning") {
     const parts = check.parts && check.parts.total ? ` · ${check.parts.done} of ${check.parts.total} parts done` : "";
     return `Agents are checking it${parts}`;
   }
-  const found = nothing ? "nothing found" : total ? `${total} ${total === 1 ? "problem" : "problems"} found` : "";
+  if (stage === "in_app") return `${check.moved} sent to your app`;
   return [STAGE[stage].label, found].filter(Boolean).join(" · ");
 }
 
-/**
- * A Feed card, as Marketing's (24 Nov, Chloe): the site's icon and name, where it is and when it was last scanned, and
- * "See progress". Security is one person's own, so there's nothing to vote on; the card opens the site's page.
- */
+/** A Feed card, as Marketing's: the site's icon and name, where it is, and "See progress". The card opens its page. */
 function FeedCard({ check, highlighted }: { check: WorkspaceCheckRow; highlighted: boolean }) {
   return (
     <li>
@@ -459,6 +385,70 @@ function FeedCard({ check, highlighted }: { check: WorkspaceCheckRow; highlighte
         <span className="shrink-0 rounded-full px-3 py-1 text-[12.5px] font-semibold" style={PILL_TONES.blue}>See progress</span>
       </Link>
     </li>
+  );
+}
+
+/** One site in Marketing's table: name and where it is, its problems, when it was last scanned, its status and "…". */
+function TargetTableRow({
+  check,
+  highlighted,
+  onScanAgain,
+  onRemove,
+  busy,
+}: {
+  check: WorkspaceCheckRow;
+  highlighted: boolean;
+  onScanAgain: () => void;
+  onRemove: () => void;
+  busy: boolean;
+}) {
+  const stage = stageOf(check);
+  const href = `/security/checks/${check.id}`;
+  const { found, nothing, fromAgents } = problemsOf(check);
+  const source = fromAgents ? "agents' report" : "quick scan";
+  return (
+    <tr className={`transition hover:bg-zk-bg has-[[aria-expanded=true]]:relative has-[[aria-expanded=true]]:z-30 ${highlighted ? "bg-zk-tint/40" : ""}`}>
+      <td className={CELL}>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <TargetIcon check={check} />
+          {/* A site opens its own page, with everything found on it. */}
+          <Link href={href} className="block min-w-0 truncate font-semibold text-zk-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue">
+            {check.value}
+          </Link>
+        </span>
+      </td>
+      <td className={CELL}>
+        <Link href={href} tabIndex={-1} className="flex items-center gap-1">
+          {nothing ? (
+            <NoProblems />
+          ) : found.length ? (
+            found.map(([severity, n]) => (
+              <span
+                key={severity}
+                title={`${n ? n : "No"} ${severity} ${n === 1 ? "problem" : "problems"}, from the ${source}.`}
+                className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-bold tabular-nums security-severity security-severity--${severity} ${n ? "" : "opacity-30"}`}
+              >
+                <span className="sr-only">{severity}: </span>
+                {n}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-zk-muted">Checking…</span>
+          )}
+        </Link>
+      </td>
+      <td className={`${CELL} text-[12.5px] text-zk-text2`}>
+        <LocalTime date={lastScanned(check)} />
+      </td>
+      <td className={`${CELL} bg-[#fafafb]`}>
+        <span className="inline-flex max-w-full items-center truncate rounded-full px-3 py-1 text-[12px] font-semibold text-white" style={{ backgroundColor: PILL_TONES[STAGE_TONE[stage]].color }}>
+          {STAGE[stage].label}
+        </span>
+      </td>
+      <td className={`${CELL} bg-[#fafafb] px-1`}>
+        <RowMenu site={check.value} href={href} onScanAgain={onScanAgain} onRemove={onRemove} busy={busy} />
+      </td>
+    </tr>
   );
 }
 
@@ -511,97 +501,6 @@ function NoProblems() {
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
       No problems
     </span>
-  );
-}
-
-/** One target as a row: box, the site, its type, what was found, when it was added, its status and a "…" menu. The whole row opens it. */
-function TargetRow({
-  check,
-  highlighted,
-  ticked,
-  onTick,
-  onScanAgain,
-  onRemove,
-  busy,
-}: {
-  check: WorkspaceCheckRow;
-  highlighted: boolean;
-  ticked: boolean;
-  onTick: () => void;
-  onScanAgain: () => void;
-  onRemove: () => void;
-  busy: boolean;
-}) {
-  const stage = stageOf(check);
-  const href = `/security/checks/${check.id}`;
-  const { found, nothing, fromAgents } = problemsOf(check);
-  const source = fromAgents ? "agents' report" : "quick scan";
-
-  return (
-    <div
-      role="row"
-      // While its "…" menu is open the row is lifted above the rows below (17 Nov): each row's cells sit at z-10,
-      // so without this the next rows' boxes, links and "…" buttons showed through the open menu.
-      className={`group relative has-[[aria-expanded=true]]:z-30 grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-divider px-3 py-3 last:border-b-0 hover:bg-zk-tint/50 sm:px-5 ${ticked || highlighted ? "bg-zk-tint/40" : ""}`}
-    >
-      <span role="cell" className="relative z-10 flex justify-center">
-        <input type="checkbox" aria-label={`Tick ${check.value}`} checked={ticked} onChange={onTick} className="h-4 w-4 accent-electric-blue-strong" />
-      </span>
-      <span role="cell" className="flex min-w-0 items-center gap-2 sm:gap-2.5">
-        {/* On a phone there's no Status column: a dot says it instead, where Intruder puts its status dot. */}
-        <span aria-hidden="true" title={STAGE[stage].label} className={`h-2 w-2 shrink-0 rounded-full md:hidden ${STAGE[stage].dot} ${stage === "scanning" ? "animate-pulse" : ""}`} />
-        <TargetIcon check={check} />
-        {/* The row opens the target's page in Ziki: this link covers the row (the name is a separate link, above it). */}
-        <Link href={href} aria-label={`Open ${check.value} (${STAGE[stage].label})`} className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric-blue" />
-        {/* The name opens the site itself, in a new tab, like a domain on Intruder or Detectify. */}
-        {siteUrl(check) ? (
-          <a
-            href={siteUrl(check)!}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={`Visit ${check.value}`}
-            className="relative z-10 min-w-0 truncate text-sm font-semibold text-zk-text hover:text-zk-accent hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
-          >
-            {check.value}
-            <span className="sr-only"> (opens the site in a new tab)</span>
-          </a>
-        ) : (
-          <span className="min-w-0 truncate text-sm font-semibold text-zk-text">{check.value}</span>
-        )}
-      </span>
-      <span role="cell" className="hidden md:block">
-        <span className="inline-flex rounded-md border border-zk-border px-1.5 py-0.5 text-xs text-zk-text2">{TARGET_KIND_LABEL[check.kind]}</span>
-      </span>
-      <span role="cell" className="flex items-center">
-        {/* Above the row's covering link, so every box's hover says what it counts (17 Nov): under it, only the faded
-            zero boxes (opacity lifts them) showed theirs. Still opens the scan; out of the Tab order, the row link is the stop. */}
-        <Link href={href} tabIndex={-1} className="relative z-10 flex items-center gap-0.5 md:gap-1">
-        {nothing ? (
-          <NoProblems />
-        ) : found.length ? (
-          found.map(([severity, n]) => (
-            <span
-              key={severity}
-              title={`${n ? n : "No"} ${severity} ${n === 1 ? "problem" : "problems"}, from the ${source}.`}
-              className={`inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-[11px] font-bold tabular-nums md:h-6 md:min-w-6 md:px-1.5 md:text-xs security-severity security-severity--${severity} ${n ? "" : "opacity-30"}`}
-            >
-              <span className="sr-only">{severity}: </span>
-              {n}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-zk-muted">Checking…</span>
-        )}
-        </Link>
-      </span>
-      <span role="cell" className="hidden text-xs text-zk-muted md:block">
-        <LocalTime date={lastScanned(check)} />
-      </span>
-      <span role="cell" className={`hidden text-xs font-semibold md:block ${STAGE[stage].text}`}>{STAGE[stage].label}</span>
-      <span role="cell" className="relative z-10 flex justify-end">
-        <RowMenu site={check.value} href={href} onScanAgain={onScanAgain} onRemove={onRemove} busy={busy} />
-      </span>
-    </div>
   );
 }
 
