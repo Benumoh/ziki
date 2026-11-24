@@ -2,8 +2,9 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ project: vi.fn(), user: vi.fn() }));
+const mocks = vi.hoisted(() => ({ project: vi.fn(), user: vi.fn(), ideas: vi.fn() }));
 vi.mock("@/lib/public-projects", () => ({ findFeedbackProject: mocks.project }));
+vi.mock("@/lib/public-feedback-ideas", () => ({ listPublicFeedbackIdeas: mocks.ideas }));
 vi.mock("@/lib/auth-helpers", () => ({ optionalUser: mocks.user }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("not-found"); } }));
 vi.mock("@/components/public-product-overview", () => ({
@@ -18,7 +19,7 @@ vi.mock("@/components/public-feedback-idea-detail", () => ({
 vi.mock("@/components/local-time", () => ({ LocalTime: () => <span>Today</span> }));
 vi.mock("@/components/rich-text", () => ({ RichText: ({ content }: { content: string }) => <p>{content}</p> }));
 
-import FeedbackPage from "@/app/(app)/[org]/[project]/feedback/page";
+import FeedbackPage from "@/app/(feedback)/[org]/[project]/feedback/page";
 import { PublicReportProgress } from "@/components/public-report-progress";
 
 describe("external feedback flow", () => {
@@ -26,13 +27,19 @@ describe("external feedback flow", () => {
     vi.clearAllMocks();
     mocks.project.mockResolvedValue({ name: "Desktop", slug: "desktop", organisation: { slug: "team", name: "Team" } });
     mocks.user.mockResolvedValue(null);
+    mocks.ideas.mockResolvedValue([]);
   });
 
   it.each(["web", "mobile", "desktop"])("opens the %s product information before the report form", async project => {
     mocks.project.mockResolvedValue({ name: project, slug: project, organisation: { slug: "team", name: "Team" } });
     const page = await FeedbackPage({ params: Promise.resolve({ org: "team", project }), searchParams: Promise.resolve({}) });
     expect(renderToStaticMarkup(page)).toContain(`About ${project}`);
-    expect(mocks.user).not.toHaveBeenCalled();
+    expect(mocks.ideas).toHaveBeenCalledWith("team", { projectSlug: project, query: undefined, status: undefined, take: 7 });
+  });
+
+  it("scopes inline feedback search to the selected product", async () => {
+    await FeedbackPage({ params: Promise.resolve({ org: "team", project: "desktop" }), searchParams: Promise.resolve({ q: "save", status: "open" }) });
+    expect(mocks.ideas).toHaveBeenCalledWith("team", { projectSlug: "desktop", query: "save", status: "open", take: 7 });
   });
 
   it.each(["problem", "improvement"])("keeps guest %s reporting linked to its selected project", async type => {
@@ -41,6 +48,14 @@ describe("external feedback flow", () => {
     expect(html).toContain("Continue as guest");
     expect(html).toContain('href="/team/desktop/feedback"');
     expect(html).toContain(type);
+  });
+
+  it("opens unified feedback without requiring sign-in", async () => {
+    const page = await FeedbackPage({ params: Promise.resolve({ org: "team", project: "desktop" }), searchParams: Promise.resolve({ view: "share" }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain("Continue as guest");
+    expect(html).toContain('href="/team/desktop/feedback"');
+    expect(html).not.toContain("About Desktop");
   });
 
   it("opens a submitted idea in the selected project's feedback flow", async () => {

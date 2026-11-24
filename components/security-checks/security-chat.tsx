@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { askSite, replaceScan, siteChat, talkToSecurityAssistant } from "@/app/actions/security-assistant";
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
@@ -520,6 +521,23 @@ export function SecurityChat({
           </div>
         </div>
         {error ? <p id={errorId} role="alert" className="m-0 mt-2 px-2 text-sm text-zk-bad-fg">{error}</p> : null}
+        {/* Under the box, as Marketing's "Marketing yourproduct.com" (24 Nov, Chloe): the site the chat is about, while
+            it's scanned and after. Nothing when the chat isn't about a site. */}
+        {newChat && (focus || (scanning && lastTarget?.ok)) ? (
+          <p className="m-0 mt-2 px-2 text-[12px] text-zk-muted">
+            {focus ? (
+              <>
+                {finished ? "Securing" : "Scanning"}{" "}
+                <Link href={`/security/checks/${focus.checkId}`} className="rounded-sm font-semibold text-zk-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue">
+                  {focus.site}
+                </Link>
+                {finished ? null : "…"}
+              </>
+            ) : (
+              <>Scanning <span className="font-semibold text-zk-text2">{lastTarget?.ok ? lastTarget.target.value : ""}</span>…</>
+            )}
+          </p>
+        ) : null}
         {newChat ? files.dialog : null}
       </form>
     </div>
