@@ -289,7 +289,7 @@ export function ScanList({
                   from={(current - 1) * PAGE + 1}
                   to={Math.min(current * PAGE, matching.length)}
                   basePath="/security"
-                  queryParams={{ show: filter === "all" ? undefined : filter }}
+                  queryParams={{ show: filter }}
                   itemLabel="target"
                 />
               </div>
