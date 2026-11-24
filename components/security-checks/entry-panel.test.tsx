@@ -47,7 +47,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     for (const pill of ["Feed", "Websites", "Servers", "Repos"]) expect(html).toContain(pill);
     expect(html).toContain('aria-label="Feed"');
     expect(html).toContain("See progress");
-    expect(html).toContain("Agents are checking it");
+    expect(html).toContain("Agents checking");
     expect(html).toContain('href="/security/checks/c2"');
     expect(html).not.toContain("<table");
     // Nothing to vote on, and no "Fix it" or "Needs fixing" (24 Nov, Chloe).
@@ -94,7 +94,8 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toMatch(/All (<!-- -->)?Websites/);
     // Marketing's table, with the site's own icon and no line under the name (24 Nov, Chloe).
     expect(html).toContain("Last scanned</th>");
-    expect(html).not.toContain("Agents are checking it");
+    // Under the name only while the agents are checking (24 Nov, Chloe).
+    expect(html).toContain("Agents checking");
     // Marketing's heading: the funnel and "+ New Website" (24 Nov, Chloe).
     expect(html).toContain("New Website");
     expect(html).toContain('aria-label="Filter"');

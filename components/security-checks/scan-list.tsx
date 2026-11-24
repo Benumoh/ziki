@@ -379,15 +379,17 @@ const STAGE_TONE: Record<ScanStage, keyof typeof PILL_TONES> = {
   cancelled: "grey",
 };
 
+/** While the agents work, just "Agents checking" (24 Nov, Chloe): no count of parts. */
+function agentsChecking(): string {
+  return "Agents checking";
+}
+
 /** Where a site is, in a sentence: under its name in the table, and on its Feed card. */
 function whereItIs(check: WorkspaceCheckRow): string {
   const stage = stageOf(check);
   const { total, nothing } = problemsOf(check);
-  const found = nothing ? "nothing found" : total ? `${total} ${total === 1 ? "problem" : "problems"} found` : "";
-  if (stage === "scanning") {
-    const parts = check.parts && check.parts.total ? ` · ${check.parts.done} of ${check.parts.total} parts done` : "";
-    return `Agents are checking it${parts}`;
-  }
+  const found = nothing ? "nothing found" : total ? `${total} found` : "";
+  if (stage === "scanning") return agentsChecking();
   if (stage === "in_app") return `${check.moved} sent to your app`;
   return [STAGE[stage].label, found].filter(Boolean).join(" · ");
 }
@@ -436,10 +438,14 @@ function TargetTableRow({
       <td className={CELL}>
         <span className="flex min-w-0 items-center gap-2.5">
           <TargetIcon check={check} />
+          <span className="min-w-0">
           {/* A site opens its own page, with everything found on it. */}
           <Link href={href} className="block min-w-0 truncate font-semibold text-zk-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue">
             {check.value}
           </Link>
+          {/* Only while the agents are checking, how far they are (24 Nov, Chloe); nothing under the name otherwise. */}
+          {stage === "scanning" ? <span className="mt-0.5 block truncate text-[12.5px] font-medium text-zk-accent">{agentsChecking()}</span> : null}
+          </span>
         </span>
       </td>
       <td className={CELL}>
