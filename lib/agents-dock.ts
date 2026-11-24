@@ -32,6 +32,8 @@ export function dockVisibleOn(pathname: string | null | undefined): boolean {
   if (first === "inbox") return true;
   if (first === "home" || first === "feed" || first === "activity") return segments.length === 1;
   if (isReservedProjectSlug(first) || segments.length < 2 || isProjectFirstPath(path)) return false;
+  // Forum pages (/<org>/forum, /<org>/<project>/forum, and threads under them) hide the dock.
+  if (segments[1] === "forum" || segments[2] === "forum") return false;
   // An old /<project>/ideas, which only redirects: Ideas are at /new now.
   if (segments[1] === "ideas" && segments.length === 2) return false;
   // The organisation-wide lists (#project-filter): /<org>/overview, /<org>/issues/…, /<org>/new and /<org>/queue.
