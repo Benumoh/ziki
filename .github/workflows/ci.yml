@@ -96,7 +96,7 @@ jobs:
   # against `next dev`, as they do locally, so this job adds no second build.
   cli:
     name: CLI scenarios
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, emerjent]
     timeout-minutes: 20
     services:
       postgres:
@@ -170,7 +170,7 @@ jobs:
     # Pinned: ubuntu-latest is moving to 26.04, where `playwright install
     # chromium` fails ("does not support chromium on ubuntu26.04-x64").
     # Go back to ubuntu-latest once Playwright supports it.
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, emerjent]
     timeout-minutes: 15
     services:
       postgres:
