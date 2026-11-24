@@ -44,7 +44,8 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain("Which website should we secure? Paste its address, like https://yourproduct.com");
     expect(html).toContain('name="target"');
     expect(html).toContain("Nothing checked yet.");
-    expect(html).toContain("0 targets");
+    // No count or status tabs above the list: just Filter and search.
+    expect(html).not.toContain('aria-label="Targets by status"');
     // No title, subtitle or Add target button on top, and no proof step.
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Your websites, servers and repos");
@@ -71,7 +72,10 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     );
     // The chat box stays on top once there are scans, as Marketing's: no Add target button, no empty card.
     expect(html).toContain('name="target"');
-    expect(html).toContain("Tell the security agent what to check");
+    expect(html).toContain("Which website should we secure?");
+    expect(html).not.toContain('aria-label="Targets by status"');
+    expect(html).not.toMatch(/\d+ targets</);
+    expect(html).toContain("Search your targets");
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Nothing checked yet.");
     expect(html).toContain("Scanning");
@@ -145,7 +149,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).not.toContain("Session cookie has no Secure flag");
     // The browser scan only stays while no agent has reported.
     expect(html).not.toContain("No Content Security Policy");
-    expect(html).not.toContain("Quick scan");
+    expect(html).not.toContain("from the quick scan");
   });
 
   it("confirms the fixes just unlocked", () => {
