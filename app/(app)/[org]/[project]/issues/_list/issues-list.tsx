@@ -691,7 +691,9 @@ export async function IssuesList({
   // They top Needs your OK with Approve (your good verdict), and the one the chat just filed flashes there.
   const ideaSection = toSingleQueryParam(params[OVERVIEW_SECTION_PARAM]);
   // On the organisation-wide list (every project), every project's ideas, as the Fixes tab lists them.
+  // External feedback is reviewed in its portal. Its converted issue enters the normal feed.
   const ideasToOkWhere: Prisma.IdeaWhereInput = {
+    source: { not: "public" },
     ...(allProjects ? { organisationId: organisationId ?? "" } : { projectId: project.id }), isDeleted: false, status: "open", track: "product",
     ...(userId ? { verdicts: { none: { onBehalfOfUserId: userId } } } : {}),
   };
@@ -1223,6 +1225,8 @@ export async function IssuesList({
   // issues. A draft is a person's idea not yet written up in the standard
   // headings.
   const ideaWhere: Prisma.IdeaWhereInput = {
+    // Keep unconverted public feedback out of main idea lists, counts and categories.
+    source: { not: "public" },
     organisationId: organisationId ?? "",
     ...PRODUCT_TRACK,
     ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
