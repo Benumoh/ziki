@@ -221,6 +221,8 @@ export type WorkspaceCheckRow = {
    */
   agentReport: AgentReport | null;
   createdAt: Date;
+  /** The agents' parts of the deeper scan, for "Agents checking · 3 of 9" on Security (24 Nov). */
+  parts?: { done: number; total: number };
 };
 
 /** What a card shows of a posted report: Ziki's summary and each finding, worst first. */
@@ -284,6 +286,7 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
       createdAt: true,
       target: { select: { id: true, kind: true, value: true, verifiedAt: true, previewSummary: true } },
       results: { select: { id: true, severity: true, title: true, unlockedAt: true, findingId: true } },
+      items: { where: { kind: "check" }, select: { status: true } },
     },
   });
   return rows.map((row) => ({
@@ -301,6 +304,8 @@ export async function listWorkspaceChecks(organisationId: string, userId: string
     preview: readQuickScan(row.target.previewSummary),
     agentReport: row.postedAt !== null ? agentReportOf(row.summary, row.results) : null,
     createdAt: row.createdAt,
+    // Skipped parts don't count: they were dropped, not left to do.
+    parts: { done: (row.items ?? []).filter((item) => item.status === "done").length, total: (row.items ?? []).filter((item) => item.status !== "skipped").length },
   }));
 }
 

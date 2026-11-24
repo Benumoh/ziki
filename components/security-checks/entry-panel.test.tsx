@@ -39,6 +39,21 @@ const quick: PreviewSummary = {
 } as PreviewSummary;
 
 describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
+  it("opens on the Feed, as Marketing's: pills for each kind, the sites as cards with See progress, no table (24 Nov)", () => {
+    const html = renderToStaticMarkup(
+      <SecurityChecksPanel checks={[row({}), row({ id: "c2", targetId: "t2", value: "shop.ng", status: "done", posted: true, findings: 2 })]} />,
+    );
+    expect(html).toContain('aria-label="Kinds of target"');
+    for (const pill of ["Feed", "Websites", "Servers", "Repos"]) expect(html).toContain(pill);
+    expect(html).toContain('aria-label="Feed"');
+    expect(html).toContain("See progress");
+    expect(html).toContain("Agents are checking it");
+    expect(html).toContain('href="/security/checks/c2"');
+    expect(html).not.toContain('role="table"');
+    // Nothing to vote on, and no "Fix it" or "Needs fixing" (24 Nov, Chloe).
+    expect(html).not.toMatch(/Vote on it|Fix it|Needs fixing/);
+  });
+
   it("opens a new workspace on the chat box, as Marketing's, with an empty card under it (23 Nov)", () => {
     const html = renderToStaticMarkup(<SecurityChecksPanel checks={[]} />);
     expect(html).toContain("Which website should we secure? Paste its address, like https://yourproduct.com");
@@ -62,7 +77,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
 
   it("keeps the box on top and lists the scans as rows, each with its stage, opening its page with one click", () => {
     const html = renderToStaticMarkup(
-      <SecurityChecksPanel
+      <SecurityChecksPanel show="website"
         checks={[
           row({}),
           row({ id: "c2", targetId: "t2", kind: "repo", value: "settle/app", status: "checking" }),
@@ -75,7 +90,8 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain('name="target"');
     expect(html).toContain("Which website should we secure?");
     expect(html).not.toContain('aria-label="Targets by status"');
-    expect(html).toContain("4 targets");
+    // The repo is under Repos, so Websites shows three.
+    expect(html).toContain("3 targets");
     expect(html).toContain("Search your targets");
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Nothing checked yet.");
@@ -104,7 +120,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
   });
 
   it("says nothing to fix when the report found nothing", () => {
-    const html = renderToStaticMarkup(<SecurityChecksPanel checks={[row({ status: "done", posted: true })]} />);
+    const html = renderToStaticMarkup(<SecurityChecksPanel show="website" checks={[row({ status: "done", posted: true })]} />);
     expect(html).toContain("No problems");
     expect(html).toContain('href="/security/checks/c1"');
     expect(html).not.toContain("/pay");
@@ -112,7 +128,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
 
   it("shows each scan's quick result as four coloured counts only: its full result is on the scan's page, not repeated on the list", () => {
     const html = renderToStaticMarkup(
-      <SecurityChecksPanel checks={[row({ preview: quick }), row({ id: "c2", targetId: "t2", value: "shop.ng", preview: quick })]} />,
+      <SecurityChecksPanel show="website" checks={[row({ preview: quick }), row({ id: "c2", targetId: "t2", value: "shop.ng", preview: quick })]} />,
     );
     expect(html).toContain("from the quick scan.");
     // Always four boxes in the report's severity colours; empty ones faded.
@@ -129,7 +145,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
 
   it("counts the agents' findings instead of the quick scan once their report is posted", () => {
     const html = renderToStaticMarkup(
-      <SecurityChecksPanel
+      <SecurityChecksPanel show="website"
         checks={[
           row({
             status: "done", posted: true, findings: 2, unlocked: 1, preview: quick,
@@ -155,7 +171,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
 
   it("confirms the fixes just unlocked", () => {
     const html = renderToStaticMarkup(
-      <SecurityChecksPanel checks={[row({ status: "done", posted: true, findings: 3, unlocked: 3 })]} highlight={{ checkId: "c1", unlocked: 3 }} />,
+      <SecurityChecksPanel show="website" checks={[row({ status: "done", posted: true, findings: 3, unlocked: 3 })]} highlight={{ checkId: "c1", unlocked: 3 }} />,
     );
     expect(html).toContain('role="status"');
     expect(html).toContain("3 fixes unlocked.");

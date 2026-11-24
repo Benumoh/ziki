@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { removeScan } from "@/app/actions/security-assistant";
 import { useRescan } from "./use-rescan";
 import { KindIcon } from "./entry-box";
+import { PILL_TONES } from "@/lib/pill-tones";
 import "@/components/security-finding.css";
 import { SecurityChat, forgetChatAfterRemove } from "./security-chat";
 
@@ -234,8 +235,47 @@ export function ScanList({
     );
   };
 
+  // Feed (24 Nov, Chloe): Marketing's Feed, the sites as cards, newest first; a kind's pill (or a Filter status) shows the table.
+  const feed = filter === "all";
+  const pills = (
+    <nav aria-label="Kinds of target" className="flex flex-wrap items-center gap-1.5 px-4 pt-4 sm:px-5 sm:pt-5">
+      {KIND_PILLS.map(({ id, label }) => {
+        const on = filter === id;
+        return (
+          <Link
+            key={id}
+            href={id === "all" ? "/security" : `/security?show=${id}`}
+            scroll={false}
+            aria-current={on ? "page" : undefined}
+            className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${on ? "bg-white text-zk-text shadow-[0_1px_3px_rgba(16,24,40,0.12)] ring-1 ring-black/[0.04]" : "bg-zk-bg text-zk-text2 hover:bg-zk-chip"}`}
+          >
+            {label}
+            <span className="text-[12px] tabular-nums text-zk-muted">
+              {count(id)}
+              <span className="sr-only">{count(id) === 1 ? " target" : " targets"}</span>
+            </span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+  if (feed && live.length) {
+    const newest = [...live].sort((a, b) => lastScanned(b).getTime() - lastScanned(a).getTime());
+    return (
+      <div className="flex flex-col">
+        {pills}
+        <ul aria-label="Feed" className="m-4 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-3 sm:m-5 sm:p-4">
+          {newest.map((check) => (
+            <FeedCard key={check.id} check={check} highlighted={highlightId === check.id} />
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
+      {pills}
       {/* The list's own toolbar (24 Nov, Chloe): how many on the left; Filter and search on the right, and once something
           is ticked, its actions next to Filter. No status tabs above the table. */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
@@ -281,7 +321,8 @@ export function ScanList({
             />
           ) : null}
           <ToolbarFilterMenu
-            summary={filter === "all" ? "" : ALL_FILTERS.find(({ id }) => id === filter)?.label}
+            // A kind is already its pill above, so the button only names a status it filters by.
+            summary={filter === "all" || KIND_PILLS.some(({ id }) => id === filter) ? "" : ALL_FILTERS.find(({ id }) => id === filter)?.label}
             groups={[
               { label: "Status", options: STAGE_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: id === "all" ? "/security" : `/security?show=${id}`, selected: filter === id })) },
               { label: "Needs attention", options: ATTENTION_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
@@ -377,6 +418,50 @@ export function ScanList({
   );
 }
 
+/** The pills above the list: Feed, then each kind of target, as Marketing's Feed and task types. */
+const KIND_PILLS: { id: Filter; label: string }[] = [
+  { id: "all", label: "Feed" },
+  { id: "website", label: "Websites" },
+  { id: "server", label: "Servers" },
+  { id: "repo", label: "Repos" },
+];
+
+/** Where a site is, in a few words, for its Feed card: our stages, how far the agents are, and what was found. */
+function whereItIs(check: WorkspaceCheckRow): string {
+  const stage = stageOf(check);
+  const { total, nothing } = problemsOf(check);
+  if (stage === "scanning") {
+    const parts = check.parts && check.parts.total ? ` · ${check.parts.done} of ${check.parts.total} parts done` : "";
+    return `Agents are checking it${parts}`;
+  }
+  const found = nothing ? "nothing found" : total ? `${total} ${total === 1 ? "problem" : "problems"} found` : "";
+  return [STAGE[stage].label, found].filter(Boolean).join(" · ");
+}
+
+/**
+ * A Feed card, as Marketing's (24 Nov, Chloe): the site's icon and name, where it is and when it was last scanned, and
+ * "See progress". Security is one person's own, so there's nothing to vote on; the card opens the site's page.
+ */
+function FeedCard({ check, highlighted }: { check: WorkspaceCheckRow; highlighted: boolean }) {
+  return (
+    <li>
+      <Link
+        href={`/security/checks/${check.id}`}
+        className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-4 py-3.5 transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue sm:px-5 sm:py-4 ${highlighted ? "ring-2 ring-electric-blue-strong/40" : ""}`}
+      >
+        <TargetIcon check={check} large />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold text-zk-text">{check.value}</span>
+          <span className="mt-0.5 block truncate text-[13px] text-zk-muted">
+            {whereItIs(check)} · <LocalTime date={lastScanned(check)} />
+          </span>
+        </span>
+        <span className="shrink-0 rounded-full px-3 py-1 text-[12.5px] font-semibold" style={PILL_TONES.blue}>See progress</span>
+      </Link>
+    </li>
+  );
+}
+
 function PageArrow({ href, label, glyph }: { href: string | null; label: string; glyph: string }) {
   const look = "grid h-8 w-8 place-items-center rounded-lg border border-zk-border bg-zk-surface text-base text-zk-text2";
   return href ? (
@@ -387,7 +472,7 @@ function PageArrow({ href, label, glyph }: { href: string | null; label: string;
 }
 
 /** The site's own icon, like Netlify and Vercel list sites: Ziki's server finds the one the site declares (security/checks/[id]/icon). The globe, server or repo icon when there isn't one. */
-function TargetIcon({ check }: { check: WorkspaceCheckRow }) {
+function TargetIcon({ check, large = false }: { check: WorkspaceCheckRow; large?: boolean }) {
   const host = check.kind === "website" ? hostOf(check.value) : null; // only websites have an icon to look for
   const [failed, setFailed] = useState(false);
   const image = useRef<HTMLImageElement>(null);
@@ -397,7 +482,7 @@ function TargetIcon({ check }: { check: WorkspaceCheckRow }) {
     if (img && img.complete && img.naturalWidth < 2) setFailed(true);
   }, []);
   return (
-    <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-md border border-zk-border bg-zk-surface">
+    <span className={`grid shrink-0 place-items-center overflow-hidden border border-zk-border bg-zk-surface ${large ? "h-10 w-10 rounded-[11px]" : "h-7 w-7 rounded-md"}`}>
       {host && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element -- the site's own favicon, from the site itself
         <img
@@ -410,10 +495,10 @@ function TargetIcon({ check }: { check: WorkspaceCheckRow }) {
           onLoad={(event) => {
             if (event.currentTarget.naturalWidth < 2) setFailed(true);
           }}
-          className="h-4 w-4"
+          className={large ? "h-5 w-5" : "h-4 w-4"}
         />
       ) : (
-        <KindIcon kind={check.kind} className="h-4 w-4 text-zk-text2" />
+        <KindIcon kind={check.kind} className={`${large ? "h-5 w-5" : "h-4 w-4"} text-zk-text2`} />
       )}
     </span>
   );
