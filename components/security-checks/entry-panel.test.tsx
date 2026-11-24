@@ -95,7 +95,9 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     // Marketing's table, with the site's own icon and no line under the name (24 Nov, Chloe).
     expect(html).toContain("Last scanned</th>");
     expect(html).not.toContain("Agents are checking it");
-    expect(html).toContain("Search your targets");
+    // Marketing's heading: the funnel and "+ New Website" (24 Nov, Chloe).
+    expect(html).toContain("New Website");
+    expect(html).toContain('aria-label="Filter"');
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Nothing checked yet.");
     expect(html).toContain("Scanning");
@@ -140,7 +142,8 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain("opacity-30");
     expect(html).not.toContain("No Content Security Policy");
     expect(html).not.toContain("See result");
-    expect(html).not.toContain("<details");
+    // Rows never open up; the only <details> is the funnel (Marketing's filter).
+    expect(html.match(/<details/g)?.length ?? 0).toBe(1);
     expect(html).not.toContain("coin");
     // No delete on the list: like an issue, that belongs on the scan's own page.
     expect(html).not.toContain('aria-label="Remove');

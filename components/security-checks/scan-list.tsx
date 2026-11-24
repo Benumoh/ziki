@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } f
 import { useRouter } from "next/navigation";
 import type { ScanStage, WorkspaceCheckRow } from "@/lib/security-checks/entry";
 import { LocalTime } from "@/components/local-time";
-import { ToolbarFilterMenu } from "@/components/toolbar-filter-menu";
 import { PaginationControls } from "@/components/pagination-controls";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
@@ -13,6 +12,7 @@ import { removeScan } from "@/app/actions/security-assistant";
 import { useRescan } from "./use-rescan";
 import { KindIcon } from "./entry-box";
 import { PILL_TONES } from "@/lib/pill-tones";
+import { SECTION_TITLE, TOOL_BUTTON, TOOL_BUTTON_ON } from "@/lib/ui-style";
 import "@/components/security-finding.css";
 import { SecurityChat, forgetChatAfterRemove } from "./security-chat";
 
@@ -126,32 +126,21 @@ export function ScanList({
   const { rescan, pending: rescanning } = useRescan();
   const busy = removing || rescanning;
   const filter: Filter = ALL_FILTERS.some(({ id }) => id === show) ? (show as Filter) : "all";
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-  const searchBox = useRef<HTMLInputElement>(null);
-  // Opening the search puts the cursor in it.
-  useEffect(() => {
-    if (searching) searchBox.current?.focus();
-  }, [searching]);
 
   // Removed scans leave the list, and so, for now, does the one whose result is showing in the chat.
   const live = useMemo(() => checks.filter((check) => check.status !== "cancelled" && check.id !== hideId), [checks, hideId]);
   const count = (id: Filter) => live.filter((check) => matchesFilter(check, id)).length;
-  const words = query.trim().toLowerCase();
   // Newest scan first.
   const matching = useMemo(
-    () =>
-      live
-        .filter((check) => matchesFilter(check, filter) && (!words || check.value.toLowerCase().includes(words)))
-        .sort((a, b) => lastScanned(b).getTime() - lastScanned(a).getTime()),
-    [live, filter, words],
+    () => live.filter((check) => matchesFilter(check, filter)).sort((a, b) => lastScanned(b).getTime() - lastScanned(a).getTime()),
+    [live, filter],
   );
   // The Feed is the cards; every other choice (a kind, or a status from Filter) is the table.
   const feed = filter === "all";
   // Numbered pages like the app's issue lists; a search looks through every page.
   const totalPages = Math.max(1, Math.ceil(matching.length / PAGE));
-  const current = words ? 1 : Math.min(Math.max(1, page), totalPages);
-  const visible = words ? matching : matching.slice((current - 1) * PAGE, current * PAGE);
+  const current = Math.min(Math.max(1, page), totalPages);
+  const visible = matching.slice((current - 1) * PAGE, current * PAGE);
   const pageHref = (n: number) => {
     const params = new URLSearchParams();
     if (filter !== "all") params.set("show", filter);
@@ -232,43 +221,26 @@ export function ScanList({
         </ul>
       ) : (
         <section aria-labelledby="security-all" className="mt-4 rounded-xl bg-zk-bg p-3 sm:p-4">
-          {/* The table's heading, with Filter and search on its right, as Marketing's "All Landing Pages". */}
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 id="security-all" className="m-0 flex items-center gap-2 text-[16px] font-medium text-zk-text">
+          {/* The table's heading, as Marketing's "All Landing Pages": the funnel and "+ New Website" on its right. */}
+          <div className="mb-3 flex items-center justify-between gap-3 px-1">
+            <h2 id="security-all" className={`flex items-center gap-2 ${SECTION_TITLE}`}>
               All {heading}
-              <span className="text-[13px] font-normal tabular-nums text-zk-muted">{matching.length}</span>
+              <span className="text-[12px] font-normal tabular-nums text-zk-muted">{matching.length}</span>
             </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {searching ? (
-                <input
-                  ref={searchBox}
-                  type="search"
-                  aria-label="Search your targets"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onBlur={() => {
-                    if (!query.trim()) setSearching(false);
-                  }}
-                  placeholder="Search by site"
-                  className="h-8 w-44 rounded-lg border border-zk-border bg-zk-surface px-3 text-[13px] text-zk-text placeholder:text-zk-muted focus:border-electric-blue-strong/60 focus:outline-none sm:w-60"
-                />
-              ) : null}
-              <ToolbarFilterMenu
-                summary={STAGE_FILTERS.some(({ id }) => id === filter) || ATTENTION_FILTERS.some(({ id }) => id === filter) ? ALL_FILTERS.find(({ id }) => id === filter)?.label : ""}
-                // The kinds are the pills above; the menu keeps the statuses and what needs attention.
-                groups={[
-                  { label: "Status", options: STAGE_FILTERS.filter(({ id }) => id !== "all").map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
-                  { label: "Needs attention", options: ATTENTION_FILTERS.map(({ id, label }) => ({ label, count: count(id), href: `/security?show=${id}`, selected: filter === id })) },
-                ]}
-              />
+            <div className="flex shrink-0 items-center gap-2">
+              <StatusFilter filter={filter} count={count} />
+              {/* A site is added in the chat box above (14 Nov plan): this takes you there, as "+ New Landing Page" adds one. */}
               <button
                 type="button"
-                aria-label="Search your targets"
-                aria-pressed={searching}
-                onClick={() => setSearching((open) => !open)}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 hover:bg-zk-chip hover:text-zk-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+                onClick={() => {
+                  const box = document.getElementById("security-chat");
+                  box?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  box?.focus({ preventScroll: true });
+                }}
+                className={`${TOOL_BUTTON} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue`}
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
+                {NEW_LABEL[filter] ?? "New target"}
               </button>
             </div>
           </div>
@@ -293,7 +265,7 @@ export function ScanList({
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-zk-muted">{words ? `No targets match "${query.trim()}".` : "Nothing here in that status."}</td>
+                    <td colSpan={5} className="px-3 py-8 text-center text-zk-muted">Nothing here in that status.</td>
                   </tr>
                 ) : (
                   visible.map((check) => (
@@ -303,7 +275,7 @@ export function ScanList({
               </tbody>
             </table>
           </div>
-          {matching.length > PAGE && !words ? (
+          {matching.length > PAGE ? (
             <div className="mt-3 px-1">
               {/* A computer gets Ziki's numbered pages; a phone gets "1–10 of 20 ‹ ›", as Gmail does on a phone. */}
               <div className="hidden md:block">
@@ -340,6 +312,51 @@ const KIND_PILLS: { id: Filter; label: string }[] = [
   { id: "server", label: "Servers" },
   { id: "repo", label: "Repos" },
 ];
+
+/** "+ New Website" and the like, as Marketing's "+ New Landing Page". */
+const NEW_LABEL: Partial<Record<Filter, string>> = { website: "New Website", server: "New Server", repo: "New Repo" };
+
+/**
+ * Marketing's filter (marketing-home.tsx StatusFilter): a funnel button that opens our statuses and what needs
+ * attention, each with its count; the button turns blue and names the pick while one is picked.
+ */
+function StatusFilter({ filter, count }: { filter: Filter; count: (id: Filter) => number }) {
+  const options = [...STAGE_FILTERS.filter(({ id }) => id !== "all"), ...ATTENTION_FILTERS];
+  const picked = options.find(({ id }) => id === filter) ?? null;
+  return (
+    // Keyed by the pick, so the menu is closed again once a pick loads.
+    <details key={picked?.id ?? "none"} className="group relative">
+      <summary aria-label={picked ? `Filter: ${picked.label}` : "Filter"} title="Filter" className={`${TOOL_BUTTON} ${picked ? TOOL_BUTTON_ON : ""} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-4 w-4"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5z" /></svg>
+        {picked ? picked.label : null}
+      </summary>
+      <div role="menu" aria-label="Filter by status" className="absolute right-0 z-20 mt-1.5 w-56 rounded-xl border border-zk-border bg-zk-surface p-1.5 shadow-[0_4px_16px_-4px_rgba(16,24,40,0.12)]">
+        {[{ label: "Status", items: STAGE_FILTERS.filter(({ id }) => id !== "all") }, { label: "Needs attention", items: ATTENTION_FILTERS }].map((group) => (
+          <div key={group.label}>
+            <p className="m-0 px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-zk-muted">{group.label}</p>
+            {group.items.map(({ id, label }) => {
+              const current = filter === id;
+              return (
+                <Link
+                  key={id}
+                  role="menuitemradio"
+                  aria-checked={current}
+                  href={current ? "/security?show=website" : `/security?show=${id}`}
+                  scroll={false}
+                  className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition hover:bg-zk-bg ${current ? "font-semibold text-zk-text" : "text-zk-text2"}`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span className="text-[12px] tabular-nums text-zk-muted">{count(id)}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-zk-accent ${current ? "" : "invisible"}`}><path d="M20 6 9 17l-5-5" /></svg>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 /** Marketing's table cells (marketing-home.tsx). */
 const HEAD = "border-b border-zk-border px-3 py-2.5 text-left text-[12px] font-semibold text-zk-muted";
