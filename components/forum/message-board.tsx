@@ -7,6 +7,7 @@ import { scopedForumPath, scopedForumPostPath } from "@/lib/project-paths";
 import {
   DEFAULT_EXTERNAL_PROJECTS,
   DEFAULT_ORGANISATIONS,
+  FORUM_SCROLLBAR_CLASS,
   trendingScore,
   type FeedFilter,
   type ForumCategory,
@@ -273,7 +274,9 @@ export function PublicMessageBoard({
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-stretch">
-            <div className="bg-zk-surface border border-zk-border rounded-panel p-3 flex flex-col min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
+            <div
+              className={`bg-zk-surface border border-zk-border rounded-panel p-3 flex flex-col min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto ${FORUM_SCROLLBAR_CLASS}`}
+            >
               <ForumSidebar
                 selectedScope={selectedScope}
                 organisations={effectiveOrgs}
@@ -293,7 +296,9 @@ export function PublicMessageBoard({
               />
             </div>
 
-            <div className="bg-zk-surface border border-zk-border rounded-panel p-4 md:p-5 flex flex-col gap-3 min-w-0 min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
+            <div
+              className={`bg-zk-surface border border-zk-border rounded-panel p-4 md:p-5 flex flex-col gap-3 min-w-0 min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto ${FORUM_SCROLLBAR_CLASS}`}
+            >
               <ForumThreadList
                 selectedScope={selectedScope}
                 totalCount={messages.length}

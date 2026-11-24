@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/rich-text";
 import {
   DownArrowIcon,
+  FORUM_SCROLLBAR_CLASS,
   ForumIcon,
   forumSourceLabel,
   UpArrowIcon,
@@ -269,7 +270,9 @@ export function ForumPostDetail({
 
       {/* Main Workspace Grid: Sticky Detail Sidebar + Natural-Flow Thread Column */}
       <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-start">
-        <div className="bg-zk-surface border border-zk-border rounded-panel p-3.5 flex flex-col lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+        <div
+          className={`bg-zk-surface border border-zk-border rounded-panel p-3.5 flex flex-col lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto ${FORUM_SCROLLBAR_CLASS}`}
+        >
           <aside className="flex flex-col gap-3 min-w-0 shrink-0 w-full text-xs">
             {/* Thread Context */}
             <div className="flex flex-col gap-2">
@@ -655,9 +658,11 @@ export function ForumPostDetail({
                 <h2 className="text-base font-semibold text-zk-text">
                   {activePost.kind === "ask" ? "Answers" : "Comments"}
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-zk-chip text-zk-text2 font-mono font-bold text-xs">
-                  {activePost.replies.length}
-                </span>
+                {activePost.replies.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-zk-chip text-zk-text2 font-mono font-bold text-xs">
+                    {activePost.replies.length}
+                  </span>
+                )}
               </div>
             </div>
 
