@@ -33,7 +33,7 @@ export function AddAsset({ slug, typeId, label }: { slug: ProjectRef; typeId: st
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
         {label}
       </summary>
-      <form ref={formRef} action={action} className="absolute right-0 z-20 mt-1.5 w-72 rounded-xl border border-zk-border bg-white p-3 shadow-[0_4px_16px_-4px_rgba(16,24,40,0.12)]">
+      <form ref={formRef} action={action} className="absolute right-0 z-20 mt-1.5 w-72 rounded-xl border border-zk-border bg-zk-surface p-3 shadow-[0_4px_16px_-4px_rgba(16,24,40,0.12)]">
         <label htmlFor={inputId} className="mb-1.5 block text-[12px] font-semibold text-zk-text2">Name</label>
         <div className="flex gap-2">
           <input

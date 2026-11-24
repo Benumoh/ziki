@@ -3,133 +3,154 @@ import { TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { listAgentJobs, listOwnWorkspaces, type AgentJobRow } from "@/lib/security-checks/your-work";
 import { formatZik } from "@/lib/coins/math";
 import { KindIcon } from "@/components/security-checks/entry-box";
-import { SecurityTabs } from "@/components/security-checks/security-tabs";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
-import { listWorkspaceChecks } from "@/lib/security-checks/entry";
 import { LocalTime } from "@/components/local-time";
+import { PILL_TONES } from "@/lib/pill-tones";
 import Link from "next/link";
-// The same table as a project's Your Work list, so this reads like the rest of Ziki.
-import "../../[org]/[project]/issues/_list/issues.css";
 
 export const metadata = { title: "Your work" };
 
+/** A status pill, as on Your App's Work Feed (#work-feed). */
+const PILL = "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[12.5px] font-semibold";
+
 /**
  * Your work on Security (#security-checks): what your agents are checking for
- * other people. Only the job (the site, the part, checking or done) and what it
+ * other people in this workspace. Only the job (the site, the part, checking or done) and what it
  * pays you, never the client's stages, payment or results. Fixing happens later,
  * in a project's issues, once the client sends a problem there.
+ *
+ * In the app's look (23 Nov, Chloe; Mark: Security in the style set on the other pages): no tab bar on top;
+ * the jobs in Your App's Work Feed sections, "Being checked" then "Done", each a white card with its status pill.
  */
 export default async function SecurityYourWorkPage() {
   const user = await requireUser();
   const access = await currentOrganisationAccess(user.id, user.role);
-  const [jobs, checks, ownWorkspaces] = await Promise.all([
-    listAgentJobs(user.id),
-    access.organisationId && access.admin ? listWorkspaceChecks(access.organisationId, user.id) : Promise.resolve([]),
+  const [jobs, ownWorkspaces] = await Promise.all([
+    // Only this workspace's jobs, not everything your agents ever did (23 Nov, Chloe).
+    listAgentJobs(user.id, access.organisationId),
     // A plain member can switch to a workspace they own, where their own scans live (never moved there unasked).
     access.admin ? Promise.resolve([]) : listOwnWorkspaces(user.id, access.organisationId),
   ]);
-  // Removed (cancelled) scans don't count.
-  const checkCount = checks.filter((check) => check.status !== "cancelled").length;
-  // One list, no sidebar: everything your agents worked on, each with its own status.
-  const shown = jobs;
+  const checking = jobs.filter((job) => job.status === "checking");
+  const done = jobs.filter((job) => job.status !== "checking");
+  const workspace = access.organisationName ?? "this workspace";
 
   return (
-    <div className="flex w-full flex-col pb-10">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-4 pb-10">
       <h1 className="sr-only">Your work</h1>
-      <SecurityTabs selected="work" checks={checkCount} jobs={jobs.length} canAdd={access.admin} />
+      {ownWorkspaces.length > 0 ? (
+        <p className="m-0 px-1 text-sm text-zk-text2" data-testid="own-workspaces">
+          You&apos;re a member of {workspace}, so you see your agents&apos; work here. To scan your own sites, switch to{" "}
+          {ownWorkspaces.map((own, index) => (
+            <span key={own.id}>
+              {index > 0 ? ", " : ""}
+              <Link href={`/organisations/open?organisation=${encodeURIComponent(own.id)}&next=${encodeURIComponent("/security")}`} className="font-semibold text-zk-accent hover:underline">
+                {own.name}
+              </Link>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
 
-      <section aria-label="Jobs" className="mx-auto w-full max-w-6xl rounded-panel border border-zk-border bg-zk-surface p-3 sm:p-6">
-        <p className="mb-4 mt-0 px-1 text-sm text-zk-muted">Jobs your agents do for others. You see the job and the pay, not their results.</p>
-        {ownWorkspaces.length > 0 ? (
-          <p className="mb-4 mt-0 px-1 text-sm text-zk-text2" data-testid="own-workspaces">
-            You&apos;re a member of {access.organisationName ?? "this workspace"}, so you see your agents&apos; work here. To scan your own sites, switch to{" "}
-            {ownWorkspaces.map((workspace, index) => (
-              <span key={workspace.id}>
-                {index > 0 ? ", " : ""}
-                <Link href={`/organisations/open?organisation=${encodeURIComponent(workspace.id)}&next=${encodeURIComponent("/security")}`} className="font-semibold text-zk-accent hover:underline">
-                  {workspace.name}
-                </Link>
-              </span>
-            ))}
-            .
-          </p>
-        ) : null}
+      <section aria-labelledby="your-work-heading" className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 px-1">
+          <h2 id="your-work-heading" className="m-0 text-[15px] font-semibold text-zk-text">
+            Your work <span className="ml-1 text-[13px] font-medium tabular-nums text-zk-muted">{jobs.length}</span>
+          </h2>
+          <p className="m-0 text-[13px] text-zk-muted">Jobs your agents do in {workspace}. You see the job and the pay, not the results.</p>
+        </div>
 
-        <div className="w-full min-w-0">
-        {shown.length === 0 ? (
-          <div className="rounded-control border border-zk-border bg-zk-bg px-6 py-12 text-center">
-            <p className="m-0 font-semibold text-zk-text">
-              Your agents haven&apos;t worked on anything yet
-            </p>
-            <p className="mx-auto mb-0 mt-1 max-w-md text-sm text-zk-text2">
-              When one of your agents is given part of a security check, it shows here while it works and after it reports back.
-            </p>
+        {jobs.length === 0 ? (
+          // Empty, as Marketing's and Security's: one white card on the grey ground.
+          <div className="rounded-xl bg-zk-bg p-4 sm:p-5">
+            <div className="rounded-2xl border border-zk-border bg-zk-surface px-4 py-14 text-center">
+              <p className="m-0 text-base font-semibold text-zk-text">Your agents haven&apos;t worked on anything here yet.</p>
+              <p className="mx-auto mb-0 mt-1.5 max-w-md text-sm text-zk-muted">
+                When one of your agents is given part of a security check in {workspace}, it shows here while it works and after it reports back.
+              </p>
+            </div>
           </div>
         ) : (
-          <>
-            <div className="issues-table">
-              <div className="issues-table-heading">
-                <span className="w-[76px] shrink-0 text-center">Earned</span>
-                <span className="min-w-0 flex-1">Job</span>
-                <span className="hidden w-[120px] shrink-0 md:block">Status</span>
-              </div>
-              <ul className="m-0 list-none p-0">
-                {shown.map((job, index) => (
-                  <JobRow key={job.id} job={job} last={index === shown.length - 1} />
-                ))}
-              </ul>
-            </div>
-            <p className="mb-0 mt-4 px-1 text-sm text-zk-text2">
-              Showing <b className="text-zk-text">{shown.length}</b> {shown.length === 1 ? "job" : "jobs"}
-            </p>
-          </>
+          <div className="flex flex-col gap-6">
+            <JobSection title="Being checked" jobs={checking} />
+            <JobSection title="Done" jobs={done} />
+          </div>
         )}
-        </div>
       </section>
     </div>
   );
 }
 
-function JobRow({ job, last }: { job: AgentJobRow; last: boolean }) {
-  const status = statusOf(job);
+/** A Work Feed section (#work-feed): its title and count, then its cards on the grey ground. */
+function JobSection({ title, jobs }: { title: string; jobs: AgentJobRow[] }) {
+  const id = `your-work-${title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
-    <li className={`issues-row flex items-center ${last ? "" : "border-b border-zk-divider"}`}>
-      {/* A finding pays its price once the client unlocks it: until then, nothing is earned yet. */}
-      <span className="flex w-[76px] shrink-0 justify-center">
+    <section aria-labelledby={id}>
+      <h3 id={id} className="m-0 mb-2 px-1 text-[15px] font-semibold text-zk-text">
+        {title} <span className="ml-1 text-[13px] font-medium tabular-nums text-zk-muted">{jobs.length}</span>
+      </h3>
+      {jobs.length === 0 ? (
+        <p className="m-0 rounded-xl bg-zk-bg px-4 py-4 text-[13px] text-zk-muted">Nothing here right now.</p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-3 sm:p-4">
+          {jobs.map((job) => (
+            <JobCard key={job.id} job={job} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function JobCard({ job }: { job: AgentJobRow }) {
+  const status = statusOf(job);
+  const when = job.status === "checking" ? job.assignedAt : job.reportedAt;
+  return (
+    <li className="flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-4 py-3.5 sm:px-5 sm:py-4">
+      <span aria-hidden="true" className="flex h-11 w-14 shrink-0 items-center justify-center rounded-control border border-zk-border bg-zk-bg max-sm:hidden">
+        <KindIcon kind={job.targetKind} className="text-zk-text2" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-semibold text-zk-text">{job.title}</span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-zk-muted">
+          <span className="font-medium text-zk-text2">{job.targetValue}</span>
+          <span aria-hidden="true">·</span>
+          <span>{TARGET_KIND_LABEL[job.targetKind]}</span>
+          <span aria-hidden="true">·</span>
+          <span>{job.agentName}</span>
+          {job.status === "done" ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{job.findings === 1 ? "1 finding" : `${job.findings} findings`}</span>
+            </>
+          ) : null}
+          {when ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <LocalTime date={when} />
+            </>
+          ) : null}
+        </span>
+      </span>
+      {/* Its status, and what it paid (a finding pays once the client unlocks it), as the feed's pill and action. */}
+      <span className="flex shrink-0 flex-col items-end gap-1.5">
+        <span className={PILL} style={PILL_TONES[status.tone]}>{status.label}</span>
         {job.earned > 0 ? (
-          <span className="font-mono text-[14px] font-bold tabular-nums text-zk-ok-fg" title={`Earned ${formatZik(job.earned)} from unlocked findings`}>
+          <span className="font-mono text-[13px] font-bold tabular-nums text-zk-ok-fg" title={`Earned ${formatZik(job.earned)} from unlocked findings`}>
             {formatZik(job.earned)}
           </span>
-        ) : (
-          <span className="text-sm text-zk-muted" title="Earns once the client unlocks its findings">–</span>
-        )}
-      </span>
-      <span className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-lg bg-zk-bg sm:grid">
-          <KindIcon kind={job.targetKind} className="h-4 w-4 text-zk-text2" />
-        </span>
-        <span className="min-w-0">
-          <span className="issues-row-title text-zk-text">{job.title}</span>
-          <span className="issues-row-meta flex items-center text-zk-muted">
-            <span className="font-medium text-zk-text2">{job.targetValue}</span>
-            <span>{TARGET_KIND_LABEL[job.targetKind]}</span>
-            <span>{job.agentName}</span>
-            {job.status === "done" ? <span>{job.findings === 1 ? "1 finding" : `${job.findings} findings`}</span> : null}
-            {job.status === "checking" && job.assignedAt ? <LocalTime date={job.assignedAt} /> : job.reportedAt ? <LocalTime date={job.reportedAt} /> : null}
-            <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold md:hidden ${status.tone}`}>{status.label}</span>
-          </span>
-        </span>
-      </span>
-      <span className="hidden w-[120px] shrink-0 md:flex">
-        <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${status.tone}`}>{status.label}</span>
+        ) : job.status === "done" ? (
+          <span className="text-[12px] text-zk-muted" title="Earns once the client unlocks its findings">Not unlocked yet</span>
+        ) : null}
       </span>
     </li>
   );
 }
 
 /** The job's status in one word: checking, reported, or earned. */
-function statusOf(job: AgentJobRow): { label: string; tone: string } {
-  if (job.status === "checking") return { label: "Checking", tone: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300" };
-  if (job.earned > 0) return { label: job.paid ? "Paid" : "Earned", tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" };
-  return { label: "Reported", tone: "bg-zk-chip text-zk-text2" };
+function statusOf(job: AgentJobRow): { label: string; tone: keyof typeof PILL_TONES } {
+  if (job.status === "checking") return { label: "Checking", tone: "blue" };
+  if (job.earned > 0) return { label: job.paid ? "Paid" : "Earned", tone: "green" };
+  return { label: "Reported", tone: "grey" };
 }

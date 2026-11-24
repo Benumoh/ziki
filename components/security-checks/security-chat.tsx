@@ -4,7 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { askSite, replaceScan, siteChat, talkToSecurityAssistant } from "@/app/actions/security-assistant";
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
+import { Avatar } from "@/components/avatar";
 import { ClaudeWorking } from "@/components/claude-working";
+import { useChatAttachments } from "@/components/chat-attachments";
+import { Typed } from "@/components/typed-text";
+import { ZikiMark } from "@/components/ziki-mark";
 import { parseSecurityTarget, PRIVATE_TARGET_ERROR } from "@/lib/security-checks/target";
 import type { AssistantTurn } from "@/lib/security-checks/assistant";
 import type { PreviewSummary } from "@/lib/security-checks/preview-summary";
@@ -102,6 +106,10 @@ export function SecurityChat({
   onSeeProgress,
   onScanned,
   onClose,
+  placeholder = "Tell Ziki what you want to secure",
+  newChat = false,
+  onNewChat,
+  me,
 }: {
   id?: string;
   focusOnOpen?: boolean;
@@ -117,6 +125,14 @@ export function SecurityChat({
   onScanned?: (checkId: string) => void;
   /** The X at the box's top right: closes the chat. */
   onClose?: () => void;
+  /** What the empty box says before anything is said. */
+  placeholder?: string;
+  /** On top of the page, as Marketing's (23 Nov, Chloe): the conversation scrolls in its own space, and "New chat" under the box starts over. */
+  newChat?: boolean;
+  /** "New chat" was pressed: the scan it was about can show in the list again. */
+  onNewChat?: () => void;
+  /** Who is typing, for their picture beside their messages (as Your App's chat). */
+  me?: { name: string | null; image: string | null };
 }) {
   const router = useRouter();
   const [turns, setTurns] = useState<ChatItem[]>(() => kept.turns);
@@ -128,6 +144,8 @@ export function SecurityChat({
   const [finished, setFinished] = useState(() => kept.finished ?? false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // + on the box, as Your App's (#idea-chat): attach files, record the screen or capture an area. Shown on the Security page.
+  const files = useChatAttachments({ disabled: pending });
   /** A site was sent: think first, like the Ideas chat, then show the scan's progress. */
   const [thinking, setThinking] = useState(false);
   /** Sending something the person has already seen scanned (from the public page): no waiting lines. */
@@ -199,16 +217,36 @@ export function SecurityChat({
     sendText(value);
   }
 
+  function startOver() {
+    startNewChat();
+    setTurns([]);
+    setText("");
+    setFocus(undefined);
+    setThread([]);
+    setFinished(false);
+    setError(null);
+    files.clear();
+    onNewChat?.();
+    box.current?.focus();
+  }
+
+  /** The agent reads text only: it hears that files came with the message (as Marketing's chat does), then the box empties. */
+  function withFiles(words: string): string {
+    const count = newChat ? files.ids.length : 0;
+    if (count) files.clear();
+    return count ? `${words}\n\n(The person attached ${count} file${count === 1 ? "" : "s"}, such as screenshots.)` : words;
+  }
+
   function sendText(raw: string, instant = false) {
     const words = raw.trim();
-    if (!words || pending) return;
+    if (!words || pending || files.uploading) return;
     // About the scanned site (anything that isn't a new address): it goes to that
     // site's saved chat, and Claude answers from all of it, wherever it was said.
     if (focus && !parseSecurityTarget(words).ok) {
-      askAboutFocus(focus, words.slice(0, MESSAGE_MAX));
+      askAboutFocus(focus, withFiles(words.slice(0, MESSAGE_MAX)));
       return;
     }
-    const next: ChatItem[] = [...turns, { role: "user", text: words.slice(0, MESSAGE_MAX) }];
+    const next: ChatItem[] = [...turns, { role: "user", text: withFiles(words.slice(0, MESSAGE_MAX)) }];
     setTurns(next);
     setText("");
     setError(null);
@@ -299,63 +337,100 @@ export function SecurityChat({
   const threadWaiting = pending && thread.at(-1)?.role === "user";
   const scanning = waiting && !thinking && lastTarget?.ok === true;
 
-  return (
-    <div className="flex flex-col gap-3">
-      {turns.length || thread.length ? (
-        <ol ref={log} aria-label="Conversation with Ziki" aria-live="polite" className="m-0 flex list-none flex-col gap-2.5 p-0">
-          {turns.map((turn, index) => (
-            <li key={index} className={turn.role === "user" ? "ml-auto max-w-[85%]" : `mr-auto flex flex-col gap-2 ${turn.scan ? "w-full" : "max-w-[90%]"}`}>
-              {turn.role === "user" ? (
-                <p className="m-0 whitespace-pre-wrap break-words rounded-panel rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
-                  <span className="sr-only">You: </span>
-                  {turn.text}
-                </p>
-              ) : (
-                <>
-                  {turn.text ? (
-                    <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-panel rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
-                      <span className="sr-only">Reply: </span>
-                      {turn.text}
-                    </p>
-                  ) : null}
-                  {turn.scan ? <ScanCard scan={turn.scan} /> : null}
-                </>
-              )}
-            </li>
-          ))}
-          {/* The site's saved chat since the scan: the same messages its scan page shows. */}
-          {thread.map((message) => (
-            <li key={message.id} className={message.role === "user" ? "ml-auto max-w-[85%]" : "mr-auto max-w-[90%]"}>
-              {message.role === "user" ? (
-                <p className="m-0 whitespace-pre-wrap break-words rounded-panel rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
-                  <span className="sr-only">You: </span>
-                  {message.text}
-                </p>
-              ) : (
-                <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-panel rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
-                  <span className="sr-only">Reply: </span>
-                  {message.text}
-                </p>
-              )}
-            </li>
-          ))}
-          {threadWaiting ? (
-            <li className="mr-auto w-full max-w-[90%]">
-              <ClaudeWorking steps={["Reading the chat about this site…", "Writing back…"]} statusText="Ziki is reading your message." />
-            </li>
-          ) : null}
-          {waiting ? (
-            // The same "Claude is working" lines as the Ideas chat, for this job.
-            <li className="mr-auto w-full max-w-[90%]">
-              {scanning && lastTarget?.ok ? (
-                <ScanProgress site={lastTarget.target.value} kind={lastTarget.target.kind} />
-              ) : (
-                <ClaudeWorking steps={WORKING_STEPS} statusText="Ziki is reading your message." />
-              )}
-            </li>
-          ) : null}
-        </ol>
+  // On the Security page the chat is Your App's (#project-chat, 23 Nov, Chloe): Ziki on the left and you on the right,
+  // each with a picture, in bubbles with a tail, on a sheet of paper rising out of the box that closes with ×.
+  // Elsewhere (the entry dialog) it keeps its own bubbles.
+  const lastAssistant = newChat ? (thread.length ? (thread.at(-1)?.role === "assistant" ? `t${thread.length - 1}` : null) : turns.at(-1)?.role === "assistant" ? `c${turns.length - 1}` : null) : null;
+  const bubble = (mine: boolean, words: string, key: string) =>
+    newChat ? (
+      <div className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
+        {mine ? (
+          <Avatar name={me?.name ?? "You"} image={me?.image ?? null} size="sm" className="mb-0.5 !h-6 !w-6 shadow-[0_2px_6px_rgba(16,24,40,0.18)]" />
+        ) : (
+          <span aria-hidden="true" className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zk-text text-zk-surface shadow-[0_2px_6px_rgba(16,24,40,0.22)]">
+            <ZikiMark className="h-3 w-auto" />
+          </span>
+        )}
+        <div
+          className={`relative max-w-[75%] px-3 py-1.5 text-[13px] leading-relaxed shadow-[0_8px_18px_-6px_rgba(16,24,40,0.22),0_2px_4px_-1px_rgba(16,24,40,0.10)] ${mine
+            ? "rounded-2xl rounded-br-[4px] bg-zk-text text-zk-surface"
+            : "rounded-2xl rounded-bl-[4px] bg-[#f1f3f6] text-zk-text"}`}
+        >
+          <span
+            aria-hidden="true"
+            className={`absolute bottom-0 h-3 w-3 ${mine ? "-right-1.5 bg-zk-text [clip-path:polygon(0_0,0_100%,100%_100%)]" : "-left-1.5 bg-[#f1f3f6] [clip-path:polygon(100%_0,0_100%,100%_100%)]"}`}
+          />
+          <span className="sr-only">{mine ? "You: " : "Ziki: "}</span>
+          {!mine && key === lastAssistant ? <Typed text={words} /> : <span className="whitespace-pre-wrap break-words">{words}</span>}
+        </div>
+      </div>
+    ) : mine ? (
+      <p className="m-0 whitespace-pre-wrap break-words rounded-panel rounded-br-md bg-electric-blue-strong px-4 py-2 text-[15px] text-white">
+        <span className="sr-only">You: </span>
+        {words}
+      </p>
+    ) : (
+      <p className="m-0 w-fit whitespace-pre-wrap break-words rounded-panel rounded-tl-md border border-zk-border bg-zk-surface px-4 py-2 text-[15px] text-zk-text2">
+        <span className="sr-only">Reply: </span>
+        {words}
+      </p>
+    );
+  const place = (mine: boolean, wide = false) => (newChat ? (wide ? "w-full" : "") : mine ? "ml-auto max-w-[85%]" : `mr-auto ${wide ? "w-full" : "max-w-[90%]"}`);
+
+  const conversation = turns.length || thread.length ? (
+    <ol ref={log} aria-label="Conversation with Ziki" aria-live="polite" className={`m-0 flex list-none flex-col gap-2.5 p-0 ${newChat ? "pr-6" : ""}`}>
+      {turns.map((turn, index) => (
+        <li key={index} className={turn.role === "user" ? place(true) : `${place(false, Boolean(turn.scan))} flex flex-col gap-2`}>
+          {turn.role === "user" ? bubble(true, turn.text, `c${index}`) : (
+            <>
+              {turn.text ? bubble(false, turn.text, `c${index}`) : null}
+              {turn.scan ? <ScanCard scan={turn.scan} /> : null}
+            </>
+          )}
+        </li>
+      ))}
+      {/* The site's saved chat since the scan: the same messages its scan page shows. */}
+      {thread.map((message, index) => (
+        <li key={message.id} className={place(message.role === "user")}>
+          {bubble(message.role === "user", message.text, `t${index}`)}
+        </li>
+      ))}
+      {threadWaiting ? (
+        <li className="mr-auto w-full max-w-[90%]">
+          <ClaudeWorking steps={["Reading the chat about this site…", "Writing back…"]} statusText="Ziki is reading your message." />
+        </li>
       ) : null}
+      {waiting ? (
+        // The same "Claude is working" lines as the Ideas chat, for this job.
+        <li className="mr-auto w-full max-w-[90%]">
+          {scanning && lastTarget?.ok ? (
+            <ScanProgress site={lastTarget.target.value} kind={lastTarget.target.kind} />
+          ) : (
+            <ClaudeWorking steps={WORKING_STEPS} statusText="Ziki is reading your message." />
+          )}
+        </li>
+      ) : null}
+    </ol>
+  ) : null;
+
+  return (
+    <div className={newChat ? "flex flex-col" : "flex flex-col gap-3"}>
+      {newChat && conversation ? (
+        // Your App's sheet of paper above the box: it scrolls once it is tall; × closes it and starts over.
+        <div className="relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]">
+          <button
+            type="button"
+            onClick={startOver}
+            disabled={pending}
+            aria-label="Close the chat"
+            title="Close"
+            className="absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-zk-muted transition hover:bg-zk-chip hover:text-zk-text disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-electric-blue"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+          <div className="max-h-[300px] overflow-y-auto px-5 pb-4 pt-4">{conversation}</div>
+        </div>
+      ) : conversation}
 
       <form
         onSubmit={(event) => {
@@ -364,7 +439,7 @@ export function SecurityChat({
         }}
         noValidate
       >
-        <div className="relative rounded-panel border border-zk-border bg-zk-surface px-4 pb-2.5 pt-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)] focus-within:border-electric-blue-strong/50">
+        <div className={`relative rounded-panel bg-zk-surface px-4 pb-2.5 pt-3 focus-within:border-electric-blue-strong/50 ${newChat ? "z-[1] border border-black/[0.06] shadow-[0_14px_34px_rgba(16,24,40,0.10),0_3px_8px_rgba(16,24,40,0.06)]" : "border border-zk-border shadow-[0_2px_10px_rgba(0,0,0,0.06)]"}`}>
           {/* Close, like the X on Ziki's dialogs (add-confirmation-dialog.tsx). */}
           {onClose ? (
             <button
@@ -388,7 +463,7 @@ export function SecurityChat({
             value={text}
             disabled={pending}
             maxLength={MESSAGE_MAX}
-            placeholder={focus ? `Ask about ${focus.site}` : turns.length ? "Reply to Ziki" : "Tell Ziki what you want to secure"}
+            placeholder={focus ? `Ask about ${focus.site}` : turns.length ? "Reply to Ziki" : placeholder}
             autoComplete="off"
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : `${id}-reading`}
@@ -401,8 +476,11 @@ export function SecurityChat({
             }}
             className="block min-h-[28px] w-full resize-none border-0 bg-transparent p-1 pr-9 text-[15px] leading-6 text-zk-text placeholder:text-zk-muted focus:outline-none"
           />
+          {newChat ? files.chips : null}
+          {newChat && files.error ? <p role="alert" className="m-0 mt-1 px-1 text-xs text-zk-bad-fg">{files.error}</p> : null}
           <div className="mt-2 flex items-center justify-between gap-3">
-            <p id={`${id}-reading`} aria-live="polite" className="m-0 min-w-0 truncate px-1 text-[13px] text-zk-muted">
+            {newChat ? files.controls : null}
+            <p id={`${id}-reading`} aria-live="polite" className="m-0 min-w-0 flex-1 truncate px-1 text-[13px] text-zk-muted">
               {target ? (
                 <span className="inline-flex items-center gap-1.5 text-zk-ok-fg">
                   <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -427,7 +505,7 @@ export function SecurityChat({
               ) : null}
               <button
                 type="submit"
-                disabled={pending || !value}
+                disabled={pending || files.uploading || !value}
                 aria-label="Send"
                 title="Send"
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zk-text text-zk-surface transition disabled:opacity-30"
@@ -442,6 +520,7 @@ export function SecurityChat({
           </div>
         </div>
         {error ? <p id={errorId} role="alert" className="m-0 mt-2 px-2 text-sm text-zk-bad-fg">{error}</p> : null}
+        {newChat ? files.dialog : null}
       </form>
     </div>
   );

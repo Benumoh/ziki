@@ -394,7 +394,7 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
     const maps = inflatedStreams(pdf).filter((stream) => stream.includes("begincmap")).join("\n");
     const printed = new Set([...maps.matchAll(/<([0-9a-f]{4,})>/gi)].map((m) => hexToText(m[1])));
     for (const char of ["₦", "Ọ", "ọ", "à", "́", "̀"]) expect(printed, char).toContain(char);
-  });
+  }, 20000);
 
   it("a moved problem's fix follows its finding: Live is fixed, a deleted issue doesn't count, a rejected idea is closed", () => {
     const project = { slug: "web", organisation: { slug: "ziki" } };

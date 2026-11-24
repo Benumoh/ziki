@@ -26,6 +26,17 @@ describe("Your work on Security (#security-checks, plan C1)", () => {
     expect(Object.keys(query.select.results.select).sort()).toEqual(["payoutReleasedAt", "priceCoins", "severity", "unlockedAt"]);
   });
 
+  it("only lists jobs in the workspace you're in, not everything your agents ever did (23 Nov)", async () => {
+    prismaMock.securityCheckItem.findMany.mockResolvedValue([]);
+    await listAgentJobs("u1", "org-1");
+    expect(prismaMock.securityCheckItem.findMany.mock.calls[0][0].where).toEqual({
+      kind: "check", agent: { ownerUserId: "u1" }, status: { in: ["checking", "done"] }, check: { organisationId: "org-1" },
+    });
+    prismaMock.securityCheckItem.count.mockResolvedValue(1);
+    await countAgentJobs("u1", "org-1");
+    expect(prismaMock.securityCheckItem.count.mock.calls[0][0].where.check).toEqual({ organisationId: "org-1" });
+  });
+
   it("counts with the same filter", async () => {
     prismaMock.securityCheckItem.count.mockResolvedValue(2);
     expect(await countAgentJobs("u1")).toBe(2);

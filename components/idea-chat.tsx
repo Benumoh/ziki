@@ -9,6 +9,7 @@ import type { ProjectRef } from "@/lib/project-paths";
 import { Avatar } from "@/components/avatar";
 import { ClaudeWorking } from "@/components/claude-working";
 import { ZikiMark } from "@/components/ziki-mark";
+import { Typed } from "@/components/typed-text";
 import { useChatAttachments } from "@/components/chat-attachments";
 import { TOOL_BUTTON } from "@/lib/ui-style";
 
@@ -217,7 +218,7 @@ export function IdeaChat({
   // closes with ×.
   const conversation = chatSlug && turns.length ? (
     <div
-      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
+      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-zk-surface pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
       style={{ animation: "zk-sheet 0.45s ease-out both" }}
     >
       <style>{`
@@ -351,34 +352,5 @@ export function IdeaChat({
       {button}
       {composer}
     </>
-  );
-}
-
-/**
- * Ziki's newest reply, typed out a few characters at a time with a caret, like a typewriter (#project-chat). Screen
- * readers get the whole text at once; people who ask for reduced motion see it whole.
- */
-function Typed({ text }: { text: string }) {
-  // Whole at once for people who ask for reduced motion.
-  const [still] = useState(() => typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches));
-  const [typed, setShown] = useState(0);
-  const shown = still ? text.length : typed;
-  useEffect(() => {
-    if (still) return;
-    let count = 0;
-    const timer = setInterval(() => {
-      count = Math.min(text.length, count + 3);
-      setShown(count);
-      if (count >= text.length) clearInterval(timer);
-    }, 16);
-    return () => clearInterval(timer);
-  }, [text, still]);
-  const done = shown >= text.length;
-  return (
-    <span className="whitespace-pre-wrap">
-      <span aria-hidden="true">{text.slice(0, shown)}</span>
-      {done ? null : <span aria-hidden="true" className="ml-px inline-block h-[1em] w-[2px] translate-y-[2px] bg-zk-text" style={{ animation: "zk-caret 0.8s step-end infinite" }} />}
-      <span className="sr-only">{text}</span>
-    </span>
   );
 }

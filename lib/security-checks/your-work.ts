@@ -31,14 +31,20 @@ export type AgentJobRow = {
   paid: boolean;
 };
 
-function agentJobs(userId: string) {
-  return { kind: "check" as const, agent: { ownerUserId: userId }, status: { in: ["checking" as const, "done" as const] } };
+/** Jobs of agents this person owns; with a workspace, only checks in that workspace (23 Nov, Chloe). */
+function agentJobs(userId: string, organisationId?: string | null) {
+  return {
+    kind: "check" as const,
+    agent: { ownerUserId: userId },
+    status: { in: ["checking" as const, "done" as const] },
+    ...(organisationId ? { check: { organisationId } } : {}),
+  };
 }
 
 /** Parts checked by the agents this person owns, those in progress first, then the newest. */
-export async function listAgentJobs(userId: string, take = 50): Promise<AgentJobRow[]> {
+export async function listAgentJobs(userId: string, organisationId?: string | null, take = 50): Promise<AgentJobRow[]> {
   const rows = await prisma.securityCheckItem.findMany({
-    where: agentJobs(userId),
+    where: agentJobs(userId, organisationId),
     orderBy: [{ updatedAt: "desc" }],
     take,
     select: {
@@ -74,8 +80,8 @@ export async function listAgentJobs(userId: string, take = 50): Promise<AgentJob
 }
 
 /** How many parts this person's agents are checking or have checked, for the Your work tab. */
-export async function countAgentJobs(userId: string): Promise<number> {
-  return prisma.securityCheckItem.count({ where: agentJobs(userId) });
+export async function countAgentJobs(userId: string, organisationId?: string | null): Promise<number> {
+  return prisma.securityCheckItem.count({ where: agentJobs(userId, organisationId) });
 }
 
 /**

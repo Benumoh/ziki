@@ -14,7 +14,7 @@ import { removeScan } from "@/app/actions/security-assistant";
 import { useRescan } from "./use-rescan";
 import { KindIcon } from "./entry-box";
 import "@/components/security-finding.css";
-import { SecurityChat, chatLeftOpen, forgetChatAfterRemove, keepChatOpen, startNewChat } from "./security-chat";
+import { SecurityChat, forgetChatAfterRemove } from "./security-chat";
 
 /** Rows on each page. */
 const PAGE = 10;
@@ -120,14 +120,12 @@ export function ScanList({
   highlightId,
   show = "all",
   page = 1,
-  adding,
   hideId,
 }: {
   checks: WorkspaceCheckRow[];
   highlightId?: string;
   show?: string;
   page?: number;
-  adding?: ReactNode;
   hideId?: string | null;
 }) {
   const router = useRouter();
@@ -238,13 +236,14 @@ export function ScanList({
 
   return (
     <div className="flex flex-col">
-      {/* The list's own toolbar: how many on the left; once something is ticked, its actions sit next to Filter. */}
+      {/* The list's own toolbar (24 Nov, Chloe): how many on the left; Filter and search on the right, and once something
+          is ticked, its actions next to Filter. No status tabs above the table. */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
         <p className="m-0 text-sm font-bold text-zk-text">
           {matching.length} {matching.length === 1 ? "target" : "targets"}
-          {ticked.length ? <span className="font-medium text-zk-muted"> · {ticked.length} selected</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          {ticked.length ? <span className="text-[13px] font-medium text-zk-muted">{ticked.length} selected</span> : null}
           {ticked.length ? (
             <>
               <button
@@ -301,9 +300,6 @@ export function ScanList({
         </div>
       </div>
 
-      {/* "+ Add target" opens the box here, above the list. */}
-      {adding ? <div className="px-4 pb-4 sm:px-5">{adding}</div> : null}
-
       {visible.length ? (
         <div role="table" aria-label="Your targets" className="border-t border-zk-border">
           <div role="row" className="grid grid-cols-[20px_minmax(0,1fr)_auto_28px] items-center gap-x-2 sm:gap-x-3 md:grid-cols-[20px_minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_32px] border-b border-zk-border px-3 py-3 text-xs font-semibold text-zk-muted sm:px-5">
@@ -338,6 +334,14 @@ export function ScanList({
               busy={busy}
             />
           ))}
+        </div>
+      ) : live.length === 0 ? (
+        // Nothing checked yet: an empty card, as Marketing's (23 Nov, Chloe); the chat box above is where to start.
+        <div className="border-t border-zk-border bg-zk-bg p-4 sm:p-5">
+          <div className="rounded-2xl border border-zk-border bg-zk-surface px-4 py-14 text-center">
+            <p className="m-0 text-base font-semibold text-zk-text">Nothing checked yet.</p>
+            <p className="m-0 mt-1.5 text-sm text-zk-muted">Websites you add show up here, with what the agents find.</p>
+          </div>
         </div>
       ) : (
         <p className="m-4 rounded-2xl border border-dashed border-zk-border px-4 py-8 text-center text-sm text-zk-muted sm:m-5">
@@ -575,9 +579,8 @@ function RowMenu({ site, href, onScanAgain, onRemove, busy }: { site: string; hr
 }
 
 /**
- * The page with scans (#security-checks): "Security" and "+ Add target" on top, as Intruder,
- * HostedScan and Tenable put their title and add button; the list in Ziki's panel below. "+ Add
- * target" opens the chat box above the list.
+ * The Security page (#security-checks), as Marketing's (23 Nov, Chloe): no title, the chat box first and always open,
+ * then the targets in Ziki's panel below. A new site goes in through the chat; its row joins the list.
  */
 export function ScansArea({
   checks,
@@ -585,6 +588,7 @@ export function ScansArea({
   show,
   page,
   startWith,
+  me,
   top,
   bottom,
 }: {
@@ -593,78 +597,46 @@ export function ScansArea({
   show?: string;
   page?: number;
   startWith?: string;
+  /** Who is typing, for their picture in the chat. */
+  me?: { name: string | null; image: string | null };
   /** Shown at the top of the panel (a note after unlocking fixes). */
   top?: ReactNode;
   /** Shown at the foot of the panel (the privacy note). */
   bottom?: ReactNode;
 }) {
   const router = useRouter();
-  // Open when arriving with a site, or when it was left open (back from a scan's page).
-  const [adding, setAdding] = useState(() => Boolean(startWith) || chatLeftOpen());
-  // A site can arrive after the page is already showing (picking a workspace comes back to this same page
-  // with ?picked=1): open the chat then too, so the site goes in and its result shows.
-  // (React's "adjust state when a prop changes" pattern, during render rather than in an effect.)
-  const [arrived, setArrived] = useState(startWith);
-  if (startWith !== arrived) {
-    setArrived(startWith);
-    if (startWith) setAdding(true);
-  }
-  useEffect(() => {
-    keepChatOpen(adding);
-  }, [adding]);
   // The scan whose result is in the chat: its row waits until "See progress", so it isn't shown twice.
   const [inChat, setInChat] = useState<string | null>(null);
-  // A scan was removed: close the chat box (its kept conversation is already cleared).
+  // A scan was removed: its kept conversation is already cleared, so start the chat afresh.
+  const [chatKey, setChatKey] = useState(0);
   useEffect(() => {
-    const close = () => {
-      setAdding(false);
+    const reset = () => {
       setInChat(null);
+      setChatKey((key) => key + 1);
     };
-    window.addEventListener("zk:chat-forget", close);
-    return () => window.removeEventListener("zk:chat-forget", close);
+    window.addEventListener("zk:chat-forget", reset);
+    return () => window.removeEventListener("zk:chat-forget", reset);
   }, []);
 
-  const chat = adding ? (
-    <SecurityChat
-      id="security-chat"
-      focusOnOpen
-      startWith={startWith}
-      onScanned={setInChat}
-      // Straight to the scan's page; the chat stays open for when they come back.
-      onSeeProgress={(checkId) => router.push(`/security/checks/${checkId}`)}
-      onClose={() => {
-        setAdding(false);
-        setInChat(null);
-      }}
-    />
-  ) : null;
-
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3 px-0.5">
-        <div className="min-w-0">
-          <h1 id="security-scans-heading" className="m-0 text-2xl font-extrabold tracking-tight text-zk-text sm:text-[28px]">Security</h1>
-          <p className="m-0 mt-1 hidden text-sm text-zk-text2 sm:block">Your websites, servers and repos, checked by Ziki&apos;s agents.</p>
-        </div>
-        <button
-          type="button"
-          aria-expanded={adding}
-          aria-controls="security-chat"
-          onClick={() => {
-            // A second click closes the box. Opening it starts a fresh conversation.
-            if (!adding) startNewChat();
-            setAdding((open) => !open);
-            setInChat(null);
-          }}
-          className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-electric-blue-strong px-5 text-sm font-bold text-white hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${adding ? "opacity-60" : ""}`}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Add target
-        </button>
-      </header>
+    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-4">
+      <h1 id="security-scans-heading" className="sr-only">Security</h1>
+      <SecurityChat
+        key={chatKey}
+        id="security-chat"
+        startWith={startWith}
+        newChat
+        me={me}
+        // Marketing's words (23 Nov, Chloe): every new target starts with its address.
+        placeholder="Which website should we secure? Paste its address, like https://yourproduct.com"
+        onScanned={setInChat}
+        onNewChat={() => setInChat(null)}
+        // Straight to the scan's page; the chat is kept for when they come back.
+        onSeeProgress={(checkId) => router.push(`/security/checks/${checkId}`)}
+      />
       <section aria-labelledby="security-scans-heading" className="rounded-panel border border-zk-border bg-zk-surface">
         {top}
-        <ScanList checks={checks} highlightId={highlightId} show={show} page={page} adding={chat} hideId={adding ? inChat : null} />
+        <ScanList checks={checks} highlightId={highlightId} show={show} page={page} hideId={inChat} />
         {bottom}
       </section>
     </div>

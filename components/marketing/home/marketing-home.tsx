@@ -59,7 +59,7 @@ function newLabel(name: string): string {
 function TypePills({ slug, data }: { slug: ProjectRef; data: MarketingHomeData }) {
   const total = data.types.reduce((sum, type) => sum + type.count, 0);
   const pill = (selected: boolean) =>
-    `${chip} ${selected ? "bg-white text-zk-text shadow-[0_1px_3px_rgba(16,24,40,0.12)] ring-1 ring-black/[0.04]" : "bg-zk-bg text-zk-text2 hover:bg-zk-chip"}`;
+    `${chip} ${selected ? "bg-zk-surface text-zk-text shadow-[0_1px_3px_rgba(16,24,40,0.12)] ring-1 ring-black/[0.04]" : "bg-zk-bg text-zk-text2 hover:bg-zk-chip"}`;
   return (
     <nav aria-label="Task types" className="flex flex-wrap items-center gap-1.5">
       {/* First, and where Marketing opens: the Feed, what needs you across every type. */}
@@ -114,7 +114,7 @@ function StatusFilter({ scope, groups, picked }: { scope: Scope; groups: HomeTas
         <svg {...smallIcon}><path d="M3 5h18l-7 8v6l-4 2v-8L3 5z" /></svg>
         {picked ? picked.heading : null}
       </summary>
-      <div role="menu" aria-label="Filter by status" className="absolute right-0 z-20 mt-1.5 w-56 rounded-xl border border-zk-border bg-white p-1.5 shadow-[0_4px_16px_-4px_rgba(16,24,40,0.12)]">
+      <div role="menu" aria-label="Filter by status" className="absolute right-0 z-20 mt-1.5 w-56 rounded-xl border border-zk-border bg-zk-surface p-1.5 shadow-[0_4px_16px_-4px_rgba(16,24,40,0.12)]">
         <p className="m-0 px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Status</p>
         {options.map((option) => {
           const current = (picked?.key ?? null) === option.key;
@@ -164,7 +164,7 @@ function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; s
   if (groups.length === 0 && assets.length === 0) {
     return (
       <div className="mt-4 rounded-xl bg-zk-bg p-4">
-        <div className={`flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-zk-border bg-white px-4 py-10 text-center ${LIFT}`}>
+        <div className={`flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-zk-border bg-zk-surface px-4 py-10 text-center ${LIFT}`}>
           <div>
             <p className="font-semibold text-zk-text">Nothing in {scope.name} yet.</p>
             <p className="mt-1 text-sm text-zk-muted">Add the first one to get started.</p>
@@ -205,7 +205,7 @@ function WorkFeed({ slug, scope, groups, assets, status }: { slug: ProjectRef; s
             <AddAsset slug={slug} typeId={scope.type.id} label={newLabel(scope.type.name)} />
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-zk-border bg-white">
+        <div className="overflow-x-auto rounded-lg border border-zk-border bg-zk-surface">
           <table className="w-full min-w-[620px] table-fixed border-collapse text-[13.5px]">
             <colgroup>
               <col />
@@ -284,7 +284,7 @@ function AttentionFeed({ slug, groups, assets }: { slug: ProjectRef; groups: Hom
   return (
     <div className="mt-4 rounded-xl bg-zk-bg p-4" aria-label="Feed">
       {attention.length === 0 ? (
-        <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-zk-border bg-white px-4 py-10 text-center">
+        <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-zk-border bg-zk-surface px-4 py-10 text-center">
           <p className="font-semibold text-zk-text">Nothing needs you right now.</p>
           <p className="mt-1 text-sm text-zk-muted">Work to review and ideas to vote on show up here.</p>
         </div>
@@ -296,7 +296,7 @@ function AttentionFeed({ slug, groups, assets }: { slug: ProjectRef; groups: Hom
             const name = asset?.name ?? item.title;
             return (
               <li key={item.id}>
-                <Link href={asset ? marketingPath(slug, `assets/${encodeURIComponent(asset.id)}`) : item.href} className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg ${focus}`}>
+                <Link href={asset ? marketingPath(slug, `assets/${encodeURIComponent(asset.id)}`) : item.href} className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-5 py-4 transition hover:bg-zk-chip ${focus}`}>
                   <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={TILE_TONES[toneForName(name)]}>
                     {name.charAt(0).toUpperCase()}
                   </span>
