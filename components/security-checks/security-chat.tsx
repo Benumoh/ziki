@@ -6,6 +6,7 @@ import { askSite, replaceScan, siteChat, talkToSecurityAssistant } from "@/app/a
 import { TARGET_KIND_LABEL } from "@/lib/security-checks";
 import { Avatar } from "@/components/avatar";
 import { ClaudeWorking } from "@/components/claude-working";
+import { useChatAttachments } from "@/components/chat-attachments";
 import { Typed } from "@/components/typed-text";
 import { ZikiMark } from "@/components/ziki-mark";
 import { parseSecurityTarget, PRIVATE_TARGET_ERROR } from "@/lib/security-checks/target";
@@ -143,6 +144,8 @@ export function SecurityChat({
   const [finished, setFinished] = useState(() => kept.finished ?? false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // + on the box, as Your App's (#idea-chat): attach files, record the screen or capture an area. Shown on the Security page.
+  const files = useChatAttachments({ disabled: pending });
   /** A site was sent: think first, like the Ideas chat, then show the scan's progress. */
   const [thinking, setThinking] = useState(false);
   /** Sending something the person has already seen scanned (from the public page): no waiting lines. */
@@ -222,20 +225,28 @@ export function SecurityChat({
     setThread([]);
     setFinished(false);
     setError(null);
+    files.clear();
     onNewChat?.();
     box.current?.focus();
   }
 
+  /** The agent reads text only: it hears that files came with the message (as Marketing's chat does), then the box empties. */
+  function withFiles(words: string): string {
+    const count = newChat ? files.ids.length : 0;
+    if (count) files.clear();
+    return count ? `${words}\n\n(The person attached ${count} file${count === 1 ? "" : "s"}, such as screenshots.)` : words;
+  }
+
   function sendText(raw: string, instant = false) {
     const words = raw.trim();
-    if (!words || pending) return;
+    if (!words || pending || files.uploading) return;
     // About the scanned site (anything that isn't a new address): it goes to that
     // site's saved chat, and Claude answers from all of it, wherever it was said.
     if (focus && !parseSecurityTarget(words).ok) {
-      askAboutFocus(focus, words.slice(0, MESSAGE_MAX));
+      askAboutFocus(focus, withFiles(words.slice(0, MESSAGE_MAX)));
       return;
     }
-    const next: ChatItem[] = [...turns, { role: "user", text: words.slice(0, MESSAGE_MAX) }];
+    const next: ChatItem[] = [...turns, { role: "user", text: withFiles(words.slice(0, MESSAGE_MAX)) }];
     setTurns(next);
     setText("");
     setError(null);
@@ -465,8 +476,11 @@ export function SecurityChat({
             }}
             className="block min-h-[28px] w-full resize-none border-0 bg-transparent p-1 pr-9 text-[15px] leading-6 text-zk-text placeholder:text-zk-muted focus:outline-none"
           />
+          {newChat ? files.chips : null}
+          {newChat && files.error ? <p role="alert" className="m-0 mt-1 px-1 text-xs text-zk-bad-fg">{files.error}</p> : null}
           <div className="mt-2 flex items-center justify-between gap-3">
-            <p id={`${id}-reading`} aria-live="polite" className="m-0 min-w-0 truncate px-1 text-[13px] text-zk-muted">
+            {newChat ? files.controls : null}
+            <p id={`${id}-reading`} aria-live="polite" className="m-0 min-w-0 flex-1 truncate px-1 text-[13px] text-zk-muted">
               {target ? (
                 <span className="inline-flex items-center gap-1.5 text-zk-ok-fg">
                   <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -491,7 +505,7 @@ export function SecurityChat({
               ) : null}
               <button
                 type="submit"
-                disabled={pending || !value}
+                disabled={pending || files.uploading || !value}
                 aria-label="Send"
                 title="Send"
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zk-text text-zk-surface transition disabled:opacity-30"
@@ -506,6 +520,7 @@ export function SecurityChat({
           </div>
         </div>
         {error ? <p id={errorId} role="alert" className="m-0 mt-2 px-2 text-sm text-zk-bad-fg">{error}</p> : null}
+        {newChat ? files.dialog : null}
       </form>
     </div>
   );

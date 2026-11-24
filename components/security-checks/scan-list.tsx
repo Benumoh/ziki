@@ -236,13 +236,14 @@ export function ScanList({
 
   return (
     <div className="flex flex-col">
-      {/* The list's own toolbar: how many on the left; once something is ticked, its actions sit next to Filter. */}
+      {/* The list's own toolbar (24 Nov, Chloe): how many on the left; Filter and search on the right, and once something
+          is ticked, its actions next to Filter. No status tabs above the table. */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
         <p className="m-0 text-sm font-bold text-zk-text">
           {matching.length} {matching.length === 1 ? "target" : "targets"}
-          {ticked.length ? <span className="font-medium text-zk-muted"> · {ticked.length} selected</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          {ticked.length ? <span className="text-[13px] font-medium text-zk-muted">{ticked.length} selected</span> : null}
           {ticked.length ? (
             <>
               <button
@@ -616,10 +617,9 @@ export function ScansArea({
     window.addEventListener("zk:chat-forget", reset);
     return () => window.removeEventListener("zk:chat-forget", reset);
   }, []);
-  const any = checks.some((check) => check.status !== "cancelled");
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[920px] flex-col gap-4">
       <h1 id="security-scans-heading" className="sr-only">Security</h1>
       <SecurityChat
         key={chatKey}
@@ -627,8 +627,8 @@ export function ScansArea({
         startWith={startWith}
         newChat
         me={me}
-        // The same words as Marketing's box: the site first; after that, anything for the agent.
-        placeholder={any ? "Tell the security agent what to check: a website, a server, a repo…" : "Which website should we secure? Paste its address, like https://yourproduct.com"}
+        // Marketing's words (23 Nov, Chloe): every new target starts with its address.
+        placeholder="Which website should we secure? Paste its address, like https://yourproduct.com"
         onScanned={setInChat}
         onNewChat={() => setInChat(null)}
         // Straight to the scan's page; the chat is kept for when they come back.
