@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { canContributeToProject, canManageProject } from "@/lib/project-permissions";
 import { ideasPath, marketingPath, orgPath, projectPath, projectRef } from "@/lib/project-paths";
 import { projectHomePath } from "@/lib/marketing/project-home";
-import { awardSignupBonus } from "@/lib/points/signup-bonus";
+import { giveWelcomeBonus } from "@/lib/coins/welcome-bonus";
 import { DECLINED_REQUEST_COOLDOWN_MS } from "@/lib/join-requests";
 
 export type JoinRequestActionResult = {
@@ -215,7 +215,7 @@ export async function joinOpenProjectAction(projectId: string): Promise<JoinOpen
     // paid in the joined project's organisation: once per account (its source key is the account), so it is never
     // paid twice, and someone who already has an organisation got theirs, or comes in another way.
     const inAnOrganisation = await tx.membership.findFirst({ where: { userId: user.id }, select: { id: true } });
-    if (!inAnOrganisation) await awardSignupBonus(tx, user.id, project.organisationId);
+    if (!inAnOrganisation) await giveWelcomeBonus(tx, user.id);
     await tx.projectJoinRequest.updateMany({
       where: { projectId: project.id, userId: user.id, status: "pending" },
       data: { status: "accepted", reviewedAt: new Date() },

@@ -25,7 +25,7 @@ export function ZikSymbol({ className = "" }: { className?: string }) {
 
 /** An amount of Ziks with the symbol in front. A screen reader hears the number and the word "Ziks". */
 export function ZikAmount({ amount, className = "" }: { amount: number; className?: string }) {
-  const text = amount.toLocaleString("en-US");
+  const text = Math.round(amount).toLocaleString("en-US");
   return (
     <span className={`inline-flex items-baseline gap-[0.12em] whitespace-nowrap ${className}`}>
       <span aria-hidden="true" className="inline-flex items-baseline gap-[0.12em]">

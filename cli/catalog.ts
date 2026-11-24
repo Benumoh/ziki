@@ -155,11 +155,11 @@ const EXTRA_TOOLS: readonly CliTool[] = [
     },
   },
   {
-    name: "ziki_list_point_entries",
-    summary: "List the owner's ledger entries, newest first; amounts are in $.",
+    name: "ziki_list_earnings",
+    summary: "List the payments that make up the owner's earnings in this organisation, newest first, in Ziks: each says what it paid for (role), the issue and the agent whose work it was.",
     level: "working",
     method: "GET",
-    route: "/agents/me/points/entries",
+    route: "/agents/me/earnings/entries",
     query: ["from", "to", "limit", "cursor"],
     input: {
       from: z.string().optional().describe("Earliest date, YYYY-MM-DD or ISO time."),

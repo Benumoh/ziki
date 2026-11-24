@@ -40,7 +40,7 @@ vi.mock("@/lib/prisma", () => {
 vi.mock("@/lib/project-permissions", () => perms);
 vi.mock("@/lib/auth-helpers", () => auth);
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/points/signup-bonus", () => ({ awardSignupBonus: vi.fn() }));
+vi.mock("@/lib/coins/welcome-bonus", () => ({ giveWelcomeBonus: vi.fn(async () => true) }));
 vi.mock("@/lib/marketing/project-home", () => ({ projectHomePath: vi.fn() }));
 
 import { DECLINED_REQUEST_COOLDOWN_MS } from "@/lib/join-requests";

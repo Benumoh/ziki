@@ -44,7 +44,7 @@ describe("addTargetAndCheck (#security-checks part 1)", () => {
     expect(created).toMatchObject({ organisationId: "org1", kind: "website", value: "settle.ng", input: "https://settle.ng", addedById: "u1" });
     expect(created.ownershipToken).toMatch(/^ziki-verify-[0-9a-f]{32}$/);
     expect(prismaMock.securityCheck.create.mock.calls[0][0].data).toEqual({
-      organisationId: "org1", targetId: "t1", requestedById: "u1", free: false, priceCoins: 20, status: "queued",
+      organisationId: "org1", targetId: "t1", requestedById: "u1", free: false, priceCoins: 2000, status: "queued",
     });
   });
 
@@ -206,9 +206,11 @@ describe("unlocking fixes per finding (plan C1, paid in Ziks)", () => {
       { id: "r2", severity: "low", priceCoins: null },
     ]);
     prismaMock.securityCheckResult.updateMany.mockResolvedValue({ count: 2 });
+    prismaMock.coinEntry.aggregate.mockResolvedValue({ _sum: { amount: 1000 } });
     const now = new Date("2026-11-12T12:00:00Z");
 
-    expect(await unlockFindings("c1", "org1", "u1", "all", now)).toEqual({ ok: true, unlocked: 2, coins: 6 });
+    // 5 Ziks saved on the critical one, and the low one at its severity's 100.
+    expect(await unlockFindings("c1", "org1", "u1", "all", now)).toEqual({ ok: true, unlocked: 2, coins: 105 });
     expect(prismaMock.securityCheck.findFirst.mock.calls[0][0].where).toEqual({ id: "c1", organisationId: "org1", requestedById: "u1" });
     expect(prismaMock.securityCheckResult.findMany.mock.calls[0][0].where).toEqual({ checkId: "c1", unlockedAt: null });
     expect(prismaMock.securityCheckResult.updateMany).toHaveBeenCalledWith({
@@ -267,8 +269,8 @@ describe("unlocking fixes per finding (plan C1, paid in Ziks)", () => {
   });
 
   it("prices a finding by its stored price, or its severity's for older ones", () => {
-    expect(findingPrice({ severity: "critical", priceCoins: null })).toBe(5);
-    expect(findingPrice({ severity: "medium", priceCoins: null })).toBe(2);
+    expect(findingPrice({ severity: "critical", priceCoins: null })).toBe(500);
+    expect(findingPrice({ severity: "medium", priceCoins: null })).toBe(200);
     expect(findingPrice({ severity: "high", priceCoins: 3 })).toBe(3);
   });
 });

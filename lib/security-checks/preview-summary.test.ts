@@ -25,9 +25,9 @@ describe("summarisePreview (#security-checks)", () => {
       { area: "email", label: "Email settings", problems: 1 },
     ]);
     expect(summary.rows).toEqual([
-      { severity: "high", area: "headers", price: 3, label: "Security headers", title: "No HSTS header" },
-      { severity: "medium", area: "headers", price: 2, label: "Security headers", title: "No Content Security Policy" },
-      { severity: "medium", area: "email", price: 2, label: "Email settings", title: "No DMARC record" },
+      { severity: "high", area: "headers", price: 300, label: "Security headers", title: "No HSTS header" },
+      { severity: "medium", area: "headers", price: 200, label: "Security headers", title: "No Content Security Policy" },
+      { severity: "medium", area: "email", price: 200, label: "Email settings", title: "No DMARC record" },
     ]);
     expect(JSON.stringify(summary)).not.toMatch(/HIDDEN-/);
   });
@@ -69,12 +69,12 @@ describe("quick-scan findings as locked rows (14 Nov plan, D3)", () => {
     { id: "certificate-expired", severity: "critical" as const, area: "certificate" as const, title: "The HTTPS certificate has expired", detail: "SECRET-DETAIL-CRITICAL" },
   ];
 
-  it("lists every finding worst first with its area and price (critical 5, high 3, medium 2, low 1)", () => {
+  it("lists every finding worst first with its area and price (critical 500, high 300, medium 200, low 100 Ziks)", () => {
     expect(previewRows(findings)).toEqual([
-      { severity: "critical", area: "certificate", price: 5 },
-      { severity: "high", area: "headers", price: 3 },
-      { severity: "medium", area: "email", price: 2 },
-      { severity: "low", area: "cookies", price: 1 },
+      { severity: "critical", area: "certificate", price: 500 },
+      { severity: "high", area: "headers", price: 300 },
+      { severity: "medium", area: "email", price: 200 },
+      { severity: "low", area: "cookies", price: 100 },
     ]);
   });
 
@@ -89,10 +89,10 @@ describe("quick-scan findings as locked rows (14 Nov plan, D3)", () => {
       findings,
     });
     expect(summary.rows).toEqual([
-      { severity: "critical", area: "certificate", label: "Certificate", price: 5, title: "The HTTPS certificate has expired" },
-      { severity: "high", area: "headers", label: "Security headers", price: 3, title: "Browsers aren't told to always use HTTPS" },
-      { severity: "medium", area: "email", label: "Email settings", price: 2, title: "Anyone can send email that claims to be from this domain" },
-      { severity: "low", area: "cookies", label: "Cookies", price: 1, title: "Cookies don't say when other sites may send them" },
+      { severity: "critical", area: "certificate", label: "Certificate", price: 500, title: "The HTTPS certificate has expired" },
+      { severity: "high", area: "headers", label: "Security headers", price: 300, title: "Browsers aren't told to always use HTTPS" },
+      { severity: "medium", area: "email", label: "Email settings", price: 200, title: "Anyone can send email that claims to be from this domain" },
+      { severity: "low", area: "cookies", label: "Cookies", price: 100, title: "Cookies don't say when other sites may send them" },
     ]);
     const sent = JSON.stringify(summary);
     expect(sent).not.toMatch(/SECRET-/);

@@ -2,7 +2,7 @@ import { marketingIdeaFieldsSchema } from "@/lib/validations/marketing";
 import { reopenSubstatus, trackRules } from "@/lib/marketing/track";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentContext } from "@/lib/agents/require-agent";
-import { resetWorkflowCache } from "@/lib/workflow";
+import { resetWorkflowCache, soloWorkflow } from "@/lib/workflow";
 import { DEFAULT_PROJECT_WORKFLOW } from "@/lib/workflow-config";
 
 /** Idea verdicts and conversion (#idea-table, #727): verdict weights, the score, the threshold, conversion to an issue at Requires confirmation, and rejecting a bad idea. */
@@ -18,16 +18,13 @@ const db = vi.hoisted(() => ({
   attachment: { updateMany: vi.fn() },
   securityFinding: { updateMany: vi.fn() },
   issueStake: { updateMany: vi.fn(), findMany: vi.fn(async () => []), update: vi.fn() },
-  pointEntry: { createMany: vi.fn() },
   projectWorkflow: { findUnique: vi.fn() },
 }));
 const publish = vi.hoisted(() => vi.fn());
 const audit = vi.hoisted(() => vi.fn());
-const getProjectRewardConfig = vi.hoisted(() => vi.fn(async () => ({ reporter: 2.75 })));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/agent-api/events", () => ({ publish }));
 vi.mock("@/lib/agents/audit", () => ({ audit }));
-vi.mock("@/lib/points/platform-rewards", () => ({ getProjectRewardConfig }));
 
 import { convertClientVettedIdea, convertIdea, convertVettedIdea, giveIdeaVerdict, maxVotesFor, rejectIdea, verdictScore } from "@/lib/agent-api/idea-verdicts";
 import { formatRejectDetail, ideaNextStep } from "@/lib/next-step";
@@ -71,11 +68,18 @@ beforeEach(() => {
   db.ideaVerdict.findUnique.mockResolvedValue(null);
   db.ideaVerdict.upsert.mockImplementation(async ({ create }: { create: Record<string, unknown> }) => ({ id: "v1", ...create }));
   db.ideaVerdict.findMany.mockResolvedValue([{ opinion: "good", votes: 1 }]);
-  db.pointEntry.createMany.mockResolvedValue({ count: 1 });
   db.projectWorkflow.findUnique.mockResolvedValue(null);
-  getProjectRewardConfig.mockResolvedValue({ reporter: 2.75 });
   db.idea.findUniqueOrThrow.mockResolvedValue(report);
   db.bug.create.mockResolvedValue({ id: "b9", number: 42 });
+});
+
+describe("Solo projects (#solo)", () => {
+  it("need one vote at every step, from the owner's own agents or the owner, and no other person's approval", () => {
+    const solo = soloWorkflow({ ...DEFAULT_PROJECT_WORKFLOW });
+    expect(solo).toMatchObject({ confirmationsNeeded: 1, verdictsNeeded: 1, ideaThreshold: 1, awardThreshold: 1, acceptThreshold: 1, humanApprovalsNeeded: 0 });
+    // The rest of the project's dials stay as they were.
+    expect(solo.deliveryMinutes).toBe(DEFAULT_PROJECT_WORKFLOW.deliveryMinutes);
+  });
 });
 
 describe("the verdict rules", () => {
@@ -100,18 +104,15 @@ describe("giveIdeaVerdict", () => {
     db.$queryRaw.mockResolvedValue([idea({ score: 0 })]);
   });
 
-  it("records the verdict on the idea, rescores it and pays the first point", async () => {
+  it("records the verdict on the idea and rescores it, paying nothing (#one-payment)", async () => {
     const result = await giveIdeaVerdict(person, "p1", "7", input);
     expect(db.ideaVerdict.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { ideaId_onBehalfOfUserId_weightClass: { ideaId: "i1", onBehalfOfUserId: "bob", weightClass: "working" } },
       create: expect.objectContaining({ ideaId: "i1", weightClass: "working", opinion: "good", summary: input.summary, description: input.description }),
     }));
     expect(db.idea.update).toHaveBeenCalledWith({ where: { id: "i1" }, data: { score: 1 } });
-    expect(db.pointEntry.createMany).toHaveBeenCalledWith({
-      data: [expect.objectContaining({ userId: "bob", role: "idea", points: 0.01, bugId: null, ideaId: "i1", sourceKey: "idea:i1:bob" })],
-      skipDuplicates: true,
-    });
-    expect(result).toMatchObject({ ideaScore: 1, ideaThreshold: 3, convertible: false, replaced: false, pointsAwarded: 0.01 });
+    expect(result).toMatchObject({ ideaScore: 1, ideaThreshold: 3, convertible: false, replaced: false });
+    expect(result).not.toHaveProperty("pointsAwarded");
     // An idea's event names its project: there is no issue for the trigger to read it from.
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({
       type: "idea.verdict",
@@ -121,17 +122,16 @@ describe("giveIdeaVerdict", () => {
     expect(publish.mock.calls[0][1]).not.toHaveProperty("bugId");
   });
 
-  it("replaces the person's earlier verdict without paying again", async () => {
+  it("replaces the person's earlier verdict", async () => {
     db.ideaVerdict.findUnique.mockResolvedValue({ id: "v1" });
-    db.pointEntry.createMany.mockResolvedValue({ count: 0 });
     const result = await giveIdeaVerdict(person, "p1", "i1", { ...input, opinion: "bad" });
-    expect(result).toMatchObject({ replaced: true, pointsAwarded: 0 });
+    expect(result).toMatchObject({ replaced: true });
   });
 
-  it("takes a verdict from the idea's own reporter, and pays it (#owner-agents)", async () => {
+  it("takes a verdict from the idea's own reporter (#owner-agents)", async () => {
     db.$queryRaw.mockResolvedValue([idea({ score: 0 })]);
     const result = await giveIdeaVerdict({ organisationId: "t1", userId: "ada" }, "p1", "i1", input);
-    expect(result).toMatchObject({ replaced: false, pointsAwarded: 0.01 });
+    expect(result).toMatchObject({ replaced: false });
     expect(db.ideaVerdict.upsert).toHaveBeenCalled();
   });
 
@@ -141,7 +141,6 @@ describe("giveIdeaVerdict", () => {
     db.$queryRaw.mockResolvedValue([idea({ track: "marketing", status: "converted" })]);
     await expect(giveIdeaVerdict(person, "p1", "i1", input)).rejects.toMatchObject({ status: 409, body: { error: "idea_converted" } });
     expect(db.ideaVerdict.upsert).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
   });
 
   it("locks the idea inside its organisation and project before applying a verdict", async () => {
@@ -155,7 +154,7 @@ describe("giveIdeaVerdict", () => {
     expect(sql).toContain("FOR NO KEY UPDATE OF i");
   });
 
-  it("refuses another good verdict once the idea reached the threshold, and pays nothing (#727)", async () => {
+  it("refuses another good verdict once the idea reached the threshold (#727)", async () => {
     db.$queryRaw.mockResolvedValue([idea({ score: 3 })]);
     await expect(giveIdeaVerdict(person, "p1", "i1", input)).rejects.toMatchObject({
       status: 409,
@@ -165,7 +164,6 @@ describe("giveIdeaVerdict", () => {
     db.ideaVerdict.findUnique.mockResolvedValue({ id: "v1", opinion: "bad" });
     await expect(giveIdeaVerdict(person, "p1", "i1", input)).rejects.toMatchObject({ status: 409, body: { error: "enough_verdicts" } });
     expect(db.ideaVerdict.upsert).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
   });
 
   it("still takes a bad verdict at the threshold, so a late problem can stop the idea (#727)", async () => {
@@ -179,24 +177,6 @@ describe("giveIdeaVerdict", () => {
   it("refuses more votes than the giver may give", async () => {
     await expect(giveIdeaVerdict(person, "p1", "i1", { ...input, votes: 2 })).rejects.toMatchObject({ status: 422, body: { error: "too_many_votes", maxVotes: 1 } });
     expect(db.ideaVerdict.upsert).not.toHaveBeenCalled();
-  });
-
-  it("awards the existing idea-vote points for a marketing verdict", async () => {
-    db.$queryRaw.mockResolvedValue([idea({ track: "marketing", score: 0 })]);
-
-    const result = await giveIdeaVerdict(person, "p1", "7", input);
-
-    expect(result).toMatchObject({ pointsAwarded: 0.01, replaced: false });
-    expect(db.pointEntry.createMany).toHaveBeenCalledWith({
-      data: [expect.objectContaining({
-        userId: "bob",
-        role: "idea",
-        points: 0.01,
-        ideaId: "i1",
-        sourceKey: "idea:i1:bob",
-      })],
-      skipDuplicates: true,
-    });
   });
 
   it("opens a marketing idea on the verdict that reaches its threshold, with no agent converting it", async () => {
@@ -249,14 +229,6 @@ describe("giveIdeaVerdict", () => {
     expect(db.bug.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ track: "marketing", status: "open", substatus: "open" }),
     }));
-    expect(db.pointEntry.createMany).toHaveBeenNthCalledWith(1, {
-      data: [expect.objectContaining({ userId: "bob", role: "idea", points: 0.01, ideaId: "i1" })],
-      skipDuplicates: true,
-    });
-    expect(db.pointEntry.createMany).toHaveBeenNthCalledWith(2, {
-      data: [expect.objectContaining({ userId: "ada", bugId: "b9", role: "reporter", points: 2.75, sourceKey: "reporter:b9:ada" })],
-      skipDuplicates: true,
-    });
   });
 
   it("rejects a bad marketing idea in the vote transaction under threshold-only governance", async () => {
@@ -325,31 +297,15 @@ describe("convertIdea", () => {
         substatus: "open",
       }),
     }));
-    expect(getProjectRewardConfig).toHaveBeenCalledWith(db, "p1");
-    expect(db.pointEntry.createMany).toHaveBeenCalledWith({
-      data: [expect.objectContaining({
-        organisationId: "t1",
-        userId: "ada",
-        bugId: "b9",
-        role: "reporter",
-        points: 2.75,
-        sourceKey: "reporter:b9:ada",
-        agentId: "agent-ada",
-      })],
-      skipDuplicates: true,
-    });
   });
 
-  it("does not subscribe or reward the synthetic reporter of a public-source idea", async () => {
+  it("does not subscribe the synthetic reporter of a public-source idea", async () => {
     db.$queryRaw.mockResolvedValue([idea({ source: "public" })]);
 
     await convertIdea(agentOf("working"), "p1", "7", "medium");
 
     const data = db.bug.create.mock.calls[0][0].data;
     expect(data).not.toHaveProperty("watches");
-    expect(db.pointEntry.createMany).not.toHaveBeenCalledWith(expect.objectContaining({
-      data: [expect.objectContaining({ role: "reporter" })],
-    }));
   });
 
   it("needs an open idea and a score at the threshold", async () => {
@@ -369,7 +325,7 @@ describe("convertIdea", () => {
 describe("convertVettedIdea", () => {
   const owner: AgentContext = { agentId: "agent-ada", name: "ada", ownerId: "ada", organisationId: "t1", level: "working", burst: false, keyId: "k1" };
 
-  it("makes a confirmed issue the filing agent holds at once, In progress, and pays the reporter now", async () => {
+  it("makes a confirmed issue the filing agent holds at once, In progress", async () => {
     db.$queryRaw.mockResolvedValue([idea({ score: 0 })]);
     const result = await convertVettedIdea(db as never, owner, "p1", "i1", "Approved by Mark, sheet row 42", "medium");
     expect(result).toMatchObject({ ideaId: "i1", issueId: "b9", issueNumber: 42, ideaScore: 0, claimId: "c1", claimStatus: "active" });
@@ -385,10 +341,6 @@ describe("convertVettedIdea", () => {
       data: expect.objectContaining({ bugId: "b9", beneficiaryUserId: "ada", agentId: "agent-ada", status: "active", deliverBy: expect.any(Date) }),
     }));
     expect(db.bug.update).toHaveBeenCalledWith({ where: { id: "b9" }, data: expect.objectContaining({ assigneeId: "ada", status: "in_progress", substatus: "in_progress" }) });
-    // A product issue's reporter is normally paid on confirmation; a vetted one is confirmed from the start.
-    expect(db.pointEntry.createMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: [expect.objectContaining({ userId: "ada", role: "reporter", bugId: "b9" })],
-    }));
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({
       type: "issue.converted",
       payload: expect.objectContaining({ via: "already_vetted", decidedByUserId: "ada", vettedNote: "Approved by Mark, sheet row 42" }),

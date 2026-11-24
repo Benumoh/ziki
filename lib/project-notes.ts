@@ -1,5 +1,4 @@
-import { award } from "@/lib/points/award";
-import { noteVoteSourceKey } from "@/lib/points/rules";
+
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -14,8 +13,7 @@ export const notesInput = z.object({
   expectedVersion: z.number().int().min(0).max(2_147_483_646),
   reason: z.string().trim().min(1).max(500),
 }).strict();
-/** Points a note comment's author gains per upvote, and loses per downvote, from someone else. */
-export const NOTE_VOTE_POINTS = 0.01;
+
 
 export const noteCommentInput = z.object({ body: z.string().trim().min(1).max(10_000), parentId: z.string().trim().min(1).max(64).optional() }).strict();
 export const restoreNotesInput = z.object({ expectedVersion: z.number().int().min(1).max(2_147_483_646), reason: z.string().trim().min(1).max(500) }).strict();
@@ -272,8 +270,6 @@ export async function voteNoteComment(actor: NotesActor, commentId: string, valu
   return prisma.$transaction(async (db) => {
     const comment = await db.projectNoteComment.findFirst({ where: { id: commentId, projectId: actor.projectId }, select: { id: true, ownerId: true, agentId: true } });
     if (!comment) throw new IssueApiError(404, "Comment not found.");
-    const author = comment;
-    const previous = (await db.projectNoteCommentVote.findUnique({ where: { commentId_userId: { commentId, userId } }, select: { value: true } }))?.value ?? 0;
     if (value === 0) await db.projectNoteCommentVote.deleteMany({ where: { commentId, userId } });
     else {
       await db.projectNoteCommentVote.upsert({
@@ -282,20 +278,7 @@ export async function voteNoteComment(actor: NotesActor, commentId: string, valu
         update: { value, agentId },
       });
     }
-    // Points (#note-vote-points): the note's author gains 1 for each upvote from
-    // someone else and loses 1 for each downvote; a changed or withdrawn vote
-    // moves the points back. Paid to the agent that wrote it, if one did.
-    if (value !== previous && userId !== author.ownerId) {
-      await award(db, {
-        organisationId: actor.organisationId,
-        userId: author.ownerId,
-        bugId: null,
-        role: "comment",
-        points: (value - previous) * NOTE_VOTE_POINTS,
-        sourceKey: noteVoteSourceKey(commentId, userId, previous, value, Date.now()),
-        agentId: author.agentId,
-      });
-    }
+
     const action = value === 1 ? "notes.comment_upvoted" : value === -1 ? "notes.comment_downvoted" : "notes.comment_unvoted";
     await notesAudit(db, actor, action, commentId, { projectId: actor.projectId });
     const [upvotes, downvotes] = await Promise.all([

@@ -1,7 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-const award = vi.fn();
-vi.mock("@/lib/points/award", () => ({ award: (...args: unknown[]) => award(...args) }));
 // The real network is never touched in tests; the AI is passed in as a fake.
 vi.mock("@/lib/security-checks/ownership", () => ({ realNetwork: { get: vi.fn() } }));
 
@@ -21,6 +19,7 @@ import {
   submitReport,
   sweepSecurityChecks,
 } from "@/lib/security-checks/engine";
+import { SEVERITY_PRICE } from "@/lib/security-checks";
 
 /** A fake Prisma client: every model method is a mock, and $transaction runs the callback on the same fake. */
 function fakeDb() {
@@ -30,6 +29,7 @@ function fakeDb() {
     // A part holds no earlier findings to recheck unless a test says so.
     securityCheckResult: { createMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), update: vi.fn() },
     agent: { findMany: vi.fn() },
+    coinEntry: { createMany: vi.fn(async ({ data }: { data: unknown[] }) => ({ count: data.length })) },
     $transaction: vi.fn(),
   };
   db.$transaction.mockImplementation((fn: (tx: typeof db) => unknown) => fn(db));
@@ -58,10 +58,6 @@ function heldItem(overrides: Record<string, unknown> = {}) {
   return { id: "item1", kind: "check", status: "checking", agentId: "agentA", checkId: "check1", check: { status: "checking", free: true, paidAt: null, target: verified }, ...overrides };
 }
 
-beforeEach(() => {
-  award.mockReset();
-  award.mockResolvedValue(true);
-});
 
 describe("who gets a part (#security-checks)", () => {
   const agents = [
@@ -303,7 +299,7 @@ describe("reporting a part", () => {
     db.securityCheckItem.findUnique.mockResolvedValue(heldItem());
     db.securityCheckItem.updateMany.mockResolvedValue({ count: 1 });
     expect(await submitReport(asDb(db), "agentA", "item1", found, now)).toEqual({ checkId: "check1", results: 1, rechecked: 0, addedParts: 0 });
-    expect(db.securityCheckResult.createMany.mock.calls[0][0].data[0]).toMatchObject({ checkId: "check1", itemId: "item1", severity: "high", priceCoins: 3 });
+    expect(db.securityCheckResult.createMany.mock.calls[0][0].data[0]).toMatchObject({ checkId: "check1", itemId: "item1", severity: "high", priceCoins: 300 });
   });
 
   it("saves the extra parts an agent asks for with its report: new titles only, a few per report, none past the check's ceiling", async () => {
@@ -506,12 +502,12 @@ describe("posting the report: Ziki's AI summary (#security-checks)", () => {
 });
 
 describe("paying the finder of an unlocked finding (#security-checks)", () => {
-  it("pays its price to the agent's owner exactly once, with no multiplier", async () => {
+  it("pays the agent's owner the Ziks the client paid for the finding, less Ziki's fee, out of Ziki's revenue, exactly once (#one-payment)", async () => {
     const db = fakeDb();
     db.securityCheckResult.findMany.mockResolvedValue([
-      { id: "r1", severity: "critical", priceCoins: 5, check: { organisationId: "client" }, item: { agentId: "agentB", agent: { ownerUserId: "ownerB" } } },
+      { id: "r1", severity: "critical", priceCoins: 500, check: { organisationId: "client" }, item: { agentId: "agentB", agent: { ownerUserId: "ownerB" } } },
       { id: "r2", severity: "medium", priceCoins: null, check: { organisationId: "client" }, item: { agentId: "agentB", agent: { ownerUserId: "ownerB" } } },
-      { id: "r3", severity: "low", priceCoins: 1, check: { organisationId: "client" }, item: { agentId: "agentB", agent: { ownerUserId: "ownerB" } } },
+      { id: "r3", severity: "low", priceCoins: 100, check: { organisationId: "client" }, item: { agentId: "agentB", agent: { ownerUserId: "ownerB" } } },
     ]);
     // r3 was paid by a concurrent run: its conditional update matches nothing.
     db.securityCheckResult.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
@@ -519,16 +515,15 @@ describe("paying the finder of an unlocked finding (#security-checks)", () => {
     expect(db.securityCheckResult.findMany.mock.calls[0][0].where).toMatchObject({ unlockedAt: { not: null }, payoutReleasedAt: null });
     // Ziki's own security agent (the fallback) is never paid.
     expect(db.securityCheckResult.findMany.mock.calls[0][0].where.item).toEqual({ agentId: { not: null }, agent: { username: { not: "ziki-security" } } });
-    expect(award.mock.calls[0][1]).toEqual({
-      organisationId: "client",
-      userId: "ownerB",
-      agentId: "agentB",
-      bugId: null,
-      role: "security_check",
-      points: 5,
-      sourceKey: findingSourceKey("r1"),
-      exact: true,
-    });
-    expect(award.mock.calls[1][1]).toMatchObject({ points: 2, sourceKey: "security-finding:r2" });
+    const rows = db.coinEntry.createMany.mock.calls.flatMap(([args]) => (args as { data: Array<Record<string, unknown>> }).data);
+    // 500 Ziks, less the 10% fee: 450 from Ziki's revenue to the finder's owner, recording the agent.
+    expect(rows.slice(0, 2)).toEqual([
+      { account: "revenue", kind: "release", payoutRole: "security_finder", agentId: "agentB", amount: -450, sourceKey: `${findingSourceKey("r1")}:revenue` },
+      { account: "wallet", userId: "ownerB", kind: "release", payoutRole: "security_finder", agentId: "agentB", amount: 450, sourceKey: `${findingSourceKey("r1")}:wallet` },
+    ]);
+    // A finding with no price of its own pays its severity's price, less the fee.
+    expect(rows[3]).toMatchObject({ userId: "ownerB", amount: SEVERITY_PRICE.medium - Math.round(SEVERITY_PRICE.medium / 10) });
+    // r3 was already paid: nothing more is written for it.
+    expect(rows).toHaveLength(4);
   });
 });

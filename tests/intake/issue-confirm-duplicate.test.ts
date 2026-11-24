@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CONFIRMATION_REVIEWER_POINTS, confirmationPointsAt } from "@/lib/points/rules";
+import { confirmationPayFactor } from "@/lib/coins/price-rules";
 
 /** Confirmation (#issue-confirmations, #confirmation-weights): weighted confirms, one entry per person per class, the move to Open, and duplicate decisions. */
 type Entry = {
@@ -21,7 +21,6 @@ const state = vi.hoisted(() => ({
   bug: {} as Record<string, unknown>,
   entries: [] as Entry[],
   agentOwners: {} as Record<string, string>,
-  points: [] as Array<{ sourceKey: string; userId: string; role: string; points: number }>,
   clock: 0,
   otherIssues: [] as Array<{ id: string; number: number; project: { slug: string } }>,
 }));
@@ -31,7 +30,7 @@ const db = vi.hoisted(() => ({
   bugRevision: { findMany: vi.fn() },
   bugActivity: { create: vi.fn() },
   issueConfirmation: { findUnique: vi.fn(), upsert: vi.fn(), findMany: vi.fn() },
-  pointEntry: { createMany: vi.fn() },
+  // No ledger table: confirming pays nothing on its own (#one-payment), so writing to it would throw.
   confirmationPenalty: { findMany: vi.fn(async () => []) },
   closeSuggestion: {
     findUnique: vi.fn(async () => null),
@@ -110,7 +109,6 @@ beforeEach(() => {
   state.bug = bugRow();
   state.entries = [];
   state.agentOwners = {};
-  state.points = [];
   state.clock = 0;
   state.otherIssues = [{ id: "bug0", number: 3, project: { slug: "ziki" } }];
   db.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(db));
@@ -129,11 +127,6 @@ beforeEach(() => {
   });
   db.bugRevision.findMany.mockResolvedValue([]);
   db.bugActivity.create.mockResolvedValue({});
-  db.pointEntry.createMany.mockImplementation(async ({ data }: { data: Array<{ sourceKey: string; userId: string; role: string; points: number }> }) => {
-    const fresh = data.filter((row) => !state.points.some((p) => p.sourceKey === row.sourceKey));
-    state.points.push(...fresh);
-    return { count: fresh.length };
-  });
   type Key = { bugId_onBehalfOfUserId_weightClass: { onBehalfOfUserId: string; weightClass: string } };
   const byKey = (where: Key) => (e: Entry) =>
     e.onBehalfOfUserId === where.bugId_onBehalfOfUserId_weightClass.onBehalfOfUserId &&
@@ -180,17 +173,6 @@ describe("giveConfirmation (#issue-confirmations)", () => {
     // In a manager-governed project a confirmed issue stays until an agent moves it to Open (openConfirmedIssue).
     expect(state.bug.substatus).toBe("requires_confirmation");
 
-    // Points: each counted confirm earns the reviewer award and the clearance; the reporter is paid once.
-    expect(state.points.map((p) => p.sourceKey).sort()).toEqual([
-      "reporter:bug1:ada",
-      "reviewer-confirm:bug1:bob",
-      "reviewer-confirm:bug1:cara",
-      "triager-clear:bug1:bob",
-      "triager-clear:bug1:cara",
-    ]);
-    // #confirmation-pay: the second confirmer is still among the first three, paid in full.
-    expect(state.points.find((p) => p.sourceKey === "reviewer-confirm:bug1:cara")?.points).toBe(CONFIRMATION_REVIEWER_POINTS);
-
     // Events agents already subscribe to; only the agent's entry is audited.
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({ type: "issue.confirmation", actorAgentId: "agent-bob" }));
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({ type: "issue.confirmation", actorAgentId: null }));
@@ -223,22 +205,12 @@ describe("giveConfirmation (#issue-confirmations)", () => {
     expect(db.issueConfirmation.upsert).not.toHaveBeenCalled();
   });
 
-  it("lets the reporter confirm their own issue: it counts 1 and pays no confirmer points (#confirmation-weights)", async () => {
+  it("lets the reporter confirm their own issue: it counts 1 (#confirmation-weights)", async () => {
     const own = await giveConfirmation(person("ada"), scope, "bug1", body("confirm"));
     expect(own).toMatchObject({ confirmations: 1 });
-    expect(state.points.filter((p) => p.userId === "ada" && p.sourceKey.startsWith("reviewer-confirm"))).toEqual([]);
     // The filing agent may confirm too; one person's agent of the same class replaces the entry.
     const filer = await giveConfirmation(agentOf("agent-ada", "ada"), scope, "bug1", body("confirm"));
     expect(filer).toMatchObject({ replaced: true, confirmations: 1 });
-  });
-
-  it("does not award reporter points to a public intake identity when the issue is confirmed", async () => {
-    state.bug = bugRow({ idea: { source: "public" } });
-    await giveConfirmation(person("bob"), scope, "bug1", body("confirm"));
-    await giveConfirmation(person("cara"), scope, "bug1", body("confirm"));
-
-    expect(state.points.map((point) => point.sourceKey)).not.toContain("reporter:bug1:ada");
-    expect(state.points.map((point) => point.role).filter((role) => role === "reviewer")).toHaveLength(2);
   });
 
   it("keeps one entry per person per class: a manager agent's counts its weight beside the person's own (#confirmation-weights)", async () => {
@@ -251,13 +223,12 @@ describe("giveConfirmation (#issue-confirmations)", () => {
     expect(state.entries.filter((e) => e.onBehalfOfUserId === "bob")).toHaveLength(2);
   });
 
-  it("refuses a marketing issue, which has no confirmation step, and writes and pays nothing", async () => {
+  it("refuses a marketing issue, which has no confirmation step, and writes nothing", async () => {
     state.bug = bugRow({ track: "marketing", substatus: "open" });
     const refused = await rejection(giveConfirmation(person("bob"), scope, "bug1", body("confirm")));
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ error: "wrong_track" });
     expect(db.issueConfirmation.upsert).not.toHaveBeenCalled();
-    expect(state.points).toEqual([]);
     const opener = { agentId: "agent-eli", ownerId: "eli", organisationId: "t1" };
     expect((await rejection(openConfirmedIssue(opener, scope, "bug1"))).body).toMatchObject({ error: "wrong_track" });
   });
@@ -292,8 +263,6 @@ describe("giveConfirmation (#issue-confirmations)", () => {
     expect(state.bug.substatus).toBe("accepted");
     expect(db.bug.update).not.toHaveBeenCalled();
     expect(await isConfirmed("bug1")).toBe(true);
-    // The reporter is paid once, as for any confirmed issue.
-    expect(state.points.filter((p) => p.sourceKey === "reporter:bug1:ada")).toHaveLength(1);
   });
 
   it("takes them at Open, In progress and Requires review too, but not after the fix is accepted or the issue is closed", async () => {
@@ -322,21 +291,14 @@ describe("giveConfirmation (#issue-confirmations)", () => {
     }
   });
 
-  it("marks a duplicate with a reject naming another issue, and pays the marker", async () => {
+  it("marks a duplicate with a reject naming another issue", async () => {
     const given = await giveConfirmation(person("bob"), scope, "bug1", body("reject", { duplicateOfId: "#3" }));
     expect(given.confirmation).toMatchObject({ verdict: "reject", duplicateOfId: "bug0" });
-    expect(state.points.map((p) => p.sourceKey)).toEqual(["duplicate-marker:bug1:bob"]);
     expect((await rejection(giveConfirmation(person("cara"), scope, "bug1", body("reject", { duplicateOfId: "bug1" })))).body).toMatchObject({ field: "duplicateOfId" });
 
-    // A duplicate earns its confirmers' reviewer award and its reporter nothing.
     await giveConfirmation(person("cara"), scope, "bug1", body("confirm"));
     const last = await giveConfirmation(person("dan"), scope, "bug1", body("confirm"));
     expect(last.confirmed).toBe(true);
-    expect(state.points.map((p) => p.sourceKey).sort()).toEqual([
-      "duplicate-marker:bug1:bob",
-      "triager-clear:bug1:cara",
-      "triager-clear:bug1:dan",
-    ]);
   });
 
   it("replaces the person's earlier entry instead of adding one", async () => {
@@ -349,10 +311,9 @@ describe("giveConfirmation (#issue-confirmations)", () => {
 });
 
 describe("confirmation pay (#confirmation-pay)", () => {
-  it("pays the first three confirmers in full, halves the next three, and pays pile-ons nothing", () => {
-    const paid = Array.from({ length: 8 }, (_, index) => confirmationPointsAt(index, CONFIRMATION_REVIEWER_POINTS));
-    expect(paid).toEqual([0.9, 0.9, 0.9, 0.45, 0.225, 0.1125, 0, 0]);
-    expect(confirmationPointsAt(-1, CONFIRMATION_REVIEWER_POINTS)).toBe(0);
+  it("counts the first three confirmers in full in the confirmers' share, halves the next three, and pile-ons nothing", () => {
+    expect(Array.from({ length: 8 }, (_, index) => confirmationPayFactor(index))).toEqual([1, 1, 1, 0.5, 0.25, 0.125, 0, 0]);
+    expect(confirmationPayFactor(-1)).toBe(0);
   });
 });
 

@@ -63,8 +63,9 @@ export async function workflowFor(
         revisionLimit: true,
         planReviewSeconds: true,
         humanApprovalsNeeded: true,
+        project: { select: { solo: true } },
       },
-    })) as Partial<ProjectWorkflowValues> | null;
+    })) as (Partial<ProjectWorkflowValues> & { project?: { solo: boolean } | null }) | null;
   } catch (error) {
     // The team page reads this for every member. A database that has not
     // created ProjectWorkflow yet must use the defaults, not take the page down.
@@ -77,7 +78,8 @@ export async function workflowFor(
   // once, not after the TTL.
   if (!row) return { ...DEFAULT_PROJECT_WORKFLOW };
 
-  const value = workflowValues(row);
+  const { project, ...dials } = row as Partial<ProjectWorkflowValues> & { project?: { solo: boolean } | null };
+  const value = project?.solo ? soloWorkflow(workflowValues(dials)) : workflowValues(dials);
   // A transaction client sees data that may roll back; only the shared client
   // populates the process-wide cache.
   if (db === prisma) {
@@ -88,6 +90,26 @@ export async function workflowFor(
     cache.set(projectId, { value, expiresAt: Date.now() + CACHE_TTL_MS });
   }
   return value;
+}
+
+/**
+ * A Solo project's dials (#solo): the owner works alone with their own agents, so every step that waits for other
+ * people's votes needs only one, from the owner's own agents or the owner. Testing and review still happen: an agent
+ * still can't review its own work, so with one agent the owner approves it themselves.
+ */
+export function soloWorkflow(values: ProjectWorkflowValues): ProjectWorkflowValues {
+  return {
+    ...values,
+    confirmationsNeeded: 1,
+    verdictsNeeded: 1,
+    ideaThreshold: 1,
+    abandonThreshold: 1,
+    closeThreshold: 1,
+    awardThreshold: 1,
+    acceptThreshold: 1,
+    // Nobody else to approve a flagged idea or pull request: the owner's own approval is the gate.
+    humanApprovalsNeeded: 0,
+  };
 }
 
 /** Drop one project's cached settings after a committed edit. */

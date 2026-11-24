@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { WITHDRAW_THRESHOLD } from "@/lib/earnings-threshold";
 import { absoluteUrl } from "@/lib/site-url";
 import { CoinError, appendRows, lockUser, walletSummary, zikOf } from "./ledger";
-import { zikToCents } from "./math";
+import { ZIKS_PER_DOLLAR, payableZik, zikToCents } from "./math";
 import { getStripe } from "./stripe";
 
 /**
@@ -16,7 +16,7 @@ import { getStripe } from "./stripe";
  */
 
 /** The smallest withdrawal: the existing threshold, in Ziks. */
-export const WITHDRAW_MIN_ZIK = Math.ceil((WITHDRAW_THRESHOLD * 100) / zikToCents(1));
+export const WITHDRAW_MIN_ZIK = WITHDRAW_THRESHOLD * ZIKS_PER_DOLLAR;
 
 /** Starts (or resumes) Stripe's hosted onboarding and returns the page to send the person to. */
 /** The country payout accounts are opened in (two letters). It must be one Stripe supports for the platform's own country. */
@@ -88,8 +88,10 @@ function isBalanceInsufficient(error: unknown): boolean {
 
 /**
  * Withdraws everything the person can: their earned Ziks (not ones they
- * bought), once it reaches the threshold. The wallet debit and the withdrawal
- * row are written together first; only then is Stripe asked to move the money.
+ * bought), once it reaches the threshold, in whole cents. A bank pays whole
+ * cents (10 Ziks), so the few Ziks short of a cent stay in the wallet for next
+ * time. The wallet debit and the withdrawal row are written together first;
+ * only then is Stripe asked to move the money.
  */
 export async function withdrawEarned(userId: string): Promise<WithdrawOutcome> {
   await syncPayoutsEnabled(userId).catch(() => false);
@@ -99,13 +101,14 @@ export async function withdrawEarned(userId: string): Promise<WithdrawOutcome> {
     if (!user.stripeAccountId || !user.payoutsEnabled) throw new CoinError("payouts_not_ready", "Set up payouts first.");
     const { withdrawable } = await walletSummary(tx, userId);
     if (withdrawable < WITHDRAW_MIN_ZIK) {
-      throw new CoinError("below_threshold", `Withdrawals open at ${WITHDRAW_MIN_ZIK} earned Ziks.`);
+      throw new CoinError("below_threshold", `Withdrawals open at ${WITHDRAW_MIN_ZIK.toLocaleString("en-US")} earned Ziks.`);
     }
-    const amountCents = zikToCents(withdrawable);
+    const zik = payableZik(withdrawable);
+    const amountCents = zikToCents(zik);
     const withdrawal = await tx.withdrawal.create({
-      data: { userId, zik: withdrawable, amountCents, idempotencyKey: `ziki-withdrawal-${crypto.randomUUID()}` },
+      data: { userId, zik, amountCents, idempotencyKey: `ziki-withdrawal-${crypto.randomUUID()}` },
     });
-    await appendRows(tx, [{ account: "wallet", userId, kind: "withdrawal", amount: -withdrawable, sourceKey: `withdrawal:${withdrawal.id}`, withdrawalId: withdrawal.id }]);
+    await appendRows(tx, [{ account: "wallet", userId, kind: "withdrawal", amount: -zik, sourceKey: `withdrawal:${withdrawal.id}`, withdrawalId: withdrawal.id }]);
     return { withdrawal, destination: user.stripeAccountId };
   });
   return sendTransfer(started.withdrawal, started.destination);

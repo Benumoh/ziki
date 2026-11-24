@@ -70,6 +70,14 @@ export async function setupSandbox(options: { reset: boolean; serverUrl: string 
   if (options.reset) {
     const existing = await prisma.organisation.findUnique({ where: { slug: SANDBOX.organisationSlug }, select: { id: true } });
     if (existing) {
+      // The sandbox's own Ziks rows (its issues are funded before they are awarded, #price-lock) RESTRICT deleting its
+      // issues and project, and the ledger is append-only, so they go first, with its delete guard off only inside
+      // this transaction. Only rows on this sandbox's issues and project are touched.
+      await prisma.$transaction([
+        prisma.$executeRaw`ALTER TABLE "CoinEntry" DISABLE TRIGGER "CoinEntry_no_delete"`,
+        prisma.$executeRaw`DELETE FROM "CoinEntry" WHERE "bugId" IN (SELECT "id" FROM "Bug" WHERE "organisationId" = ${existing.id}) OR "projectId" IN (SELECT "id" FROM "Project" WHERE "organisationId" = ${existing.id})`,
+        prisma.$executeRaw`ALTER TABLE "CoinEntry" ENABLE TRIGGER "CoinEntry_no_delete"`,
+      ]);
       // Issues and ideas RESTRICT deleting their organisation; everything else cascades or is nulled.
       await prisma.bug.deleteMany({ where: { organisationId: existing.id } });
       await prisma.idea.deleteMany({ where: { organisationId: existing.id } });

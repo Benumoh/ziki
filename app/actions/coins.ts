@@ -6,12 +6,11 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { CoinError } from "@/lib/coins/ledger";
 import { fundIssue } from "@/lib/coins/fund";
-import { fundBudget, raiseIssuePrice, setBudgetPaused, takeBackBudget } from "@/lib/coins/budget";
-import { refreshBudgetAlert } from "@/lib/coins/budget-sweeps";
+import { budgetBalance, fundBudget, raiseIssuePrice, setBudgetPaused, takeBackBudget } from "@/lib/coins/budget";
+import { lockSettledPrices, refreshBudgetAlert } from "@/lib/coins/budget-sweeps";
 import { createPackCheckout, createTestPurchase } from "@/lib/coins/purchase";
 import { createSubscriptionCheckout, setSubscriptionEnding, startTestSubscription, subscribeFrom } from "@/lib/coins/subscription";
 import { testPayments } from "@/lib/coins/test-mode";
-import { syncEarnedZiks } from "@/lib/coins/earnings-sync";
 import { startPayoutOnboarding, syncPayoutsEnabled, withdrawEarned } from "@/lib/coins/withdraw";
 
 /**
@@ -96,11 +95,9 @@ export async function keepSubscriptionAction(): Promise<void> {
 export async function fundIssueAction(bugId: string, amount: number, requestId: string): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
-    // What they just earned is spendable at once (#earnings-in-ziks), not only after the next sweep.
-    await syncEarnedZiks(user.id);
     const result = await fundIssue(user.id, bugId, Math.trunc(Number(amount)), requestId);
     revalidatePath("/", "layout");
-    return { ok: true, message: result.funded ? `Funded. ${result.escrow.toLocaleString("en-US")} Ziks are now behind this issue.` : "Already funded." };
+    return { ok: true, message: result.funded ? `Funded. ${result.escrow.toLocaleString("en-US")} Ziks are held for this issue and its price is locked.` : "Already funded." };
   } catch (error) {
     return failure(error);
   }
@@ -110,11 +107,14 @@ export async function fundIssueAction(bugId: string, amount: number, requestId: 
 export async function fundBudgetAction(projectId: string, amount: number, requestId: string): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
-    await syncEarnedZiks(user.id);
     const result = await fundBudget(user.id, projectId, Math.trunc(Number(amount)), requestId);
+    // The issues waiting for funding that the new money covers are locked now, not at the next sweep (#price-lock).
+    const locked = await lockSettledPrices({ projectId }).catch(() => 0);
+    const balance = locked > 0 ? await budgetBalance(prisma, projectId) : result.balance;
     revalidatePath("/", "layout");
     await refreshBudgetAlert(projectId).catch(() => null);
-    return { ok: true, message: result.funded ? `Funded. The project's budget is now ${result.balance.toLocaleString("en-US")} Ziks.` : "Already funded." };
+    const started = locked > 0 ? ` ${locked} ${locked === 1 ? "issue is" : "issues are"} funded from it and can start.` : "";
+    return { ok: true, message: result.funded ? `Funded. The project's budget is now ${balance.toLocaleString("en-US")} Ziks.${started}` : "Already funded." };
   } catch (error) {
     return failure(error);
   }
@@ -138,6 +138,8 @@ export async function setBudgetPausedAction(projectId: string, paused: boolean):
   const user = await requireUser();
   try {
     await setBudgetPaused(user.id, projectId, paused);
+    // Resumed: what the budget can cover now is locked at once (#price-lock).
+    if (!paused) await lockSettledPrices({ projectId }).catch(() => 0);
     revalidatePath("/", "layout");
     return { ok: true, message: paused ? "Paused. No new issue will be awarded until you resume." : "Resumed. Issues can be awarded again." };
   } catch (error) {
@@ -145,7 +147,7 @@ export async function setBudgetPausedAction(projectId: string, paused: boolean):
   }
 }
 
-/** Sets an issue's price above what it costs now (#project-budget). */
+/** Raises an issue's settled price, to have it picked up sooner (#price-lock). */
 export async function raiseIssuePriceAction(bugId: string, zik: number): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
@@ -186,7 +188,6 @@ export async function refreshPayoutsAction(): Promise<boolean> {
 export async function withdrawZiksAction(): Promise<CoinActionResult> {
   const user = await requireUser();
   try {
-    await syncEarnedZiks(user.id);
     const outcome = await withdrawEarned(user.id);
     revalidatePath("/coins");
     revalidatePath("/coins/payouts");

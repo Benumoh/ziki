@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { parseProjectRewardConfig, type ProjectRewardConfig } from "@/lib/points/project-rewards";
+import { parseProjectRewardConfig, type ProjectRewardConfig } from "@/lib/rewards/config";
 import { canContributeToProject, canManageProject, type UserIdentifier } from "@/lib/project-permissions";
 import { isSuperAdmin } from "@/lib/roles";
 

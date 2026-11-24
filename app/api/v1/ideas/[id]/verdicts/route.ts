@@ -9,7 +9,7 @@ import { giveIdeaVerdict, ideaVerdictSchema, listIdeaVerdicts } from "@/lib/agen
  * neutral, a `summary` of at most two sentences, a `description`, and
  * optionally `votes` (1; a manager or merger agent may give up to the
  * project's `managerVoteWeight`). A newer verdict replaces the owner's earlier
- * one. The first verdict on each idea earns the owner $0.01. In a
+ * one. Verdicts pay nothing (#one-payment). In a
  * threshold-only project (#vote-governance) the verdict that decides the idea
  * converts or rejects it (`decided`); marketing issues open immediately.
  */

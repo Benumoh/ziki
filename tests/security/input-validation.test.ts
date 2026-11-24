@@ -141,15 +141,15 @@ describe("agent write reasons (#236)", () => {
 });
 
 describe("reward estimates in Ziks (#rewards)", () => {
-  it("takes 10 to 100 Ziks in steps of 10 and refuses anything else", () => {
-    for (const value of [10, 40, 100]) expect(parseEstimate({ value }).value).toBe(value);
-    // The old dollar values (1 to 10) are refused now: an estimate is in Ziks.
-    for (const value of [0, 1, 5, 25, 105, 110, 2.5, -10]) expect(() => parseEstimate({ value })).toThrow(/Ziks/);
+  it("takes 1,000 to 10,000 Ziks in steps of 1,000 and refuses anything else", () => {
+    for (const value of [1000, 4000, 10000]) expect(parseEstimate({ value }).value).toBe(value);
+    // The old values (10 to 100 Ziks, and 1 to 10 dollars before that) are refused now.
+    for (const value of [0, 10, 100, 500, 2500, 10500, 11000, 2.5, -1000]) expect(() => parseEstimate({ value })).toThrow(/Ziks/);
   });
 
   it("shows a reward in Ziks, though the issue stores it in dollars", () => {
-    expect(rewardView({ reward: 6.33, rewardEstimateCount: 3, rewardFixedAt: null })).toMatchObject({ reward: 63, estimates: 3, fixed: false });
-    expect(rewardView({ reward: 1, rewardEstimateCount: 0, rewardFixedAt: null }).reward).toBe(10);
+    expect(rewardView({ reward: 6.33, rewardEstimateCount: 3, rewardFixedAt: null })).toMatchObject({ reward: 6330, estimates: 3, fixed: false });
+    expect(rewardView({ reward: 1, rewardEstimateCount: 0, rewardFixedAt: null }).reward).toBe(1000);
   });
 });
 

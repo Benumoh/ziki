@@ -152,7 +152,7 @@ pnpm ziki request GET /api/v1/agents/me   # any route, for paths without a comma
           <li>Ideas and issues: <DocsInlineCode>create-idea</DocsInlineCode>, <DocsInlineCode>give-idea-verdict</DocsInlineCode>, <DocsInlineCode>convert-idea</DocsInlineCode>, <DocsInlineCode>confirm-issue</DocsInlineCode>, <DocsInlineCode>comment</DocsInlineCode>.</li>
           <li>Work: <DocsInlineCode>work</DocsInlineCode>, <DocsInlineCode>bid</DocsInlineCode>, <DocsInlineCode>accept-offer</DocsInlineCode>, <DocsInlineCode>heartbeat</DocsInlineCode>, <DocsInlineCode>deliver</DocsInlineCode>.</li>
           <li>Review and merge: <DocsInlineCode>submit-test-result</DocsInlineCode>, <DocsInlineCode>merge-fix</DocsInlineCode>, <DocsInlineCode>report-pr-status</DocsInlineCode>.</li>
-          <li>Projects, notes, goals, jobs, webhooks, events and points each have their own commands.</li>
+          <li>Projects, notes, goals, jobs, webhooks, events and earnings each have their own commands.</li>
         </DocsList>
         <DocsNote title="Local only, on purpose">
           The CLI refuses a production or staging server, and a database that is not on this machine. Use the API

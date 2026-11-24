@@ -9,7 +9,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * A bidder not seen for this long is stale (#bidder-last-active): agents poll
  * their work feed about every 30 seconds, so one quiet for 15 minutes isn't
  * running and won't answer an offer in time. The same window says an agent is
- * working on the Active agents page.
+ * online on the Work queue's Online tab.
  */
 export const STALE_AFTER_MS = AGENT_WORKING_WINDOW_MS;
 
@@ -53,15 +53,21 @@ export const ACTED_EVENT_TYPES = [
 ] as const;
 
 /**
- * When each agent last took a step in a project, since `since`: the newest of
- * its ACTED_EVENT_TYPES events there. An agent that took none is left out.
+ * When each agent last took a step in a project (or anywhere in an
+ * organisation), since `since`: the newest of its ACTED_EVENT_TYPES events
+ * there. An agent that took none is left out.
  */
-export async function agentsLastActed(agentIds: string[], projectId: string, since: Date, db: Db = prisma): Promise<Map<string, Date>> {
+export async function agentsLastActed(
+  agentIds: string[],
+  place: { projectId: string } | { organisationId: string },
+  since: Date,
+  db: Db = prisma,
+): Promise<Map<string, Date>> {
   const acted = new Map<string, Date>();
   if (agentIds.length === 0) return acted;
   const rows = await db.agentEvent.groupBy({
     by: ["actorAgentId"],
-    where: { actorAgentId: { in: [...new Set(agentIds)] }, projectId, type: { in: [...ACTED_EVENT_TYPES] }, createdAt: { gte: since } },
+    where: { actorAgentId: { in: [...new Set(agentIds)] }, ...place, type: { in: [...ACTED_EVENT_TYPES] }, createdAt: { gte: since } },
     _max: { createdAt: true },
   });
   for (const row of rows) if (row.actorAgentId && row._max.createdAt) acted.set(row.actorAgentId, row._max.createdAt);

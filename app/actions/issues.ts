@@ -88,11 +88,7 @@ import {
   NO_ORGANISATION_MESSAGE,
 } from "@/lib/organisation-context";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
-import { award, solverAwardFor } from "@/lib/points/award";
-import { holdPayout } from "@/lib/points/payout";
-import { isConfirmed } from "@/lib/agent-api/confirmations";
-import { correct } from "@/lib/points/correct";
-import { VOTE_POINTS, importanceSourceKey, pointSourceKey } from "@/lib/points/rules";
+import { releasePayoutIfLive } from "@/lib/coins/issue-payout";
 import {
   checkRateLimit,
   consumeRateLimit,
@@ -100,6 +96,7 @@ import {
   RATE_LIMIT_MESSAGE,
 } from "@/lib/rate-limit";
 import { publish } from "@/lib/agent-api/events";
+import { convertSoloIdeas } from "@/lib/projects/solo";
 import { issueChangePayload, publishWebEvent } from "@/lib/agent-api/web-events";
 import { firstPullRequestLink } from "@/lib/github/pr-mention";
 import { CommentPlacementError, placeComment, type CommentPlacement } from "@/lib/comment-placement";
@@ -428,6 +425,8 @@ export async function createBugAction(
     throw error;
   }
 
+  // #solo: in a Solo project the idea becomes an issue at once (security reports keep their own flow).
+  if (!severity) await convertSoloIdeas({ ideaId: idea.id }).catch(() => 0);
   revalidatePath("/[org]/[project]", "layout");
   // The Marketing assistant files drafts from its chat and stays on it (#marketing-assistant).
   if (formData.get("stay") === "true") return { ok: true, href: ideaPath(refOf(targetProject), idea.number), ideaNumber: idea.number };
@@ -857,16 +856,9 @@ export async function updateBugAction(
           }
         }
       }
-      // #428, #rewards: resolving an issue earns its assignee the issue's reward, once,
-      // held until enough people report the work deployed (#live-payout).
-      if (data.status === "resolved" && existing.status !== "resolved") {
-        const solver = await solverAwardFor(tx, {
-          id: bugId,
-          organisationId: existing.organisationId,
-          assigneeId: data.assigneeId !== undefined ? data.assigneeId : existing.assigneeId,
-        });
-        if (solver) await holdPayout(tx, bugId, [solver]);
-      }
+      // #live-payout, #one-payment: a resolved issue's funded Ziks pay everyone who worked on it once enough people
+      // report it deployed.
+      if (data.status === "resolved" && existing.status !== "resolved") await releasePayoutIfLive(tx, bugId);
       if (pending.length > 0) {
         await tx.bugActivity.createMany({
           data: activityCreateData(
@@ -1108,8 +1100,6 @@ export async function editBugContentAction(
     // none goes missing from the history.
     const [previous] = await tx.$queryRaw<{ title: string; description: string }[]>`
       SELECT "title", "description" FROM "Bug" WHERE "id" = ${bugId} FOR UPDATE`;
-    // Read before the revision below voids the confirmations.
-    const wasConfirmed = await isConfirmed(bugId, tx);
     await tx.bugRevision.create({
       data: {
         bugId,
@@ -1119,43 +1109,11 @@ export async function editBugContentAction(
       },
     });
 
-    // #713: Editing an issue voids its confirmations and reverses any
-    // reporter points awarded for the replaced report. The entries and their
+    // #713: Editing an issue voids its confirmations. The entries and their
     // replies stay (a person wrote them), but only entries given after the
     // latest edit count (lib/issue-stage.ts), so this revision clears them:
-    // each person gives theirs again to count.
-    type OptionalTxExtensions = {
-      pointEntry?: {
-        findFirst?: (args: unknown) => Promise<{ id: string; organisationId: string; userId: string; bugId: string | null; role: "solver" | "reporter" | "reviewer"; points: number } | null>;
-        update?: (args: unknown) => Promise<unknown>;
-      };
-    };
-    const txExtensions = tx as unknown as OptionalTxExtensions;
-
-    if (wasConfirmed) {
-      const recipientId = existing.beneficiaryUserId ?? existing.reporterId;
-      const organisationId = existing.organisationId ?? (await currentOrganisationIdFor(userId));
-      if (recipientId && typeof txExtensions.pointEntry?.findFirst === "function") {
-        const entry = await txExtensions.pointEntry.findFirst({
-          where: {
-            organisationId,
-            sourceKey: pointSourceKey("reporter", bugId, recipientId),
-          },
-          select: { id: true, organisationId: true, userId: true, bugId: true, role: true, points: true },
-        });
-        if (entry) {
-          await correct(tx, { entry });
-          if (typeof txExtensions.pointEntry?.update === "function") {
-            await txExtensions.pointEntry.update({
-              where: { id: entry.id },
-              data: {
-                sourceKey: `${pointSourceKey("reporter", bugId, recipientId)}:invalidated:${entry.id}`,
-              },
-            });
-          }
-        }
-      }
-    }
+    // each person gives theirs again to count, and only counted ones are paid
+    // when the issue pays out (#one-payment).
 
     await tx.bug.update({
       where: { id: bugId },
@@ -1888,15 +1846,6 @@ export async function toggleVoteAction(
     } else {
       await tx.vote.create({
         data: { userId, bugId, value: nextVote },
-      });
-      // The first mark on an issue earns a point, once per person (#vote-points).
-      await award(tx, {
-        organisationId: bug.organisationId,
-        userId,
-        bugId,
-        role: "vote",
-        points: VOTE_POINTS,
-        sourceKey: importanceSourceKey(bugId, userId),
       });
     }
 

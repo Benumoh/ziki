@@ -51,7 +51,7 @@ export function uniqueEvidenceFiles(files: readonly EvidenceFile[]): EvidenceFil
 
 /**
  * The web forms' text form: one file per line, as `path` or `path:lines`
- * (e.g. `lib/points/award.ts:40-58`). Blank lines are skipped.
+ * (e.g. `lib/coins/issue-payout.ts:40-58`). Blank lines are skipped.
  */
 export function parseEvidenceFileLines(text: string): EvidenceFile[] {
   return text
