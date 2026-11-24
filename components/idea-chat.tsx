@@ -218,7 +218,7 @@ export function IdeaChat({
   // closes with ×.
   const conversation = chatSlug && turns.length ? (
     <div
-      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-white pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
+      className="zk-paper relative mx-auto mb-4 w-[calc(100%-1rem)] max-w-[820px] rounded-panel bg-zk-surface pb-3 shadow-[0_28px_56px_-16px_rgba(16,24,40,0.28),0_10px_20px_-10px_rgba(16,24,40,0.16),0_0_0_1px_rgba(16,24,40,0.04)]"
       style={{ animation: "zk-sheet 0.45s ease-out both" }}
     >
       <style>{`
