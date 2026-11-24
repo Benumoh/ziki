@@ -12,6 +12,7 @@ import { removeScan } from "@/app/actions/security-assistant";
 import { useRescan } from "./use-rescan";
 import { KindIcon } from "./entry-box";
 import { PILL_TONES } from "@/lib/pill-tones";
+
 import { SECTION_TITLE, TOOL_BUTTON, TOOL_BUTTON_ON } from "@/lib/ui-style";
 import "@/components/security-finding.css";
 import { SecurityChat, forgetChatAfterRemove } from "./security-chat";
@@ -313,6 +314,14 @@ const KIND_PILLS: { id: Filter; label: string }[] = [
   { id: "repo", label: "Repos" },
 ];
 
+/**
+ * Marketing's table cells and pill, the same strings as marketing-home.tsx (24 Nov, Chloe: the same table, line for line).
+ * Copied, not imported: that file is the server-rendered Marketing home.
+ */
+const HEAD = "h-9 border-b border-r border-zk-border px-3 text-left text-[12.5px] font-medium text-zk-text2 last:border-r-0";
+const CELL = "border-b border-r border-zk-divider px-3 py-2 align-middle last:border-r-0";
+const PILL = "inline-flex max-w-full items-center truncate rounded-full px-2.5 py-0.5 text-[12px] font-semibold text-white";
+
 /** "+ New Website" and the like, as Marketing's "+ New Landing Page". */
 const NEW_LABEL: Partial<Record<Filter, string>> = { website: "New Website", server: "New Server", repo: "New Repo" };
 
@@ -358,9 +367,6 @@ function StatusFilter({ filter, count }: { filter: Filter; count: (id: Filter) =
   );
 }
 
-/** Marketing's table cells (marketing-home.tsx). */
-const HEAD = "border-b border-zk-border px-3 py-2.5 text-left text-[12px] font-semibold text-zk-muted";
-const CELL = "border-b border-zk-divider px-3 py-3 align-middle";
 
 /** Each stage's pill, in Ziki's pill colours: solid in the table, as Marketing's Status. */
 const STAGE_TONE: Record<ScanStage, keyof typeof PILL_TONES> = {
@@ -458,7 +464,7 @@ function TargetTableRow({
         <LocalTime date={lastScanned(check)} />
       </td>
       <td className={`${CELL} bg-[#fafafb]`}>
-        <span className="inline-flex max-w-full items-center truncate rounded-full px-3 py-1 text-[12px] font-semibold text-white" style={{ backgroundColor: PILL_TONES[STAGE_TONE[stage]].color }}>
+        <span className={PILL} style={{ backgroundColor: PILL_TONES[STAGE_TONE[stage]].color }}>
           {STAGE[stage].label}
         </span>
       </td>
