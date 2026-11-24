@@ -562,7 +562,6 @@ export function JoinQuestions({ ask, organisationId, organisationName, firstName
                             <span className="text-xs font-semibold uppercase tracking-wide text-zk-muted">{item.action} · #{item.number}</span>
                             <span className="text-[15px] font-bold leading-snug text-zk-text">{item.title}</span>
                           </span>
-                          {item.pays ? <span className="shrink-0 text-xs font-bold text-zk-ok-fg">{item.pays}</span> : null}
                         </label>
                       </li>
                     );
