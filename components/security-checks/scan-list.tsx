@@ -179,16 +179,16 @@ export function ScanList({
 
   const empty = (
     // Nothing checked yet: an empty card, as Marketing's (23 Nov, Chloe); the chat box above is where to start.
-    <div className="mt-4 rounded-xl bg-zk-bg p-4 sm:p-5">
-      <div className="rounded-2xl border border-zk-border bg-zk-surface px-4 py-14 text-center">
-        <p className="m-0 text-base font-semibold text-zk-text">Nothing checked yet.</p>
-        <p className="m-0 mt-1.5 text-sm text-zk-muted">Websites you add show up here, with what the agents find.</p>
+    <div className="mt-4 rounded-xl bg-zk-bg p-4">
+      <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-zk-border bg-zk-surface px-4 py-10 text-center">
+        <p className="m-0 font-semibold text-zk-text">Nothing checked yet.</p>
+        <p className="m-0 mt-1 text-sm text-zk-muted">Websites you add show up here, with what the agents find.</p>
       </div>
     </div>
   );
 
   return (
-    <div className="flex flex-col p-4 sm:p-5">
+    <div className="flex flex-col p-5">
       {/* Marketing's row: Feed, then each kind of target, as pills with their counts. */}
       <nav aria-label="Kinds of target" className="flex flex-wrap items-center gap-1.5">
         {KIND_PILLS.map(({ id, label }) => {
@@ -215,13 +215,15 @@ export function ScanList({
         empty
       ) : feed ? (
         // The Feed: one plain list, newest first, as Marketing's Feed.
-        <ul aria-label="Feed" className="m-0 mt-4 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-3 sm:p-4">
-          {matching.map((check) => (
-            <FeedCard key={check.id} check={check} highlighted={highlightId === check.id} />
-          ))}
-        </ul>
+        <div aria-label="Feed" className="mt-4 rounded-xl bg-zk-bg p-4">
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+            {matching.map((check) => (
+              <FeedCard key={check.id} check={check} highlighted={highlightId === check.id} />
+            ))}
+          </ul>
+        </div>
       ) : (
-        <section aria-labelledby="security-all" className="mt-4 rounded-xl bg-zk-bg p-3 sm:p-4">
+        <section aria-labelledby="security-all" className="mt-4 rounded-xl bg-zk-bg p-4">
           {/* The table's heading, as Marketing's "All Landing Pages": the funnel and "+ New Website" on its right. */}
           <div className="mb-3 flex items-center justify-between gap-3 px-1">
             <h2 id="security-all" className={`flex items-center gap-2 ${SECTION_TITLE}`}>
@@ -396,7 +398,7 @@ function FeedCard({ check, highlighted }: { check: WorkspaceCheckRow; highlighte
     <li>
       <Link
         href={`/security/checks/${check.id}`}
-        className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-4 py-3.5 transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue sm:px-5 sm:py-4 ${highlighted ? "ring-2 ring-electric-blue-strong/40" : ""}`}
+        className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-5 py-4 transition hover:bg-zk-chip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue ${highlighted ? "ring-2 ring-electric-blue-strong/40" : ""}`}
       >
         <TargetIcon check={check} large />
         <span className="min-w-0 flex-1">
