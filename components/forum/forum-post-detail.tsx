@@ -23,31 +23,32 @@ function ForumReplyCard({
   onToggleExpand: () => void;
 }) {
   const previewRef = useRef<HTMLParagraphElement>(null);
-  const [isClipped, setIsClipped] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
 
   useEffect(() => {
-    if (isExpanded) return;
-    if (reply.codeDiff) {
-      setIsClipped(true);
-      return;
-    }
+    if (isExpanded || reply.codeDiff) return;
 
     const el = previewRef.current;
     if (!el) return;
 
     const checkOverflow = () => {
-      setIsClipped(el.scrollHeight > el.clientHeight + 1);
+      setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
     };
 
-    checkOverflow();
+    const rafId = requestAnimationFrame(checkOverflow);
 
-    if (typeof ResizeObserver === "undefined") return;
+    if (typeof ResizeObserver === "undefined") {
+      return () => cancelAnimationFrame(rafId);
+    }
     const observer = new ResizeObserver(checkOverflow);
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, [isExpanded, reply.content, reply.codeDiff]);
 
-  const showToggle = isExpanded || isClipped;
+  const showToggle = isExpanded || Boolean(reply.codeDiff) || isOverflowing;
 
   return (
     <div
