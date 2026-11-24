@@ -18,7 +18,7 @@ export function setupWaiting(state: GetStartedState): boolean {
 /** How long after an agent is added the card keeps saying Ziki is finding work for it. */
 const WELCOME_WAIT_MS = 30 * 60_000;
 
-export type GetStartedItem = { key: string; action: string; number: number; title: string; url: string };
+export type GetStartedItem = { key: string; action: string; number: number; title: string; url: string; pays?: string | null };
 
 export type GetStartedAlert = {
   id: string;

@@ -22,7 +22,7 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 export function IdeaFeed({ slug, ideas, empty }: { slug: ProjectRef; ideas: IdeaListRow[]; empty?: React.ReactNode }) {
   // The opened card, or null for none.
   const [openId, setOpenId] = useState<string | null>(null);
-  if (ideas.length === 0) return <div className="rounded-2xl border border-zk-border bg-white p-5">{empty}</div>;
+  if (ideas.length === 0) return <div className="rounded-2xl border border-zk-border bg-zk-surface p-5">{empty}</div>;
   return (
     <ul className="m-0 flex list-none flex-col gap-3 rounded-xl bg-zk-bg p-4" aria-label="Ideas">
       {ideas.map((idea) => {
@@ -52,7 +52,7 @@ export function IdeaFeed({ slug, ideas, empty }: { slug: ProjectRef; ideas: Idea
           <li key={idea.id} data-testid="idea-row">
             {opened ? (
               // Opened, the card unfolds downwards, as the Work Feed's do.
-              <article id={id} className="my-1 rounded-2xl border border-zk-border bg-white px-5 pb-5 pt-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+              <article id={id} className="my-1 rounded-2xl border border-zk-border bg-zk-surface px-5 pb-5 pt-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
                 <div className="flex flex-wrap items-center gap-4 border-b border-zk-divider pb-4">
                   {head}
                   <IdeaAction idea={idea} />
@@ -74,7 +74,7 @@ export function IdeaFeed({ slug, ideas, empty }: { slug: ProjectRef; ideas: Idea
                 </Link>
               </article>
             ) : (
-              <div className="flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg">
+              <div className="flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-5 py-4 transition hover:bg-zk-chip">
                 {head}
                 {/* On a phone the title needs the width: Approve shows once the card is opened. */}
                 <IdeaAction idea={idea} className="max-sm:hidden" />

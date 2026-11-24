@@ -917,7 +917,7 @@ export async function IssuesList({
   const withOverviewLook = isYourWorkView || isNewIdeasView;
   const tabClass = (current: boolean) =>
     `inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition ${
-      current ? "bg-white font-semibold text-zk-accent shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
+      current ? "bg-white font-semibold text-[#1848b8] shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"
     }`;
   // How much has been delivered (#live-confirmed), shown on the Delivered tab: live work someone confirmed.
   const deliveredCount = withOverviewLook
@@ -947,7 +947,7 @@ export async function IssuesList({
                       href={projectPath(ref, "/features/new")}
                       aria-label="Add a new feature"
                       title="Add a new feature"
-                      className="-ml-1 inline-flex h-8 w-8 items-center justify-center self-center rounded-full text-zk-muted transition hover:bg-white hover:text-zk-accent hover:shadow-[0_1px_2px_rgba(16,24,40,0.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
+                      className="-ml-1 inline-flex h-8 w-8 items-center justify-center self-center rounded-full text-zk-muted transition hover:bg-zk-surface hover:text-zk-accent hover:shadow-[0_1px_2px_rgba(16,24,40,0.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric-blue"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                     </Link>,

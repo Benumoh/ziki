@@ -18,6 +18,9 @@ import { WebhookManagement } from "@/components/webhook-management";
 import { RejectedIdeas } from "@/components/marketing/rejected-ideas/rejected-ideas";
 import type { RejectedIdea } from "@/components/marketing/rejected-ideas/model";
 import { MarketingDeliverablesPanel } from "@/components/marketing/marketing-deliverables-panel";
+import { WorkFeed, type WorkFeedItem } from "@/components/work-feed";
+import { IdeaFeed } from "@/components/idea-feed";
+import type { IdeaListRow } from "@/components/ideas-list";
 import { MarketingReviewsPanel } from "@/components/marketing/marketing-reviews-panel";
 import { createWebhookAction, listWebhooksAction } from "@/app/actions/webhooks";
 import { ActiveSessions } from "@/components/active-sessions";
@@ -67,6 +70,10 @@ vi.mock("@/app/actions/idea-verdicts", () => ({
   withdrawIdeaAction: vi.fn(),
   approveIdeaAction: vi.fn(),
   rejectIdeaAction: vi.fn(),
+}));
+vi.mock("@/app/actions/human-steps", () => ({
+  approveDeliveredWorkAction: vi.fn(),
+  confirmLiveWorkAction: vi.fn(),
 }));
 vi.mock("@/app/(app)/[org]/[project]/notes/actions", () => ({ voteNoteCommentAction: vi.fn() }));
 
@@ -535,4 +542,82 @@ describe("component accessibility (axe)", () => {
     }
   }, 15000);
 
+  describe("Dark Mode Semantic Tokens & Contrast", () => {
+    it("renders WorkFeed items using semantic surface tokens instead of hardcoded bg-white", () => {
+      const mockItem: WorkFeedItem = {
+        id: "item-1",
+        number: 101,
+        title: "Dark mode readability check",
+        kind: "delivered",
+        substatus: "in_progress",
+        who: "Amara",
+        at: new Date(),
+        href: "/demo/demo/issues/101",
+        projectName: "Demo",
+        reporter: "Amara",
+        summary: "Dark mode summary",
+        body: "Dark mode body description",
+        files: [],
+        decision: { label: "Approve", href: "/demo/demo/issues/101" },
+        liveUrl: null,
+        pullRequestUrl: null,
+        screenshots: [],
+        beforeScreenshots: [],
+        canApprove: true,
+        approved: false,
+        canConfirm: false,
+        confirmed: false,
+        progress: null,
+        progressBy: "step",
+        deliveredAt: new Date(),
+        addedAt: new Date(),
+        startedAt: new Date(),
+        stalledSince: null,
+        deliveredBy: "Amara",
+        justDelivered: true,
+        held: true,
+        stallReason: null,
+        mergeHold: null,
+        price: null,
+        priceHeld: 0,
+      };
+
+      const { container } = render(<WorkFeed title="Work Feed" items={[mockItem]} />);
+      const card = container.querySelector("li > div");
+      expect(card).toBeInTheDocument();
+      expect(card?.className).not.toContain("bg-white");
+      expect(card?.className).toContain("bg-zk-surface");
+
+      // Verify the celebration banner does not use hardcoded cream/white gradient
+      const banner = container.querySelector(".bg-gradient-to-r");
+      expect(banner).toBeInTheDocument();
+      expect(banner?.className).not.toContain("from-[#fffbf1] to-white");
+      expect(banner?.className).toContain("from-zk-warn-bg/70 to-zk-surface");
+    });
+
+    it("renders IdeaFeed items using semantic surface tokens instead of hardcoded bg-white", () => {
+      const mockIdea: IdeaListRow = {
+        id: "idea-1",
+        number: 202,
+        title: "Contrast audit for idea cards",
+        summary: "Cards should use surface tokens in dark mode.",
+        body: "Full description of idea.",
+        score: 2,
+        threshold: 3,
+        reporterName: "Dara",
+        createdAt: new Date(),
+        verdicts: 2,
+        good: 2,
+        badVotes: 0,
+        ref: projectRef("demo", "demo"),
+      };
+
+      const { container } = render(<IdeaFeed slug={projectRef("demo", "demo")} ideas={[mockIdea]} />);
+      const ideaRow = container.querySelector('[data-testid="idea-row"] > div');
+      expect(ideaRow).toBeInTheDocument();
+      expect(ideaRow?.className).not.toContain("bg-white");
+      expect(ideaRow?.className).toContain("bg-zk-surface");
+      expect(ideaRow?.className).toContain("hover:bg-zk-chip");
+    });
+  });
 });

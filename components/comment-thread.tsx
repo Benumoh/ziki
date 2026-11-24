@@ -451,7 +451,7 @@ export function IssueComments({
   const tab = chosen ?? (linkedToAgents ? "agents" : "people");
   if (count === 0 && !composer && !agentActivity) return null;
   const tabClass = (current: boolean) =>
-    `inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] transition ${current ? "bg-white font-semibold text-zk-text shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"}`;
+    `inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] transition ${current ? "bg-zk-surface font-semibold text-zk-text shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"}`;
   return (
     <section aria-labelledby="comments-heading" className="mt-5 first:mt-0" data-testid="issue-comments">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

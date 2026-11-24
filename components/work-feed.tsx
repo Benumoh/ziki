@@ -194,10 +194,10 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdd
                   // Opened, the card unfolds into the whole of it, as an opened email.
                   <FeedCard item={item} id={`work-feed-detail-${item.id}`} onClose={() => setOpenId(null)} />
                 ) : (
-                  <div className={item.justDelivered ? "relative overflow-hidden rounded-2xl border border-[#efd9a6] bg-white shadow-[0_2px_10px_rgba(0,0,0,0.05)]" : ""}>
+                  <div className={item.justDelivered ? "relative overflow-hidden rounded-2xl border border-zk-warn-bd/60 bg-zk-surface shadow-[0_2px_10px_rgba(0,0,0,0.05)]" : ""}>
                   {/* The newest delivery (#just-delivered): who delivered it, with a dancing agent and fireworks. */}
                   {item.justDelivered ? <JustDelivered by={item.deliveredBy} /> : null}
-                  <div className={`flex items-center gap-4 bg-white px-5 py-4 transition hover:bg-zk-bg ${item.justDelivered ? "" : "rounded-2xl border border-zk-border"}`}>
+                  <div className={`flex items-center gap-4 bg-zk-surface px-5 py-4 transition hover:bg-zk-chip ${item.justDelivered ? "" : "rounded-2xl border border-zk-border"}`}>
                     <button
                       type="button"
                       aria-expanded={false}
@@ -273,7 +273,7 @@ export function WorkFeed({ items, groups, title, toolbar, empty, footer, justAdd
           ))}
         </div>
       ) : items.length === 0 && justAdded.length === 0 ? (
-        <div className="rounded-2xl border border-zk-border bg-white p-5">{empty}</div>
+        <div className="rounded-2xl border border-zk-border bg-zk-surface p-5">{empty}</div>
       ) : (
         // One section in full: Needs your OK starts with its new ideas.
         cards(items, "Work", justAdded.length > 0 ? <IdeaOkCards ideas={justAdded} flash={flash} /> : null)
@@ -400,7 +400,7 @@ function FeedCard({ item, id, onClose }: { item: WorkFeedItem; id: string; onClo
   const tone = PILL_TONES[kind.tone];
   const who = item.who ?? "Nobody yet";
   return (
-    <article id={id} aria-labelledby={`${id}-title`} className="my-1 rounded-2xl border border-zk-border bg-white px-5 pb-5 pt-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+    <article id={id} aria-labelledby={`${id}-title`} className="my-1 rounded-2xl border border-zk-border bg-zk-surface px-5 pb-5 pt-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
       <div className="flex flex-wrap items-center gap-3 border-b border-zk-divider pb-4">
         <button type="button" aria-expanded={true} aria-controls={id} onClick={onClose} className={`flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left ${focus}`}>
           <IssueThumb item={item} />
@@ -674,14 +674,14 @@ function StalledFix({ item }: { item: WorkFeedItem }) {
         <div className="mt-4 border-t border-zk-divider pt-3">
           <div className="flex items-center justify-between gap-2">
             <p className="m-0 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Or ask your agent</p>
-            <button type="button" onClick={() => void copy()} className={`inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-zk-border bg-white px-2 text-[12px] font-semibold text-zk-text transition hover:bg-zk-chip ${focus}`}>
+            <button type="button" onClick={() => void copy()} className={`inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-zk-border bg-zk-surface px-2 text-[12px] font-semibold text-zk-text transition hover:bg-zk-chip ${focus}`}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 {copied ? <path d="m5 12 5 5 9-10" /> : <path d="M9 9h10v10H9zM5 15V5h10" />}
               </svg>
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-          <p className="m-0 mt-2 whitespace-pre-wrap break-words rounded-lg border border-zk-border bg-white px-3 py-2 font-mono text-[12px] leading-relaxed text-zk-text2" suppressHydrationWarning>
+          <p className="m-0 mt-2 whitespace-pre-wrap break-words rounded-lg border border-zk-border bg-zk-surface px-3 py-2 font-mono text-[12px] leading-relaxed text-zk-text2" suppressHydrationWarning>
             {prompt}
           </p>
           <span aria-live="polite" className="sr-only">{copied ? "Copied to the clipboard" : ""}</span>
@@ -739,7 +739,7 @@ function DeliveryPreview({ item }: { item: WorkFeedItem }) {
           below with the timeline and links. */}
       <div className="rounded-panel border border-zk-border/70 bg-zk-bg p-1.5">
       {/* The screenshots' card opens the full issue. */}
-      <Link href={item.href} aria-label={`Open the full issue ${formatIssueNumber(item.number)}`} className={`block rounded-panel border border-zk-border bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-zk-accent/50 hover:shadow-[0_2px_8px_rgba(16,24,40,0.08)] ${focus}`}>
+      <Link href={item.href} aria-label={`Open the full issue ${formatIssueNumber(item.number)}`} className={`block rounded-panel border border-zk-border bg-zk-surface p-3 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-zk-accent/50 hover:shadow-[0_2px_8px_rgba(16,24,40,0.08)] ${focus}`}>
       {first && item.beforeScreenshots.length > 0 ? <p className="m-0 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-zk-muted">Now</p> : null}
       {first ? (
         <div className="flex flex-col gap-2">
@@ -901,11 +901,11 @@ function ConfirmLive({ item, className = "" }: { item: WorkFeedItem; className?:
 function JustDelivered({ by }: { by: string | null }) {
   const name = by?.trim().split(/\s+/)[0] || "Your agent";
   return (
-    <div className="relative flex items-center gap-2.5 overflow-hidden border-b border-[#f3e7c9] bg-gradient-to-r from-[#fffbf1] to-white px-5 py-2">
+    <div className="relative flex items-center gap-2.5 overflow-hidden border-b border-zk-warn-bd/60 bg-gradient-to-r from-zk-warn-bg/70 to-zk-surface px-5 py-2 text-zk-warn-fg">
       {/* Still until Approve: the fireworks go off when it is approved. */}
       <DancingAgent size={28} still />
-      <p className="relative m-0 text-[13px] font-medium text-zk-text2">
-        {name} just delivered this <span aria-hidden="true">🎉</span>
+      <p className="relative m-0 text-[13px] font-semibold text-zk-text">
+        <span className="text-zk-warn-fg">{name}</span> just delivered this <span aria-hidden="true">🎉</span>
       </p>
     </div>
   );
@@ -992,7 +992,7 @@ function IdeaOkCard({ idea, flashing }: { idea: JustAddedIdea; flashing: boolean
     <li>
       <div
         // The same row as the work around it (#just-added); only a flash marks the one just filed.
-        className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-white px-5 py-4 transition hover:bg-zk-bg ${flashing ? "zk-flash" : ""}`}
+        className={`flex items-center gap-4 rounded-2xl border border-zk-border bg-zk-surface px-5 py-4 transition hover:bg-zk-chip ${flashing ? "zk-flash" : ""}`}
         style={flashing ? { animation: "zk-flash 1.6s ease-in-out 3" } : undefined}
       >
         <Link href={idea.href} className={`flex min-w-0 flex-1 items-center gap-4 text-left ${focus}`}>
