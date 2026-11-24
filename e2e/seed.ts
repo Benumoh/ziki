@@ -102,8 +102,8 @@ async function main() {
       organisationId: organisation.id,
       userId: user.id,
       role: user.role === "super_admin" ? "owner" : user.role === "admin" ? "admin" : "member",
-      // Already answered the join questions (#join-questions), or their dialog
-      // opens over every page and blocks the suite's clicks.
+      // Answered already (#join-questions): otherwise the join questions open over every page a member visits and
+      // cover what the tests click.
       joinAnsweredAt: new Date(),
     })),
   });
