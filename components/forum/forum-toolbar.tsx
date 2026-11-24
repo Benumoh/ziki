@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ForumIcon,
   POPULAR_TAGS,
@@ -45,19 +45,47 @@ export function ForumToolbar({
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [popularTagsOpen, setPopularTagsOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const menusRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!filterModalOpen && !popularTagsOpen && !sortMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menusRef.current && !menusRef.current.contains(event.target as Node)) {
+        setFilterModalOpen(false);
+        setPopularTagsOpen(false);
+        setSortMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFilterModalOpen(false);
+        setPopularTagsOpen(false);
+        setSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [filterModalOpen, popularTagsOpen, sortMenuOpen]);
 
   return (
     <>
       {/* Top Row with Tracks */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-[13px] px-1 pb-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-zk-chip/60 p-0.5 rounded-lg border border-zk-border">
+          <div className="flex items-center gap-1 bg-zk-chip/60 p-0.5 rounded-control border border-zk-border">
             <button
               type="button"
               onClick={() => onTrackFilterChange("all")}
-              className={`px-2 py-0.5 rounded-md text-[12px] transition-colors cursor-pointer ${
+              className={`px-2 py-0.5 rounded-chip text-xs transition-colors cursor-pointer ${
                 trackFilter === "all"
-                  ? "bg-zk-surface text-zk-text font-medium shadow-2xs"
+                  ? "bg-zk-surface text-zk-text font-medium"
                   : "text-zk-muted hover:text-zk-text"
               }`}
             >
@@ -66,9 +94,9 @@ export function ForumToolbar({
             <button
               type="button"
               onClick={() => onTrackFilterChange(trackFilter === "product" ? "all" : "product")}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[12px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-chip text-xs transition-colors cursor-pointer ${
                 trackFilter === "product"
-                  ? "bg-zk-surface text-zk-accent font-semibold shadow-2xs"
+                  ? "bg-zk-surface text-zk-accent font-semibold"
                   : "text-zk-muted hover:text-zk-text"
               }`}
             >
@@ -78,9 +106,9 @@ export function ForumToolbar({
             <button
               type="button"
               onClick={() => onTrackFilterChange(trackFilter === "marketing" ? "all" : "marketing")}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[12px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-chip text-xs transition-colors cursor-pointer ${
                 trackFilter === "marketing"
-                  ? "bg-zk-surface text-zk-accent font-semibold shadow-2xs"
+                  ? "bg-zk-surface text-zk-accent font-semibold"
                   : "text-zk-muted hover:text-zk-text"
               }`}
             >
@@ -90,9 +118,9 @@ export function ForumToolbar({
             <button
               type="button"
               onClick={() => onTrackFilterChange(trackFilter === "security" ? "all" : "security")}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[12px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-chip text-xs transition-colors cursor-pointer ${
                 trackFilter === "security"
-                  ? "bg-zk-surface text-zk-accent font-semibold shadow-2xs"
+                  ? "bg-zk-surface text-zk-accent font-semibold"
                   : "text-zk-muted hover:text-zk-text"
               }`}
             >
@@ -186,7 +214,7 @@ export function ForumToolbar({
         </div>
 
         {/* Right Action Controls: Search, Filter Modal, Popular Tags Dropdown, Sort */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap relative">
+        <div ref={menusRef} className="flex items-center gap-2 shrink-0 flex-wrap relative">
           <div className="relative flex items-center">
             <ForumIcon
               size={14}
@@ -201,7 +229,7 @@ export function ForumToolbar({
               onChange={(e) => onSearchQueryChange(e.target.value)}
               placeholder="Search forum..."
               aria-label="Search forum"
-              className="w-40 sm:w-48 h-8 pl-8 pr-3 bg-zk-bg rounded-md border border-zk-border text-zk-text placeholder-zk-muted text-[13px] focus:outline-none focus:border-zk-accent transition-colors"
+              className="w-40 sm:w-48 h-8 pl-8 pr-3 bg-zk-bg rounded-chip border border-zk-border text-zk-text placeholder-zk-muted text-[13px] focus:outline-none focus:border-zk-accent transition-colors"
             />
           </div>
 
@@ -215,7 +243,7 @@ export function ForumToolbar({
                 setPopularTagsOpen(false);
                 setSortMenuOpen(false);
               }}
-              className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[13px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 h-8 px-2.5 rounded-chip border text-[13px] transition-colors cursor-pointer ${
                 statusFilter !== "all" || filterModalOpen
                   ? "bg-zk-tint border-zk-accent/40 text-zk-accent font-semibold"
                   : "bg-zk-chip hover:bg-zk-seg border-zk-border text-zk-text"
@@ -234,7 +262,7 @@ export function ForumToolbar({
             </button>
 
             {filterModalOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-zk-surface border border-zk-border shadow-xl p-2 z-40 flex flex-col gap-1">
+              <div className="absolute right-0 top-full mt-1.5 w-48 rounded-panel bg-zk-surface border border-zk-border shadow-xl p-2 z-40 flex flex-col gap-1">
                 <div className="px-2 py-1 text-[11px] uppercase tracking-wider text-zk-muted font-semibold border-b border-zk-border mb-1">
                   Filter by Status
                 </div>
@@ -254,7 +282,7 @@ export function ForumToolbar({
                       onStatusFilterChange(item.id);
                       setFilterModalOpen(false);
                     }}
-                    className={`w-full px-2.5 py-1.5 text-left text-[12px] rounded-md transition-colors cursor-pointer flex items-center justify-between ${
+                    className={`w-full px-2.5 py-1.5 text-left text-xs rounded-chip transition-colors cursor-pointer flex items-center justify-between ${
                       statusFilter === item.id
                         ? "bg-zk-tint text-zk-accent font-semibold"
                         : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip"
@@ -282,7 +310,7 @@ export function ForumToolbar({
                 setFilterModalOpen(false);
                 setSortMenuOpen(false);
               }}
-              className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[13px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 h-8 px-2.5 rounded-chip border text-[13px] transition-colors cursor-pointer ${
                 selectedTag || popularTagsOpen
                   ? "bg-zk-tint border-zk-accent/40 text-zk-accent font-semibold"
                   : "bg-zk-chip hover:bg-zk-seg border-zk-border text-zk-text"
@@ -302,7 +330,7 @@ export function ForumToolbar({
             </button>
 
             {popularTagsOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl bg-zk-surface border border-zk-border shadow-xl p-2.5 z-40 flex flex-col gap-2">
+              <div className="absolute right-0 top-full mt-1.5 w-52 rounded-panel bg-zk-surface border border-zk-border shadow-xl p-2.5 z-40 flex flex-col gap-2">
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-zk-muted font-semibold border-b border-zk-border pb-1">
                   <span>Popular Tags</span>
                   {selectedTag && (
@@ -355,7 +383,7 @@ export function ForumToolbar({
                 setFilterModalOpen(false);
                 setPopularTagsOpen(false);
               }}
-              className={`flex items-center gap-1 h-8 px-2.5 rounded-md border text-[13px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1 h-8 px-2.5 rounded-chip border text-[13px] transition-colors cursor-pointer ${
                 sortMenuOpen
                   ? "bg-zk-tint border-zk-accent/40 text-zk-accent font-semibold"
                   : "bg-zk-chip hover:bg-zk-seg border-zk-border text-zk-text"
@@ -369,7 +397,7 @@ export function ForumToolbar({
             </button>
 
             {sortMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-zk-surface border border-zk-border shadow-xl p-1.5 z-40 flex flex-col gap-0.5">
+              <div className="absolute right-0 top-full mt-1.5 w-44 rounded-panel bg-zk-surface border border-zk-border shadow-xl p-1.5 z-40 flex flex-col gap-0.5">
                 {(
                   [
                     { id: "trending", label: "Trending" },
@@ -385,7 +413,7 @@ export function ForumToolbar({
                       onSortByChange(option.id);
                       setSortMenuOpen(false);
                     }}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] text-left transition-colors cursor-pointer ${
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-control text-xs text-left transition-colors cursor-pointer ${
                       sortBy === option.id
                         ? "bg-zk-tint text-zk-accent font-semibold"
                         : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"

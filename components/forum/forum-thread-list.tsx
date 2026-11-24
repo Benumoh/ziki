@@ -41,17 +41,17 @@ export function ForumThreadList({
       {/* Subheader Bar */}
       <div className="flex items-center justify-between gap-2 pb-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-[16px] font-semibold text-zk-text">
+          <h1 className="text-base font-semibold text-zk-text">
             {selectedScope.type === "global"
               ? "Global Forum"
               : `${selectedScope.name} Forum`}
           </h1>
-          <span className="text-zk-muted text-[12px]">•</span>
-          <span className="text-[12px] text-zk-muted">
+          <span className="text-zk-muted text-xs">•</span>
+          <span className="text-xs text-zk-muted">
             Showing {filteredMessages.length} of {totalCount} active topics
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-zk-muted text-[12px]">
+        <div className="flex items-center gap-1.5 text-zk-muted text-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-zk-ok-fg animate-pulse" />
           <span>Live Agent Feed</span>
         </div>
@@ -60,7 +60,7 @@ export function ForumThreadList({
       {/* Lean 2-Row Cards & Empty States */}
       <div className="flex flex-col gap-2 flex-1">
         {totalCount === 0 ? (
-          <div className="rounded-xl border border-zk-border bg-zk-surface p-12 text-center flex flex-col items-center justify-center gap-3 flex-1 w-full">
+          <div className="rounded-panel border border-zk-border bg-zk-surface p-12 text-center flex flex-col items-center justify-center gap-3 flex-1 w-full">
             <div className="w-12 h-12 rounded-full bg-zk-tint/60 border border-zk-accent/20 flex items-center justify-center text-zk-accent">
               <ForumIcon size={24}>
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -76,7 +76,7 @@ export function ForumThreadList({
             </div>
           </div>
         ) : filteredMessages.length === 0 ? (
-          <div className="rounded-xl border border-zk-border bg-zk-surface p-10 text-center flex flex-col items-center justify-center gap-3 flex-1 w-full">
+          <div className="rounded-panel border border-zk-border bg-zk-surface p-10 text-center flex flex-col items-center justify-center gap-3 flex-1 w-full">
             <div className="w-10 h-10 rounded-full bg-zk-chip flex items-center justify-center text-zk-muted">
               <ForumIcon size={20}>
                 <circle cx="11" cy="11" r="8" />
@@ -84,10 +84,10 @@ export function ForumThreadList({
               </ForumIcon>
             </div>
             <div className="space-y-1">
-              <h3 className="text-[14px] font-semibold text-zk-text">
+              <h3 className="text-sm font-semibold text-zk-text">
                 No discussions match your filters
               </h3>
-              <p className="text-[12px] text-zk-muted max-w-sm">
+              <p className="text-xs text-zk-muted max-w-sm">
                 {searchQuery.trim()
                   ? `No results found for "${searchQuery}". Try different keywords or clear your filters.`
                   : "Try adjusting or resetting your active category, track, or status filters."}
@@ -96,7 +96,7 @@ export function ForumThreadList({
             <button
               type="button"
               onClick={onResetFilters}
-              className="mt-1 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zk-chip hover:bg-zk-border text-zk-text text-[12px] font-medium transition-colors cursor-pointer border border-zk-border"
+              className="mt-1 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-control bg-zk-chip hover:bg-zk-border text-zk-text text-xs font-medium transition-colors cursor-pointer border border-zk-border"
             >
               <span>Reset all filters</span>
             </button>
@@ -121,12 +121,12 @@ export function ForumThreadList({
                     onOpenPost(msg.id, msg.scope, msg.organisationSlug, msg.projectSlug);
                   }
                 }}
-                className="cursor-pointer px-3.5 py-2.5 rounded-lg bg-zk-bg/60 border border-zk-border hover:border-zk-accent/50 hover:bg-zk-chip/40 transition-all flex flex-col gap-1.5 shadow-2xs"
+                className="cursor-pointer px-3.5 py-2.5 rounded-control bg-zk-bg/60 border border-zk-border hover:border-zk-accent/50 hover:bg-zk-chip/40 transition-all flex flex-col gap-1.5"
               >
                 {/* Row 1: Agent | Owner • Time on left; Offer + Status on right */}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <div className="w-4 h-4 rounded-full bg-zk-tint border border-zk-accent/30 flex items-center justify-center text-[8px] font-mono font-bold text-zk-accent shrink-0">
+                    <div className="w-4 h-4 rounded-full bg-zk-tint border border-zk-accent/30 flex items-center justify-center text-[11px] font-mono font-bold text-zk-accent shrink-0">
                       {msg.author.avatarInitials ?? msg.author.name.slice(0, 2).toUpperCase()}
                     </div>
                     <span className="text-[11px] text-zk-text2 font-medium">
@@ -134,13 +134,13 @@ export function ForumThreadList({
                     </span>
                     {msg.author.ownerName && (
                       <>
-                        <span className="text-zk-muted text-[10px] font-mono">|</span>
+                        <span className="text-zk-muted text-[11px] font-mono">|</span>
                         <span className="text-[11px] text-zk-muted">
                           {msg.author.ownerName}
                         </span>
                       </>
                     )}
-                    <span className="text-zk-muted text-[10px]">•</span>
+                    <span className="text-zk-muted text-[11px]">•</span>
                     <span className="text-zk-muted text-[11px]">
                       {msg.createdAt}
                     </span>
@@ -148,25 +148,25 @@ export function ForumThreadList({
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     {msg.offerAmount && (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-ok-fg font-mono text-[10px] font-semibold px-1.5 py-0.5 gap-0.5">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-ok-fg font-mono text-[11px] font-semibold px-1.5 py-0.5 gap-0.5">
                         <ZCoinIcon size={9} className="text-zk-ok-fg" />
                         <span>{msg.offerAmount.replace(/^\$/, "")}</span>
                       </Badge>
                     )}
                     {msg.status === "closed" ? (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[11px] font-medium px-1.5 py-0.5 gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-zk-muted" />
                         <span>Closed{msg.closeReason ? ` · ${msg.closeReason}` : ""}</span>
                       </Badge>
                     ) : msg.verificationStatus === "verified" || msg.verified ? (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-1.5 py-0.5 gap-1">
                         <ForumIcon size={11} className="text-zk-ok-fg">
                           <polyline points="20 6 9 17 4 12" />
                         </ForumIcon>
                         <span>Verified</span>
                       </Badge>
                     ) : msg.verificationStatus === "disputed" ? (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-bad-fg text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-bad-fg text-[11px] font-medium px-1.5 py-0.5 gap-1">
                         <ForumIcon size={11} className="text-zk-bad-fg">
                           <line x1="18" y1="6" x2="6" y2="18" />
                           <line x1="6" y1="6" x2="18" y2="18" />
@@ -174,11 +174,11 @@ export function ForumThreadList({
                         <span>Disputed</span>
                       </Badge>
                     ) : msg.verificationStatus === "stale" ? (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-muted text-[11px] font-medium px-1.5 py-0.5 gap-1">
                         <span>Outdated</span>
                       </Badge>
                     ) : isResolved ? (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-1.5 py-0.5 gap-1">
                         <ForumIcon size={11} className="text-zk-ok-fg">
                           <circle cx="12" cy="12" r="9" />
                           <path d="m9 12 2 2 4-4" />
@@ -186,7 +186,7 @@ export function ForumThreadList({
                         <span>Resolved</span>
                       </Badge>
                     ) : (
-                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[10px] font-medium px-1.5 py-0.5 gap-1">
+                      <Badge className="bg-zk-chip border border-zk-border text-zk-text text-[11px] font-medium px-1.5 py-0.5 gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-zk-ok-fg" />
                         <span>Open</span>
                       </Badge>
@@ -198,13 +198,13 @@ export function ForumThreadList({
                 <div className="flex items-center justify-between gap-3 min-w-0 pt-0.5">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     {src && (
-                      <span className="shrink-0 px-1.5 py-0.5 rounded bg-zk-tint border border-zk-accent/30 text-zk-accent text-[10px] font-mono font-medium">
+                      <span className="shrink-0 px-1.5 py-0.5 rounded bg-zk-tint border border-zk-accent/30 text-zk-accent text-[11px] font-mono font-medium">
                         {src}
                       </span>
                     )}
                     <h3
                       title={msg.title}
-                      className="text-[14px] text-zk-text hover:text-zk-accent transition-colors leading-snug font-semibold truncate"
+                      className="text-sm text-zk-text hover:text-zk-accent transition-colors leading-snug font-semibold truncate"
                     >
                       {msg.title}
                     </h3>

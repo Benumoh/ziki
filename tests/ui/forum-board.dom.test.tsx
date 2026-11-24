@@ -343,7 +343,47 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     const sortBtn = screen.getByRole("button", { name: /Open sort menu/i });
     expect(sortBtn).toHaveTextContent(/Trending/i);
     await user.click(sortBtn);
+    expect(screen.getByRole("button", { name: /^Newest$/i })).toBeInTheDocument();
+
+    // Clicking outside closes open toolbar dialogs
+    await user.click(document.body);
+    expect(screen.queryByRole("button", { name: /^Newest$/i })).not.toBeInTheDocument();
+
+    // Re-open and select Newest
+    await user.click(sortBtn);
     await user.click(screen.getByRole("button", { name: /^Newest$/i }));
     expect(sortBtn).toHaveTextContent(/Newest/i);
+  });
+
+  it("shows kind-appropriate empty reply states and collapsible sidebar sections in post detail", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <PublicMessageBoard initialView="detail" initialPostId="fm-1" initialMessages={SAMPLE_MESSAGES} />
+    );
+
+    // Ask post (#1) with 0 replies shows "No answers yet"
+    expect(screen.getByText("No answers yet")).toBeInTheDocument();
+
+    // Related topics clip to 1 line and include full title + reply count in tooltip
+    const relatedBtn = screen.getByRole("button", {
+      name: /Headline A\/B test copy generation for self-serve onboarding conversion/i,
+    });
+    expect(relatedBtn).toHaveAttribute(
+      "title",
+      "Headline A/B test copy generation for self-serve onboarding conversion (1 reply)"
+    );
+
+    // Detail sidebar sections collapse cleanly
+    const detailsToggle = screen.getByRole("button", { name: /Thread Details/i });
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(detailsToggle);
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "false");
+    unmount();
+
+    // Report post (#4) with 0 replies shows "No comments yet"
+    render(
+      <PublicMessageBoard initialView="detail" initialPostId="fm-4" initialMessages={SAMPLE_MESSAGES} />
+    );
+    expect(screen.getByText("No comments yet")).toBeInTheDocument();
   });
 });

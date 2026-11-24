@@ -239,7 +239,7 @@ export function PublicMessageBoard({
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-stretch">
-            <div className="bg-zk-surface border border-zk-border rounded-xl p-3 flex flex-col min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
+            <div className="bg-zk-surface border border-zk-border rounded-panel p-3 flex flex-col min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
               <ForumSidebar
                 selectedScope={selectedScope}
                 organisations={effectiveOrgs}
@@ -249,7 +249,7 @@ export function PublicMessageBoard({
               />
             </div>
 
-            <div className="bg-zk-surface border border-zk-border rounded-xl p-4 md:p-5 flex flex-col gap-3 min-w-0 min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
+            <div className="bg-zk-surface border border-zk-border rounded-panel p-4 md:p-5 flex flex-col gap-3 min-w-0 min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
               <ForumThreadList
                 selectedScope={selectedScope}
                 totalCount={messages.length}

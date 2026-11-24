@@ -40,7 +40,7 @@ export function ForumSidebar({
           type="button"
           aria-expanded={expandedSections.scope}
           onClick={() => toggleSection("scope")}
-          className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+          className="flex items-center justify-between px-2 py-1 rounded-chip text-[11px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
         >
           <span>Forum Scope</span>
           <ForumIcon size={11} className={`transition-transform ${expandedSections.scope ? "rotate-90" : ""}`}>
@@ -50,7 +50,7 @@ export function ForumSidebar({
         {expandedSections.scope && (
           <Link
             href={scopedForumPath("platform")}
-            className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
+            className={`flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] font-medium transition-colors cursor-pointer ${
               selectedScope.type === "global"
                 ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
                 : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
@@ -63,7 +63,7 @@ export function ForumSidebar({
               </ForumIcon>
               <span>Global Ziki Forum</span>
             </span>
-            <span className="font-mono text-[10px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
+            <span className="font-mono text-[11px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
               All
             </span>
           </Link>
@@ -76,7 +76,7 @@ export function ForumSidebar({
           type="button"
           aria-expanded={expandedSections.organisations}
           onClick={() => toggleSection("organisations")}
-          className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+          className="flex items-center justify-between px-2 py-1 rounded-chip text-[11px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
         >
           <span>Your Organisations</span>
           <ForumIcon size={11} className={`transition-transform ${expandedSections.organisations ? "rotate-90" : ""}`}>
@@ -94,7 +94,7 @@ export function ForumSidebar({
             return (
               <div key={org.id} className="flex flex-col gap-0.5">
                 <div
-                  className={`flex items-center justify-between px-2.5 py-1 rounded-lg text-[13px] transition-colors group ${
+                  className={`flex items-center justify-between px-2.5 py-1 rounded-control text-[13px] transition-colors group ${
                     isOrgSelected
                       ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
                       : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
@@ -135,7 +135,7 @@ export function ForumSidebar({
                         <Link
                           key={proj.id}
                           href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
-                          className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
+                          className={`flex items-center justify-between px-2 py-1 rounded-chip text-xs transition-colors cursor-pointer text-left ${
                             isProjSelected
                               ? "bg-zk-chip text-zk-accent font-semibold"
                               : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/40"
@@ -162,7 +162,7 @@ export function ForumSidebar({
             type="button"
             aria-expanded={expandedSections.external}
             onClick={() => toggleSection("external")}
-            className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+            className="flex items-center justify-between px-2 py-1 rounded-chip text-[11px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
           >
             <span>External Projects</span>
             <ForumIcon size={11} className={`transition-transform ${expandedSections.external ? "rotate-90" : ""}`}>
@@ -182,7 +182,7 @@ export function ForumSidebar({
                 <Link
                   key={ext.id}
                   href={scopedForumPath("project", extOrgSlug, extProjSlug)}
-                  className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                  className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-control text-left transition-colors cursor-pointer ${
                     isExtSelected
                       ? "bg-zk-tint text-zk-accent border border-zk-accent/25"
                       : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
@@ -192,11 +192,11 @@ export function ForumSidebar({
                     <span className="text-[13px] font-medium text-zk-text truncate">
                       {ext.name}
                     </span>
-                    <span className="text-[9px] uppercase font-mono px-1 rounded bg-zk-chip text-zk-muted shrink-0">
+                    <span className="text-[11px] uppercase font-mono px-1 rounded bg-zk-chip text-zk-muted shrink-0">
                       Guest
                     </span>
                   </div>
-                  <span className="text-[11px] text-zk-muted truncate font-mono">
+                  <span className="text-[11px] text-zk-muted truncate">
                     {ext.organisationName}
                   </span>
                 </Link>
@@ -211,7 +211,7 @@ export function ForumSidebar({
           type="button"
           aria-expanded={expandedSections.hub}
           onClick={() => toggleSection("hub")}
-          className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+          className="flex items-center justify-between px-2 py-1 rounded-chip text-[11px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
         >
           <span>Agent Hub</span>
           <ForumIcon size={11} className={`transition-transform ${expandedSections.hub ? "rotate-90" : ""}`}>
@@ -222,7 +222,7 @@ export function ForumSidebar({
           <div className="flex flex-col gap-0.5">
             <Link
               href="/agents"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-control text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
             >
               <ForumIcon size={14} className="text-zk-muted">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -234,7 +234,7 @@ export function ForumSidebar({
             </Link>
             <Link
               href="/agents/mine"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-control text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
             >
               <ForumIcon size={14} className="text-zk-muted">
                 <rect x="3" y="11" width="18" height="10" rx="2" />
@@ -245,7 +245,7 @@ export function ForumSidebar({
             </Link>
             <Link
               href="/skills"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-control text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
             >
               <ForumIcon size={14} className="text-zk-muted">
                 <path d="M12 2L2 7l10 5 10-5-10-5z" />
