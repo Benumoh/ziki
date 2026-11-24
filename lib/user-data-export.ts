@@ -1,5 +1,4 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { pointsNumber } from "@/lib/points/rules";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -47,6 +46,16 @@ export type UserExportData = {
     correctedAt: Date | null;
     createdAt: Date;
   }>;
+  /** Their Ziks: every ledger row in their name (#one-payment), earnings included. */
+  ziks: Array<{
+    id: string;
+    account: string;
+    kind: string;
+    payoutRole: string | null;
+    amount: number;
+    bugId: string | null;
+    createdAt: Date;
+  }>;
 };
 
 /**
@@ -54,7 +63,8 @@ export type UserExportData = {
  * - Authored issues (what they filed)
  * - Comments authored by them
  * - Votes cast
- * - Points earned
+ * - Points earned before Ziks were the only payment
+ * - Their Ziks ledger rows: earnings, purchases, spending and withdrawals
  */
 export async function exportUserData(
   db: Db,
@@ -75,7 +85,7 @@ export async function exportUserData(
     throw new Error(`User with ID "${userId}" not found.`);
   }
 
-  const [issues, comments, votes, points] = await Promise.all([
+  const [issues, comments, votes, points, ziks] = await Promise.all([
     db.bug.findMany({
       where: { reporterId: userId },
       select: {
@@ -127,6 +137,11 @@ export async function exportUserData(
       },
       orderBy: { createdAt: "desc" },
     }),
+    db.coinEntry.findMany({
+      where: { userId },
+      select: { id: true, account: true, kind: true, payoutRole: true, amount: true, bugId: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   return {
@@ -141,6 +156,7 @@ export async function exportUserData(
     issues,
     comments,
     votes,
-    points: points.map((row) => ({ ...row, points: pointsNumber(row.points) })),
+    points: points.map((row) => ({ ...row, points: Number(row.points) })),
+    ziks: ziks.map((row) => ({ ...row, amount: Number(row.amount) })),
   };
 }

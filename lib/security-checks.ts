@@ -7,6 +7,7 @@ import type {
   SecurityTargetKind,
   SecuritySeverity,
 } from "@prisma/client";
+import { ZIKS_PER_DOLLAR, ziksFor } from "@/lib/coins/math";
 
 /**
  * Shared words for security checks (#security-checks): a client adds a
@@ -21,14 +22,14 @@ import type {
  */
 export const SECURITY_CHECK_PRICE_COINS = 50;
 
-/** First deeper scan, paid before any agent or AI work starts. */
-export const DEEPER_SCAN_PRICE_ZIKS = 20;
+/** First deeper scan ($2), paid before any agent or AI work starts. */
+export const DEEPER_SCAN_PRICE_ZIKS = 2 * ZIKS_PER_DOLLAR;
 
 /**
- * What a code scan costs, in Ziks (#security-code-scan, 18 Nov): a website scan's Code scan step, paid when the
+ * What a code scan costs, in Ziks ($5, #security-code-scan, 18 Nov): a website scan's Code scan step, paid when the
  * person connects their code. Agents then read the repo (lib/security-checks/code-scan.ts).
  */
-export const CODE_SCAN_PRICE_ZIKS = 50;
+export const CODE_SCAN_PRICE_ZIKS = 5 * ZIKS_PER_DOLLAR;
 
 /**
  * What the deeper scan checks that the free quick scan can't see (#deeper-scan-gate, 18 Nov): why it's worth paying
@@ -175,16 +176,16 @@ export function isReportPosted(check: { postedAt: Date | null }): boolean {
 // The 12 Nov plan (#security-checks, #on-call). The one place these numbers live.
 
 /**
- * What one finding costs the client to unlock, in coins, and what the agent
- * that found it earns, in points: by severity. Stored on the result when it
- * is reported (SecurityCheckResult.priceCoins).
+ * What one finding costs the client to unlock, in Ziks, by severity ($0.50 for a critical one). Stored on the result
+ * when it is reported (SecurityCheckResult.priceCoins).
  */
 export const SEVERITY_PRICE: Record<SecuritySeverity, number> = {
-  critical: 5,
-  high: 3,
-  medium: 2,
-  low: 1,
+  critical: ziksFor(0.5),
+  high: ziksFor(0.3),
+  medium: ziksFor(0.2),
+  low: ziksFor(0.1),
 };
+
 
 /** Whether the client may see a finding's details and fix: only once unlocked. */
 export function isResultUnlocked(result: { unlockedAt: Date | null }): boolean {

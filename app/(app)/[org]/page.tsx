@@ -3,6 +3,7 @@ import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { projectFirstTarget, requireOrg } from "@/lib/project-route";
 import { issuesPath, orgRef } from "@/lib/project-paths";
 import { NewProjectButton } from "./new-project-form";
+import { organisationSoloBlock, SOLO_BLOCK_MESSAGE } from "@/lib/projects/solo";
 
 type Props = { params: Promise<{ org: string }> };
 
@@ -32,6 +33,8 @@ export default async function OrganisationHome({ params }: Props) {
   });
   // The Overview across every project (#project-filter).
   if (first) redirect(issuesPath(orgRef(organisation.slug), "your_work"));
+  // #solo: a new project can be Solo only while nobody else works in the organisation.
+  const soloBlocked = await organisationSoloBlock(prisma, organisation.id);
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-4 py-16 text-center">
@@ -40,7 +43,7 @@ export default async function OrganisationHome({ params }: Props) {
         A project is one product inside {organisation.name}, such as a web app. Create the first one to start.
       </p>
       <div className="flex justify-center">
-        <NewProjectButton orgSlug={organisation.slug} />
+        <NewProjectButton orgSlug={organisation.slug} soloBlockedReason={soloBlocked ? SOLO_BLOCK_MESSAGE[soloBlocked] : null} />
       </div>
     </div>
   );

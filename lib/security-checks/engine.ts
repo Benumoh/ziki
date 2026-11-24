@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, SecurityCheckStatus, SecuritySeverity, SecurityTargetKind } from "@prisma/client";
-import { award } from "@/lib/points/award";
+import { appendRows } from "@/lib/coins/ledger";
+import { feeOf } from "@/lib/coins/math";
 import { logger } from "@/lib/logger";
 import { ON_CALL_QUIET_AFTER_MS, SEVERITY_PRICE, ZIKI_SECURITY_AGENT_USERNAME, agentsMayWork, fallbackWindowMs, ownershipProofRequired, provenTargetWhere, scanPaymentWhere } from "@/lib/security-checks";
 import { cleanParts, coreParts, planParts, writeSummary, type PageReader, type PlannedPart, type SecurityAi } from "./ai";
@@ -28,9 +29,9 @@ import { codeRoute } from "./repo-access";
  *    does the client see anything.
  * 5. A part not reported within JOB_TIMEOUT_MINUTES goes back to waiting, for
  *    another agent.
- * 6. When the client unlocks a finding, the agent that found it earns its price,
- *    once (`payoutReleasedAt`, source key `security-finding:<resultId>`). Free
- *    scans that are never unlocked pay nobody.
+ * 6. When the client unlocks a finding, the agent's owner that found it is paid
+ *    what the client paid, less Ziki's fee, once (`payoutReleasedAt`, source key
+ *    `security-finding:<resultId>`). Free scans that are never unlocked pay nobody.
  *
  * Every state change is a conditional update checked by its count, because the
  * sweep, an agent asking for work and the timeout can reach the same row. AI
@@ -715,11 +716,10 @@ export async function postFinishedReports(db: EngineDb, now = new Date(), deps: 
 // 6. Pay per finding, once the client unlocks it.
 
 /**
- * Pays the finder of every unlocked, unpaid finding: its price, to the agent's
- * owner, in the client's workspace ledger, once (the source key and the
- * conditional `payoutReleasedAt` both guard it). The price is exact: the
- * workspace's points multiplier doesn't apply, because the finder earns what
- * the client paid.
+ * Pays the finder of every unlocked, unpaid finding (#one-payment): what the
+ * client paid to unlock it, less Ziki's fee, from Ziki's revenue into the
+ * agent's owner's wallet, once (the source key and the conditional
+ * `payoutReleasedAt` both guard it).
  */
 export async function payUnlockedFindings(db: EngineDb, now = new Date()): Promise<number> {
   const due = await db.securityCheckResult.findMany({
@@ -745,16 +745,15 @@ export async function payUnlockedFindings(db: EngineDb, now = new Date()): Promi
         data: { payoutReleasedAt: now },
       });
       if (count !== 1) return false;
-      await award(tx, {
-        organisationId: result.check.organisationId,
-        userId: owner,
-        agentId,
-        bugId: null,
-        role: "security_check",
-        points: result.priceCoins ?? SEVERITY_PRICE[result.severity],
-        sourceKey: findingSourceKey(result.id),
-        exact: true,
-      });
+      const price = result.priceCoins ?? SEVERITY_PRICE[result.severity];
+      const share = price - feeOf(price);
+      if (share > 0) {
+        const key = findingSourceKey(result.id);
+        await appendRows(tx, [
+          { account: "revenue", kind: "release", payoutRole: "security_finder", agentId, amount: -share, sourceKey: `${key}:revenue` },
+          { account: "wallet", userId: owner, kind: "release", payoutRole: "security_finder", agentId, amount: share, sourceKey: `${key}:wallet` },
+        ]);
+      }
       return true;
     });
     if (done) paid++;

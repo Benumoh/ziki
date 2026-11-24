@@ -33,7 +33,7 @@ export async function unlockSecurityFindings(checkId: string, which: "all" | str
     if (outcome.reason === "not_found") return { error: "That check isn't one of yours." };
     if (outcome.reason === "not_posted") return { error: "The report isn't ready yet. You can unlock fixes once it's posted." };
     if (outcome.reason === "insufficient_ziks") {
-      return { error: `That costs ${outcome.needed} Ziks and you have ${outcome.balance}. Buy more Ziks, then unlock again.` };
+      return { error: `That costs ${outcome.needed.toLocaleString("en-US")} Ziks and you have ${outcome.balance.toLocaleString("en-US")}. Buy more Ziks, then unlock again.` };
     }
     return { error: "Those findings are already unlocked." };
   }

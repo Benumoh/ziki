@@ -9,7 +9,6 @@ const projectId = "project-1";
 const db = vi.hoisted(() => ({
   bug: { findUnique: vi.fn(), update: vi.fn() },
   vote: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(), groupBy: vi.fn() },
-  pointEntry: { createMany: vi.fn(async () => ({ count: 1 })) },
   agentEvent: { create: vi.fn(), findUnique: vi.fn() },
   webhookSubscription: { findMany: vi.fn() },
   webhookDelivery: { createMany: vi.fn() },

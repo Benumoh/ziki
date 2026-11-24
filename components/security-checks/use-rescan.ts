@@ -7,6 +7,9 @@ import { borrowZiks } from "@/app/actions/ziks-loan";
 import { SadZiks } from "@/components/coins/sad-ziks";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { ZIKS_LOAN } from "@/lib/coins/loan";
+
+const LOAN = ZIKS_LOAN.toLocaleString("en-US");
 
 /**
  * Scan again with agents (#security-rescan, 17 Nov), from the scan page's menu or the Assets list: a confirm with
@@ -29,9 +32,9 @@ export function useRescan() {
         art: createElement(SadZiks),
         title: "Oops, not enough Ziks",
         body:
-          `This scan costs ${outcome.needed} Ziks and you have ${Math.max(0, outcome.balance)}. Would you like to borrow 20 Ziks for it? ` +
+          `This scan costs ${outcome.needed.toLocaleString("en-US")} Ziks and you have ${Math.max(0, outcome.balance).toLocaleString("en-US")}. Would you like to borrow ${LOAN} Ziks for it? ` +
           "It's a one-time loan, and your first top-up pays it back.",
-        confirmLabel: "Borrow 20 Ziks and scan",
+        confirmLabel: `Borrow ${LOAN} Ziks and scan`,
         cancelLabel: "Not now",
       });
       if (!borrow) return null;
@@ -65,8 +68,8 @@ export function useRescan() {
         title: one ? `Scan ${first.site} again?` : `Scan ${ready.length} targets again?`,
         body:
           `The same checks as last time: the ${earlier} ${earlier === 1 ? "problem" : "problems"} found before ${earlier === 1 ? "is" : "are"} rechecked to see what's fixed. ` +
-          `It costs ${price} Ziks; you have ${first.balance}.`,
-        confirmLabel: `Scan again for ${price} Ziks`,
+          `It costs ${price.toLocaleString("en-US")} Ziks; you have ${first.balance.toLocaleString("en-US")}.`,
+        confirmLabel: `Scan again for ${price.toLocaleString("en-US")} Ziks`,
       });
       if (!confirmed) return;
       const started: string[] = [];

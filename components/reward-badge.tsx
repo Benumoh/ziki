@@ -1,26 +1,36 @@
-import { ZikAmount } from "@/components/zik-symbol";
-import { dollarsToZiks } from "@/lib/coins/math";
-import { REWARD_MAX_ESTIMATES } from "@/lib/points/rules";
+import { ZikSymbol } from "@/components/zik-symbol";
 
 /**
- * An issue's reward in the list (#rewards): what solving it is worth, in Ziks.
- * The amount alone; how far the estimating has got is in its title. `reward` is
- * what the issue stores, in $ (a Zik is 10 cents); it is shown in Ziks.
+ * Ziks in a few characters, for the issue list where there is little room: 670, 5k, 5.3k, 12k, 1.2M. Exact to a tenth
+ * of the unit, never rounded up into a different-looking amount, and no "+": a locked price is exact.
  */
-export function RewardBadge({ reward, estimates, fixed, funded = false }: { reward: number; estimates: number; fixed: boolean; funded?: boolean }) {
-  const ziks = dollarsToZiks(reward);
-  const base = fixed
-    ? `Reward ${ziks} Ziks, fixed`
-    : estimates === 0
-      ? `Reward ${ziks} Ziks, not estimated yet`
-      : `Reward ${ziks} Ziks, ${estimates} of ${REWARD_MAX_ESTIMATES} estimates`;
-  const label = funded ? `${base}, funded` : base;
+export function compactZiks(ziks: number): string {
+  const amount = Math.round(ziks);
+  const short = (value: number, unit: string) => `${Number((Math.floor(value * 10) / 10).toFixed(1))}${unit}`;
+  if (amount >= 1_000_000) return short(amount / 1_000_000, "M");
+  if (amount >= 1_000) return short(amount / 1_000, "k");
+  return String(amount);
+}
+
+/**
+ * An issue's price on the list (#price-lock), in Ziks: green once it is funded and locked (the Ziks are held for the
+ * fixer), grey while it is priced but waiting for funding, and nothing while agents are still estimating it. The full
+ * amount and where it stands are in its title.
+ */
+export function RewardBadge({ price, held, className = "text-[14px]" }: { price: number | null; held: number; className?: string }) {
+  if (price === null) return <span data-testid="reward" aria-hidden="true" />;
+  const funded = held >= price;
+  const label = `${price.toLocaleString("en-US")} Ziks, ${funded ? "funded" : "waiting for funding"}`;
   return (
-    <span className="inline-flex flex-col items-start leading-tight" title={label} aria-label={label} data-testid="reward">
-      <span className={`font-mono text-[14px] font-bold tabular-nums ${fixed ? "text-zk-text" : "text-zk-ok-fg"}`}>
-        <ZikAmount amount={ziks} />
-      </span>
-      {funded ? <span className="mt-0.5 rounded-full bg-zk-ok-bg px-1.5 text-[10px] font-bold uppercase tracking-[0.04em] text-zk-ok-fg" data-testid="funded-badge">Funded</span> : null}
+    <span
+      className={`inline-flex items-baseline gap-[0.12em] whitespace-nowrap font-mono font-bold tabular-nums ${className} ${funded ? "text-zk-ok-fg" : "text-zk-muted"}`}
+      title={label}
+      aria-label={label}
+      data-testid="reward"
+      data-funded={funded ? "true" : "false"}
+    >
+      <ZikSymbol />
+      {compactZiks(price)}
     </span>
   );
 }

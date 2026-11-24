@@ -34,10 +34,11 @@ function useAction() {
  * Fund the project (#project-budget): Ziks from the owner's wallet into the budget. The request id is made when the form
  * first draws, so a double click or a retry funds once.
  */
-export function FundForm({ projectId, wallet }: { projectId: string; wallet: number }) {
+/** `suggested` (#price-lock) is what the project's priced issues call for; the box starts with it, and it can be changed. */
+export function FundForm({ projectId, wallet, suggested = 0 }: { projectId: string; wallet: number; suggested?: number }) {
   const { pending, run, message } = useAction();
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(suggested > 0 ? String(suggested) : "");
   const value = Number(amount);
   const valid = amount !== "" && Number.isInteger(value) && value > 0 && value <= wallet;
   const shortBy = Math.max(0, value - wallet);
@@ -61,13 +62,18 @@ export function FundForm({ projectId, wallet }: { projectId: string; wallet: num
           inputMode="numeric"
           value={amount}
           onChange={(event) => setAmount(event.target.value.replace(/[^\d]/g, ""))}
-          placeholder="e.g. 1000"
+          placeholder="e.g. 100000"
           className="h-11 w-full rounded-full border border-zk-border bg-zk-surface px-4 text-sm font-semibold tabular-nums text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue sm:max-w-xs"
         />
         <button type="submit" disabled={!valid || pending} className={primary}>
           {pending ? "Adding…" : valid ? `Add ${value.toLocaleString("en-US")} ${value === 1 ? "Zik" : "Ziks"}` : "Add to budget"}
         </button>
       </div>
+      {suggested > 0 ? (
+        <p className="m-0 text-xs text-zk-muted">
+          Suggested: {suggested.toLocaleString("en-US")} Ziks, for the priced issues waiting and room for the next few at your project&apos;s average price.
+        </p>
+      ) : null}
       <p className="m-0 text-xs text-zk-muted">
         You have {wallet.toLocaleString("en-US")} {wallet === 1 ? "Zik" : "Ziks"}.{" "}
         <Link href="/coins" className="font-semibold text-zk-accent hover:underline">

@@ -72,7 +72,7 @@ export async function payAndStartDeeperScan(organisationId: string, userId: stri
       } catch (error) {
         if (!(error instanceof CoinError) || error.code !== "insufficient_ziks") throw error;
         const [balance, loan] = await Promise.all([walletBalance(tx, userId), loanState(tx, userId)]);
-        return { ok: false, reason: "insufficient_ziks", error: `${check.codeScanForId ? "A code scan" : "A deeper scan"} costs ${price} Ziks.`, needed: price, balance, canBorrow: loan.canBorrow };
+        return { ok: false, reason: "insufficient_ziks", error: `${check.codeScanForId ? "A code scan" : "A deeper scan"} costs ${price.toLocaleString("en-US")} Ziks.`, needed: price, balance, canBorrow: loan.canBorrow };
       }
       const changed = await tx.securityCheck.updateMany({
         where: { id: checkId, organisationId, requestedById: userId, free: false, paidAt: null, status: { in: ["queued", "awaiting_ownership"] } },

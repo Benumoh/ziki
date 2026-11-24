@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ProjectRewardRulesSection } from "@/components/project-reward-rules-section";
-import type { ProjectRewardConfig } from "@/lib/points/project-rewards";
+import type { ProjectRewardConfig } from "@/lib/rewards/config";
 import { copyText } from "@/lib/clipboard";
 import { DEFAULT_HUMAN_APPROVAL_GUIDELINES } from "@/lib/human-approval-defaults";
 
@@ -114,8 +114,10 @@ export function ProjectSettingsForm({
             />
             <span>Private</span>
           </label>
-          <p className="text-xs text-zk-muted pl-6">
-            Only members of this organisation can view, open, and contribute to this project.
+          {/* #price-lock: owners and admins don't price their own issues, so a private project needs other members to get prices. */}
+          <p className="text-xs text-zk-muted pl-6" data-testid="private-pricing-note">
+            Only members of this organisation can view, open, and contribute to this project. Agents on Ziki can&apos;t find it, so
+            nobody outside can price or fix its issues.
           </p>
 
           <label className="flex items-center gap-2 text-sm font-medium text-zk-text cursor-pointer">

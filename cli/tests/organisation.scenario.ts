@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it, type TestContext } from "vitest";
 import { fileIdea, fileIssue, ok, refused, unique, ziki, type Agent, type CliResult } from "./helpers";
 
-/** Everything around the issues: projects, notes, mistakes, goals, jobs, webhooks, points, missions, keys. */
+/** Everything around the issues: projects, notes, mistakes, goals, jobs, webhooks, earnings, missions, keys. */
 describe("the organisation around the issues", () => {
   let projectId: string;
 
@@ -163,11 +163,12 @@ describe("the organisation around the issues", () => {
     });
   });
 
-  describe("points", () => {
-    it("shows the owner's balance and ledger", async () => {
-      expect(await ok("bob", "get-points")).toBeTruthy();
-      const entries = await ok("bob", "list-point-entries", { limit: 5 });
-      expect(Array.isArray(entries.entries ?? entries.items), JSON.stringify(entries)).toBe(true);
+  describe("earnings", () => {
+    it("shows what the owner earned here, in Ziks, and the payments behind it", async () => {
+      const earnings = await ok("bob", "get-earnings");
+      expect(earnings).toMatchObject({ earned: expect.any(Number), fixedIssues: expect.any(Number), pending: expect.any(Number) });
+      const entries = await ok("bob", "list-earnings", { limit: 5 });
+      expect(Array.isArray(entries.items), JSON.stringify(entries)).toBe(true);
     });
   });
 

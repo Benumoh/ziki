@@ -7,7 +7,6 @@ const db = vi.hoisted(() => ({
   projectNoteRevision: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
   projectNoteComment: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
   projectNoteCommentVote: { findUnique: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn(), count: vi.fn() },
-  pointEntry: { createMany: vi.fn() },
   agentAuditEvent: { create: vi.fn() }, $transaction: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
@@ -27,7 +26,6 @@ beforeEach(() => {
   db.projectNoteRevision.create.mockResolvedValue({ id: "revision" });
   db.projectNotes.findUniqueOrThrow.mockResolvedValue({ body: input.body, version: 1 });
   db.projectNotes.updateMany.mockResolvedValue({ count: 1 });
-  db.pointEntry.createMany.mockResolvedValue({ count: 1 });
 });
 
 describe("project notes access", () => {
@@ -126,27 +124,5 @@ describe("agent discussion", () => {
     expect(db.projectNoteCommentVote.deleteMany).toHaveBeenCalledWith({ where: { commentId: "comment", userId: "owner" } });
     expect(db.projectNotes.updateMany).not.toHaveBeenCalled();
     expect(db.projectNoteRevision.create).not.toHaveBeenCalled();
-  });
-
-  it("pays the note's author for upvotes from others and takes points back for downvotes (#note-vote-points)", async () => {
-    db.projectNoteComment.findFirst.mockResolvedValue({ id: "comment", ownerId: "author", agentId: "author-agent" });
-    db.projectNoteCommentVote.count.mockResolvedValue(0);
-    db.pointEntry.createMany.mockResolvedValue({ count: 1 });
-    db.projectNoteCommentVote.findUnique.mockResolvedValue(null);
-    await voteNoteComment(actor, "comment", 1);
-    // Switching an upvote to a downvote moves 2 points.
-    db.projectNoteCommentVote.findUnique.mockResolvedValue({ value: 1 });
-    await voteNoteComment(actor, "comment", -1);
-    const paid = db.pointEntry.createMany.mock.calls.map(([args]) => args.data[0]);
-    expect(paid.map((entry: { points: number }) => Number(entry.points))).toEqual([0.01, -0.02]);
-    expect(paid.every((entry: { userId: string; agentId: string }) => entry.userId === "author" && entry.agentId === "author-agent")).toBe(true);
-  });
-
-  it("pays nothing for voting on your own note", async () => {
-    db.projectNoteComment.findFirst.mockResolvedValue({ id: "comment", ownerId: "owner", agentId: "agent" });
-    db.projectNoteCommentVote.findUnique.mockResolvedValue(null);
-    db.projectNoteCommentVote.count.mockResolvedValue(0);
-    await voteNoteComment(actor, "comment", 1);
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
   });
 });

@@ -34,7 +34,7 @@ import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { currentHold } from "@/lib/issue-holders";
 import { staleHold } from "@/lib/agent-api/stale-hold";
 import { classifyAgentStatus, isClaimStalled, loadOwnAgents } from "@/lib/dashboard-overview";
-import { isListedOnPage, projectAgentState, NOT_RESPONDING_AFTER_MS, type HeldClaimSignal } from "@/lib/agents/project-agents";
+import { focusOf, holdsWork, isOnlineNow, nudgeNote, projectAgentState, stepFor, NOT_RESPONDING_AFTER_MS, QUESTIONS_HREF, type HeldClaimSignal, type ProjectAgent, type ProjectAgentClaim } from "@/lib/agents/project-agents";
 import { loadAgentStuckContext } from "@/app/(app)/agent/[username]/data";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -491,7 +491,7 @@ describe("owner pause and steering", () => {
   });
 });
 
-describe("active agents in a project (#active-agents)", () => {
+describe("agents at work in a project (#online-agents)", () => {
   const minutes = (n: number) => new Date(now.getTime() - n * 60_000);
   const live: HeldClaimSignal = {
     status: "active", issueNumber: 7, issueStatus: "in_progress", offeredAt: minutes(60), claimedAt: minutes(55),
@@ -538,12 +538,56 @@ describe("active agents in a project (#active-agents)", () => {
     expect(state([offer], { lastActedAt: minutes(2) })).toBe("offered");
   });
 
-  it("leaves a delivered agent that isn't online off the page, and lists it while it is", () => {
-    expect(isListedOnPage({ status: "delivered", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(false);
-    expect(isListedOnPage({ status: "delivered", lastSeenAt: null }, now)).toBe(false);
-    expect(isListedOnPage({ status: "delivered", lastSeenAt: minutes(5) }, now)).toBe(true);
-    // Only delivered agents: a stuck or offline one stays listed, whenever it was seen.
-    expect(isListedOnPage({ status: "stuck", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(true);
-    expect(isListedOnPage({ status: "offline", lastSeenAt: minutes(60 * 24 * 10) }, now)).toBe(true);
+  it("calls an agent online when it checked in within 15 minutes and isn't paused", () => {
+    expect(isOnlineNow({ status: "working", lastSeenAt: minutes(5) }, now)).toBe(true);
+    expect(isOnlineNow({ status: "idle", lastSeenAt: minutes(16) }, now)).toBe(false);
+    expect(isOnlineNow({ status: "idle", lastSeenAt: null }, now)).toBe(false);
+    // Paused by its owner: its clocks are frozen, so it isn't counted online even while it polls.
+    expect(isOnlineNow({ status: "paused", lastSeenAt: minutes(1) }, now)).toBe(false);
+  });
+
+  const held = (extra: Partial<ProjectAgentClaim> = {}): ProjectAgentClaim => ({
+    id: "c", bugId: "bug-7", status: "active", issueNumber: 7, issueTitle: "Fix login", issueStatus: "in_progress", href: "/acme/web/7", stuck: false, unanswered: false, ...extra,
+  });
+  const agent = (extra: Partial<ProjectAgent> = {}): ProjectAgent => ({
+    id: "a", name: "Ada's Claude", username: "ada-claude", avatar: null, ownerUserId: "ada", ownerName: "Ada",
+    status: "working", detail: "", lastSeenAt: minutes(1), openBids: 0, claims: [held()], ...extra,
+  });
+
+  it("holds work while it has an offer, a plan or work in progress, not when its work is only delivered", () => {
+    expect(holdsWork(agent())).toBe(true);
+    expect(holdsWork(agent({ claims: [held({ status: "offered", issueStatus: "open" })] }))).toBe(true);
+    expect(holdsWork(agent({ claims: [held({ issueStatus: "done" })] }))).toBe(false);
+    expect(holdsWork(agent({ claims: [] }))).toBe(false);
+  });
+
+  it("says what it is on, with the issue that needs attention first", () => {
+    const stuck = held({ id: "s", issueNumber: 3, stuck: true });
+    expect(focusOf(agent({ status: "stuck", claims: [held(), stuck] }))).toEqual({ text: "Stuck on", claim: stuck });
+    expect(focusOf(agent())).toMatchObject({ text: "Working on", claim: { issueNumber: 7 } });
+    // Working with no claim: clearing the queue, with no issue to name.
+    expect(focusOf(agent({ claims: [] }))).toEqual({ text: "Helping clear the queue: voting, testing and reviewing", claim: null });
+    expect(focusOf(agent({ status: "idle", claims: [] })).text).toBe("Free: it can be offered work");
+    expect(focusOf(agent({ status: "bidding", claims: [], openBids: 2 })).text).toBe("Bidding on 2 issues, waiting for an award");
+  });
+
+  it("offers the viewer one step, only where they can take it", () => {
+    // Its owner answers its question, accepts its offer, or nudges it when it is stuck.
+    expect(stepFor(agent({ status: "waiting" }), "ada")).toEqual({ kind: "link", label: "Answer it", href: QUESTIONS_HREF });
+    const offered = agent({ status: "offered", claims: [held({ status: "offered", issueStatus: "open" })] });
+    expect(stepFor(offered, "ada")).toEqual({ kind: "link", label: "Accept the offer", href: "/acme/web/7" });
+    const stuck = agent({ status: "stuck", claims: [held({ stuck: true })] });
+    expect(stepFor(stuck, "ada")).toMatchObject({ kind: "nudge", label: "Nudge it", claim: { bugId: "bug-7" } });
+    expect(nudgeNote(7)).toContain("#7");
+    // Someone else can't answer for it, accept for it or nudge it (only an owner may steer their agent)…
+    expect(stepFor(agent({ status: "waiting" }), "bo")).toBeNull();
+    expect(stepFor(offered, "bo")).toBeNull();
+    expect(stepFor(stuck, "bo")).toBeNull();
+    // …but can review what it delivered; its owner can't review their own agent's work.
+    const delivered = agent({ status: "delivered", claims: [held({ issueStatus: "done" })] });
+    expect(stepFor(delivered, "bo")).toEqual({ kind: "link", label: "Review it", href: "/acme/web/7" });
+    expect(stepFor(delivered, "ada")).toBeNull();
+    // Working along with nothing wrong: nothing to do.
+    expect(stepFor(agent(), "ada")).toBeNull();
   });
 });

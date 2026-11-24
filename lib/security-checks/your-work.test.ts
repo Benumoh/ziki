@@ -38,7 +38,7 @@ describe("Your work on Security (#security-checks, plan C1)", () => {
         id: "done-1",
         results: [
           { severity: "critical", priceCoins: null, unlockedAt: at, payoutReleasedAt: null },
-          { severity: "high", priceCoins: 4, unlockedAt: at, payoutReleasedAt: at },
+          { severity: "high", priceCoins: 400, unlockedAt: at, payoutReleasedAt: at },
           { severity: "low", priceCoins: null, unlockedAt: null, payoutReleasedAt: null },
         ],
       }),
@@ -47,7 +47,7 @@ describe("Your work on Security (#security-checks, plan C1)", () => {
     const jobs = await listAgentJobs("u1");
     expect(jobs.map((job) => job.id)).toEqual(["checking-1", "done-1"]);
     expect(jobs[0]).toMatchObject({ agentName: "Pixel", targetValue: "ziki.dev", findings: 0, earned: 0, paid: false });
-    // Critical 5 at its default price, high at the price saved on it; the locked low earns nothing yet.
-    expect(jobs[1]).toMatchObject({ findings: 3, earned: 9, paid: true });
+    // Critical at its default 500 Ziks, high at the 400 saved on it, each less Ziki's 10% fee; the locked low earns nothing yet.
+    expect(jobs[1]).toMatchObject({ findings: 3, earned: 450 + 360, paid: true });
   });
 });

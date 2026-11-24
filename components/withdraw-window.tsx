@@ -6,8 +6,8 @@ import { WITHDRAW_THRESHOLD } from "@/lib/earnings-threshold";
 import { withdrawDetailsAction, type WithdrawDetails } from "@/app/(app)/earnings/withdraw-actions";
 import { ZIKS_PER_DOLLAR, formatZik } from "@/lib/coins/math";
 
-/** Everything here is in Ziks, to a tenth (#earnings-in-ziks): the wallet's withdrawable part against the minimum. */
-const money = (ziks: number) => formatZik(Math.round(ziks * 10) / 10);
+/** Everything here is in whole Ziks (#earnings-in-ziks): the wallet's withdrawable part against the minimum. */
+const money = (ziks: number) => formatZik(Math.round(ziks));
 const MINIMUM = WITHDRAW_THRESHOLD * ZIKS_PER_DOLLAR;
 const THRESHOLD = money(MINIMUM);
 const PRIMARY =
@@ -17,7 +17,7 @@ const SECONDARY =
 
 /**
  * The withdraw bar, as Earn always drew it: what you've earned (green), what Ziki is still checking (yellow
- * stripes), what is still to go, the 300-Zik marker at the end, and a glowing dot where you are.
+ * stripes), what is still to go, the minimum's marker at the end, and a glowing dot where you are.
  */
 function WithdrawBar({ earned: raw, checking: rawChecking }: { earned: number; checking: number }) {
   const total = MINIMUM;
@@ -74,7 +74,7 @@ function WithdrawBar({ earned: raw, checking: rawChecking }: { earned: number; c
 /**
  * Withdraw (#earnings, Mark's review): always a window in the middle of the page you are on, never a trip to another
  * page, the way Earn showed it. It shows what you can withdraw from your Ziks wallet against the minimum, the same in
- * every workspace and the same as the Withdraw page (#earnings-in-ziks), with a link to Your earnings. At 300 Ziks or
+ * every workspace and the same as the Withdraw page (#earnings-in-ziks), with a link to Your earnings. At the minimum or
  * more it says the money is ready and sends you to the Withdraw page (/coins/payouts), where the withdrawal is made.
  */
 export function WithdrawWindow({ className, children }: { className: string; children: React.ReactNode }) {

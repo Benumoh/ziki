@@ -16,7 +16,7 @@ concurrency:
 jobs:
   ci:
     name: Lint, Type Check, Test & Build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, emerjent]
     timeout-minutes: 15
     env:
       DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"

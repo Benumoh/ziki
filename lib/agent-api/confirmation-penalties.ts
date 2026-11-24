@@ -5,9 +5,7 @@ import type { AgentContext } from "@/lib/agents/require-agent";
 import { requireLevel } from "@/lib/agents/levels";
 import { audit } from "@/lib/agents/audit";
 import { IssueApiError } from "@/lib/agent-api/errors";
-import { award } from "@/lib/points/award";
-import { correct } from "@/lib/points/correct";
-import { confirmationReviewerSourceKey, pointsNumber, roundPoints, triagerClearSourceKey } from "@/lib/points/rules";
+
 import { REPUTATION_PER_PENALTY } from "@/lib/agents/reputation";
 
 /**
@@ -17,9 +15,9 @@ import { REPUTATION_PER_PENALTY } from "@/lib/agents/reputation";
  * may then penalise another confirmation whose files are irrelevant, don't
  * exist or are empty (`POST /api/v1/confirmations/{id}/penalties`):
  *
- * - The penalised confirmer loses what that confirmation earned (its
- *   confirmation reviewer and triager-clear points, corrected in the ledger)
- *   and is not paid for it later; the penaliser gets the same amount.
+ * - The penalised confirmation earns nothing: it is left out of the
+ *   confirmers' share when the issue pays out (#one-payment,
+ *   lib/coins/issue-payout.ts). The penaliser earns nothing extra for it.
  * - The penalised agent's reputation drops (`REPUTATION_PER_PENALTY`).
  * - The reason shows as a reply under the confirmation.
  * - A penalised confirmation still counts toward the confirmation threshold.
@@ -56,8 +54,6 @@ export type PenaltyResult = {
   penaltyId: string;
   confirmationId: string;
   reason: PenaltyReason;
-  /** Points moved from the penalised confirmer to you. */
-  points: number;
   /** The reply posted under the confirmation. */
   commentId: string;
   /** The penalised agent's reputation now, or null when a person gave the confirmation. */
@@ -75,20 +71,6 @@ function parse(raw: unknown): PenaltyInput {
     throw new IssueApiError(400, message, { error: "invalid_request", message, ...(field ? { field } : {}) });
   }
   return parsed.data;
-}
-
-/** The ledger rows a confirmation earned its person: the confirmation reviewer and triager-clear awards, uncorrected. */
-async function confirmationEarnings(tx: Prisma.TransactionClient, bugId: string, userId: string) {
-  return tx.pointEntry.findMany({
-    where: {
-      bugId,
-      userId,
-      correctedAt: null,
-      points: { gt: 0 },
-      sourceKey: { in: [confirmationReviewerSourceKey(bugId, userId), triagerClearSourceKey(bugId, userId)] },
-    },
-    select: { id: true, organisationId: true, userId: true, bugId: true, role: true, points: true, agentId: true },
-  });
 }
 
 /** `POST /api/v1/confirmations/{id}/penalties`: penalise another confirmer's confirmation on an issue you confirmed. */
@@ -144,14 +126,7 @@ export async function penaliseConfirmation(agent: AgentContext, projectId: strin
       throw new IssueApiError(429, message, { error: "penalty_limit", message, limit: PENALTIES_PER_AGENT_PER_DAY });
     }
 
-    // Take back what the confirmation earned, and pay the same to the penaliser.
-    const earned = await confirmationEarnings(tx, target.bugId, target.onBehalfOfUserId);
-    let points = 0;
-    for (const entry of earned) {
-      points += pointsNumber(entry.points);
-      await correct(tx, { entry });
-    }
-    points = roundPoints(points);
+    // Nothing is taken back or paid (#one-payment): the confirmation is simply left out of the payout.
 
     const comment = await tx.comment.create({
       data: {
@@ -175,24 +150,12 @@ export async function penaliseConfirmation(agent: AgentContext, projectId: strin
         targetUserId: target.onBehalfOfUserId,
         targetAgentId: target.agentId,
         reason: input.reason,
-        points,
+        points: 0,
         commentId: comment.id,
       },
       select: { id: true },
     });
 
-    if (points > 0) {
-      await award(tx, {
-        organisationId: target.bug.organisationId,
-        userId: agent.ownerId,
-        bugId: target.bugId,
-        role: "triager",
-        points,
-        sourceKey: penaltySourceKey(target.id),
-        agentId: agent.agentId,
-        exact: true,
-      });
-    }
 
     let targetReputation: number | null = null;
     if (target.agentId) {
@@ -209,7 +172,6 @@ export async function penaliseConfirmation(agent: AgentContext, projectId: strin
       confirmationId: target.id,
       bugId: target.bugId,
       reason: input.reason,
-      points,
       commentId: comment.id,
       targetReputation,
       remainingToday: Math.max(0, PENALTIES_PER_AGENT_PER_DAY - recent - 1),
@@ -220,7 +182,7 @@ export async function penaliseConfirmation(agent: AgentContext, projectId: strin
     agent,
     "issue.confirmation_penalised",
     `issue:${result.bugId}`,
-    { confirmationId: result.confirmationId, reason: result.reason, points: result.points },
+    { confirmationId: result.confirmationId, reason: result.reason },
     { bugId: result.bugId },
   );
   const { bugId: _bugId, ...answer } = result;
@@ -228,10 +190,6 @@ export async function penaliseConfirmation(agent: AgentContext, projectId: strin
   return answer;
 }
 
-/** Idempotency key for the penaliser's award: once per penalised confirmation. */
-export function penaltySourceKey(confirmationId: string): string {
-  return `confirmation-penalty:${confirmationId}`;
-}
 
 /** The confirmations on an issue that were penalised, so they are never paid. */
 export async function penalisedConfirmationIds(db: Prisma.TransactionClient | typeof prisma, bugId: string): Promise<Set<string>> {

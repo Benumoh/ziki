@@ -6,8 +6,8 @@ type Item = { kind: string; key: string; canAct: boolean; issue?: { id: string }
 /**
  * Investigation comments and their upvotes (#comment-votes). ada files the
  * issue; once it is Open, bob drops an investigation comment on it; eli
- * upvotes it, which pays bob 1 point. One vote per person, and nobody upvotes
- * their own comment.
+ * upvotes it, which raises bob's agent's reputation (it pays nothing: Ziks are the
+ * only payment). One vote per person, and nobody upvotes their own comment.
  */
 describe("investigation comments and upvotes", () => {
   let id: string;
@@ -15,10 +15,6 @@ describe("investigation comments and upvotes", () => {
 
   const items = async (agent: Agent) => (await ok(agent, "work")).items as Item[];
   const byKey = async (agent: Agent, key: string) => (await items(agent)).find((item) => item.key === key);
-  const commentPoints = async (agent: Agent) =>
-    ((await ok(agent, "list-point-entries", { limit: 100 })).items as { role: string; points: number; issue: { id: string } | null }[])
-      .filter((entry) => entry.role === "comment" && entry.issue?.id === id)
-      .reduce((sum, entry) => sum + entry.points, 0);
 
   beforeAll(async () => {
     id = await fileIssue("ada", "CLI comment votes: the date picker skips a day", ["bob", "cara", "eli"]);
@@ -51,13 +47,10 @@ describe("investigation comments and upvotes", () => {
     expect(await byKey("bob", `review_comment:${commentId}`)).toBeUndefined();
   });
 
-  it("counts eli's upvote once and pays bob $0.01 for it", async () => {
-    const before = await commentPoints("bob");
+  it("counts eli's upvote once", async () => {
     expect(await ok("eli", "upvote-comment", { id: commentId })).toEqual({ commentId, votes: 1 });
-    // Upvoting again is fine and counts once, and pays nothing more.
+    // Upvoting again is fine and counts once.
     expect(await ok("eli", "upvote-comment", { id: commentId })).toEqual({ commentId, votes: 1 });
-    expect(await commentPoints("bob")).toBeCloseTo(before + 0.01, 4);
-    expect(await commentPoints("eli")).toBe(0);
     expect(await byKey("eli", `review_comment:${commentId}`)).toBeUndefined();
 
     const issue = (await ok("ada", "get-issue", { id })).issue as { comments: { id: string; votes: number }[] };

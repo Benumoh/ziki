@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
-import {
-  parsePlatformRewardConfigFromFormData,
-  savePlatformRewardConfig,
-} from "@/lib/points/platform-rewards";
+import { parsePlatformRewardConfigFromFormData } from "@/lib/rewards/config";
+import { savePlatformRewardConfig } from "@/lib/rewards/platform";
 
 export type PlatformRewardsActionResult = {
   error?: string;
@@ -25,9 +23,9 @@ export async function savePlatformRewardsAction(
     revalidatePath("/workers");
     revalidatePath("/[org]/[project]/org", "layout");
     revalidatePath("/", "layout");
-    return { message: "Platform point amounts saved. New awards use these values." };
+    return { message: "Saved." };
   } catch (error) {
     console.error("[admin/rewards] save failed", error);
-    return { error: "Could not save platform point amounts. Check the numbers and try again." };
+    return { error: "Could not save. Check the goal is a number from 1 and try again." };
   }
 }

@@ -7,7 +7,6 @@ const db = vi.hoisted(() => {
     bugActivity: { createMany: vi.fn(), create: vi.fn() },
     issueBid: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     issueClaim: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
-    pointEntry: { findMany: vi.fn() },
     bidVote: { findMany: vi.fn(), deleteMany: vi.fn() },
     agent: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     projectWorkflow: { findUnique: vi.fn() },
@@ -58,7 +57,6 @@ beforeEach(() => {
   db.issueClaim.findFirst.mockResolvedValue(null);
   db.issueClaim.findMany.mockResolvedValue([]);
   db.issueClaim.count.mockResolvedValue(0);
-  db.pointEntry.findMany.mockResolvedValue([]);
   db.agent.findMany.mockResolvedValue([]);
   db.projectWorkflow.findUnique.mockResolvedValue(null);
   db.agent.findFirst.mockResolvedValue(null);
@@ -274,25 +272,20 @@ describe("bidder records (#825)", () => {
   });
 
   it("loads every bid owner's record in organisation-scoped batched queries", async () => {
-    db.pointEntry.findMany.mockResolvedValue([
-      {
-        userId: "ada",
-        agentId: "agent1",
-        createdAt: at(3),
-        bug: { id: "bug1", number: 1, title: "Fix login", organisationId: "organisation", areaId: "area-auth", isDeleted: false, project: { slug: "ziki", organisation: { slug: "zedu" } } },
-      },
-      {
-        userId: "ada",
-        agentId: "agent1",
-        createdAt: at(2),
-        bug: { id: "foreign", number: 9, title: "Elsewhere", organisationId: "other", areaId: null, isDeleted: false, project: { slug: "ziki", organisation: { slug: "other" } } },
-      },
-    ]);
+    // Finished is a claim released with its work resolved (Live); dropped is one that went silent, ran out or was abandoned.
     db.issueClaim.findMany.mockResolvedValue([
       {
         beneficiaryUserId: "ada",
         agentId: "agent1",
+        releasedAt: at(3),
+        releaseReason: "resolved",
+        bug: { id: "bug1", number: 1, title: "Fix login", areaId: "area-auth", project: { slug: "ziki", organisation: { slug: "zedu" } } },
+      },
+      {
+        beneficiaryUserId: "ada",
+        agentId: "agent1",
         releasedAt: at(4),
+        releaseReason: "silence",
         bug: { id: "bug2", number: 2, title: "Old task", areaId: "area-auth", project: { slug: "ziki", organisation: { slug: "zedu" } } },
       },
     ]);
@@ -305,22 +298,12 @@ describe("bidder records (#825)", () => {
       [{ beneficiaryUserId: "ada" }, { beneficiaryUserId: "ada" }],
     );
 
-    expect(db.pointEntry.findMany).toHaveBeenCalledTimes(1);
     expect(db.issueClaim.findMany).toHaveBeenCalledTimes(1);
     expect(db.agent.findMany).toHaveBeenCalledTimes(1);
-    expect(db.pointEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        organisationId: "organisation",
-        userId: { in: ["ada"] },
-        role: "solver",
-        points: { gt: 0 },
-        correctedAt: null,
-        sourceKey: { not: { startsWith: "multiplier:" } },
-      }),
-    }));
     expect(db.issueClaim.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        releaseReason: { in: ["silence", "deadline", "abandoned"] },
+        beneficiaryUserId: { in: ["ada"] },
+        releaseReason: { in: ["resolved", "silence", "deadline", "abandoned"] },
         bug: { organisationId: "organisation", isDeleted: false },
       }),
     }));

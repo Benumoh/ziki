@@ -1,7 +1,6 @@
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { audit } from "@/lib/agents/audit";
-import { correct } from "@/lib/points/correct";
-import { pointSourceKey } from "@/lib/points/rules";
+
 import { isOrganisationAdminRole } from "@/lib/agents/membership";
 import { isConfirmed } from "@/lib/agent-api/confirmations";
 import { moveTo } from "@/lib/issue-substatus";
@@ -19,8 +18,8 @@ import { activeIn } from "@/lib/agents/active-in";
  * Supported reversible actions:
  * - `issue.confirmation` — an agent's confirmation entry: it stops counting,
  *   the issue goes back to Requires
- *   confirmation if it is no longer confirmed, and the reporter points the
- *   confirmation awarded are reversed.
+ *   confirmation if it is no longer confirmed, and it is no longer paid when
+ *   the issue pays out.
  */
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -150,9 +149,8 @@ export async function undoAuditEvent(
 
 /**
  * Reverse an `issue.confirmation` audit event: the agent's confirmation entry
- * (#issue-confirmations). The entry stays, marked undone, so it stops counting; it
- * reverses the reporter points if it confirmed
- * the issue, and an Open issue that is no longer confirmed goes back to
+ * (#issue-confirmations). The entry stays, marked undone, so it stops counting
+ * (and is not paid when the issue pays out), and an Open issue that is no longer confirmed goes back to
  * Requires confirmation. If the entry was given again since, the newer entry
  * is left alone.
  */
@@ -160,7 +158,6 @@ async function undoConfirmation(tx: Db, event: AuditEvent): Promise<UndoResult> 
   const payload = (event.payload as {
     confirmationId?: string;
     entryAt?: string;
-    confirmed?: boolean;
   } | null) ?? {};
   const confirmationId = payload.confirmationId;
   if (!confirmationId) {
@@ -186,28 +183,6 @@ async function undoConfirmation(tx: Db, event: AuditEvent): Promise<UndoResult> 
 
   await tx.issueConfirmation.update({ where: { id: confirmation.id }, data: { undoneAt: new Date() } });
 
-  // If this entry was the one that confirmed the issue, reverse the reporter
-  // points it awarded. The correction reuses idempotency, so a second undo
-  // does not pay twice in reverse.
-  if (payload.confirmed === true && confirmation.verdict === "confirm") {
-    const bug = await tx.bug.findUnique({
-      where: { id: confirmation.bugId },
-      select: { id: true, organisationId: true, beneficiaryUserId: true, reporterId: true },
-    });
-    if (bug) {
-      const userId = bug.beneficiaryUserId ?? bug.reporterId;
-      const entry = await tx.pointEntry.findFirst({
-        where: {
-          organisationId: bug.organisationId,
-          sourceKey: pointSourceKey("reporter", bug.id, userId),
-        },
-        select: { id: true, organisationId: true, userId: true, bugId: true, role: true, points: true },
-      });
-      if (entry) {
-        await correct(tx, { entry });
-      }
-    }
-  }
 
   // #requires-confirmation: an Open issue that loses its confirmation goes back.
   const issue = await tx.bug.findUnique({ where: { id: confirmation.bugId }, select: { substatus: true } });

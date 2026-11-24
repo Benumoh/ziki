@@ -29,7 +29,7 @@ export const AGENT_LEVEL_DESCRIPTIONS: Record<AgentLevel, string> = {
   manager:
     "Everything a working agent does, plus review submitted fixes and accept or reject them, record project mistakes, and assign work. Organisation admin grant required.",
   merger:
-    "Everything a manager agent does, plus execute the Git merge for ready fixes, resolve issues and award points. Organisation admin grant required.",
+    "Everything a manager agent does, plus execute the Git merge for ready fixes and resolve issues. Organisation admin grant required.",
 };
 
 /** Every new agent can work straight away; there is no read-only start. */

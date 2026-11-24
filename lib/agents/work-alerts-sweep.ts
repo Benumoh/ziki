@@ -9,7 +9,6 @@ import { OPEN_BID_WHERE } from "@/lib/open-bids";
 import { PRODUCT_TRACK } from "@/lib/marketing/track";
 import { workflowFor } from "@/lib/workflow";
 import type { ProjectWorkflowValues } from "@/lib/workflow-config";
-import { pointsNumber } from "@/lib/points/rules";
 import { absoluteUrl } from "@/lib/site-url";
 import { issuePath } from "@/lib/issue-ref";
 import { ideaPath, projectRef } from "@/lib/project-paths";
@@ -72,6 +71,20 @@ const ITEMS_PER_LINE = 100;
 const MAX_SLOTS = 3;
 /** Claim releases that count as lapses (lib: IssueClaim.releaseReason). */
 const LAPSE_RELEASES = ["expired", "offer_expired", "silence", "deadline"];
+/** How many estimates give an issue a price (lib/coins/budget.ts MIN_ESTIMATES_TO_AWARD). */
+const MIN_ESTIMATES_TO_AWARD = 3;
+/**
+ * Issues still waiting for estimates (#ziki-estimate): unfinished, price not locked, fewer than three estimates and no
+ * estimate from Ziki yet.
+ */
+const NEEDS_ESTIMATES = {
+  status: { notIn: ["closed", "resolved"] },
+  rewardFixedAt: null,
+  rewardEstimateCount: { lt: MIN_ESTIMATES_TO_AWARD },
+  zikiEstimateZik: null,
+  // A Solo project (#solo) has no prices, so nothing in it waits for estimates.
+  project: { solo: false },
+} satisfies Prisma.BugWhereInput;
 
 export type WorkAlertSweepResult = { projects: number; pinged: number; sent: number; askedAgain: number; passed: number; ended: number };
 
@@ -103,6 +116,7 @@ export async function projectCounts(db: Db, projectId: string, offerWindowSecond
   return {
     ideas_waiting: { waiting: ideasWaiting, stuck: ideasStuck },
     issues_need_confirmation: await bySubstatus("issues_need_confirmation", { substatus: "requires_confirmation" }),
+    issues_need_estimates: await bySubstatus("issues_need_estimates", NEEDS_ESTIMATES),
     open_no_bids: await bySubstatus("open_no_bids", { substatus: "open", ...unheld, bids: { none: OPEN_BID_WHERE } }),
     bids_to_award: { waiting: awardWaiting, stuck: awardStuck },
     deliveries_need_judgement: await bySubstatus("deliveries_need_judgement", { substatus: "requires_review" }),
@@ -135,13 +149,16 @@ async function projectItems(
   const read = { orderBy: [{ createdAt: "asc" as const }, { number: "asc" as const }], take: ITEMS_PER_LINE };
   const issueUrl = (number: number) => absoluteUrl(issuePath(project.ref, number));
 
-  const [ideas, confirmations, noBids, toAward, deliveries, accepted, merges] = await Promise.all([
+  const [ideas, confirmations, unpriced, payers, noBids, toAward, deliveries, accepted, merges] = await Promise.all([
     db.idea.findMany({
       where: { projectId: project.id, status: "open", ...PRODUCT_TRACK },
       ...read,
       select: { ...base, score: true, reporterId: true, beneficiaryUserId: true, createdByAgentId: true, verdicts: { select: { agentId: true } } },
     }),
     db.bug.findMany({ where: { ...issue, substatus: "requires_confirmation" }, ...read, select: { ...base, confirmations: { select: { agentId: true, verdict: true } } } }),
+    db.bug.findMany({ where: { ...issue, ...NEEDS_ESTIMATES }, ...read, select: { ...base, rewardEstimateCount: true, rewardEstimates: { select: { onBehalfOfUserId: true } } } }),
+    // The organisation's owners and admins pay for its issues, so their agents don't estimate them (#price-lock).
+    db.membership.findMany({ where: { organisation: { projects: { some: { id: project.id } } }, role: { in: ["owner", "admin"] } }, select: { userId: true } }),
     db.bug.findMany({ where: { ...issue, substatus: "open", ...unheld, bids: { none: OPEN_BID_WHERE } }, ...read, select: base }),
     db.bug.findMany({ where: { ...issue, status: "open", ...unheld, bids: { some: OPEN_BID_WHERE } }, ...read, select: base }),
     db.bug.findMany({ where: { ...issue, substatus: "requires_review" }, ...read, select: { ...base, ...workers, testVerdicts: { select: { agentId: true } } } }),
@@ -178,6 +195,14 @@ async function projectItems(
         row,
         clampSlots(workflow.confirmationsNeeded - row.confirmations.filter((entry) => entry.verdict === "confirm").length),
         row.confirmations.map((entry) => entry.agentId),
+      ),
+    ),
+    ...unpriced.map((row) =>
+      item(
+        "issues_need_estimates",
+        row,
+        clampSlots(MIN_ESTIMATES_TO_AWARD - row.rewardEstimateCount),
+        agentsOf([...row.rewardEstimates.map((estimate) => estimate.onBehalfOfUserId), ...payers.map((payer) => payer.userId)]),
       ),
     ),
     ...noBids.map((row) => item("open_no_bids", row, 1)),
@@ -262,7 +287,7 @@ async function sweepProject(
       const [seen, acted, holding, offered, openRows, endedRows, firstOn, hadAlert, given, alertLapses, claimLapses, holds] = await Promise.all([
         agentsLastSeen(ids, tx),
         // A day back: the last 5 minutes say who is busy, and since a yes says whether it did anything.
-        agentsLastActed(ids, project.id, new Date(t - FAIRNESS_WINDOW_MS), tx),
+        agentsLastActed(ids, { projectId: project.id }, new Date(t - FAIRNESS_WINDOW_MS), tx),
         // Work in hand anywhere in the organisation: plan review, or a claim on work still In progress.
         tx.issueClaim.findMany({
           where: {
@@ -275,7 +300,7 @@ async function sweepProject(
         }),
         tx.issueClaim.findMany({
           where: { agentId: { in: ids }, releasedAt: null, status: "offered", bug: { projectId: project.id, isDeleted: false } },
-          select: { id: true, agentId: true, offeredAt: true, bug: { select: { number: true, title: true, reward: true } } },
+          select: { id: true, agentId: true, offeredAt: true, bug: { select: { number: true, title: true, lockedPriceZik: true } } },
         }),
         tx.workAlert.findMany({ where: { projectId: project.id, endedAt: null } }),
         tx.workAlert.findMany({
@@ -331,7 +356,7 @@ async function sweepProject(
           if (claim.agentId !== agent.id || !claim.offeredAt) return [];
           const expiresAt = new Date(claim.offeredAt.getTime() + windowMs);
           if (expiresAt.getTime() <= t) return [];
-          return [{ claimId: claim.id, issueNumber: claim.bug.number, title: claim.bug.title, expiresAt, reward: pointsNumber(claim.bug.reward) }];
+          return [{ claimId: claim.id, issueNumber: claim.bug.number, title: claim.bug.title, expiresAt, reward: claim.bug.lockedPriceZik ?? 0 }];
         });
         const row = openRows.find((alert) => alert.agentId === agent.id) ?? null;
         const open: OpenAlert | null = row

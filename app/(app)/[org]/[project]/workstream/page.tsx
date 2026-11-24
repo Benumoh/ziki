@@ -248,7 +248,6 @@ export default async function WorkstreamPage({ params }: { params: Promise<{ org
                       ) : (
                         <span className="text-sm font-semibold text-zk-text">{item.title}</span>
                       )}
-                      {item.points ? <span className="font-mono text-xs font-bold text-zk-ok-fg">+{item.points} pts</span> : null}
                       {!item.canAct && item.blockedReason ? <span className="text-xs text-zk-warn-fg">{item.blockedReason}</span> : null}
                     </div>
                     <details className="group mt-1">

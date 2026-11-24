@@ -1,23 +1,28 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { REWARD_ZIK_MIN } from "@/lib/points/rules";
+import { REWARD_ZIK_MIN } from "@/lib/coins/price-rules";
 import { CoinError, appendRows, assertAmount, assertCanSpend, escrowBalance, lockBug, lockUser, zikOf, type Tx } from "./ledger";
 import { MAX_FUND_ZIK, dollarsToZiks, splitByWeight } from "./math";
 
 /**
- * Project budgets (#project-budget). An owner puts Ziks behind a whole project instead of behind each issue. While the
- * project has a budget switched on, an issue is only awarded when the budget covers its price, and awarding it moves the
- * price from the budget into that issue's escrow (a reserve), where releasing and refunding work as they always have.
- * Whatever the budget still holds goes back to the people who funded it, when they take it or when the project goes idle.
+ * Project budgets and issue prices (#project-budget, #price-lock). Every issue is paid in Ziks, so an issue is only
+ * awarded once its price is locked and the Ziks for it are held. The owner puts Ziks behind the whole project (its
+ * budget) or behind one issue at a time; either way the price moves into that issue's escrow, where releasing and
+ * refunding work as they always have. Whatever the budget still holds goes back to the people who funded it, when they
+ * take it or when the project goes idle.
  *
- * The price of an issue is its estimate once three estimates are in, or a price its owner set above that (the owner's
- * price counts even before then). A project with no budget works as before: free, or funded issue by issue.
+ * Agents price issues. An issue's price is the average of its estimates once three are in; it settles when a minute
+ * passes with no new estimate, and locks when it is funded: at once, from the project's budget, when the budget covers
+ * it, or when the owner funds it. A locked price takes no more estimates. Once it has settled, the owner may raise it
+ * (never lower it) to have the issue picked up sooner; the difference is funded like the rest.
  */
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-/** How many agent estimates an issue needs before it has a price (an owner's price replaces them). */
+/** How many agent estimates an issue needs before it has a price. */
 export const MIN_ESTIMATES_TO_AWARD = 3;
+/** After the third estimate, the price settles once this long passes with no new estimate. */
+export const PRICE_SETTLE_SECONDS = 60;
 /** The owner is warned once the budget can't cover this many of the next issues waiting to be awarded. */
 export const LOW_BUDGET_ISSUES = 3;
 /** A budget with no unfinished issue for this long goes back to the people who funded it. */
@@ -33,16 +38,91 @@ export async function budgetBalance(db: Db, projectId: string): Promise<number> 
   return zikOf(sum._sum.amount);
 }
 
-export type PricedIssue = { reward: Prisma.Decimal | number | string; rewardEstimateCount: number; rewardOverrideZik: number | null };
+/** Whether anyone has ever put Ziks into this project's budget. */
+export async function hasBudget(db: Db, projectId: string): Promise<boolean> {
+  const funded = await db.coinEntry.findFirst({ where: { account: "budget", projectId, kind: "fund_budget" }, select: { id: true } });
+  return funded !== null;
+}
 
-/** What an issue costs the budget, in Ziks, or null while it has no price (fewer than three estimates and no price from its owner). */
+export type PricedIssue = {
+  reward: Prisma.Decimal | number | string;
+  rewardEstimateCount: number;
+  rewardOverrideZik: number | null;
+  /** Ziki's own estimate (#ziki-estimate), once it gave one. */
+  zikiEstimateZik: number | null;
+};
+
+/**
+ * The issue's price in Ziks: the average of its estimates, Ziki's own included when it gave one (it counts as one
+ * estimate), or the higher price its owner raised it to. Null while fewer than three agents have estimated it and Ziki
+ * hasn't yet (an owner's price never counts before the issue is priced).
+ */
 export function issuePriceZik(issue: PricedIssue): number | null {
-  const estimate = issue.rewardEstimateCount >= MIN_ESTIMATES_TO_AWARD ? dollarsToZiks(Number(issue.reward)) : 0;
+  const agents = issue.rewardEstimateCount;
+  const agentsAverage = dollarsToZiks(Number(issue.reward));
+  let estimate: number;
+  if (issue.zikiEstimateZik !== null && issue.zikiEstimateZik > 0) {
+    estimate = Math.round((agentsAverage * agents + issue.zikiEstimateZik) / (agents + 1));
+  } else if (agents >= MIN_ESTIMATES_TO_AWARD) {
+    estimate = agentsAverage;
+  } else {
+    return null;
+  }
   const price = Math.max(estimate, issue.rewardOverrideZik ?? 0);
   return price > 0 ? price : null;
 }
 
-/** Whether this person may fund and take back a project's budget, and set prices: an owner or admin of its organisation. */
+/** The Prisma `where` for issues that have a price from estimates: three agents, or Ziki's own. */
+export const PRICED_WHERE = { OR: [{ rewardEstimateCount: { gte: MIN_ESTIMATES_TO_AWARD } }, { zikiEstimateZik: { not: null } }] } satisfies Prisma.BugWhereInput;
+
+export type PriceInput = PricedIssue & { rewardEstimatedAt: Date | null; rewardFixedAt: Date | null; lockedPriceZik: number | null };
+
+/** The price to show: the one it was locked at, once locked by funding, else what the estimates make it. */
+export function currentPriceZik(issue: PricedIssue & { rewardFixedAt: Date | null; lockedPriceZik: number | null }): number | null {
+  if (issue.rewardFixedAt && issue.lockedPriceZik !== null && issue.lockedPriceZik > 0) return issue.lockedPriceZik;
+  return issuePriceZik(issue);
+}
+
+/**
+ * Where an issue's price stands:
+ * - `estimating`: fewer than three estimates;
+ * - `settling`: three or more, but the last came in less than a minute ago, so more may follow;
+ * - `settled`: no estimate for a minute, so it can be funded and locked;
+ * - `locked`: funded (or at 15 estimates); it takes no more estimates.
+ */
+export type PriceStage =
+  | { stage: "estimating"; have: number; need: number }
+  | { stage: "settling"; price: number; settlesAt: Date }
+  | { stage: "settled"; price: number }
+  | { stage: "locked"; price: number };
+
+export const SETTLE_FIELDS = { reward: true, rewardEstimateCount: true, rewardOverrideZik: true, zikiEstimateZik: true, rewardEstimatedAt: true, rewardFixedAt: true, lockedPriceZik: true } as const;
+
+export function priceStage(issue: PriceInput, now: Date = new Date()): PriceStage {
+  // Locked by funding: the price it was locked at, as stored, whatever the estimates now work out to.
+  if (issue.rewardFixedAt && issue.lockedPriceZik !== null && issue.lockedPriceZik > 0) return { stage: "locked", price: issue.lockedPriceZik };
+  const price = currentPriceZik(issue);
+  if (price === null) return { stage: "estimating", have: Math.min(issue.rewardEstimateCount, MIN_ESTIMATES_TO_AWARD), need: MIN_ESTIMATES_TO_AWARD };
+  if (issue.rewardFixedAt) return { stage: "locked", price };
+  const settlesAt = new Date((issue.rewardEstimatedAt?.getTime() ?? 0) + PRICE_SETTLE_SECONDS * 1000);
+  if (settlesAt > now) return { stage: "settling", price, settlesAt };
+  return { stage: "settled", price };
+}
+
+const PAUSED_MESSAGE = "This project's budget is paused by its owner, so no new issue is awarded until it is resumed.";
+
+/** Why an issue without a settled price can't be funded or awarded yet. */
+export function unpricedMessage(stage: Extract<PriceStage, { stage: "estimating" | "settling" }>): string {
+  return stage.stage === "estimating"
+    ? `This issue has no price yet: ${stage.have} of ${stage.need} agents have estimated it.`
+    : "Agents are still estimating this issue. Its price settles a minute after the last estimate.";
+}
+
+function waitingForFundsMessage(need: number, available: number): string {
+  return `This issue is waiting for funding: it needs ${need.toLocaleString("en-US")} Ziks and the project's budget has ${available.toLocaleString("en-US")}. Its owner can fund it.`;
+}
+
+/** Whether this person may fund and take back a project's budget: an owner or admin of its organisation. */
 export async function canManageBudget(userId: string, organisationId: string): Promise<boolean> {
   const membership = await prisma.membership.findUnique({
     where: { organisationId_userId: { organisationId, userId } },
@@ -58,9 +138,9 @@ async function projectFor(projectId: string) {
 }
 
 /**
- * Moves Ziks from the owner's wallet into the project's budget, and switches the budget on. `requestId` makes a double
- * click or a retry fund once. Bought Ziks are spent before earned ones, because the wallet's withdrawable part is
- * only what is earned and still there (ledger.ts withdrawableOf).
+ * Moves Ziks from the owner's wallet into the project's budget. `requestId` makes a double click or a retry fund once.
+ * Bought Ziks are spent before earned ones, because the wallet's withdrawable part is only what is earned and still
+ * there (ledger.ts withdrawableOf). Settled prices the new money covers are locked by the caller (lockSettledPrices).
  */
 export async function fundBudget(userId: string, projectId: string, amount: number, requestId: string): Promise<{ funded: boolean; balance: number }> {
   assertAmount(amount);
@@ -83,7 +163,7 @@ export async function fundBudget(userId: string, projectId: string, amount: numb
       { account: "budget", projectId, kind: "fund_budget", amount, sourceKey: `${key}:budget` },
     ]);
     // New money clears any warning; the next one is judged from this balance.
-    await tx.project.update({ where: { id: projectId }, data: { budgetEnabled: true, budgetAlert: null } });
+    await tx.project.update({ where: { id: projectId }, data: { budgetAlert: null } });
     return { funded: true, balance: await budgetBalance(tx, projectId) };
   });
 }
@@ -118,21 +198,19 @@ export async function returnUnusedBudget(tx: Tx, projectId: string): Promise<num
   return [...shares.values()].reduce((sum, share) => sum + share, 0);
 }
 
-const PAUSED_MESSAGE = "This project's budget is paused by its owner, so no new issue is awarded until it is resumed.";
-
 /**
  * Pauses or resumes a project's budget: while paused no new issue is awarded or offered and no offer can be accepted,
  * the money stays where it is, and work already under way carries on. Only an owner or admin may.
  */
 export async function setBudgetPaused(userId: string, projectId: string, paused: boolean): Promise<void> {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { organisationId: true, budgetEnabled: true } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { organisationId: true } });
   if (!project) throw new CoinError("not_found", "That project doesn't exist.");
   if (!(await canManageBudget(userId, project.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can pause the budget.");
-  if (!project.budgetEnabled) throw new CoinError("invalid_amount", "This project has no budget to pause yet.");
+  if (!(await hasBudget(prisma, projectId))) throw new CoinError("invalid_amount", "This project has no budget to pause yet.");
   await prisma.project.update({ where: { id: projectId }, data: { budgetPausedAt: paused ? new Date() : null } });
 }
 
-/** The owner takes back what the budget hasn't reserved. Ziks already reserved for awarded issues stay with them. */
+/** The owner takes back what the budget hasn't reserved. Ziks already reserved for issues stay with them. */
 export async function takeBackBudget(userId: string, projectId: string): Promise<number> {
   const project = await projectFor(projectId);
   if (!(await canManageBudget(userId, project.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can take the budget back.");
@@ -141,106 +219,131 @@ export async function takeBackBudget(userId: string, projectId: string): Promise
   return returned;
 }
 
-/** Why an issue can't be awarded from its project's budget right now, or null when it can (or the project has no budget). */
-export async function budgetBlock(db: Db, bugId: string): Promise<{ code: "not_priced" | "out_of_funds" | "paused"; message: string } | null> {
+type BlockCode = "not_priced" | "out_of_funds" | "paused";
+
+/** Why an issue can't be awarded right now (no settled price, no Ziks for it, a paused budget), or null when it can. */
+export async function budgetBlock(db: Db, bugId: string, now: Date = new Date()): Promise<{ code: BlockCode; message: string } | null> {
   const bug = await db.bug.findUnique({
     where: { id: bugId },
-    select: { projectId: true, reward: true, rewardEstimateCount: true, rewardOverrideZik: true, project: { select: { budgetEnabled: true, budgetPausedAt: true } } },
+    select: { projectId: true, ...SETTLE_FIELDS, project: { select: { budgetPausedAt: true, solo: true } } },
   });
-  if (!bug || !bug.project.budgetEnabled) return null;
+  // A Solo project (#solo) has no prices or funding: nothing blocks its awards.
+  if (!bug || bug.project.solo) return null;
   if (bug.project.budgetPausedAt) return { code: "paused", message: PAUSED_MESSAGE };
-  const price = issuePriceZik(bug);
-  if (price === null) {
-    return { code: "not_priced", message: `This issue has no price yet: it needs ${MIN_ESTIMATES_TO_AWARD} estimates, or a price from its owner, before it can be awarded.` };
-  }
-  const need = price - (await escrowBalance(db, bugId));
+  const stage = priceStage(bug, now);
+  if (stage.stage === "estimating" || stage.stage === "settling") return { code: "not_priced", message: unpricedMessage(stage) };
+  const need = stage.price - (await escrowBalance(db, bugId));
   if (need <= 0) return null;
   const available = await budgetBalance(db, bug.projectId);
-  if (available < need) {
-    return { code: "out_of_funds", message: `This project has no funds left for this issue: it needs ${need.toLocaleString("en-US")} Ziks and the budget has ${available.toLocaleString("en-US")}. Its owner can add to the budget.` };
-  }
-  return null;
+  return available < need ? { code: "out_of_funds", message: waitingForFundsMessage(need, available) } : null;
 }
 
 /**
- * Of these issues, the ones the project's budget can't pay for right now. Empty for a project without a budget. One
- * read for a whole list, for the work feed. Each issue is judged on its own against the whole budget.
+ * Of these issues, the ones that can't be awarded right now: no settled price, or no Ziks for it on the issue or in the
+ * project's budget. One read for a whole list, for the work feed. Each issue is judged on its own against the whole budget.
  */
-export async function unaffordableIssueIds(db: Db, projectId: string, bugIds: string[]): Promise<Set<string>> {
+export async function unaffordableIssueIds(db: Db, projectId: string, bugIds: string[], now: Date = new Date()): Promise<Set<string>> {
   if (bugIds.length === 0) return new Set();
-  const project = await db.project.findUnique({ where: { id: projectId }, select: { budgetEnabled: true, budgetPausedAt: true } });
-  if (!project?.budgetEnabled) return new Set();
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { budgetPausedAt: true, solo: true } });
+  // A Solo project (#solo) has no prices or funding: none of them is blocked.
+  if (project?.solo) return new Set();
   // Paused: nothing new is awarded, so every one of them is blocked.
-  if (project.budgetPausedAt) return new Set(bugIds);
+  if (!project || project.budgetPausedAt) return new Set(bugIds);
   const [bugs, held, available] = await Promise.all([
-    db.bug.findMany({ where: { id: { in: bugIds } }, select: { id: true, reward: true, rewardEstimateCount: true, rewardOverrideZik: true } }),
+    db.bug.findMany({ where: { id: { in: bugIds } }, select: { id: true, ...SETTLE_FIELDS } }),
     db.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: bugIds } }, _sum: { amount: true } }),
     budgetBalance(db, projectId),
   ]);
   const heldBy = new Map(held.map((row) => [row.bugId, zikOf(row._sum.amount)]));
   const blocked = new Set<string>();
   for (const bug of bugs) {
-    const price = issuePriceZik(bug);
-    if (price === null || price - (heldBy.get(bug.id) ?? 0) > available) blocked.add(bug.id);
+    const stage = priceStage(bug, now);
+    if (stage.stage === "estimating" || stage.stage === "settling" || stage.price - (heldBy.get(bug.id) ?? 0) > available) blocked.add(bug.id);
   }
   return blocked;
 }
 
+export type LockResult =
+  | { locked: true; reserved: number }
+  | { locked: false; code: BlockCode; message: string };
+
 /**
- * Reserves an issue's price from its project's budget into the issue's escrow, when it is awarded. Only what the issue
- * doesn't already hold is taken, so giving the work back and awarding it again takes nothing twice. A project without a
- * budget reserves nothing. Throws CoinError `out_of_funds` before writing anything when the budget can't cover it.
- * The caller holds the issue's lock; the project's is taken here (always the issue's first, then the project's).
+ * Locks an issue's settled price: from what the issue already holds, else by reserving the rest from the project's
+ * budget. Nothing is written unless it locks. Only what the issue doesn't already hold is taken, so giving the work back
+ * and awarding it again takes nothing twice. The caller holds the issue's lock; the project's is taken here (always the
+ * issue's first, then the project's).
  */
-export async function reserveForIssue(tx: Tx, bugId: string): Promise<number> {
+export async function lockPrice(tx: Tx, bugId: string, now: Date = new Date()): Promise<LockResult> {
   const bug = await tx.bug.findUniqueOrThrow({
     where: { id: bugId },
-    select: { projectId: true, reward: true, rewardEstimateCount: true, rewardOverrideZik: true, project: { select: { budgetEnabled: true, budgetPausedAt: true } } },
+    select: { projectId: true, ...SETTLE_FIELDS, project: { select: { budgetPausedAt: true } } },
   });
-  if (!bug.project.budgetEnabled) return 0;
-  // Taking the work reserves its price, and that is new work: a paused budget starts none.
-  if (bug.project.budgetPausedAt) throw new CoinError("paused", PAUSED_MESSAGE);
-  const price = issuePriceZik(bug);
-  if (price === null) throw new CoinError("not_priced", `This issue has no price yet: it needs ${MIN_ESTIMATES_TO_AWARD} estimates, or a price from its owner.`);
-  await lockProject(tx, bug.projectId);
-  const need = price - (await escrowBalance(tx, bugId));
-  if (need <= 0) return 0;
-  const available = await budgetBalance(tx, bug.projectId);
-  if (available < need) {
-    throw new CoinError("out_of_funds", `This project has no funds left for this issue: it needs ${need.toLocaleString("en-US")} Ziks and the budget has ${available.toLocaleString("en-US")}. Its owner can add to the budget.`);
+  const stage = priceStage(bug, now);
+  if (stage.stage === "estimating" || stage.stage === "settling") return { locked: false, code: "not_priced", message: unpricedMessage(stage) };
+  let need = stage.price - (await escrowBalance(tx, bugId));
+  if (need > 0) {
+    // A paused budget is the owner's own choice: it reserves nothing until resumed.
+    if (bug.project.budgetPausedAt) return { locked: false, code: "paused", message: PAUSED_MESSAGE };
+    await lockProject(tx, bug.projectId);
+    const available = await budgetBalance(tx, bug.projectId);
+    if (available < need) return { locked: false, code: "out_of_funds", message: waitingForFundsMessage(need, available) };
+    const generation = await tx.coinEntry.count({ where: { account: "escrow", bugId, kind: "reserve" } });
+    const key = `reserve:${bugId}:${generation}`;
+    await appendRows(tx, [
+      { account: "budget", projectId: bug.projectId, bugId, kind: "reserve", amount: -need, sourceKey: `${key}:budget` },
+      { account: "escrow", bugId, projectId: bug.projectId, kind: "reserve", amount: need, sourceKey: `${key}:escrow` },
+    ]);
+  } else {
+    need = 0;
   }
-  const generation = await tx.coinEntry.count({ where: { account: "escrow", bugId, kind: "reserve" } });
-  const key = `reserve:${bugId}:${generation}`;
-  await appendRows(tx, [
-    { account: "budget", projectId: bug.projectId, bugId, kind: "reserve", amount: -need, sourceKey: `${key}:budget` },
-    { account: "escrow", bugId, projectId: bug.projectId, kind: "reserve", amount: need, sourceKey: `${key}:escrow` },
-  ]);
-  return need;
+  // The price is kept as it is now, so later rounding or estimates never move it away from what is held.
+  if (!bug.rewardFixedAt || bug.lockedPriceZik !== stage.price) {
+    await tx.bug.update({ where: { id: bugId }, data: { rewardFixedAt: bug.rewardFixedAt ?? now, lockedPriceZik: stage.price } });
+  }
+  return { locked: true, reserved: need };
 }
 
 /**
- * The owner sets a price for an issue above what it costs now. It only goes up. If the issue is already awarded, the
- * difference is reserved from the budget at once, and a raise the budget can't cover is refused.
+ * The owner raises an issue's settled price (#price-lock), to have it picked up sooner. It only goes up, and only once
+ * agents have priced the issue. The difference is reserved from the budget at once when the budget covers it; if
+ * someone already holds the issue it must be (they were promised the price), so a raise the budget can't cover is
+ * refused. Otherwise the issue waits for the difference to be funded.
  */
 export async function raiseIssuePrice(userId: string, bugId: string, zik: number): Promise<number> {
   if (!Number.isSafeInteger(zik) || zik < REWARD_ZIK_MIN) throw new CoinError("invalid_amount", `Enter a whole number of Ziks, at least ${REWARD_ZIK_MIN}.`);
   if (zik > MAX_FUND_ZIK) throw new CoinError("invalid_amount", `A price can be at most ${MAX_FUND_ZIK.toLocaleString("en-US")} Ziks.`);
   const issue = await prisma.bug.findUnique({ where: { id: bugId }, select: { organisationId: true, isDeleted: true, status: true, payoutReleasedAt: true } });
   if (!issue || issue.isDeleted) throw new CoinError("not_found", "That issue doesn't exist.");
-  if (!(await canManageBudget(userId, issue.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can set an issue's price.");
-  if (issue.status === "closed" || issue.payoutReleasedAt) throw new CoinError("closed", "This issue is finished, so its price can't change.");
+  if (!(await canManageBudget(userId, issue.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can raise an issue's price.");
+  if (issue.status === "closed" || issue.status === "resolved" || issue.payoutReleasedAt) throw new CoinError("closed", "This issue is finished, so its price can't change.");
 
   return prisma.$transaction(async (tx) => {
     await lockBug(tx, bugId);
-    const fresh = await tx.bug.findUniqueOrThrow({
-      where: { id: bugId },
-      select: { reward: true, rewardEstimateCount: true, rewardOverrideZik: true, assigneeId: true, project: { select: { budgetEnabled: true } } },
-    });
-    const current = issuePriceZik(fresh) ?? 0;
-    if (zik <= current) throw new CoinError("invalid_amount", `A price can only go up. It is ${current.toLocaleString("en-US")} Ziks now.`);
-    await tx.bug.update({ where: { id: bugId }, data: { rewardOverrideZik: zik } });
-    // Held by someone: the extra is reserved now, so the agent is promised what it was told.
-    if (fresh.assigneeId && fresh.project.budgetEnabled) await reserveForIssue(tx, bugId);
+    const fresh = await tx.bug.findUniqueOrThrow({ where: { id: bugId }, select: { ...SETTLE_FIELDS, assigneeId: true } });
+    const stage = priceStage(fresh);
+    if (stage.stage === "estimating" || stage.stage === "settling") {
+      throw new CoinError("not_priced", "Agents price an issue first. You can raise its price once their price has settled.");
+    }
+    if (zik <= stage.price) throw new CoinError("invalid_amount", `A price can only go up. It is ${stage.price.toLocaleString("en-US")} Ziks now.`);
+    // A locked price moves to the raised one; the difference is funded like the rest.
+    await tx.bug.update({ where: { id: bugId }, data: { rewardOverrideZik: zik, ...(stage.stage === "locked" ? { lockedPriceZik: zik } : {}) } });
+    const locked = await lockPrice(tx, bugId);
+    // Held by someone: the extra is reserved now, or the raise is refused (and rolled back with this transaction).
+    if (fresh.assigneeId && !locked.locked) throw new CoinError(locked.code, locked.message);
     return zik;
   });
+}
+
+/**
+ * When an issue is awarded (or an offer on it accepted): its price must be settled and held, so it is locked now if it
+ * isn't yet. A paused budget starts no new work. Throws CoinError before writing anything when it can't.
+ */
+export async function reserveForIssue(tx: Tx, bugId: string): Promise<number> {
+  const paused = await tx.bug.findUniqueOrThrow({ where: { id: bugId }, select: { project: { select: { budgetPausedAt: true, solo: true } } } });
+  // A Solo project (#solo) has no prices or funding: nothing to reserve.
+  if (paused.project.solo) return 0;
+  if (paused.project.budgetPausedAt) throw new CoinError("paused", PAUSED_MESSAGE);
+  const result = await lockPrice(tx, bugId);
+  if (!result.locked) throw new CoinError(result.code, result.message);
+  return result.reserved;
 }
