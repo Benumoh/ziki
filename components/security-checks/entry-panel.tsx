@@ -1,10 +1,7 @@
 import type { WorkspaceCheckRow } from "@/lib/security-checks/entry";
-import { SecurityWelcome } from "./security-welcome";
 import { FlashNote } from "./flash-note";
 import { ScansArea } from "./scan-list";
 
-/** One panel for everything, as wide as the tabs above it, like a project's Ideas and Issues. */
-const PANEL = "mx-auto w-full max-w-6xl overflow-hidden rounded-panel border border-zk-border bg-zk-surface";
 function PrivacyNote() {
   return (
     <p className="m-0 flex items-start gap-2 text-xs text-zk-muted">
@@ -16,9 +13,8 @@ function PrivacyNote() {
 
 /**
  * The Security page (#security-checks, 14 Nov plan and call): one page, no
- * wizard and no proof step. With nothing scanned yet it's the one big box;
- * after that the person's scans are the page, with "+ Add target" opening the
- * chat to scan a new site.
+ * wizard and no proof step. As Marketing's (23 Nov, Chloe): the chat box on top,
+ * the person's targets under it, and an empty card when nothing is checked yet.
  */
 export function SecurityChecksPanel({
   checks,
@@ -26,6 +22,7 @@ export function SecurityChecksPanel({
   startWith,
   show,
   page,
+  me,
 }: {
   checks: WorkspaceCheckRow[];
   highlight?: { checkId: string; unlocked: number };
@@ -35,17 +32,9 @@ export function SecurityChecksPanel({
   show?: string;
   /** Which page of scans (?page=). */
   page?: number;
+  /** Who is typing, for their picture in the chat. */
+  me?: { name: string | null; image: string | null };
 }) {
-  // Removed scans don't count: with none left, it's the welcome again.
-  if (checks.every((check) => check.status === "cancelled")) {
-    return (
-      <section aria-label="Security" className={PANEL}>
-        <h1 className="sr-only">Security</h1>
-        <SecurityWelcome startWith={startWith} />
-      </section>
-    );
-  }
-
   return (
     <ScansArea
       checks={checks}
@@ -53,6 +42,7 @@ export function SecurityChecksPanel({
       show={show}
       page={page}
       startWith={startWith}
+      me={me}
       top={
         highlight?.unlocked ? (
           <FlashNote>
