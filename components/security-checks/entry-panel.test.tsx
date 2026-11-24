@@ -44,7 +44,8 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain("Which website should we secure? Paste its address, like https://yourproduct.com");
     expect(html).toContain('name="target"');
     expect(html).toContain("Nothing checked yet.");
-    // No count or status tabs above the list: just Filter and search.
+    // How many on the left, Filter and search on the right; no status tabs.
+    expect(html).toContain("0 targets");
     expect(html).not.toContain('aria-label="Targets by status"');
     // No title, subtitle or Add target button on top, and no proof step.
     expect(html).not.toContain("Add target");
@@ -74,7 +75,7 @@ describe("SecurityChecksPanel (#security-checks, 14 Nov plan)", () => {
     expect(html).toContain('name="target"');
     expect(html).toContain("Which website should we secure?");
     expect(html).not.toContain('aria-label="Targets by status"');
-    expect(html).not.toMatch(/\d+ targets</);
+    expect(html).toContain("4 targets");
     expect(html).toContain("Search your targets");
     expect(html).not.toContain("Add target");
     expect(html).not.toContain("Nothing checked yet.");

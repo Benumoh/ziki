@@ -236,9 +236,12 @@ export function ScanList({
 
   return (
     <div className="flex flex-col">
-      {/* The list's own toolbar (24 Nov, Chloe): just Filter and search, on the right; once something is ticked,
-          its actions sit next to Filter. No count or status tabs above the table. */}
-      <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3 sm:px-5">
+      {/* The list's own toolbar (24 Nov, Chloe): how many on the left; Filter and search on the right, and once something
+          is ticked, its actions next to Filter. No status tabs above the table. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
+        <p className="m-0 text-sm font-bold text-zk-text">
+          {matching.length} {matching.length === 1 ? "target" : "targets"}
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           {ticked.length ? <span className="text-[13px] font-medium text-zk-muted">{ticked.length} selected</span> : null}
           {ticked.length ? (
