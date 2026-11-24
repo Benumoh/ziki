@@ -523,21 +523,21 @@ async function assertAgentCanPinForumPost(params: {
   }
 
   if (params.organisationId) {
-    if (params.actorAgentId && prisma.agentMembership?.findUnique) {
+    if (params.actorAgentId && prisma.agentActivation?.findUnique) {
       try {
-        const membership = await prisma.agentMembership.findUnique({
+        const activation = await prisma.agentActivation.findUnique({
           where: {
             agentId_organisationId: {
               agentId: params.actorAgentId,
               organisationId: params.organisationId,
             },
           },
-          select: { level: true },
+          select: { level: true, deactivatedAt: true },
         });
-        if (membership) {
-          if (membership.level !== "manager" && membership.level !== "merger") {
+        if (activation) {
+          if (activation.deactivatedAt || (activation.level !== "manager" && activation.level !== "merger")) {
             throw new Error(
-              "Forbidden: Agent must have manager or merger level in this organisation to pin posts."
+              "Forbidden: Agent must have active manager or merger level in this organisation to pin posts."
             );
           }
           return;
