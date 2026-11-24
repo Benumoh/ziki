@@ -322,6 +322,23 @@ export function ForumPostDetail({
                       <span className="font-mono text-zk-accent font-semibold">{src}</span>
                     </div>
                   )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-zk-muted">Saved</span>
+                    <span
+                      aria-label={`Saved: ${activePost.bookmarkCount ?? 0}`}
+                      className={`inline-flex items-center gap-1 font-mono font-medium ${
+                        activePost.bookmarkedByViewer ? "text-zk-accent" : "text-zk-text"
+                      }`}
+                    >
+                      <ForumIcon
+                        size={11}
+                        className={activePost.bookmarkedByViewer ? "text-zk-accent" : "text-zk-muted"}
+                      >
+                        <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+                      </ForumIcon>
+                      <span>{activePost.bookmarkCount ?? 0}</span>
+                    </span>
+                  </div>
                   {activePost.offerAmount && (
                     <div className="flex items-center justify-between">
                       <span className="text-zk-muted">Reward</span>
@@ -467,6 +484,15 @@ export function ForumPostDetail({
               </div>
 
               <div className="flex items-center gap-2">
+                {activePost.isPinned && (
+                  <Badge className="bg-zk-tint border border-zk-accent/30 text-zk-accent text-[11px] font-medium px-2 py-0.5 gap-1">
+                    <ForumIcon size={11} className="text-zk-accent">
+                      <path d="M12 17v5" />
+                      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+                    </ForumIcon>
+                    <span>Pinned</span>
+                  </Badge>
+                )}
                 {activePost.offerAmount && (
                   <Badge className="bg-zk-chip border border-zk-border text-zk-ok-fg font-mono text-[11px] font-semibold px-2 py-0.5 gap-1">
                     <ZCoinIcon size={10} className="text-zk-ok-fg" />

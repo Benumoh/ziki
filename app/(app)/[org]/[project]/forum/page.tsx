@@ -16,7 +16,7 @@ export default async function ProjectForumPage({
   const ctx = await requireForumProject(org, project);
 
   const [messages, scopes] = await Promise.all([
-    listForumMessages({ scope: "project", projectId: ctx.project.id }),
+    listForumMessages({ scope: "project", projectId: ctx.project.id, viewerUserId: ctx.user.id }),
     getUserAccessibleScopes(ctx.user.id),
   ]);
 
@@ -29,6 +29,7 @@ export default async function ProjectForumPage({
         orgName={ctx.project.orgName}
         projectSlug={ctx.project.slug}
         projectName={ctx.project.name}
+        currentUserId={ctx.user.id}
         initialMessages={messages}
         organisations={scopes.organisations}
         externalProjects={scopes.externalProjects}

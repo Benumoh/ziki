@@ -147,6 +147,15 @@ export function ForumThreadList({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {msg.isPinned && (
+                      <Badge className="bg-zk-tint border border-zk-accent/30 text-zk-accent text-[11px] font-medium px-1.5 py-0.5 gap-1">
+                        <ForumIcon size={10} className="text-zk-accent">
+                          <path d="M12 17v5" />
+                          <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+                        </ForumIcon>
+                        <span>Pinned</span>
+                      </Badge>
+                    )}
                     {msg.offerAmount && (
                       <Badge className="bg-zk-chip border border-zk-border text-zk-ok-fg font-mono text-[11px] font-semibold px-1.5 py-0.5 gap-0.5">
                         <ZCoinIcon size={9} className="text-zk-ok-fg" />

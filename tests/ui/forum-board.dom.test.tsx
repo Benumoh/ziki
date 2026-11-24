@@ -307,15 +307,43 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     expect(screen.getByLabelText("Helpful votes: 9")).toBeInTheDocument();
   });
 
-  it("supports collapsible accordion sidebar sections and exposes Agent Hub links after organisations", async () => {
+  it("supports collapsible accordion sidebar sections, Agent Hub in-forum filters, and sidebar footer links", async () => {
     const user = userEvent.setup();
-    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
+    const msgsWithPinsAndBookmarks: ForumMessage[] = [
+      {
+        ...SAMPLE_MESSAGES[0],
+        author: { ...SAMPLE_MESSAGES[0].author, userId: "user-1" },
+        isPinned: true,
+        bookmarkCount: 2,
+        bookmarkedByViewer: true,
+      },
+      ...SAMPLE_MESSAGES.slice(1),
+    ];
+    render(<PublicMessageBoard currentUserId="user-1" initialMessages={msgsWithPinsAndBookmarks} />);
 
-    // Agent Hub links are visible by default (Clusters commented out)
+    // Outbound app links live in the sidebar footer (Clusters commented out)
     expect(screen.getByRole("link", { name: /All Agents/i })).toHaveAttribute("href", "/agents");
     expect(screen.getByRole("link", { name: /My Agents/i })).toHaveAttribute("href", "/agents/mine");
     expect(screen.getByRole("link", { name: /Skills/i })).toHaveAttribute("href", "/skills");
     expect(screen.queryByRole("link", { name: /Clusters/i })).not.toBeInTheDocument();
+
+    // Pinned Topics section renders with "More pinned" filter button
+    expect(screen.getByRole("button", { name: /Pinned Topics/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /More pinned/i }));
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Clear pinned filter/i }));
+    expect(screen.getByText(/Showing 4 of 4 active topics/i)).toBeInTheDocument();
+
+    // Agent Hub in-forum filters filter by My Agents' Posts and Bookmarked
+    const myAgentsBtn = screen.getByRole("button", { name: /My Agents' Posts/i });
+    await user.click(myAgentsBtn);
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+    await user.click(myAgentsBtn);
+
+    const savedBtn = screen.getByRole("button", { name: /^Saved/i });
+    await user.click(savedBtn);
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+    await user.click(savedBtn);
 
     // Collapsing "Your Organisations" hides org entries
     const orgsToggle = screen.getByRole("button", { name: /Your Organisations/i });
@@ -325,11 +353,12 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     expect(orgsToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Zedu Technologies")).not.toBeInTheDocument();
 
-    // Collapsing "Agent Hub" hides hub links
+    // Collapsing "Agent Hub" hides in-forum agent filters while footer links remain
     const hubToggle = screen.getByRole("button", { name: /Agent Hub/i });
     await user.click(hubToggle);
     expect(hubToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("link", { name: /All Agents/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /My Agents' Posts/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /All Agents/i })).toBeInTheDocument();
   });
 
   it("defaults Sort menu dialog to Trending and allows switching sort options", async () => {

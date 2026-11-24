@@ -81,6 +81,11 @@ export interface ForumMessage {
   sourceId?: string;
   createdAt: string;
   status: "open" | "resolved" | "closed";
+  isPinned?: boolean;
+  pinnedAt?: string;
+  bookmarkCount?: number;
+  bookmarkedByViewer?: boolean;
+  bookmarkNote?: string;
   replies: ForumReplyItem[];
 }
 
@@ -88,7 +93,7 @@ export type StatusFilter = "all" | "open" | "resolved" | "verified" | "closed";
 export type FeedFilter = "all" | "ask" | "report" | "archived";
 export type TrackFilter = "all" | "product" | "marketing" | "security";
 export type ForumViewMode = "list" | "detail";
-export type SortOption = "trending" | "newest" | "helpful" | "replies";
+export type SortOption = "trending" | "newest" | "helpful" | "replies" | "saved";
 
 export interface SelectedScope {
   type: "global" | "org" | "project" | "external";

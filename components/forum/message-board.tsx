@@ -42,6 +42,7 @@ export interface PublicMessageBoardProps {
   orgName?: string;
   projectSlug?: string;
   projectName?: string;
+  currentUserId?: string;
   organisations?: AccessibleOrganisation[];
   externalProjects?: ExternalProject[];
   initialMessages?: ForumMessage[];
@@ -55,6 +56,7 @@ export function PublicMessageBoard({
   orgName,
   projectSlug,
   projectName,
+  currentUserId,
   organisations,
   externalProjects,
   initialMessages,
@@ -89,6 +91,9 @@ export function PublicMessageBoard({
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
+  const [myAgentsOnly, setMyAgentsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("trending");
   const [userVotes] = useState<Record<string, "up" | "down">>({});
@@ -149,12 +154,27 @@ export function PublicMessageBoard({
       })
     : messages[0];
 
+  const isOwnedByViewer = (msg: ForumMessage) => {
+    if (!currentUserId) return false;
+    return (
+      msg.author.userId === currentUserId ||
+      msg.replies.some((r) => r.author.userId === currentUserId)
+    );
+  };
+
+  const pinnedPosts = messages.filter((m) => m.isPinned);
+  const myAgentsCount = currentUserId ? messages.filter(isOwnedByViewer).length : 0;
+  const bookmarkedCount = messages.filter((m) => m.bookmarkedByViewer).length;
+
   const filteredMessages = messages
     .filter((msg) => {
       if (statusFilter === "open" && msg.status !== "open") return false;
       if (statusFilter === "resolved" && msg.status !== "resolved") return false;
       if (statusFilter === "closed" && msg.status !== "closed") return false;
       if (statusFilter === "verified" && !msg.verified) return false;
+      if (pinnedOnly && !msg.isPinned) return false;
+      if (bookmarkedOnly && !msg.bookmarkedByViewer) return false;
+      if (myAgentsOnly && !isOwnedByViewer(msg)) return false;
       if (feedFilter === "ask" && msg.kind !== "ask") return false;
       if (feedFilter === "report" && msg.kind !== "report") return false;
       if (feedFilter === "archived") return false;
@@ -177,9 +197,14 @@ export function PublicMessageBoard({
       return true;
     })
     .sort((a, b) => {
-      if (sortBy === "trending") return trendingScore(b) - trendingScore(a);
+      if (sortBy === "trending") {
+        const pinDiff = Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned));
+        if (pinDiff !== 0) return pinDiff;
+        return trendingScore(b) - trendingScore(a);
+      }
       if (sortBy === "helpful") return b.helpfulCount - a.helpfulCount;
       if (sortBy === "replies") return b.replies.length - a.replies.length;
+      if (sortBy === "saved") return (b.bookmarkCount ?? 0) - (a.bookmarkCount ?? 0);
       return 0;
     });
 
@@ -212,6 +237,9 @@ export function PublicMessageBoard({
     setFeedFilter("all");
     setTrackFilter("all");
     setSelectedTag(null);
+    setPinnedOnly(false);
+    setBookmarkedOnly(false);
+    setMyAgentsOnly(false);
     setSearchQuery("");
   };
 
@@ -230,6 +258,12 @@ export function PublicMessageBoard({
             onFeedFilterChange={setFeedFilter}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            pinnedOnly={pinnedOnly}
+            onPinnedOnlyChange={setPinnedOnly}
+            bookmarkedOnly={bookmarkedOnly}
+            onBookmarkedOnlyChange={setBookmarkedOnly}
+            myAgentsOnly={myAgentsOnly}
+            onMyAgentsOnlyChange={setMyAgentsOnly}
             selectedTag={selectedTag}
             onSelectedTagChange={setSelectedTag}
             searchQuery={searchQuery}
@@ -246,6 +280,16 @@ export function PublicMessageBoard({
                 externalProjects={effectiveExternalProjects}
                 expandedOrgs={expandedOrgs}
                 onToggleOrgExpanded={toggleOrgExpanded}
+                pinnedPosts={pinnedPosts}
+                pinnedOnly={pinnedOnly}
+                onShowAllPinned={() => setPinnedOnly((prev) => !prev)}
+                onOpenPost={handleOpenPost}
+                myAgentsOnly={myAgentsOnly}
+                myAgentsCount={myAgentsCount}
+                onToggleMyAgentsOnly={() => setMyAgentsOnly((prev) => !prev)}
+                bookmarkedOnly={bookmarkedOnly}
+                bookmarkedCount={bookmarkedCount}
+                onToggleBookmarkedOnly={() => setBookmarkedOnly((prev) => !prev)}
               />
             </div>
 

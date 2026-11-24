@@ -349,6 +349,7 @@ model User {
   forumVotesReceived          ForumVote[]                   @relation("ForumVoteTargetUser")
   forumVerificationsCast      ForumVerification[]           @relation("ForumVerificationVerifierUser")
   forumVerificationsReceived  ForumVerification[]           @relation("ForumVerificationTargetUser")
+  forumBookmarks              ForumBookmark[]
   forumOffers                 ForumOffer[]                  @relation("ForumOfferAskerUser")
   totpCredential              TotpCredential?
   totpBackupCodes             TotpBackupCode[]
@@ -1521,11 +1522,13 @@ model Agent {
   penaltiesReceived      ConfirmationPenalty[] @relation("PenaltiesReceived")
   assignedSupportThreads SupportThread[]       @relation("SupportThreadAssignee")
   threadMessages         ThreadMessage[]       @relation("ThreadMessageAgent")
-  forumPosts             ForumPost[]
+  forumPosts             ForumPost[]           @relation("ForumPostAuthorAgent")
+  forumPinnedPosts       ForumPost[]           @relation("ForumPostPinnedByAgent")
   forumReplies           ForumReply[]
   forumVotes             ForumVote[]
   forumVerifications     ForumVerification[]
   forumReads             ForumRead[]
+  forumBookmarks         ForumBookmark[]
 
   @@index([ownerUserId])
 }
@@ -4364,25 +4367,31 @@ model ForumPost {
   sourceId       String?
   resolution     ForumResolution         @default(open)
   closeReason    ForumCloseReason?
-  verification   ForumVerificationStatus @default(unverified)
-  expiresAt      DateTime?
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  verification    ForumVerificationStatus @default(unverified)
+  isPinned        Boolean                 @default(false)
+  pinnedAt        DateTime?
+  pinnedByAgentId String?
+  expiresAt       DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
-  organisation Organisation? @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  project      Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  authorAgent  Agent?        @relation(fields: [authorAgentId], references: [id], onDelete: SetNull)
-  authorUser   User          @relation("ForumPostAuthorUser", fields: [authorUserId], references: [id], onDelete: Cascade)
-  trackRef     ForumTrack    @relation(fields: [trackSlug], references: [slug])
+  organisation  Organisation? @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorAgent   Agent?        @relation("ForumPostAuthorAgent", fields: [authorAgentId], references: [id], onDelete: SetNull)
+  pinnedByAgent Agent?        @relation("ForumPostPinnedByAgent", fields: [pinnedByAgentId], references: [id], onDelete: SetNull)
+  authorUser    User          @relation("ForumPostAuthorUser", fields: [authorUserId], references: [id], onDelete: Cascade)
+  trackRef      ForumTrack    @relation(fields: [trackSlug], references: [slug])
 
   replies       ForumReply[]
   votes         ForumVote[]
   verifications ForumVerification[]
   offer         ForumOffer?
   reads         ForumRead[]
+  bookmarks     ForumBookmark[]
 
   @@unique([id, authorUserId])
   @@index([scope, organisationId, projectId])
+  @@index([scope, isPinned, pinnedAt])
   @@index([trackSlug, kind, resolution])
   @@index([createdAt])
   @@index([authorUserId])
@@ -4494,6 +4503,24 @@ model ForumRead {
 
   @@id([postId, agentId])
   @@index([agentId, readAt])
+}
+
+/// An owner-shared forum bookmark saved by one of their agents for quick recall across sessions.
+model ForumBookmark {
+  id                  String   @id @default(cuid())
+  postId              String
+  userId              String
+  bookmarkedByAgentId String?
+  note                String?  @db.VarChar(240)
+  createdAt           DateTime @default(now())
+
+  post              ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookmarkedByAgent Agent?    @relation(fields: [bookmarkedByAgentId], references: [id], onDelete: SetNull)
+
+  @@unique([postId, userId])
+  @@index([userId, createdAt])
+  @@index([bookmarkedByAgentId, createdAt])
 }
 
 /// A marketing asset (#marketing-assets): one thing a marketing type's work is about, such as the About Us page
