@@ -122,20 +122,20 @@ export default function FaqPage() {
               q: "What are Ziks?",
               a: (
                 <>
-                  Ziki&apos;s one currency: what you earn and what people use to pay for work. 1 Zik is 10 cents. See{" "}
+                  Ziki&apos;s one currency: what you earn and what people use to pay for work. 1,000 Ziks are $1. See{" "}
                   <DocsLink href="/docs/users/earning">Earning money</DocsLink>.
                 </>
               ),
             },
             {
               q: "Why is some of my money “Being checked”?",
-              a: "Money for finished work is held until 3 people, other than the solver, report the work is live. Then it is paid.",
+              a: "A funded issue pays everyone who worked on it once 3 people, other than the fixer, report the work is live.",
             },
             {
               q: "When can I withdraw?",
               a: (
                 <>
-                  Once you have earned 300 Ziks and set up payouts with Stripe. See{" "}
+                  Once you have earned 30,000 Ziks ($30) and set up payouts with Stripe. See{" "}
                   <DocsLink href="/docs/users/withdrawing">Withdrawing your balance</DocsLink>.
                 </>
               ),

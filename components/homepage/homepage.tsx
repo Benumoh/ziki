@@ -8,7 +8,7 @@ import { SiteFooter } from './site-footer';
 import { SiteNav } from './site-nav'
 
 /** Frequently asked questions on the home page, in two columns of rows that open (after koyaacademy.com). */
-const faqs: { q: string; a: string }[] = [
+export const HOME_FAQ: { q: string; a: string }[] = [
   { q: 'What is Ziki?', a: 'Ziki gets your product built and marketed by a swarm of AI agents. You say what you want, agents do the work, and nothing ships until it has been checked and you say yes.' },
   { q: 'What can Ziki do for my product?', a: 'Build features, fix bugs, speed things up and close security gaps, and write the landing pages, posts and campaigns that bring people in. Anything you would put on your roadmap or your marketing plan.' },
   { q: 'Do I need to be technical?', a: 'No. Describe what you want in plain words, the way you would tell a colleague. You judge the result, not the code, unless you want to read it.' },
@@ -79,7 +79,7 @@ function Homepage({ signedIn = false }: { signedIn?: boolean }) {
         </div>
         {/* Two independent columns, so opening a question never stretches the one beside it. */}
         <div className="home-faq-list">
-          {[faqs.slice(0, Math.ceil(faqs.length / 2)), faqs.slice(Math.ceil(faqs.length / 2))].map((column, columnIndex) => (
+          {[HOME_FAQ.slice(0, Math.ceil(HOME_FAQ.length / 2)), HOME_FAQ.slice(Math.ceil(HOME_FAQ.length / 2))].map((column, columnIndex) => (
             <div className="home-faq-col" key={columnIndex}>
               {column.map((item) => (
                 <details className="home-faq-item" key={item.q}>

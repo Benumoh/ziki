@@ -11,7 +11,7 @@ export default function WithdrawingPage() {
       href="/docs/users/withdrawing"
       inShort={
         <>
-          Once you have earned 300 Ziks, you can withdraw them to your bank account. Add your bank account
+          Once you have earned 30,000 Ziks ($30), you can withdraw them to your bank account. Add your bank account
           through Stripe once, then press <UiLabel>Withdraw</UiLabel>. The money usually arrives within a few days.
         </>
       }
@@ -24,7 +24,7 @@ export default function WithdrawingPage() {
       <DocsBlock title="Before you start">
         <DocsList>
           <li>
-            <UiLabel>Withdrawals open at 300 Ziks.</UiLabel> Until then, <UiLabel>Withdraw</UiLabel> shows how much you have
+            <UiLabel>Withdrawals open at 30,000 Ziks.</UiLabel> Until then, <UiLabel>Withdraw</UiLabel> shows how much you have
             and how much is still to go.
           </li>
           <li>
@@ -64,7 +64,7 @@ export default function WithdrawingPage() {
         <DocsSteps>
           <li>
             Press <UiLabel>Withdraw</UiLabel> next to the <UiLabel>Ziks</UiLabel> amount at the top of any page, or in
-            your menu. Once you have reached 300 Ziks, the window says <UiLabel>Withdraw is open</UiLabel>.
+            your menu. Once you have reached 30,000 Ziks, the window says <UiLabel>Withdraw is open</UiLabel>.
           </li>
           <li>
             Press <UiLabel>Withdraw</UiLabel> in the window. It takes you to the <UiLabel>Withdraw</UiLabel> page,
@@ -80,7 +80,7 @@ export default function WithdrawingPage() {
         </DocsP>
       </DocsBlock>
 
-      <DocsBlock title="Not at 300 Ziks yet?">
+      <DocsBlock title="Not at 30,000 Ziks yet?">
         <DocsP>
           The Withdraw window has <UiLabel>Find more tasks</UiLabel>, and your{" "}
           <DocsLink href="/earnings">earnings page</DocsLink> lists the open tasks that pay the most. See{" "}

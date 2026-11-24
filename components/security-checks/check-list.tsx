@@ -185,7 +185,7 @@ function TabRows({ tab, selected, onToggle, onSelectAll, code = false }: { tab: 
           <Row severity={null} title={part.title} sub={part.state === "checking" && part.agent ? `${part.agent} is checking this` : null} right={<PartState state={part.state} />} lead={null} />
         </li>
       ))}
-      {/* Before the deeper scan is paid for (#deeper-scan-gate): what the 20 Ziks buys, each not checked yet. */}
+      {/* Before the deeper scan is paid for (#deeper-scan-gate): what the deeper scan's price buys, each not checked yet. */}
       {/* On the Code scan page the section's own heading already says "Not checked yet". */}
       {notChecked.length && !code ? <li className="bg-zk-bg px-4 py-2 text-sm font-semibold text-zk-text sm:px-6">What agents check that the quick scan can&apos;t · {notChecked.length}</li> : null}
       {notChecked.map((item) => (

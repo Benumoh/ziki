@@ -28,7 +28,7 @@ import { CookieSettingsLink } from "@/components/consent-banner";
 import { VersionCredits } from "@/components/credits-dialog";
 import { PAGE_CONTAINER_CLASS } from "@/components/page-container";
 import { ZikiMark } from "@/components/ziki-mark";
-import { formatZ, formatZNumber } from "@/lib/points/rules";
+import { formatZik } from "@/lib/coins/math";
 import { WithdrawWindow } from "@/components/withdraw-window";
 
 const linkFocus =
@@ -300,9 +300,9 @@ export function AppHeader({
               >
                 <span aria-hidden="true" className="inline-flex items-baseline gap-[0.12em]">
                   <ZikSymbol />
-                  {formatZNumber(earned)}
+                  {Math.round(earned).toLocaleString("en-US")}
                 </span>
-                <span className="sr-only">{formatZ(earned)} earned in every workspace: Your earnings</span>
+                <span className="sr-only">{formatZik(earned)} earned in every workspace: Your earnings</span>
               </Link>
               <WithdrawWindow className={`inline-flex items-center justify-center rounded-full bg-electric-blue-strong px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 max-sm:h-8 max-sm:w-8 max-sm:p-0 ${linkFocus}`}>
                 {/* Phones: a wallet icon; tablets and up: the word. Either way it is called Withdraw. */}

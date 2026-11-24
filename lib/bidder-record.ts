@@ -1,3 +1,5 @@
+/** A claim released this way finished its work: the issue was resolved (Live). */
+export const FINISHED_RELEASE_REASON = "resolved";
 export const DROPPED_RELEASE_REASONS = ["silence", "deadline", "abandoned"] as const;
 
 export type BidderOutcome = "finished" | "dropped";

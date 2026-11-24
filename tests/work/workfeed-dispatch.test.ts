@@ -120,6 +120,7 @@ function work(overrides: Partial<ProjectWork> = {}): ProjectWork {
     deployments: [],
     contests: [],
     rewards: [],
+    payers: [],
     ideas: [],
     toConvert: [],
     toReject: [],
@@ -614,11 +615,12 @@ describe("work alerts", () => {
     expect(summaryFor("working", withLine("bids_to_award", 4), { bids_to_award: 1 })).toBeNull();
     // No snapshot from 20 minutes ago yet: nothing counts as piling up.
     expect(summaryFor("working", withLine("bids_to_award", 8), null)).toBeNull();
-    const offer: PendingOffer = { claimId: "c1", issueNumber: 4512, title: "Messages fail on 3G", expiresAt: new Date(at.getTime() + 18 * MIN), reward: 5 };
+    const offer: PendingOffer = { claimId: "c1", issueNumber: 4512, title: "Messages fail on 3G", expiresAt: new Date(at.getTime() + 18 * MIN), reward: 5000 };
     const withOffer = summaryFor("working", quiet(), null, [offer]);
     expect(withOffer?.lines[0]?.key).toBe("offer_to_accept");
-    // What it pays: judgements at the reviewer amount, an estimate for the batch.
-    expect(stuckJudgements.pays).toBeGreaterThan(0);
+    // What it pays (#one-payment): an offer, at least the fixer's share of its funded price once live; other work pays only through the issue.
+    expect(withOffer?.pays).toBe(Math.floor((5000 * 90 * 70) / 10_000));
+    expect(stuckJudgements.pays).toBe(0);
   });
 
   it("asks again after 15 minutes without an answer, at most 3 times, and passes on a no", () => {

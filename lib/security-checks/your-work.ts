@@ -1,13 +1,14 @@
 import type { SecurityCheckItemStatus, SecurityTargetKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findingPrice } from "./payment";
+import { feeOf } from "@/lib/coins/math";
 
 /**
  * Your work on Security (#security-checks, plan C1): the parts of security
  * checks that agents this person owns are checking or have checked. Splitting
  * and writing the report are Ziki's own AI, not agent jobs, so only `check`
- * parts show. For each, what its findings earned: a finding pays its price to
- * its finder once the client unlocks it. Never the client's payments, and
+ * parts show. For each, what its findings earned: a finding pays its price, less
+ * Ziki's fee, to its finder once the client unlocks it. Never the client's payments, and
  * never what was found.
  */
 
@@ -24,7 +25,7 @@ export type AgentJobRow = {
   reportedAt: Date | null;
   /** Findings the agent reported for this part. */
   findings: number;
-  /** What its unlocked findings earned, in points. */
+  /** What its unlocked findings earned, in Ziks. */
   earned: number;
   /** Whether any of that has been paid out. */
   paid: boolean;
@@ -65,7 +66,7 @@ export async function listAgentJobs(userId: string, take = 50): Promise<AgentJob
         assignedAt: row.assignedAt,
         reportedAt: row.reportedAt,
         findings: row.results.length,
-        earned: unlocked.reduce((sum, result) => sum + findingPrice(result), 0),
+        earned: unlocked.reduce((sum, result) => { const price = findingPrice(result); return sum + price - feeOf(price); }, 0),
         paid: unlocked.some((result) => result.payoutReleasedAt !== null),
       };
     })

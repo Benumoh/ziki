@@ -233,7 +233,7 @@ export const issueSelect = {
   pullRequestHeadSha: true,
   area: { select: { id: true, name: true, slug: true } },
   // #rewards: what solving it pays, in $, and how far the estimating has got.
-  reward: true, rewardEstimateCount: true, rewardFixedAt: true,
+  reward: true, rewardEstimateCount: true, rewardFixedAt: true, lockedPriceZik: true, zikiEstimateZik: true,
 } satisfies Prisma.BugSelect;
 
 /**

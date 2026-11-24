@@ -1,4 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/** An issue's estimates (#price-lock), in memory: who the estimator is to the organisation, and whether the price is locked. */
+const estimates = vi.hoisted(() => {
+  const state = { role: null as string | null, fixedAt: null as Date | null, updates: [] as Record<string, unknown>[] };
+  const tx = {
+    bug: {
+      findFirst: async () => ({ id: "bug-1" }),
+      findUniqueOrThrow: async () => ({ id: "bug-1", status: "open", rewardFixedAt: state.fixedAt, rewardEstimateCount: 3, reward: 5 }),
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        state.updates.push(data);
+        return { reward: 5, rewardEstimateCount: 3, rewardFixedAt: state.fixedAt };
+      },
+    },
+    membership: { findUnique: async () => (state.role ? { role: state.role } : null) },
+    rewardEstimate: {
+      findUnique: async () => null,
+      upsert: async () => ({}),
+      aggregate: async () => ({ _avg: { value: 5 }, _count: { _all: 3 } }),
+    },
+    $queryRaw: async () => [],
+  };
+  return { state, prisma: { ...tx, $transaction: async (run: (db: typeof tx) => unknown) => run(tx) } };
+});
+vi.mock("@/lib/prisma", () => ({ prisma: estimates.prisma }));
+
 import {
   assertIndependentReviewer,
   ReviewerNotIndependentError,
@@ -6,6 +31,39 @@ import {
   type ReviewedBug,
 } from "@/lib/agents/independence";
 import { countedMergeVerdicts, type CountableVerdict } from "@/lib/agent-api/merge-verdicts";
+import { giveRewardEstimate } from "@/lib/agent-api/reward-estimates";
+
+describe("who prices an issue (#price-lock)", () => {
+  const scope = { organisationId: "org-1", projectId: "project-1" };
+  beforeEach(() => {
+    Object.assign(estimates.state, { role: null, fixedAt: null });
+    estimates.state.updates.length = 0;
+  });
+
+  it("refuses an estimate from the organisation's owners and admins, and so from their agents: they pay for its issues", async () => {
+    for (const role of ["owner", "admin"]) {
+      estimates.state.role = role;
+      await expect(giveRewardEstimate({ userId: "payer", agentId: "payer-agent" }, scope, "#3", { value: 2000 })).rejects.toMatchObject({ status: 403, body: { error: "payer_cannot_estimate" } });
+      await expect(giveRewardEstimate({ userId: "payer", agentId: null }, scope, "#3", { value: 2000 })).rejects.toMatchObject({ status: 403 });
+    }
+    expect(estimates.state.updates).toHaveLength(0);
+  });
+
+  it("takes an estimate from anyone else's agent, and restarts the minute the price needs to settle", async () => {
+    estimates.state.role = "member";
+    await expect(giveRewardEstimate({ userId: "member", agentId: "member-agent" }, scope, "#3", { value: 6000 })).resolves.toMatchObject({ estimates: 3 });
+    estimates.state.role = null; // an outside agent's owner, on a project open to contributors
+    await expect(giveRewardEstimate({ userId: "outsider", agentId: "outsider-agent" }, scope, "#3", { value: 4000 })).resolves.toMatchObject({ estimates: 3 });
+    expect(estimates.state.updates).toHaveLength(2);
+    expect(estimates.state.updates[1].rewardEstimatedAt).toBeInstanceOf(Date);
+  });
+
+  it("takes no more estimates once the price is locked", async () => {
+    estimates.state.fixedAt = new Date();
+    await expect(giveRewardEstimate({ userId: "outsider", agentId: "outsider-agent" }, scope, "#3", { value: 9000 })).rejects.toMatchObject({ status: 409, body: { error: "reward_fixed" } });
+    expect(estimates.state.updates).toHaveLength(0);
+  });
+});
 
 const alice = "user-alice";
 const aliceWorker = { id: "agent-alice-worker", ownerUserId: alice };

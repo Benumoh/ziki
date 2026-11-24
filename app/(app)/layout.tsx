@@ -1,4 +1,4 @@
-import { cache, Suspense } from "react";
+import { cache } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
@@ -24,9 +24,9 @@ import { countPendingEscalations } from "@/lib/agent-questions";
 import { loadOwnAgents } from "@/lib/dashboard-overview";
 import { AgentsDock, type DockAgent } from "@/components/agents-dock";
 import { appVersionLabel } from "@/lib/deployed-version";
-import { agentActivity, agentEarnings } from "@/lib/points/agent-earnings";
+import { agentActivity, agentEarnings } from "@/lib/coins/agent-earnings";
 import { headerEarnings } from "@/lib/earnings";
-import { WelcomeTour } from "@/components/welcome-tour/welcome-tour";
+import { JoinQuestions } from "@/components/get-started/join-questions";
 
 async function getOrganisationProjects(organisationId: string) {
   return prisma.project.findMany({
@@ -190,6 +190,17 @@ export default async function AppLayout({
   } catch (error) {
     console.error("[layout] organisation context failed", error);
   }
+  // Join questions (#join-questions): every member who hasn't answered them yet is asked, once per organisation.
+  let askJoinQuestions = false;
+  if (organisationRole === "member" && activeOrganisationId) {
+    const membership = await prisma.membership
+      .findUnique({
+        where: { organisationId_userId: { organisationId: activeOrganisationId, userId: user.id } },
+        select: { joinAnsweredAt: true },
+      })
+      .catch(() => null);
+    askJoinQuestions = Boolean(membership && !membership.joinAnsweredAt);
+  }
   // For links on pages whose URL names no project yet (#project-urls).
   const defaultProjectSlug = await firstProjectRefFor(user.id).catch(() => null);
   // A missing Notification table must not take down every signed-in page.
@@ -220,7 +231,7 @@ export default async function AppLayout({
     }
     try {
       const agents = dockOrganisationId ? await loadOwnAgents({ userId: user.id, organisationId: dockOrganisationId }) : [];
-      // #710: what each agent earned, from the point entries its work wrote.
+      // #710: what each agent earned, from the Ziks its work was paid.
       const ids = agents.map((agent) => agent.id);
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
@@ -230,7 +241,7 @@ export default async function AppLayout({
         prisma.agentRequest.groupBy({ by: ["agentId"], where: { agentId: { in: ids }, doneAt: null }, _count: { _all: true } }),
       ]);
       const pendingBy = new Map(pending.map((row) => [row.agentId, row._count._all]));
-      dockAgents = agents.map((agent) => ({ id: agent.id, name: agent.name, username: agent.username, avatar: agent.avatar, status: agent.status, activity: agent.activity, issue: agent.issue, question: agent.question, needsSetup: agent.needsSetup, earnedPoints: earned.get(agent.id) ?? 0, ...(activity.get(agent.id) ?? { bids: 0, comments: 0, pointsToday: 0 }), pendingRequests: pendingBy.get(agent.id) ?? 0 }));
+      dockAgents = agents.map((agent) => ({ id: agent.id, name: agent.name, username: agent.username, avatar: agent.avatar, status: agent.status, activity: agent.activity, issue: agent.issue, question: agent.question, needsSetup: agent.needsSetup, earnedZiks: earned.get(agent.id) ?? 0, ...(activity.get(agent.id) ?? { bids: 0, comments: 0, ziksToday: 0 }), pendingRequests: pendingBy.get(agent.id) ?? 0 }));
     } catch (error) {
       console.error("[layout] agents failed", error);
     }
@@ -247,16 +258,14 @@ export default async function AppLayout({
   // the wallet on the next sweep (#earnings-in-ziks), so money earned here shows it straight away too.
   const showWithdraw = (earned !== null && earned > 0) || (await hasEarnedZiks(prisma, user.id).catch(() => false));
 
-  // #287 and #active-agents: one primary-key read; a failure leaves both on, the defaults.
+  // #287: one primary-key read; a failure leaves shortcuts on, the default.
   let shortcutsEnabled = true;
-  let showActiveAgents = true;
   try {
     const prefs = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { keyboardShortcuts: true, showActiveAgents: true },
+      select: { keyboardShortcuts: true },
     });
     shortcutsEnabled = prefs?.keyboardShortcuts ?? true;
-    showActiveAgents = prefs?.showActiveAgents ?? true;
   } catch (error) {
     console.error("[layout] shortcut setting failed", error);
   }
@@ -296,20 +305,20 @@ export default async function AppLayout({
         </main>
       </div>
       {/* The agents dock keeps the page's foot clear of its floor line itself, as tall as what stands on it, and draws nothing (no spacer either) where it doesn't help. */}
-      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} showActiveAgents={showActiveAgents} />
+      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} memberCount={memberCount} />
       <FocusMainOnNavigate />
-      {/* Members who joined an organisation get a short tour of how work gets done there; its owner and admins
-          set the project up through First questions instead (#member-tour). It lives here so it survives the
-          move to the new idea's page after a request is sent. */}
+      {/* A member of an organisation gets the join questions once, ending on one real thing to do
+          (#join-questions); its owner and admins set the project up through First questions instead. The card
+          stays mounted for every member, so a refresh after the answers are saved (which turns `ask` off)
+          doesn't take the open card away mid-way. */}
       {organisationRole === "member" && activeOrganisationId ? (
-        <Suspense fallback={null}>
-          <WelcomeTour
-            userId={user.id}
-            organisationId={activeOrganisationId}
-            organisationName={organisationOptions.find((organisation) => organisation.id === activeOrganisationId)?.name ?? null}
-            firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
-          />
-        </Suspense>
+        <JoinQuestions
+          key={activeOrganisationId}
+          ask={askJoinQuestions}
+          organisationId={activeOrganisationId}
+          organisationName={organisationOptions.find((organisation) => organisation.id === activeOrganisationId)?.name ?? null}
+          firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
+        />
       ) : null}
       <KeyboardShortcuts
         enabled={shortcutsEnabled}

@@ -53,6 +53,7 @@ import { CommentComposer } from "@/components/comment-composer";
 import { AwardBox } from "@/components/award-box";
 import { FundIssueSection } from "@/components/coins/fund-issue-section";
 import { dollarsToZiks } from "@/lib/coins/math";
+import { currentPriceZik } from "@/lib/coins/budget";
 import { PlanReviewCard, type PlanCardView } from "@/components/plan-review-card";
 import { currentPlan, planDeadline, type PlanView } from "@/lib/agent-api/plan";
 import { difficultyLabel } from "@/lib/difficulty";
@@ -164,7 +165,7 @@ import {
 import "./issue-detail.css";
 import { stateLabel } from "@/lib/labels";
 import { IssueRewardPanel } from "@/components/issue-reward-panel";
-import { rewardEstimatesFor } from "@/lib/agent-api/reward-estimates";
+import { paysForIssues, rewardEstimatesFor } from "@/lib/agent-api/reward-estimates";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
 
 type BugPageProps = {
@@ -847,9 +848,15 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   // #idea-table: the idea this issue was converted from.
   const sourceIdea = bug.idea;
   // #rewards: what solving it pays, and every estimate behind it (planning poker).
-  const [rewardRow, rewardEstimates] = await Promise.all([
-    prisma.bug.findUnique({ where: { id: bug.id }, select: { reward: true, rewardFixedAt: true } }),
+  const [rewardRow, rewardEstimates, rewardPayer] = await Promise.all([
+    // A Solo project (#solo) has no prices, so its issues show no Reward panel.
+    prisma.bug.findUnique({
+      where: { id: bug.id, project: { solo: false } },
+      select: { reward: true, rewardEstimateCount: true, rewardOverrideZik: true, rewardFixedAt: true, lockedPriceZik: true, zikiEstimateZik: true, zikiEstimateReason: true },
+    }),
     loadOptional<Awaited<ReturnType<typeof rewardEstimatesFor>>>("reward estimates", [], () => rewardEstimatesFor(bug.id)),
+    // #price-lock: the organisation's owners and admins pay for its issues, so they don't estimate them.
+    loadOptional("reward payer", false, () => paysForIssues(prisma, user.id, bug.organisationId)),
   ]);
   const confirmationsData = await loadOptional<(ConfirmationsData & { confirmed?: boolean }) | null>("confirmations", null, () =>
     // #confirmation-files: other confirmers' files show once the viewer has confirmed (admins always).
@@ -1802,11 +1809,13 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             {rewardRow ? (
               <IssueRewardPanel
                 bugId={bug.id}
-                reward={dollarsToZiks(Number(rewardRow.reward))}
+                reward={currentPriceZik(rewardRow) ?? dollarsToZiks(Number(rewardRow.reward))}
+                ziki={rewardRow.zikiEstimateZik ? { value: rewardRow.zikiEstimateZik, reason: rewardRow.zikiEstimateReason } : null}
                 fixed={Boolean(rewardRow.rewardFixedAt)}
                 estimates={rewardEstimates}
                 viewerId={user.id}
                 canEstimate={!bug.isDeleted && bug.status !== "closed"}
+                payer={rewardPayer}
               >
                 <FundIssueSection bugId={bug.id} userId={user.id} />
               </IssueRewardPanel>
@@ -2320,16 +2329,21 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
 
         {/* SIDE RAIL */}
         <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-4">
-          {/* #rewards: the ticket's Ziks reward first, compact: the values with yours highlighted. */}
+          {/* #rewards: the ticket's Ziks reward first, compact: the values with yours highlighted, then (#price-lock)
+              where its funding stands, and the ask to fund it once it is priced. */}
           {rewardRow ? (
             <IssueRewardPanel
               bugId={bug.id}
-              reward={dollarsToZiks(Number(rewardRow.reward))}
+              reward={currentPriceZik(rewardRow) ?? dollarsToZiks(Number(rewardRow.reward))}
+                ziki={rewardRow.zikiEstimateZik ? { value: rewardRow.zikiEstimateZik, reason: rewardRow.zikiEstimateReason } : null}
               fixed={Boolean(rewardRow.rewardFixedAt)}
               estimates={rewardEstimates}
               viewerId={user.id}
               canEstimate={!bug.isDeleted && bug.status !== "closed"}
-            />
+              payer={rewardPayer}
+            >
+              <FundIssueSection bugId={bug.id} userId={user.id} />
+            </IssueRewardPanel>
           ) : null}
           {/* Status: workflow state, when it was opened, and whether it is an idea or an issue (#687). */}
           <section aria-label="Status" className="flex flex-col gap-2.5 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5">

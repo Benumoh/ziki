@@ -15,7 +15,6 @@ import { prisma } from "@/lib/prisma";
 import { NotificationSettings } from "@/components/notification-settings";
 import { WalletAddressForm } from "@/components/wallet-address-form";
 import { KeyboardShortcutSettings } from "@/components/keyboard-shortcut-settings";
-import { ActiveAgentsSetting } from "@/components/active-agents-visibility";
 import { isAgentPlatformEnabled } from "@/lib/feature-flags";
 import { AccountDataSettings } from "@/components/account-data-settings";
 import { ActiveSessions } from "@/components/active-sessions";
@@ -78,7 +77,6 @@ export default async function SettingsPage(props: {
     notifyAssignments?: boolean;
     notifyStatusChanges?: boolean;
     keyboardShortcuts?: boolean;
-    showActiveAgents?: boolean;
     sessionVersion?: number;
   } | null = null;
 
@@ -95,7 +93,6 @@ export default async function SettingsPage(props: {
         notifyAssignments: true,
         notifyStatusChanges: true,
         keyboardShortcuts: true,
-        showActiveAgents: true,
         sessionVersion: true,
       },
     });
@@ -291,10 +288,6 @@ export default async function SettingsPage(props: {
                   </div>
                 </section>
               ) : null}
-
-              <section className={card}>
-                <ActiveAgentsSetting initialShown={settings?.showActiveAgents ?? true} />
-              </section>
 
               <section className={`${card} gap-3.5`}>
                 <div className="flex items-center gap-3">

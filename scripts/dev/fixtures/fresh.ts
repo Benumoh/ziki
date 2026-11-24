@@ -12,6 +12,7 @@
  * (id `fx-organisation-fresh`, slug `fresh`) and a rerun recreates it as new.
  */
 import type { PrismaClient } from "@prisma/client";
+import { giveWelcomeBonus } from "../../../lib/coins/welcome-bonus";
 
 export const FRESH_LOGIN_EMAIL = "fresh@fixtures.local";
 const USER_ID = "fx-user-fresh";
@@ -19,13 +20,11 @@ const ORGANISATION_ID = "fx-organisation-fresh";
 const PROJECT_ID = "fx-project-fresh";
 const SLUG = "fresh";
 const NAME = "Fresh Start";
-/** SIGNUP_BONUS_POINTS in lib/points/signup-bonus.ts. */
-const SIGNUP_BONUS = 0.67;
 
 export async function loadFreshOrganisation(db: PrismaClient, passwordHash: string): Promise<void> {
   const existing = await db.organisation.findUnique({ where: { slug: SLUG }, select: { id: true } });
   if (existing && existing.id !== ORGANISATION_ID) throw new Error(`A "${SLUG}" organisation exists that the fixtures didn't make; not touching it.`);
-  // Issues and ideas filed here locally restrict deleting it; everything else cascades, the signup bonus included.
+  // Issues and ideas filed here locally restrict deleting it; everything else cascades.
   if (existing) {
     await db.bug.deleteMany({ where: { organisationId: ORGANISATION_ID } });
     await db.idea.deleteMany({ where: { organisationId: ORGANISATION_ID } });
@@ -52,7 +51,6 @@ export async function loadFreshOrganisation(db: PrismaClient, passwordHash: stri
       projects: { create: { id: PROJECT_ID, slug: "web", name: "Web", workflow: { create: {} } } },
     },
   });
-  await db.pointEntry.create({
-    data: { organisationId: ORGANISATION_ID, userId: user.id, bugId: null, role: "signup", points: SIGNUP_BONUS, sourceKey: `signup:${user.id}` },
-  });
+  // The welcome bonus, in Ziks: given once per account, so a rerun keeps the one it has (the ledger is append-only).
+  await giveWelcomeBonus(db, user.id);
 }

@@ -3,15 +3,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { bugInOrganisation, currentOrganisationIdFor } from "@/lib/organisation-context";
-import { pointTotals } from "@/lib/points/leaderboard";
-import { getPlatformRewardConfig } from "@/lib/points/platform-rewards";
-import { formatZ } from "@/lib/points/rules";
-import { pointBalance } from "@/lib/points/balance";
-import { decodePointCursor, pointEntries, pointEntriesQuerySchema } from "@/lib/points/entries";
-import { PointsLedger } from "@/components/points-ledger";
-import { PointsSources } from "@/components/points-sources";
-import { pointSources } from "@/lib/points/sources";
-import { PointsSummary } from "@/components/points-summary";
+import type { PayoutRole } from "@prisma/client";
+import { earnedTotals } from "@/lib/coins/leaderboard";
+import { earningsWhere, PAYOUT_ROLE_LABELS } from "@/lib/coins/earned";
+import { zikOf } from "@/lib/coins/ledger";
+import { formatZik } from "@/lib/coins/math";
 import { requireUser } from "@/lib/auth-helpers";
 import { canViewProfile, canViewWallet } from "@/lib/profile-access";
 import { roleLabels } from "@/lib/roles";
@@ -25,7 +21,7 @@ import { MemberAssignedWork } from "@/components/member-assigned-work";
 import { isAdminOfOrganisation } from "@/lib/agents/membership";
 import { settableLevels } from "@/lib/agents/levels";
 
-type ProfileProps = { params: Promise<{ id: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> };
+type ProfileProps = { params: Promise<{ id: string }> };
 
 /** How many of each list to show before pointing at the filtered list. */
 const RECENT = 10;
@@ -51,12 +47,12 @@ export async function generateMetadata({
   };
 }
 
-export default async function ProfilePage({ params, searchParams }: ProfileProps) {
+export default async function ProfilePage({ params }: ProfileProps) {
   const viewer = await requireUser();
   const { id } = await params;
   // #503: only people who share a organisation with this person can see them.
   if (!(await canViewProfile(prisma, viewer, id))) notFound();
-  // #428: points in the viewer's organisation.
+  // #428, #one-payment: earnings in the viewer's organisation.
   const organisationId = await currentOrganisationIdFor(viewer.id);
   // #425, #439: a profile is another way to read issues. No membership, no issues.
   const scope = bugInOrganisation(organisationId);
@@ -90,23 +86,10 @@ export default async function ProfilePage({ params, searchParams }: ProfileProps
 
   if (!person) notFound();
 
-  const [points, platformRewards, balance, walletVisible] = await Promise.all([
-    organisationId ? pointTotals(prisma, organisationId, person.id) : Promise.resolve({ points: 0, solvedTasks: 0 }),
-    getPlatformRewardConfig(prisma),
-    organisationId ? pointBalance(prisma, { organisationId, userId: person.id }) : Promise.resolve(null),
+  const [earned, walletVisible] = await Promise.all([
+    organisationId ? earnedTotals(prisma, organisationId, person.id) : Promise.resolve({ ziks: 0, fixedIssues: 0 }),
     canViewWallet(prisma, viewer, person.id, organisationId),
   ]);
-
-  const ledgerParams = await searchParams ?? {};
-  const ledgerQuery = pointEntriesQuerySchema.safeParse({
-    from: ledgerParams.from || undefined, to: ledgerParams.to || undefined, cursor: ledgerParams.cursor || undefined,
-  });
-  let ledgerError = !ledgerQuery.success;
-  if (ledgerQuery.success && ledgerQuery.data.cursor) {
-    try { decodePointCursor(ledgerQuery.data.cursor); } catch { ledgerError = true; }
-  }
-  const ledger = organisationId && viewer.id === person.id && ledgerQuery.success && !ledgerError
-    ? await pointEntries(prisma, { organisationId, userId: person.id }, ledgerQuery.data) : null;
 
   const reportedTotal = counts.reduce((sum, row) => sum + row._count._all, 0);
   const resolved =
@@ -128,9 +111,16 @@ export default async function ProfilePage({ params, searchParams }: ProfileProps
   const manageLevels = organisationId && viewer.id !== person.id && viewerIsAdmin
     ? settableLevels({ isOwner: false, isAdminOfOrganisation: true })
     : null;
-  // #points-sources: where their points came from, for the person and the organisation's admins (to spot farming).
-  const sources = organisationId && (viewer.id === person.id || viewerIsAdmin)
-    ? await pointSources(prisma, { organisationId, userId: person.id })
+  // What their earnings here paid for, by role, for the person and the organisation's admins.
+  const byRole = organisationId && (viewer.id === person.id || viewerIsAdmin)
+    ? (await prisma.coinEntry.groupBy({
+        by: ["payoutRole"],
+        where: { ...earningsWhere(person.id, { organisationId }), payoutRole: { not: null } },
+        _sum: { amount: true },
+      }))
+        .filter((row): row is typeof row & { payoutRole: PayoutRole } => row.payoutRole !== null)
+        .map((row) => ({ role: row.payoutRole, ziks: zikOf(row._sum.amount) }))
+        .sort((a, b) => b.ziks - a.ziks)
     : null;
 
   return (
@@ -156,51 +146,37 @@ export default async function ProfilePage({ params, searchParams }: ProfileProps
         <Stat label="Currently assigned" value={assignedTotal} />
       </dl>
 
-      <PointsSummary
-        points={points.points}
-        solvedTasks={points.solvedTasks}
-        targetPoints={platformRewards.target}
-      />
-
-      {balance || (walletVisible && person.walletAddress) ? (
-        <section
-          className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5"
-          aria-labelledby="balance-heading"
-        >
-          <h2
-            id="balance-heading"
-            className="text-sm font-semibold uppercase tracking-wide text-zk-muted"
-          >
-            Balance
-          </h2>
-          {balance ? (
+      <section className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5" aria-labelledby="earned-heading">
+        <h2 id="earned-heading" className="text-sm font-semibold uppercase tracking-wide text-zk-muted">
+          Earned here
+        </h2>
+        <p className="mt-1 text-2xl font-semibold tabular-nums text-zk-text">{formatZik(earned.ziks)}</p>
+        <p className="text-sm text-zk-text2">
+          {earned.fixedIssues} {earned.fixedIssues === 1 ? "issue" : "issues"} fixed. Each funded issue pays everyone who worked on it once it&apos;s live.
+          {viewer.id === person.id ? (
             <>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-zk-text">
-                {formatZ(balance.lifetime.points)}
-                <span className="ml-1 text-sm font-normal text-zk-text2">
-                  point{balance.lifetime.points === 1 ? "" : "s"}
-                </span>
-              </p>
-              <p className="text-sm text-zk-text2">
-                {balance.lifetime.entries} ledger entr
-                {balance.lifetime.entries === 1 ? "y" : "ies"}, corrections included
-              </p>
+              {" "}
+              <Link href="/earnings" className="font-semibold text-zk-accent hover:underline">Your earnings</Link>
             </>
           ) : null}
-          {walletVisible && person.walletAddress ? (
-            <p className="mt-2 break-all font-mono text-sm text-zk-text2">
-              <span className="font-sans font-medium text-zk-text2">Wallet </span>
-              {person.walletAddress}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      {sources ? <PointsSources sources={sources} name={person.name ?? "this person"} /> : null}
-
-      {organisationId && viewer.id === person.id ? (
-        <PointsLedger page={ledger} profileId={person.id} from={ledgerQuery.success ? ledgerQuery.data.from : undefined} to={ledgerQuery.success ? ledgerQuery.data.to : undefined} error={ledgerError} />
-      ) : null}
+        </p>
+        {byRole && byRole.length > 0 ? (
+          <ul className="mt-3 divide-y divide-zk-divider text-sm">
+            {byRole.map((row) => (
+              <li key={row.role} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="text-zk-text2">{PAYOUT_ROLE_LABELS[row.role]}</span>
+                <span className="font-mono font-semibold tabular-nums text-zk-text">{formatZik(row.ziks)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {walletVisible && person.walletAddress ? (
+          <p className="mt-2 break-all font-mono text-sm text-zk-text2">
+            <span className="font-sans font-medium text-zk-text2">Wallet </span>
+            {person.walletAddress}
+          </p>
+        ) : null}
+      </section>
 
       <section className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5" aria-labelledby="profile-agents-heading">
         <h2 id="profile-agents-heading" className="text-sm font-semibold uppercase tracking-wide text-zk-muted">

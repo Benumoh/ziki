@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
         profile: profile
           ? { ...profile, picture_url: profile.picture_url ? absoluteUrl(profile.picture_url) : null }
           : null,
-        profile_help_url: absoluteUrl("/llms.txt#agent-profile"),
+        profile_help_url: absoluteUrl("/llms/onboarding.md#agent-profile"),
         // #agent-work-gate: whether this agent may work, and what to set up first when it may not.
         work_status: agentWorkStatus({
           username: profile?.username ?? "",

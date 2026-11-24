@@ -18,6 +18,7 @@ import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
 import { parseEstimate, rewardView } from "@/lib/agent-api/reward-estimates";
 import { leadSchema } from "@/lib/validations/lead";
+import { joinAnswersSchema } from "@/lib/validations/join-questions";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
 const valid = { title: "Login button broken", description: "Clicking sign in does nothing on mobile." };
@@ -140,15 +141,15 @@ describe("agent write reasons (#236)", () => {
 });
 
 describe("reward estimates in Ziks (#rewards)", () => {
-  it("takes 10 to 100 Ziks in steps of 10 and refuses anything else", () => {
-    for (const value of [10, 40, 100]) expect(parseEstimate({ value }).value).toBe(value);
-    // The old dollar values (1 to 10) are refused now: an estimate is in Ziks.
-    for (const value of [0, 1, 5, 25, 105, 110, 2.5, -10]) expect(() => parseEstimate({ value })).toThrow(/Ziks/);
+  it("takes 1,000 to 10,000 Ziks in steps of 1,000 and refuses anything else", () => {
+    for (const value of [1000, 4000, 10000]) expect(parseEstimate({ value }).value).toBe(value);
+    // The old values (10 to 100 Ziks, and 1 to 10 dollars before that) are refused now.
+    for (const value of [0, 10, 100, 500, 2500, 10500, 11000, 2.5, -1000]) expect(() => parseEstimate({ value })).toThrow(/Ziks/);
   });
 
   it("shows a reward in Ziks, though the issue stores it in dollars", () => {
-    expect(rewardView({ reward: 6.33, rewardEstimateCount: 3, rewardFixedAt: null })).toMatchObject({ reward: 63, estimates: 3, fixed: false });
-    expect(rewardView({ reward: 1, rewardEstimateCount: 0, rewardFixedAt: null }).reward).toBe(10);
+    expect(rewardView({ reward: 6.33, rewardEstimateCount: 3, rewardFixedAt: null })).toMatchObject({ reward: 6330, estimates: 3, fixed: false });
+    expect(rewardView({ reward: 1, rewardEstimateCount: 0, rewardFixedAt: null }).reward).toBe(1000);
   });
 });
 
@@ -355,5 +356,15 @@ describe("public lead forms (#how-it-works-leads)", () => {
     expect(leadSchema.safeParse({ email: "not-an-email", source: "how-it-works:hero" }).success).toBe(false);
     expect(leadSchema.safeParse({ email: "ada@example.com", source: "elsewhere" }).success).toBe(false);
     expect(leadSchema.safeParse({ email: "ada@example.com", source: "how-it-works:middle", goal: "x".repeat(1001) }).success).toBe(false);
+  });
+});
+
+describe("join answers (#join-questions)", () => {
+  it("keeps a skip, orders and de-duplicates strengths, and refuses anything not offered", () => {
+    const base = { organisationId: "org-1", strengths: [] };
+    expect(joinAnswersSchema.parse(base)).toEqual(base);
+    expect(joinAnswersSchema.parse({ ...base, strengths: ["review", "testing", "review"] }).strengths).toEqual(["testing", "review"]);
+    expect(joinAnswersSchema.safeParse({ ...base, strengths: ["hacking"] }).success).toBe(false);
+    expect(joinAnswersSchema.safeParse({ ...base, organisationId: "" }).success).toBe(false);
   });
 });

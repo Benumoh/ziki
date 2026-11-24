@@ -1,46 +1,69 @@
 import { prisma } from "@/lib/prisma";
 import { canFundIssue } from "@/lib/coins/fund";
-import { MIN_ESTIMATES_TO_AWARD, budgetBalance, canManageBudget, issuePriceZik } from "@/lib/coins/budget";
-import { escrowBalance, walletBalance } from "@/lib/coins/ledger";
-import { FundIssueBox } from "./fund-issue-box";
-import { IssuePriceBox } from "./issue-price-box";
+import { SETTLE_FIELDS, budgetBalance, canManageBudget, lockPrice, priceStage } from "@/lib/coins/budget";
+import { suggestedBudget } from "@/lib/coins/budget-view";
+import { escrowBalance, lockBug, walletBalance } from "@/lib/coins/ledger";
+import { feePercent } from "@/lib/coins/math";
+import { IssueFundingCard } from "./issue-funding-card";
 
 /**
- * The Ziks behind an issue (#ziki-coins), on the issue page. Everyone sees what
- * is funded; only the issue's owner or an organisation admin gets the form,
- * and only while the issue can still pay out. Draws nothing for an issue with
- * no Ziks that you can't fund.
- *
- * In a project that pays from a budget (#project-budget) there is no form to fund the issue: it shows the issue's price
- * and what the budget has reserved, and the owner may raise the price. An issue can't be funded, or priced from
- * estimates, until three agents have estimated it.
+ * The Ziks behind an issue (#price-lock), on the issue page inside the Reward panel. Everyone sees where its price
+ * stands; the person who pays for it (its reporter, or an owner or admin) is asked to fund it once it is priced. A
+ * settled price the project's budget covers is locked as the page opens, so nobody waits for the next sweep. Draws
+ * nothing for a finished issue that holds nothing.
  */
 export async function FundIssueSection({ bugId, userId }: { bugId: string; userId: string }) {
-  const bug = await prisma.bug.findUnique({
-    where: { id: bugId },
-    select: {
-      organisationId: true, reporterId: true, status: true, isDeleted: true, payoutReleasedAt: true,
-      reward: true, rewardEstimateCount: true, rewardOverrideZik: true, projectId: true,
-      project: { select: { budgetEnabled: true, slug: true, organisation: { select: { slug: true } } } },
-    },
-  });
+  const select = {
+    organisationId: true, reporterId: true, status: true, isDeleted: true, payoutReleasedAt: true, projectId: true,
+    ...SETTLE_FIELDS,
+    project: { select: { slug: true, organisation: { select: { slug: true } } } },
+  } as const;
+  let bug = await prisma.bug.findUnique({ where: { id: bugId }, select });
   if (!bug || bug.isDeleted) return null;
-  const finished = bug.status === "closed" || Boolean(bug.payoutReleasedAt);
-  const price = issuePriceZik(bug);
-  const budgetHref = `/${bug.project.organisation.slug}/${bug.project.slug}/budget`;
-  const waiting = price === null ? { have: bug.rewardEstimateCount, need: MIN_ESTIMATES_TO_AWARD } : null;
+  const finished = bug.status === "closed" || bug.status === "resolved" || Boolean(bug.payoutReleasedAt);
 
-  if (bug.project.budgetEnabled) {
-    const [escrow, mayManage, available] = await Promise.all([
-      escrowBalance(prisma, bugId),
-      finished ? Promise.resolve(false) : canManageBudget(userId, bug.organisationId),
-      budgetBalance(prisma, bug.projectId),
-    ]);
-    return <IssuePriceBox bugId={bugId} price={price} waiting={waiting} reserved={escrow} available={available} canSetPrice={mayManage} budgetHref={budgetHref} />;
+  const now = new Date();
+  const before = priceStage(bug, now);
+  // Settled, or locked but short (its price was raised): the budget covers it now if it can.
+  const short = before.stage === "locked" && before.price > (await escrowBalance(prisma, bugId));
+  if (!finished && (before.stage === "settled" || short)) {
+    const locked = await prisma
+      .$transaction(async (tx) => {
+        await lockBug(tx, bugId);
+        return lockPrice(tx, bugId, now);
+      })
+      .catch(() => null);
+    if (locked?.locked) bug = (await prisma.bug.findUnique({ where: { id: bugId }, select })) ?? bug;
   }
 
-  const [escrow, mayFund] = await Promise.all([escrowBalance(prisma, bugId), finished ? Promise.resolve(false) : canFundIssue(userId, bug)]);
-  if (escrow === 0 && !mayFund) return null;
-  const balance = mayFund ? await walletBalance(prisma, userId) : 0;
-  return <FundIssueBox bugId={bugId} escrow={escrow} balance={balance} canFund={mayFund} price={price} waiting={waiting} budgetHref={budgetHref} />;
+  const stage = priceStage(bug, now);
+  const held = Math.max(0, await escrowBalance(prisma, bugId));
+  if (finished && held === 0) return null;
+
+  const [mayFund, mayFundProject] = finished ? [false, false] : await Promise.all([canFundIssue(userId, bug), canManageBudget(userId, bug.organisationId)]);
+  const price = stage.stage === "estimating" ? null : stage.price;
+  const asking = mayFund && price !== null && (stage.stage === "settled" || stage.stage === "locked") && price > held;
+
+  const [balance, available, suggested] = asking
+    ? await Promise.all([walletBalance(prisma, userId), budgetBalance(prisma, bug.projectId), mayFundProject ? suggestedBudget(bug.projectId, price - held) : Promise.resolve(0)])
+    : [0, 0, 0];
+
+  return (
+    <IssueFundingCard
+      bugId={bugId}
+      projectId={bug.projectId}
+      stage={stage.stage}
+      price={price}
+      estimates={stage.stage === "estimating" ? { have: stage.have, need: stage.need } : { have: bug.rewardEstimateCount, need: bug.rewardEstimateCount }}
+      settlesInMs={stage.stage === "settling" ? stage.settlesAt.getTime() - now.getTime() : null}
+      held={held}
+      canFund={mayFund}
+      canFundProject={mayFundProject}
+      balance={balance}
+      available={Math.max(0, available)}
+      suggested={suggested}
+      feePercent={feePercent()}
+      budgetHref={`/${bug.project.organisation.slug}/${bug.project.slug}/budget`}
+    />
+  );
 }

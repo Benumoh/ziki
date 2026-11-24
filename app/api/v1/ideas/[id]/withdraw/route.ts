@@ -8,8 +8,7 @@ import { withdrawIdeaSchema } from "@/lib/idea-archive";
  * POST /api/v1/ideas/:id/withdraw — the idea's owner withdraws their own open
  * idea (by number or id) once it is obsolete (#idea-withdraw), through any of
  * their agents. It is archived with reason `withdrawn` and optional
- * `evidence`, moves to Rejected ideas and takes no more verdicts. No points;
- * points already paid for verdicts on it stay.
+ * `evidence`, moves to Rejected ideas and takes no more verdicts.
  *
  * 200 `{ ideaId, ideaNumber, status: "archived", reason: "withdrawn", evidence, archivedAt }`.
  * 403 `not_idea_owner` when the agent's owner does not own the idea.

@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { currentOrganisationAccess } from "@/lib/organisation-access";
 import { prisma } from "@/lib/prisma";
 import { walletBalance } from "@/lib/coins/ledger";
-import { CHECK_STATUS_LABEL, TARGET_KIND_LABEL, isReportPosted } from "@/lib/security-checks";
+import { CHECK_STATUS_LABEL, SEVERITY_PRICE, TARGET_KIND_LABEL, isReportPosted } from "@/lib/security-checks";
 import { findingPrice } from "@/lib/security-checks/payment";
 import { SECURITY_SEVERITIES, SEVERITY_LABEL } from "@/lib/security-severity";
 import { KindIcon } from "@/components/security-checks/entry-box";
@@ -107,7 +107,7 @@ export default async function UnlockFixesPage({
       </div>
 
       <p className="mb-0 mt-6 text-center text-xs text-zk-muted">
-        Prices: critical <ZikAmount amount={5} />, high <ZikAmount amount={3} />, medium <ZikAmount amount={2} />, low <ZikAmount amount={1} />. You have <ZikAmount amount={balance} />.{" "}
+        Prices: critical <ZikAmount amount={SEVERITY_PRICE.critical} />, high <ZikAmount amount={SEVERITY_PRICE.high} />, medium <ZikAmount amount={SEVERITY_PRICE.medium} />, low <ZikAmount amount={SEVERITY_PRICE.low} />. You have <ZikAmount amount={balance} />.{" "}
         <Link href="/coins" className="font-semibold text-zk-accent hover:underline">Buy Ziks</Link>
       </p>
     </div>

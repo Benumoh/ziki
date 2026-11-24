@@ -83,7 +83,7 @@ export async function rescanCost(checkId: string): Promise<RescanQuote> {
 }
 
 /**
- * Scan again with agents (#security-rescan, 17 Nov): pays 10 Ziks, starts a follow-up scan whose agents recheck the
+ * Scan again with agents (#security-rescan, 17 Nov): pays RESCAN_PRICE_ZIKS ($1), starts a follow-up scan whose agents recheck the
  * earlier findings and look for new ones, and runs the quick scan again. The follow-up starts after this answers.
  */
 export async function rescanSite(checkId: string): Promise<RescanOutcome> {

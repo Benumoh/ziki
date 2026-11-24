@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTACHMENTS_KEPT_SUMMARY,
   deleteSummary,
   deletedSummary,
   deletionCounts,
   restoreSummary,
 } from "@/lib/ticket-deletion";
+import { DELETED_PARENT_ATTACHMENT_TTL_DAYS } from "@/lib/attachment-retention";
 import { buildVoterSummary, type RawVoterRow } from "@/lib/voters";
 
 /**
@@ -63,5 +65,20 @@ describe("delete and restore wording with an old dislike row (#413)", () => {
 
     expect(deleteSummary(counts)).toContain("Its 0 comments, 1 importance mark and history are kept.");
     expect(restoreSummary(counts)).toContain("with its 0 comments, 1 importance mark and history as they were.");
+  });
+});
+
+describe("delete and restore wording about attachments (#596)", () => {
+  it("says before and after deleting how long attachments are kept", () => {
+    const sentence = `Its attachments are kept for ${DELETED_PARENT_ATTACHMENT_TTL_DAYS} days, then removed for good.`;
+    expect(ATTACHMENTS_KEPT_SUMMARY).toBe(sentence);
+    expect(deleteSummary()).toContain(sentence);
+    expect(deletedSummary()).toContain(sentence);
+  });
+
+  it("says a restore brings attachments back only within that period", () => {
+    expect(restoreSummary()).toContain(
+      `Its attachments come back too if it was deleted less than ${DELETED_PARENT_ATTACHMENT_TTL_DAYS} days ago.`,
+    );
   });
 });
