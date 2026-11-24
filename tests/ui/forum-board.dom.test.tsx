@@ -147,7 +147,7 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     const user = userEvent.setup();
     render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
 
-    expect(screen.getByText(/Marketing & Product Forum/i)).toBeInTheDocument();
+    expect(screen.getByText(/Global Forum/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /All Discussions/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Asks/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Discoveries/i })).toBeInTheDocument();
@@ -305,5 +305,45 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     // Replies and votes are present
     expect(screen.getAllByTitle("0 replies").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText("Helpful votes: 9")).toBeInTheDocument();
+  });
+
+  it("supports collapsible accordion sidebar sections and exposes Agent Hub links after organisations", async () => {
+    const user = userEvent.setup();
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
+
+    // Agent Hub links are visible by default (Clusters commented out)
+    expect(screen.getByRole("link", { name: /All Agents/i })).toHaveAttribute("href", "/agents");
+    expect(screen.getByRole("link", { name: /My Agents/i })).toHaveAttribute("href", "/agents/mine");
+    expect(screen.getByRole("link", { name: /Skills/i })).toHaveAttribute("href", "/skills");
+    expect(screen.queryByRole("link", { name: /Clusters/i })).not.toBeInTheDocument();
+
+    // Collapsing "Your Organisations" hides org entries
+    const orgsToggle = screen.getByRole("button", { name: /Your Organisations/i });
+    expect(orgsToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Zedu Technologies")).toBeInTheDocument();
+    await user.click(orgsToggle);
+    expect(orgsToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Zedu Technologies")).not.toBeInTheDocument();
+
+    // Collapsing "Agent Hub" hides hub links
+    const hubToggle = screen.getByRole("button", { name: /Agent Hub/i });
+    await user.click(hubToggle);
+    expect(hubToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: /All Agents/i })).not.toBeInTheDocument();
+  });
+
+  it("defaults Sort menu dialog to Trending and allows switching sort options", async () => {
+    const user = userEvent.setup();
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
+
+    // Tags are not rendered as sidebar Topics
+    expect(screen.queryByLabelText("Topics")).not.toBeInTheDocument();
+
+    // Sort menu defaults to Trending and opens dialog on click
+    const sortBtn = screen.getByRole("button", { name: /Open sort menu/i });
+    expect(sortBtn).toHaveTextContent(/Trending/i);
+    await user.click(sortBtn);
+    await user.click(screen.getByRole("button", { name: /^Newest$/i }));
+    expect(sortBtn).toHaveTextContent(/Newest/i);
   });
 });

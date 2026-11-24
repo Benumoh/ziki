@@ -283,11 +283,24 @@ export function PublicMessageBoard({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [popularTagsOpen, setPopularTagsOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"newest" | "helpful" | "replies">("newest");
+  const [sortBy, setSortBy] = useState<"trending" | "newest" | "helpful" | "replies">("trending");
+
+  // Collapsible accordion state for sidebar sections
+  const [expandedSections, setExpandedSections] = useState({
+    scope: true,
+    organisations: true,
+    external: true,
+    hub: true,
+  });
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
 
   // Initial scope hierarchy config
   const initialScopeConfig = React.useMemo(() => {
@@ -400,6 +413,29 @@ export function PublicMessageBoard({
     "stripe",
   ];
 
+  const parseAgeHours = (createdAt: string): number => {
+    const rel = /^(\d+)\s*([smhdw])/i.exec(createdAt.trim());
+    if (rel) {
+      const value = Number(rel[1]);
+      const unit = rel[2].toLowerCase();
+      if (unit === "s") return value / 3600;
+      if (unit === "m") return value / 60;
+      if (unit === "h") return value;
+      if (unit === "d") return value * 24;
+      if (unit === "w") return value * 168;
+    }
+    const parsed = Date.parse(createdAt);
+    if (!Number.isNaN(parsed)) {
+      return Math.max(0, (Date.now() - parsed) / 3_600_000);
+    }
+    return 24;
+  };
+
+  const trendingScore = (msg: ForumMessage): number => {
+    const ageHours = parseAgeHours(msg.createdAt);
+    return (msg.helpfulCount * 2 + msg.replies.length * 3 + 1) / Math.pow(ageHours + 2, 1.2);
+  };
+
   // Reply Expansion State
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
 
@@ -455,6 +491,7 @@ export function PublicMessageBoard({
       return true;
     })
     .sort((a, b) => {
+      if (sortBy === "trending") return trendingScore(b) - trendingScore(a);
       if (sortBy === "helpful") return b.helpfulCount - a.helpfulCount;
       if (sortBy === "replies") return b.replies.length - a.replies.length;
       return 0;
@@ -664,152 +701,263 @@ export function PublicMessageBoard({
       </aside>
     );
   };
-  const renderSidebar = () => (
-    <aside className="flex flex-col gap-4 min-w-0 lg:sticky lg:top-20 shrink-0 self-start w-full">
-      {/* Scope 1: Global Forum */}
-      <div className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
-          Forum Scope
-        </span>
-        <Link
-          href={scopedForumPath("platform")}
-          className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
-            selectedScope.type === "global"
-              ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
-              : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-          }`}
-        >
-          <span className="flex items-center gap-2">
-            <Icon size={15} className="text-zk-accent">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 3a14.5 14.5 0 0 0 0 18M12 3a14.5 14.5 0 0 1 0 18M3 12h18" />
+  const renderSidebar = () => {
+    // Clusters route kept for future re-enablement:
+    // const clusterOrgSlug = orgSlug ?? effectiveOrgs[0]?.slug ?? effectiveOrgs[0]?.id;
+    // const clusterProjSlug =
+    //   projectSlug ??
+    //   effectiveOrgs.find((o) => o.slug === clusterOrgSlug || o.id === clusterOrgSlug)?.projects[0]?.slug ??
+    //   effectiveOrgs[0]?.projects[0]?.slug;
+    // const clustersHref =
+    //   clusterOrgSlug && clusterProjSlug
+    //     ? `/${clusterOrgSlug}/${clusterProjSlug}/clusters`
+    //     : null;
+
+    return (
+      <aside className="flex flex-col gap-3 min-w-0 shrink-0 w-full">
+        {/* Section 1: Global Forum Scope (Collapsible) */}
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            aria-expanded={expandedSections.scope}
+            onClick={() => toggleSection("scope")}
+            className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+          >
+            <span>Forum Scope</span>
+            <Icon size={11} className={`transition-transform ${expandedSections.scope ? "rotate-90" : ""}`}>
+              <path d="m9 18 6-6-6-6" />
             </Icon>
-            <span>Global Ziki Forum</span>
-          </span>
-          <span className="font-mono text-[10px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
-            All
-          </span>
-        </Link>
-      </div>
-
-      {/* Scope 2: Organisations & Internal Projects */}
-      <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
-        <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
-          Your Organisations
-        </span>
-        {effectiveOrgs.map((org) => {
-          const currentOrgSlug = org.slug || org.id;
-          const isOrgSelected =
-            selectedScope.type === "org" &&
-            (selectedScope.orgId === org.id || selectedScope.orgId === currentOrgSlug);
-          const isExpanded = expandedOrgs[org.id] ?? expandedOrgs[currentOrgSlug] ?? false;
-
-          return (
-            <div key={org.id} className="flex flex-col gap-0.5">
-              <div
-                className={`flex items-center justify-between px-2.5 py-1 rounded-lg text-[13px] transition-colors group ${
-                  isOrgSelected
-                    ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
-                    : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-                }`}
-              >
-                <Link
-                  href={scopedForumPath("org", currentOrgSlug)}
-                  className="flex items-center gap-2 truncate flex-1 text-left py-0.5 focus:outline-none"
-                >
-                  <Icon size={14} className="text-zk-muted shrink-0">
-                    <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 11h2M13 11h2M9 15h2M13 15h2" />
-                  </Icon>
-                  <span className="truncate">{org.name}</span>
-                </Link>
-                <button
-                  type="button"
-                  aria-label={`Toggle projects for ${org.name}`}
-                  onClick={(e) => toggleOrgExpanded(org.id, e)}
-                  className="p-1 rounded hover:bg-zk-chip text-zk-muted hover:text-zk-text transition-colors shrink-0 ml-1"
-                >
-                  <Icon size={12} className={isExpanded ? "rotate-90" : ""}>
-                    <path d="m9 18 6-6-6-6" />
-                  </Icon>
-                </button>
-              </div>
-
-              {/* Projects Underneath Org */}
-              {isExpanded && (
-                <div className="flex flex-col gap-0.5 pl-5 pr-1 border-l border-zk-border/60 ml-3.5 my-0.5">
-                  {org.projects.map((proj) => {
-                    const currentProjSlug = proj.slug || proj.id;
-                    const isProjSelected =
-                      selectedScope.type === "project" &&
-                      (selectedScope.orgId === org.id || selectedScope.orgId === currentOrgSlug) &&
-                      (selectedScope.projectId === proj.id || selectedScope.projectId === currentProjSlug);
-
-                    return (
-                      <Link
-                        key={proj.id}
-                        href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
-                        className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
-                          isProjSelected
-                            ? "bg-zk-chip text-zk-accent font-semibold"
-                            : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/40"
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5 truncate">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zk-muted/60" />
-                          <span className="truncate">{proj.name}</span>
-                        </span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Scope 3: External Projects (Collaborator) */}
-      {effectiveExternalProjects.length > 0 && (
-        <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
-          <span className="text-[10px] uppercase tracking-wider text-zk-muted font-semibold px-2 mb-1">
-            External Projects
-          </span>
-          {effectiveExternalProjects.map((ext) => {
-            const extOrgSlug = ext.organisationSlug;
-            const extProjSlug = ext.slug || ext.id;
-            const isExtSelected =
-              (selectedScope.type === "external" || selectedScope.type === "project") &&
-              (selectedScope.orgId === extOrgSlug || selectedScope.orgId === ext.organisationId) &&
-              (selectedScope.projectId === extProjSlug || selectedScope.projectId === ext.id);
-
-            return (
-              <Link
-                key={ext.id}
-                href={scopedForumPath("project", extOrgSlug, extProjSlug)}
-                className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
-                  isExtSelected
-                    ? "bg-zk-tint text-zk-accent border border-zk-accent/25"
-                    : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 w-full">
-                  <span className="text-[13px] font-medium text-zk-text truncate">
-                    {ext.name}
-                  </span>
-                  <span className="text-[9px] uppercase font-mono px-1 rounded bg-zk-chip text-zk-muted shrink-0">
-                    Guest
-                  </span>
-                </div>
-                <span className="text-[11px] text-zk-muted truncate font-mono">
-                  {ext.organisationName}
-                </span>
-              </Link>
-            );
-          })}
+          </button>
+          {expandedSections.scope && (
+            <Link
+              href={scopedForumPath("platform")}
+              className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
+                selectedScope.type === "global"
+                  ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
+                  : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Icon size={15} className="text-zk-accent">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 3a14.5 14.5 0 0 0 0 18M12 3a14.5 14.5 0 0 1 0 18M3 12h18" />
+                </Icon>
+                <span>Global Ziki Forum</span>
+              </span>
+              <span className="font-mono text-[10px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
+                All
+              </span>
+            </Link>
+          )}
         </div>
-      )}
-    </aside>
-  );
+
+        {/* Section 2: Organisations & Internal Projects (Collapsible) */}
+        <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
+          <button
+            type="button"
+            aria-expanded={expandedSections.organisations}
+            onClick={() => toggleSection("organisations")}
+            className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+          >
+            <span>Your Organisations</span>
+            <Icon size={11} className={`transition-transform ${expandedSections.organisations ? "rotate-90" : ""}`}>
+              <path d="m9 18 6-6-6-6" />
+            </Icon>
+          </button>
+          {expandedSections.organisations &&
+            effectiveOrgs.map((org) => {
+              const currentOrgSlug = org.slug || org.id;
+              const isOrgSelected =
+                selectedScope.type === "org" &&
+                (selectedScope.orgId === org.id || selectedScope.orgId === currentOrgSlug);
+              const isExpanded = expandedOrgs[org.id] ?? expandedOrgs[currentOrgSlug] ?? false;
+
+              return (
+                <div key={org.id} className="flex flex-col gap-0.5">
+                  <div
+                    className={`flex items-center justify-between px-2.5 py-1 rounded-lg text-[13px] transition-colors group ${
+                      isOrgSelected
+                        ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
+                        : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+                    }`}
+                  >
+                    <Link
+                      href={scopedForumPath("org", currentOrgSlug)}
+                      className="flex items-center gap-2 truncate flex-1 text-left py-0.5 focus:outline-none"
+                    >
+                      <Icon size={14} className="text-zk-muted shrink-0">
+                        <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 11h2M13 11h2M9 15h2M13 15h2" />
+                      </Icon>
+                      <span className="truncate">{org.name}</span>
+                    </Link>
+                    <button
+                      type="button"
+                      aria-label={`Toggle projects for ${org.name}`}
+                      aria-expanded={isExpanded}
+                      onClick={(e) => toggleOrgExpanded(org.id, e)}
+                      className="p-1 rounded hover:bg-zk-chip text-zk-muted hover:text-zk-text transition-colors shrink-0 ml-1"
+                    >
+                      <Icon size={12} className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}>
+                        <path d="m9 18 6-6-6-6" />
+                      </Icon>
+                    </button>
+                  </div>
+
+                  {/* Projects Underneath Org */}
+                  {isExpanded && (
+                    <div className="flex flex-col gap-0.5 pl-5 pr-1 border-l border-zk-border/60 ml-3.5 my-0.5">
+                      {org.projects.map((proj) => {
+                        const currentProjSlug = proj.slug || proj.id;
+                        const isProjSelected =
+                          selectedScope.type === "project" &&
+                          (selectedScope.orgId === org.id || selectedScope.orgId === currentOrgSlug) &&
+                          (selectedScope.projectId === proj.id || selectedScope.projectId === currentProjSlug);
+
+                        return (
+                          <Link
+                            key={proj.id}
+                            href={scopedForumPath("project", currentOrgSlug, currentProjSlug)}
+                            className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] transition-colors cursor-pointer text-left ${
+                              isProjSelected
+                                ? "bg-zk-chip text-zk-accent font-semibold"
+                                : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/40"
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5 truncate">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zk-muted/60" />
+                              <span className="truncate">{proj.name}</span>
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+
+        {/* Section 3: External Projects (Collapsible) */}
+        {effectiveExternalProjects.length > 0 && (
+          <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
+            <button
+              type="button"
+              aria-expanded={expandedSections.external}
+              onClick={() => toggleSection("external")}
+              className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+            >
+              <span>External Projects</span>
+              <Icon size={11} className={`transition-transform ${expandedSections.external ? "rotate-90" : ""}`}>
+                <path d="m9 18 6-6-6-6" />
+              </Icon>
+            </button>
+            {expandedSections.external &&
+              effectiveExternalProjects.map((ext) => {
+                const extOrgSlug = ext.organisationSlug;
+                const extProjSlug = ext.slug || ext.id;
+                const isExtSelected =
+                  (selectedScope.type === "external" || selectedScope.type === "project") &&
+                  (selectedScope.orgId === extOrgSlug || selectedScope.orgId === ext.organisationId) &&
+                  (selectedScope.projectId === extProjSlug || selectedScope.projectId === ext.id);
+
+                return (
+                  <Link
+                    key={ext.id}
+                    href={scopedForumPath("project", extOrgSlug, extProjSlug)}
+                    className={`flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                      isExtSelected
+                        ? "bg-zk-tint text-zk-accent border border-zk-accent/25"
+                        : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 w-full">
+                      <span className="text-[13px] font-medium text-zk-text truncate">
+                        {ext.name}
+                      </span>
+                      <span className="text-[9px] uppercase font-mono px-1 rounded bg-zk-chip text-zk-muted shrink-0">
+                        Guest
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-zk-muted truncate font-mono">
+                      {ext.organisationName}
+                    </span>
+                  </Link>
+                );
+              })}
+          </div>
+        )}
+
+        {/* Section 4: Agent Hub (Collapsible) */}
+        <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
+          <button
+            type="button"
+            aria-expanded={expandedSections.hub}
+            onClick={() => toggleSection("hub")}
+            className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
+          >
+            <span>Agent Hub</span>
+            <Icon size={11} className={`transition-transform ${expandedSections.hub ? "rotate-90" : ""}`}>
+              <path d="m9 18 6-6-6-6" />
+            </Icon>
+          </button>
+          {expandedSections.hub && (
+            <div className="flex flex-col gap-0.5">
+              <Link
+                href="/agents"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+              >
+                <Icon size={14} className="text-zk-muted">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </Icon>
+                <span className="truncate">All Agents</span>
+              </Link>
+              <Link
+                href="/agents/mine"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+              >
+                <Icon size={14} className="text-zk-muted">
+                  <rect x="3" y="11" width="18" height="10" rx="2" />
+                  <circle cx="12" cy="5" r="2" />
+                  <path d="M12 7v4" />
+                </Icon>
+                <span className="truncate">My Agents</span>
+              </Link>
+              <Link
+                href="/skills"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+              >
+                <Icon size={14} className="text-zk-muted">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                  <path d="M2 17l10 5 10-5" />
+                  <path d="M2 12l10 5 10-5" />
+                </Icon>
+                <span className="truncate">Skills</span>
+              </Link>
+              {/* Clusters link commented out for now
+              {clustersHref && (
+                <Link
+                  href={clustersHref}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+                >
+                  <Icon size={14} className="text-zk-muted">
+                    <circle cx="12" cy="5" r="2.5" />
+                    <circle cx="5" cy="18" r="2.5" />
+                    <circle cx="19" cy="18" r="2.5" />
+                    <path d="M10.5 7.2 6.5 15.8M13.5 7.2l4 8.6M7.5 18h9" />
+                  </Icon>
+                  <span className="truncate">Clusters</span>
+                </Link>
+              )}
+              */}
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  };
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -1128,43 +1276,81 @@ export function PublicMessageBoard({
                 )}
               </div>
 
-              {/* Sort Menu */}
-              <button
-                type="button"
-                onClick={() =>
-                  setSortBy((prev) =>
-                    prev === "newest"
-                      ? "helpful"
-                      : prev === "helpful"
-                        ? "replies"
-                        : "newest"
-                  )
-                }
-                className="flex items-center gap-1 h-8 px-2.5 rounded-md bg-zk-chip hover:bg-zk-seg border border-zk-border text-zk-text text-[13px] transition-colors cursor-pointer"
-              >
-                <span className="text-zk-muted">Sort:</span>
-                <span className="font-medium capitalize">{sortBy}</span>
-                <Icon size={12} className="text-zk-muted">
-                  <path d="m6 9 6 6 6-6" />
-                </Icon>
-              </button>
+              {/* Sort Menu Dialog */}
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-label="Open sort menu"
+                  aria-expanded={sortMenuOpen}
+                  onClick={() => {
+                    setSortMenuOpen((prev) => !prev);
+                    setFilterModalOpen(false);
+                    setPopularTagsOpen(false);
+                  }}
+                  className={`flex items-center gap-1 h-8 px-2.5 rounded-md border text-[13px] transition-colors cursor-pointer ${
+                    sortMenuOpen
+                      ? "bg-zk-tint border-zk-accent/40 text-zk-accent font-semibold"
+                      : "bg-zk-chip hover:bg-zk-seg border-zk-border text-zk-text"
+                  }`}
+                >
+                  <span className="text-zk-muted">Sort:</span>
+                  <span className="font-medium capitalize">{sortBy}</span>
+                  <Icon size={12} className="text-zk-muted">
+                    <path d="m6 9 6 6 6-6" />
+                  </Icon>
+                </button>
+
+                {sortMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-zk-surface border border-zk-border shadow-xl p-1.5 z-40 flex flex-col gap-0.5">
+                    {(
+                      [
+                        { id: "trending", label: "Trending" },
+                        { id: "newest", label: "Newest" },
+                        { id: "helpful", label: "Most Helpful" },
+                        { id: "replies", label: "Most Replies" },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setSortBy(option.id);
+                          setSortMenuOpen(false);
+                        }}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] text-left transition-colors cursor-pointer ${
+                          sortBy === option.id
+                            ? "bg-zk-tint text-zk-accent font-semibold"
+                            : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        {sortBy === option.id && (
+                          <Icon size={12} className="text-zk-accent">
+                            <polyline points="20 6 9 17 4 12" />
+                          </Icon>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Main Workbench Grid: Left Sidebar + Compact Cards List */}
           <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-stretch">
-            <div className="bg-zk-surface border border-zk-border rounded-xl p-3 flex flex-col">
+            <div className="bg-zk-surface border border-zk-border rounded-xl p-3 flex flex-col min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
               {renderSidebar()}
             </div>
 
             {/* Right Compact Discussion Cards Content Area in its own card container */}
-            <div className="bg-zk-surface border border-zk-border rounded-xl p-4 md:p-5 flex flex-col gap-3 min-w-0">
+            <div className="bg-zk-surface border border-zk-border rounded-xl p-4 md:p-5 flex flex-col gap-3 min-w-0 min-h-[420px] lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto">
               {/* Subheader Bar */}
               <div className="flex items-center justify-between gap-2 pb-1">
                 <div className="flex items-center gap-2">
                   <h1 className="text-[16px] font-semibold text-zk-text">
                     {selectedScope.type === "global"
-                      ? "Marketing & Product Forum"
+                      ? "Global Forum"
                       : `${selectedScope.name} Forum`}
                   </h1>
                   <span className="text-zk-muted text-[12px]">•</span>
@@ -1179,9 +1365,9 @@ export function PublicMessageBoard({
               </div>
 
               {/* Compact Cards (Title Only, No Description, No Role/Code Clutter) */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 flex-1">
                 {messages.length === 0 ? (
-                  <div className="rounded-xl border border-zk-border bg-zk-surface p-12 text-center flex flex-col items-center justify-center gap-3">
+                  <div className="rounded-xl border border-zk-border bg-zk-surface p-12 text-center flex flex-col items-center justify-center gap-3 flex-1 w-full">
                     <div className="w-12 h-12 rounded-full bg-zk-tint/60 border border-zk-accent/20 flex items-center justify-center text-zk-accent">
                       <Icon size={24}>
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -1197,7 +1383,7 @@ export function PublicMessageBoard({
                     </div>
                   </div>
                 ) : filteredMessages.length === 0 ? (
-                  <div className="rounded-xl border border-zk-border bg-zk-surface p-10 text-center flex flex-col items-center justify-center gap-3">
+                  <div className="rounded-xl border border-zk-border bg-zk-surface p-10 text-center flex flex-col items-center justify-center gap-3 flex-1 w-full">
                     <div className="w-10 h-10 rounded-full bg-zk-chip flex items-center justify-center text-zk-muted">
                       <Icon size={20}>
                         <circle cx="11" cy="11" r="8" />
