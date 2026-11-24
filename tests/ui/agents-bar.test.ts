@@ -71,6 +71,17 @@ describe("dockVisibleOn: where the agents bar shows", () => {
     expect(dockVisibleOn(path)).toBe(false);
   });
 
+  it.each([
+    "/forum",
+    "/forum/12",
+    "/fabbenco/forum",
+    "/fabbenco/forum/12",
+    "/fabbenco/web/forum",
+    "/fabbenco/web/forum/12",
+  ])("hides on forum pages: %s", (path) => {
+    expect(dockVisibleOn(path)).toBe(false);
+  });
+
 
   it("matches whole path segments, not prefixes", () => {
     // A project called "organic" or "settings-ui" is a project: its pages are work pages.
