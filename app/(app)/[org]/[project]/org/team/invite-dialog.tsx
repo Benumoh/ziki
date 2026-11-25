@@ -33,7 +33,13 @@ export function InviteDialog({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-  }, []);
+    // A click on the dimmed page around the window closes it (Escape and the close button do from the keyboard).
+    const closeOnBackdrop = (event: MouseEvent) => {
+      if (event.target === dialog) onClose();
+    };
+    dialog.addEventListener("click", closeOnBackdrop);
+    return () => dialog.removeEventListener("click", closeOnBackdrop);
+  }, [onClose]);
 
   // Start in the field to fill, on open and when switching tabs.
   useEffect(() => {
@@ -62,10 +68,6 @@ export function InviteDialog({
       onCancel={(event) => {
         event.preventDefault();
         onClose();
-      }}
-      // A click on the dimmed page around the window closes it.
-      onClick={(event) => {
-        if (event.target === dialogRef.current) onClose();
       }}
       className="m-auto w-[min(34rem,calc(100vw-2rem))] overflow-hidden rounded-panel border border-zk-border bg-zk-surface p-0 text-zk-text shadow-xl backdrop:bg-black/50 backdrop:backdrop-blur-[2px]"
     >
