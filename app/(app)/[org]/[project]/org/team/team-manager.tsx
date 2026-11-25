@@ -30,8 +30,7 @@ import {
   removeProjectMemberAction,
 } from "@/app/actions/project-join-requests";
 import { resendInviteAction, revokeInviteAction } from "@/app/(app)/organisations/actions";
-import { InviteForm } from "./invite-form";
-import { ShareLinkForm } from "./share-link-form";
+import { InviteDialog } from "./invite-dialog";
 
 import { TEAM_VIEWS, type TeamView } from "./team-views";
 
@@ -546,7 +545,7 @@ export function TeamManager({
               </>
             ) : null}
           </p>
-          <Button type="button" onClick={() => setInviting(inviting ? null : "email")} aria-expanded={inviting !== null}>
+          <Button type="button" onClick={() => setInviting("email")} aria-haspopup="dialog">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6" />
             </svg>
@@ -556,50 +555,18 @@ export function TeamManager({
       ) : null}
 
       {canManage && inviting ? (
-        <section aria-label="Invite people" className="rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex gap-1" role="tablist" aria-label="How to invite">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={inviting === "email"}
-                className={`${TOOL_BUTTON} ${inviting === "email" ? TOOL_BUTTON_ON : ""}`}
-                onClick={() => setInviting("email")}
-              >
-                By email
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={inviting === "link"}
-                className={`${TOOL_BUTTON} ${inviting === "link" ? TOOL_BUTTON_ON : ""}`}
-                onClick={() => setInviting("link")}
-              >
-                Invite link
-              </button>
-            </div>
-            <Button type="button" variant="ghost" onClick={() => setInviting(null)}>
-              Close
-            </Button>
-          </div>
-          {inviting === "email" ? (
-            <>
-              <p className="mt-3 text-sm text-zk-text2">
-                For one person. The link works once, only for the address you enter, and expires after {inviteTtlDays}{" "}
-                days. They show up below as Invited until they join.
-              </p>
-              <InviteForm organisationId={organisationId} />
-            </>
-          ) : (
-            <>
-              <p className="mt-3 text-sm text-zk-text2">
-                One link for several people. Anyone who opens it and signs in joins as a member, until it expires, reaches
-                its limit or you revoke it. Links are listed under Invite links.
-              </p>
-              <ShareLinkForm organisationId={organisationId} />
-            </>
-          )}
-        </section>
+        <InviteDialog
+          organisationId={organisationId}
+          organisationName={organisationName}
+          inviteTtlDays={inviteTtlDays}
+          mode={inviting}
+          onModeChange={setInviting}
+          onClose={() => {
+            setInviting(null);
+            // Invites sent from the window show in the list straight away.
+            router.refresh();
+          }}
+        />
       ) : null}
 
       <div className="space-y-3 rounded-panel border border-zk-border bg-zk-surface p-4 sm:p-5">

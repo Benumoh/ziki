@@ -8,8 +8,6 @@ import { SETTINGS_SECTIONS } from "@/lib/settings-sections";
 /** The organisation's settings, one page each under /<org>/<project>/org (#project-urls). */
 const ORG_SECTIONS = [
   { section: "", label: "Overview", icon: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z" },
-  // #team-page: members, invites, join requests, collaborators and deactivated people, on one page.
-  { section: "team", label: "Team", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" },
   { section: "agents", label: "Agents", icon: "M4 8h16v12H4zM12 4v4M9 14h.01M15 14h.01" },
   // #secret-protection: credentials stopped or found in this organisation's posts.
   { section: "secrets", label: "Secret alerts", icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4" },
@@ -21,6 +19,9 @@ const ORG_SECTIONS = [
   { section: "settings", label: "General", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-2.9-1.18l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.17 14H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.18-2.9l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.18l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.83 10H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" },
 ] as const;
 
+const TEAM_ICON =
+  "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75";
+
 /**
  * One sidebar for all settings: yours (/settings) and, below them, your
  * organisation's. /settings and the organisation pages both show it, so they
@@ -31,15 +32,24 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
   const params = useSearchParams();
   const onSettings = pathname === "/settings";
   const section = params.get("section") ?? "account";
+  const teamHref = orgRef ? orgPath(orgRef, "team") : null;
+
+  // #team-page: the organisation's Team comes first among the main sections, since people manage it most.
+  const mainSections = [
+    ...(teamHref
+      ? [{ id: "team", href: teamHref, label: "Team", hint: "Members, invites and requests", icon: TEAM_ICON, on: pathname === teamHref || pathname.startsWith(`${teamHref}/`), badge: pendingJoinCount }]
+      : []),
+    ...SETTINGS_SECTIONS.map((item) => ({ ...item, href: `/settings?section=${item.id}`, on: onSettings && section === item.id, badge: 0 })),
+  ];
 
   return (
     <nav aria-label="Settings sections" className="settings-navigation">
-      {SETTINGS_SECTIONS.map((item) => {
-        const on = onSettings && section === item.id;
+      {mainSections.map((item) => {
+        const on = item.on;
         return (
           <Link
             key={item.id}
-            href={`/settings?section=${item.id}`}
+            href={item.href}
             aria-current={on ? "page" : undefined}
             className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-zk-text transition ${
               on ? "bg-zk-tint" : "bg-transparent hover:bg-zk-chip"
@@ -58,6 +68,12 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
               <span className="text-sm font-bold">{item.label}</span>
               <span className="text-xs font-medium text-zk-muted">{item.hint}</span>
             </span>
+            {item.badge > 0 ? (
+              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-electric-blue-strong px-1.5 text-[11px] font-bold text-white">
+                {item.badge}
+                <span className="sr-only"> pending join requests</span>
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -84,12 +100,6 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
                       <path d={item.icon} />
                     </svg>
                     {item.label}
-                    {item.section === "team" && pendingJoinCount > 0 ? (
-                      <span className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-electric-blue-strong px-1 text-[10px] font-bold text-white">
-                        {pendingJoinCount}
-                        <span className="sr-only"> pending join requests</span>
-                      </span>
-                    ) : null}
                   </Link>
                 </li>
               );

@@ -116,7 +116,7 @@ export function InviteForm({ organisationId }: { organisationId: string }) {
           className="sm:max-w-sm"
           {...attrs("email")}
         />
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} className="shrink-0 whitespace-nowrap">
           {pending ? "Creating…" : "Create invite"}
         </Button>
       </div>
