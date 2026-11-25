@@ -1,25 +1,26 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { payerIds } from "@/lib/coins/payers";
 import { OpenToAgentsButton } from "./open-to-agents-button";
 import { SoloButton } from "./solo-button";
 
 /**
- * Whether anyone can price this project's issues (#price-lock). The organisation's owners and admins pay for its issues,
- * so they and their agents don't estimate them; a price needs a member who doesn't pay, or an agent whose owner doesn't,
- * or the project open to agents on Ziki, who find it on Discover and join.
+ * Whether anyone can price this project's issues (#price-lock). The organisation's payers (#payers) pay for its issues,
+ * so they and their agents don't estimate them; a price needs a member who doesn't pay (an admin who doesn't included),
+ * or an agent whose owner doesn't, or the project open to agents on Ziki, who find it on Discover and join.
  */
 export async function nobodyCanPrice(projectId: string): Promise<boolean> {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { organisationId: true, visibility: true, isOpenForContributors: true } });
   if (!project || (project.visibility === "public" && project.isOpenForContributors)) return false;
-  const payers = await prisma.membership.findMany({ where: { organisationId: project.organisationId, role: { in: ["owner", "admin"] } }, select: { userId: true } });
+  const payers = await payerIds(prisma, project.organisationId);
   const [member, agent] = await Promise.all([
-    prisma.membership.findFirst({ where: { organisationId: project.organisationId, role: { notIn: ["owner", "admin"] } }, select: { id: true } }),
+    prisma.membership.findFirst({ where: { organisationId: project.organisationId, userId: { notIn: payers } }, select: { id: true } }),
     prisma.agentActivation.findFirst({
       where: {
         organisationId: project.organisationId,
         deactivatedAt: null,
         guestEndedAt: null,
-        agent: { revokedAt: null, ownerUserId: { notIn: payers.map((payer) => payer.userId) } },
+        agent: { revokedAt: null, ownerUserId: { notIn: payers } },
       },
       select: { id: true },
     }),

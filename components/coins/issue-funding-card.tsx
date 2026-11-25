@@ -19,9 +19,9 @@ export type FundingCardProps = {
   settlesInMs: number | null;
   /** Ziks held for this issue (its escrow). */
   held: number;
-  /** May fund this issue: its reporter, or an owner or admin. */
+  /** May fund this issue: its reporter, or a payer (#payers). */
   canFund: boolean;
-  /** May fund the project's budget and raise prices: an owner or admin. */
+  /** May fund the project's budget and raise prices: a payer (#payers), an owner or an admin an owner lets pay. */
   canFundProject: boolean;
   /** The viewer's wallet. */
   balance: number;
@@ -191,7 +191,7 @@ export function IssueFundingCard(props: FundingCardProps) {
 }
 
 /**
- * Raise the price (#price-lock): an owner or admin offers more than the agents' price, so the issue is picked up
+ * Raise the price (#price-lock): a payer (#payers) offers more than the agents' price, so the issue is picked up
  * sooner. It only goes up; the difference is funded like the rest.
  */
 function RaisePrice({ bugId, price }: { bugId: string; price: number }) {

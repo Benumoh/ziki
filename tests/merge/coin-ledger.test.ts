@@ -84,8 +84,20 @@ const db = vi.hoisted(() => {
       update: async ({ data }: { data: Record<string, unknown> }) => Object.assign(world.project, data),
     },
     rewardEstimate: { count: async () => world.estimates },
-    // "budget-owner" is an owner of the organisation (#project-budget); anyone else is no member.
-    membership: { findUnique: async ({ where }: { where: { organisationId_userId: { userId: string } } }) => (where.organisationId_userId.userId === "budget-owner" ? { role: "owner" } : null) },
+    // Who pays (#payers): "budget-owner" owns the organisation, "funding-admin" is an admin an owner lets fund issues,
+    // "plain-admin" is an admin who doesn't; anyone else is no member.
+    membership: {
+      findUnique: async ({ where }: { where: { organisationId_userId: { userId: string } } }) => (where.organisationId_userId.userId === "budget-owner" ? { role: "owner" } : null),
+      findFirst: async ({ where }: { where: { userId: string; OR: Record<string, unknown>[] } }) => {
+        const members: Record<string, Record<string, unknown>> = {
+          "budget-owner": { role: "owner", canFundIssues: false },
+          "funding-admin": { role: "admin", canFundIssues: true },
+          "plain-admin": { role: "admin", canFundIssues: false },
+        };
+        const member = members[where.userId];
+        return member && where.OR.some((match) => Object.entries(match).every(([key, value]) => member[key] === value)) ? { id: where.userId } : null;
+      },
+    },
     user: {
       findUnique: async ({ where }: { where: { id: string } }) => ({ id: where.id, stripeCustomerId: "cus_1" }),
       findUniqueOrThrow: async ({ where }: { where: { id: string } }) => ({ id: where.id, stripeCustomerId: "cus_1" }),
@@ -357,7 +369,7 @@ describe("project budgets (#project-budget)", () => {
   };
   const budgetRows = () => world.rows.filter((row) => row.account === "budget").reduce((sum, row) => sum + row.amount, 0);
 
-  it("funds a project once per request from the owner's wallet, and refuses anyone who isn't an owner or admin", async () => {
+  it("funds a project once per request from the owner's wallet, and refuses anyone who doesn't pay for the organisation", async () => {
     await buy(OWNER, 300, "b-wallet");
     expect(await fundBudget(OWNER, "proj", 200, "request-b001")).toEqual({ funded: true, balance: 200 });
     expect(await fundBudget(OWNER, "proj", 200, "request-b001")).toEqual({ funded: false, balance: 200 });
@@ -368,6 +380,15 @@ describe("project budgets (#project-budget)", () => {
     // Everything bought (the owner's 300 and the stranger's 50) is still in the ledger, with 200 of it in the budget.
     expect(total()).toBe(350);
     expect(ledgerBalances({ bought: 350, fromEarnings: 0, withdrawn: 0, inLedger: total() }).difference).toBe(0);
+  });
+
+  it("lets an admin fund only once an owner lets them (#payers): being an admin isn't paying", async () => {
+    await buy("plain-admin", 100, "b-plain-admin");
+    await buy("funding-admin", 100, "b-funding-admin");
+    await expect(fundBudget("plain-admin", "proj", 50, "request-b004")).rejects.toMatchObject({ code: "not_allowed" });
+    await expect(setBudgetPaused("plain-admin", "proj", true)).rejects.toMatchObject({ code: "not_allowed" });
+    expect(await walletBalance(db as never, "plain-admin")).toBe(100);
+    expect(await fundBudget("funding-admin", "proj", 50, "request-b005")).toEqual({ funded: true, balance: 50 });
   });
 
   it("prices an issue from three agent estimates, or the higher price its owner raised it to, and never from the owner alone", () => {

@@ -23,6 +23,8 @@ export type OrgMember = {
   agents: { id: string; name: string; level: AgentLevel }[];
   /** What they said when they joined (#join-questions): owners and admins only, null when unanswered or hidden. */
   joinedAs: string | null;
+  /** Whether they pay for the organisation's issues (#payers): every owner, and admins an owner lets. */
+  fundsIssues: boolean;
 };
 
 /** Past this many people, the list gets a search box. */
@@ -113,6 +115,7 @@ export function MemberList({
                       <span className="truncate">{name}</span>
                       {isSelf ? <span className="text-xs font-normal text-zk-muted">(you)</span> : null}
                       <Badge className={`rounded-full ${roleBadgeClass[member.role]}`}>{member.roleLabel}</Badge>
+                      {member.fundsIssues ? <Badge className="rounded-full bg-zk-ok-bg text-zk-ok-fg">Funds issues</Badge> : null}
                     </p>
                     {member.email ? <p className="truncate text-xs text-zk-muted">{member.email}</p> : null}
                     <p className="text-xs text-zk-muted">
@@ -149,6 +152,7 @@ export function MemberList({
                     userId={member.id}
                     userName={name}
                     membershipRole={member.role}
+                    fundsIssues={member.fundsIssues}
                     siteSuperAdmin={member.siteSuperAdmin}
                     canChangeRoles={canChangeRoles}
                     canRemove={canRemove}

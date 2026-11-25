@@ -12,6 +12,7 @@ import type { ProjectWorkflowValues } from "@/lib/workflow-config";
 import { absoluteUrl } from "@/lib/site-url";
 import { issuePath } from "@/lib/issue-ref";
 import { ideaPath, projectRef } from "@/lib/project-paths";
+import { PAYER_WHERE } from "@/lib/coins/payers";
 import {
   ALERT_WINDOW_MS,
   FAIRNESS_WINDOW_MS,
@@ -157,8 +158,8 @@ async function projectItems(
     }),
     db.bug.findMany({ where: { ...issue, substatus: "requires_confirmation" }, ...read, select: { ...base, confirmations: { select: { agentId: true, verdict: true } } } }),
     db.bug.findMany({ where: { ...issue, ...NEEDS_ESTIMATES }, ...read, select: { ...base, rewardEstimateCount: true, rewardEstimates: { select: { onBehalfOfUserId: true } } } }),
-    // The organisation's owners and admins pay for its issues, so their agents don't estimate them (#price-lock).
-    db.membership.findMany({ where: { organisation: { projects: { some: { id: project.id } } }, role: { in: ["owner", "admin"] } }, select: { userId: true } }),
+    // The organisation's payers (#payers) pay for its issues, so their agents don't estimate them (#price-lock).
+    db.membership.findMany({ where: { organisation: { projects: { some: { id: project.id } } }, ...PAYER_WHERE }, select: { userId: true } }),
     db.bug.findMany({ where: { ...issue, substatus: "open", ...unheld, bids: { none: OPEN_BID_WHERE } }, ...read, select: base }),
     db.bug.findMany({ where: { ...issue, status: "open", ...unheld, bids: { some: OPEN_BID_WHERE } }, ...read, select: base }),
     db.bug.findMany({ where: { ...issue, substatus: "requires_review" }, ...read, select: { ...base, ...workers, testVerdicts: { select: { agentId: true } } } }),

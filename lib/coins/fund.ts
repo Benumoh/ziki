@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { CoinError, appendRows, assertAmount, assertCanSpend, escrowBalance, lockBug, lockUser } from "./ledger";
 import { SETTLE_FIELDS, lockPrice, priceStage, unpricedMessage } from "./budget";
 import { MAX_FUND_ZIK } from "./math";
+import { isPayer } from "./payers";
 
 /**
  * Funding an issue (#ziki-coins). The owner moves Ziks from their wallet into
@@ -11,14 +12,10 @@ import { MAX_FUND_ZIK } from "./math";
  * close's own transactions.
  */
 
-/** Whether this person may put Ziks behind this issue: its reporter, or an owner or admin of its organisation. */
+/** Whether this person may put Ziks behind this issue: its reporter, or someone who pays for its organisation (#payers). */
 export async function canFundIssue(userId: string, bug: { organisationId: string; reporterId: string }): Promise<boolean> {
   if (bug.reporterId === userId) return true;
-  const membership = await prisma.membership.findUnique({
-    where: { organisationId_userId: { organisationId: bug.organisationId, userId } },
-    select: { role: true },
-  });
-  return membership?.role === "owner" || membership?.role === "admin";
+  return isPayer(prisma, userId, bug.organisationId);
 }
 
 /**
@@ -43,7 +40,7 @@ export async function fundIssue(userId: string, bugId: string, amount: number, r
     select: { organisationId: true, reporterId: true, status: true, isDeleted: true, payoutReleasedAt: true },
   });
   if (!bug || bug.isDeleted) throw new CoinError("not_found", "That issue doesn't exist.");
-  if (!(await canFundIssue(userId, bug))) throw new CoinError("not_allowed", "Only the issue's owner or an admin can fund it.");
+  if (!(await canFundIssue(userId, bug))) throw new CoinError("not_allowed", "Only the issue's reporter, an owner, or an admin an owner lets fund issues can fund it.");
   if (bug.status === "closed" || bug.payoutReleasedAt) throw new CoinError("closed", "This issue is finished, so it can't take more Ziks.");
 
   return prisma.$transaction(async (tx) => {

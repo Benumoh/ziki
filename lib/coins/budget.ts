@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { REWARD_ZIK_MIN } from "@/lib/coins/price-rules";
 import { CoinError, appendRows, assertAmount, assertCanSpend, escrowBalance, lockBug, lockUser, zikOf, type Tx } from "./ledger";
 import { MAX_FUND_ZIK, dollarsToZiks, splitByWeight } from "./math";
+import { isPayer } from "./payers";
 
 /**
  * Project budgets and issue prices (#project-budget, #price-lock). Every issue is paid in Ziks, so an issue is only
@@ -122,13 +123,9 @@ function waitingForFundsMessage(need: number, available: number): string {
   return `This issue is waiting for funding: it needs ${need.toLocaleString("en-US")} Ziks and the project's budget has ${available.toLocaleString("en-US")}. Its owner can fund it.`;
 }
 
-/** Whether this person may fund and take back a project's budget: an owner or admin of its organisation. */
-export async function canManageBudget(userId: string, organisationId: string): Promise<boolean> {
-  const membership = await prisma.membership.findUnique({
-    where: { organisationId_userId: { organisationId, userId } },
-    select: { role: true },
-  });
-  return membership?.role === "owner" || membership?.role === "admin";
+/** Refused because only payers (#payers) may: owners, and admins an owner lets fund issues. */
+function payersOnly(action: string): CoinError {
+  return new CoinError("not_allowed", `Only an owner, or an admin an owner lets fund issues, can ${action}.`);
 }
 
 async function projectFor(projectId: string) {
@@ -148,7 +145,7 @@ export async function fundBudget(userId: string, projectId: string, amount: numb
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(requestId)) throw new CoinError("invalid_amount", "Reload the page and try again.");
   const project = await projectFor(projectId);
   if (project.archivedAt) throw new CoinError("closed", "This project is archived, so it can't take a budget.");
-  if (!(await canManageBudget(userId, project.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can fund the project's budget.");
+  if (!(await isPayer(prisma, userId, project.organisationId))) throw payersOnly("fund the project's budget");
 
   return prisma.$transaction(async (tx) => {
     await lockUser(tx, userId);
@@ -200,12 +197,12 @@ export async function returnUnusedBudget(tx: Tx, projectId: string): Promise<num
 
 /**
  * Pauses or resumes a project's budget: while paused no new issue is awarded or offered and no offer can be accepted,
- * the money stays where it is, and work already under way carries on. Only an owner or admin may.
+ * the money stays where it is, and work already under way carries on. Only a payer (#payers) may.
  */
 export async function setBudgetPaused(userId: string, projectId: string, paused: boolean): Promise<void> {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { organisationId: true } });
   if (!project) throw new CoinError("not_found", "That project doesn't exist.");
-  if (!(await canManageBudget(userId, project.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can pause the budget.");
+  if (!(await isPayer(prisma, userId, project.organisationId))) throw payersOnly("pause the budget");
   if (!(await hasBudget(prisma, projectId))) throw new CoinError("invalid_amount", "This project has no budget to pause yet.");
   await prisma.project.update({ where: { id: projectId }, data: { budgetPausedAt: paused ? new Date() : null } });
 }
@@ -213,7 +210,7 @@ export async function setBudgetPaused(userId: string, projectId: string, paused:
 /** The owner takes back what the budget hasn't reserved. Ziks already reserved for issues stay with them. */
 export async function takeBackBudget(userId: string, projectId: string): Promise<number> {
   const project = await projectFor(projectId);
-  if (!(await canManageBudget(userId, project.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can take the budget back.");
+  if (!(await isPayer(prisma, userId, project.organisationId))) throw payersOnly("take the budget back");
   const returned = await prisma.$transaction((tx) => returnUnusedBudget(tx, projectId));
   if (returned === 0) throw new CoinError("invalid_amount", "There is nothing left in the budget to take back.");
   return returned;
@@ -314,7 +311,7 @@ export async function raiseIssuePrice(userId: string, bugId: string, zik: number
   if (zik > MAX_FUND_ZIK) throw new CoinError("invalid_amount", `A price can be at most ${MAX_FUND_ZIK.toLocaleString("en-US")} Ziks.`);
   const issue = await prisma.bug.findUnique({ where: { id: bugId }, select: { organisationId: true, isDeleted: true, status: true, payoutReleasedAt: true } });
   if (!issue || issue.isDeleted) throw new CoinError("not_found", "That issue doesn't exist.");
-  if (!(await canManageBudget(userId, issue.organisationId))) throw new CoinError("not_allowed", "Only an owner or admin can raise an issue's price.");
+  if (!(await isPayer(prisma, userId, issue.organisationId))) throw payersOnly("raise an issue's price");
   if (issue.status === "closed" || issue.status === "resolved" || issue.payoutReleasedAt) throw new CoinError("closed", "This issue is finished, so its price can't change.");
 
   return prisma.$transaction(async (tx) => {

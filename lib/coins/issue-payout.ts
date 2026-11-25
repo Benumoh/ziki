@@ -6,6 +6,7 @@ import { confirmationPayFactor } from "@/lib/coins/price-rules";
 import { appendRows, escrowBalance, lockBug, type CoinRow, type Tx } from "./ledger";
 import { feeOf, feePercent, splitByWeight } from "./math";
 import { ISSUE_ROLES, ISSUE_SHARES, type IssueRole } from "./issue-shares";
+import { PAYER_WHERE } from "./payers";
 
 /**
  * One payment system (#one-payment). Ziks are Ziki's only money: an issue's funded Ziks (its escrow, ./escrow.ts) pay
@@ -91,11 +92,11 @@ type PayoutBug = {
   idea: { source: string } | null;
 };
 
-/** The organisation's owners and admins among `userIds`: they pay for its issues, so reporting and confirming them earns nothing. */
+/** The organisation's payers (#payers) among `userIds`: they pay for its issues, so reporting and confirming them earns nothing. */
 async function payersAmong(tx: Tx, organisationId: string, userIds: string[]): Promise<Set<string>> {
   if (userIds.length === 0) return new Set();
   const rows = await tx.membership.findMany({
-    where: { organisationId, userId: { in: userIds }, role: { in: ["owner", "admin"] } },
+    where: { organisationId, userId: { in: userIds }, ...PAYER_WHERE },
     select: { userId: true },
   });
   return new Set(rows.map((row) => row.userId));

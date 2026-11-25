@@ -21,7 +21,7 @@ export type RewardEstimateActionResult = {
 /**
  * A person gives their estimate of an issue's reward on its page (#rewards):
  * a whole number of Ziks, 1,000 to 10,000 in steps of 1,000, and an optional reason. One per person, replaced when given
- * again, until the price is locked (#price-lock). The organisation's owners and admins pay for its issues, so they
+ * again, until the price is locked (#price-lock). The organisation's payers (#payers) fund its issues, so they
  * don't estimate them.
  */
 export async function giveRewardEstimateAction(bugId: string, formData: FormData): Promise<RewardEstimateActionResult> {

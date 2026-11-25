@@ -165,7 +165,8 @@ import {
 import "./issue-detail.css";
 import { stateLabel } from "@/lib/labels";
 import { IssueRewardPanel } from "@/components/issue-reward-panel";
-import { paysForIssues, rewardEstimatesFor } from "@/lib/agent-api/reward-estimates";
+import { rewardEstimatesFor } from "@/lib/agent-api/reward-estimates";
+import { isPayer } from "@/lib/coins/payers";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
 
 type BugPageProps = {
@@ -855,8 +856,8 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       select: { reward: true, rewardEstimateCount: true, rewardOverrideZik: true, rewardFixedAt: true, lockedPriceZik: true, zikiEstimateZik: true, zikiEstimateReason: true },
     }),
     loadOptional<Awaited<ReturnType<typeof rewardEstimatesFor>>>("reward estimates", [], () => rewardEstimatesFor(bug.id)),
-    // #price-lock: the organisation's owners and admins pay for its issues, so they don't estimate them.
-    loadOptional("reward payer", false, () => paysForIssues(prisma, user.id, bug.organisationId)),
+    // #price-lock, #payers: the organisation's payers fund its issues, so they don't estimate them.
+    loadOptional("reward payer", false, () => isPayer(prisma, user.id, bug.organisationId)),
   ]);
   const confirmationsData = await loadOptional<(ConfirmationsData & { confirmed?: boolean }) | null>("confirmations", null, () =>
     // #confirmation-files: other confirmers' files show once the viewer has confirmed (admins always).

@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireProject } from "@/lib/project-route";
 import { issuesPath, projectPath, type ProjectRef } from "@/lib/project-paths";
-import { canManageBudget, MIN_ESTIMATES_TO_AWARD } from "@/lib/coins/budget";
+import { MIN_ESTIMATES_TO_AWARD } from "@/lib/coins/budget";
+import { isPayer } from "@/lib/coins/payers";
 import { walletBalance } from "@/lib/coins/ledger";
 import { BUDGET_FILTERS, budgetFilterOf, budgetSortOf, budgetStatusOf, type BudgetFilterId, type BudgetIssueState, type BudgetSort } from "@/lib/coins/budget-states";
 import { budgetIssueList, budgetMovements, budgetOverview, suggestedBudget, type BudgetMovement } from "@/lib/coins/budget-view";
@@ -51,14 +52,14 @@ type BudgetQuery = { section?: string; filter?: string; sort?: string; page?: st
 
 /**
  * `/<org>/<project>/budget` (#project-budget): the Ziks an owner has put behind the whole project, laid out like the
- * project's settings, one thing at a time. Funding comes first; the rest is there for the owner who wants it. Owners and
- * admins fund, pause and take back; members can see where the money goes.
+ * project's settings, one thing at a time. Funding comes first; the rest is there for the owner who wants it. Payers
+ * (owners, and admins an owner lets fund issues, #payers) fund, pause and take back; members can see where the money goes.
  */
 export default async function BudgetPage({ params, searchParams }: { params: Promise<{ org: string; project: string }>; searchParams?: Promise<BudgetQuery> }) {
   const [{ org, project: slugParam }, query] = await Promise.all([params, searchParams ?? Promise.resolve({} as BudgetQuery)]);
   const { user, organisationId, project: current, isOrgMember } = await requireProject(org, slugParam);
   if (!isOrgMember && user.role !== "super_admin") notFound();
-  const canManage = await canManageBudget(user.id, organisationId);
+  const canManage = await isPayer(prisma, user.id, organisationId);
 
   const [project, overview] = await Promise.all([
     prisma.project.findUniqueOrThrow({ where: { id: current.id }, select: { name: true } }),

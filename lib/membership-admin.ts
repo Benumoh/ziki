@@ -20,6 +20,8 @@ export const MEMBERSHIP_ADMIN_ERRORS = {
   "same-role": "They already have that role.",
   "cannot-remove-self": "You can't remove yourself. Leave the organisation instead.",
   "admin-removes-member-only": "Admins can remove members. Ask an owner to change another admin.",
+  "fund-not-allowed": "Only an owner of this organisation can choose who funds its issues.",
+  "fund-admins-only": "Only admins can be given this. Owners always fund issues; make a member an admin first.",
   failed: "Couldn't update that membership. Try again.",
 } as const;
 
@@ -118,7 +120,7 @@ async function recordChange(
     organisationId: string;
     actorUserId: string;
     targetUserId: string;
-    action: "role_changed" | "removed" | "left";
+    action: "role_changed" | "removed" | "left" | "can_fund_on" | "can_fund_off";
     fromRole: MembershipRole;
     toRole: MembershipRole | null;
   },
@@ -157,7 +159,8 @@ export async function changeMembershipRole(
     });
     if (refusal || !target) return { ok: false, error: refusalMessage(refusal ?? "not-found") };
 
-    await tx.membership.update({ where: { id: target.id }, data: { role: input.nextRole } });
+    // A new role starts without paying (#payers): an owner turns it on again for an admin who should.
+    await tx.membership.update({ where: { id: target.id }, data: { role: input.nextRole, canFundIssues: false } });
     await recordChange(tx, {
       organisationId: input.organisationId,
       actorUserId: actor.id,
@@ -172,6 +175,64 @@ export async function changeMembershipRole(
         data: { sessionVersion: { increment: 1 } },
       });
     }
+    return { ok: true };
+  });
+}
+
+/** Whether `actor` may turn "Can fund issues" on or off for `target` (#payers): owners only, and only for an admin. */
+export function refuseCanFundChange(input: {
+  actorIsOwner: boolean;
+  actorIsSuperAdmin: boolean;
+  target: { role: MembershipRole; canFundIssues: boolean } | null;
+  canFund: boolean;
+}): "not-found" | "fund-not-allowed" | "fund-admins-only" | "unchanged" | null {
+  const { actorIsOwner, actorIsSuperAdmin, target, canFund } = input;
+  if (!target) return "not-found";
+  if (!actorIsOwner && !actorIsSuperAdmin) return "fund-not-allowed";
+  if (target.role !== "admin") return "fund-admins-only";
+  if (target.canFundIssues === canFund) return "unchanged";
+  return null;
+}
+
+/**
+ * Lets an admin fund the organisation's issues, or stops them (#payers, lib/coins/payers.ts). Funding spends the
+ * admin's own wallet, so only an owner chooses who may. Owners always pay; members never do.
+ */
+export async function setCanFundIssues(
+  db: Db,
+  actor: Actor,
+  input: { organisationId: string; targetUserId: string; canFund: boolean },
+): Promise<MembershipAdminResult> {
+  return inTransaction(db, async (tx) => {
+    const [target, actorMembership] = await Promise.all([
+      tx.membership.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: input.targetUserId } },
+        select: { id: true, role: true, canFundIssues: true },
+      }),
+      tx.membership.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: actor.id } },
+        select: { role: true },
+      }),
+    ]);
+    const refusal = refuseCanFundChange({
+      actorIsOwner: actorMembership?.role === "owner",
+      actorIsSuperAdmin: isSuperAdmin(actor.role),
+      target,
+      canFund: input.canFund,
+    });
+    // Already set that way (a double click): nothing to do.
+    if (refusal === "unchanged") return { ok: true };
+    if (refusal || !target) return { ok: false, error: refusalMessage(refusal ?? "not-found") };
+
+    await tx.membership.update({ where: { id: target.id }, data: { canFundIssues: input.canFund } });
+    await recordChange(tx, {
+      organisationId: input.organisationId,
+      actorUserId: actor.id,
+      targetUserId: input.targetUserId,
+      action: input.canFund ? "can_fund_on" : "can_fund_off",
+      fromRole: target.role,
+      toRole: target.role,
+    });
     return { ok: true };
   });
 }

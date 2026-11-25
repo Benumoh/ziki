@@ -4,6 +4,7 @@ import { workflowFor } from "@/lib/workflow";
 import { LOW_BUDGET_ISSUES, PRICED_WHERE, budgetBalance, currentPriceZik, hasBudget } from "./budget";
 import { zikOf } from "./ledger";
 import { ZIKS_PER_DOLLAR } from "./math";
+import { PAYER_WHERE } from "./payers";
 import { BUDGET_FILTERS, budgetStatusOf, classifyIssues, type BudgetFilterId, type BudgetIssueState, type BudgetSort, type BudgetStatus } from "./budget-states";
 
 /**
@@ -138,13 +139,13 @@ export type OwnedProjectBudget = {
 
 /**
  * The projects this person can fund, with each one's budget and status, for the Ziks page: every live project in an
- * organisation they own or administer, those with a budget first. `limit` keeps the list short.
+ * organisation they pay for (#payers), those with a budget first. `limit` keeps the list short.
  */
 export async function ownedProjectBudgets(userId: string, limit = 8): Promise<{ projects: OwnedProjectBudget[]; more: number }> {
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      organisation: { archivedAt: null, memberships: { some: { userId, role: { in: ["owner", "admin"] } } } },
+      organisation: { archivedAt: null, memberships: { some: { userId, ...PAYER_WHERE } } },
     },
     select: {
       id: true, name: true, slug: true, budgetPausedAt: true, budgetAlert: true,

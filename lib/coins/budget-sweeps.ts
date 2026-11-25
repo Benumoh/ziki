@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notifyLater } from "@/lib/notify";
 import { IDLE_RETURN_DAYS, LOW_BUDGET_ISSUES, PRICED_WHERE, PRICE_SETTLE_SECONDS, SETTLE_FIELDS, budgetBalance, hasBudget, lockPrice, priceStage, returnUnusedBudget } from "./budget";
 import { lockBug, zikOf } from "./ledger";
+import { payerIds } from "./payers";
 
 /**
  * What runs around project budgets and prices (#project-budget, #price-lock): locking settled prices the budget covers,
@@ -67,7 +68,7 @@ export async function lockSettledPrices(scope: { projectId?: string } = {}, now:
   return locked;
 }
 
-/** Judges one project's budget and, when the state has changed to a worse one, tells its owners and admins once. */
+/** Judges one project's budget and, when the state has changed to a worse one, tells its payers (#payers) once. */
 export async function refreshBudgetAlert(projectId: string, now: Date = new Date()): Promise<BudgetAlertState> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -98,7 +99,8 @@ export async function refreshBudgetAlert(projectId: string, now: Date = new Date
   if (state === project.budgetAlert) return state;
   await prisma.project.update({ where: { id: projectId }, data: { budgetAlert: state } });
   if (state) {
-    const owners = await prisma.membership.findMany({ where: { organisationId: project.organisationId, role: { in: ["owner", "admin"] } }, select: { userId: true } });
+    // Told to the people who pay (#payers), not every admin.
+    const owners = (await payerIds(prisma, project.organisationId)).map((userId) => ({ userId }));
     const budgetPath = `/${project.organisation.slug}/${project.slug}/budget`;
     const subject = !funded ? `Work in ${project.name} is waiting for funding` : state === "empty" ? `${project.name} is out of funds` : `${project.name}'s budget is running low`;
     const message = !funded
