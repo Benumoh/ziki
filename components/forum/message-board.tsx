@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AccessibleOrganisation, ExternalProject } from "@/lib/forum-types";
+import { buildForumSearchParams, parseForumSearchParams } from "@/lib/forum-url";
 import { scopedForumPath, scopedForumPostPath } from "@/lib/project-paths";
 import {
   DEFAULT_EXTERNAL_PROJECTS,
@@ -36,6 +37,22 @@ function useSafeRouter() {
   }
 }
 
+function useSafePathname() {
+  try {
+    return usePathname();
+  } catch {
+    return null;
+  }
+}
+
+function useSafeSearchParams() {
+  try {
+    return useSearchParams();
+  } catch {
+    return null;
+  }
+}
+
 export interface PublicMessageBoardProps {
   initialView?: ForumViewMode;
   initialPostId?: string;
@@ -64,6 +81,9 @@ export function PublicMessageBoard({
   initialMessages,
 }: PublicMessageBoardProps = {}) {
   const router = useSafeRouter();
+  const pathname = useSafePathname();
+  const searchParams = useSafeSearchParams();
+  const initialUrlFilters = parseForumSearchParams(searchParams);
 
   const [messages, setMessages] = useState<ForumMessage[]>(initialMessages ?? []);
   const [view, setView] = useState<ForumViewMode>(initialView);
@@ -88,16 +108,47 @@ export function PublicMessageBoard({
     if (initialMessages) setMessages(initialMessages);
   }
 
-  // Filters & sorting
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
-  const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [pinnedOnly, setPinnedOnly] = useState(false);
-  const [myAgentsView, setMyAgentsView] = useState<MyAgentsView>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("trending");
+  // Filters & sorting (initialized from URL query params)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialUrlFilters.statusFilter);
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>(initialUrlFilters.feedFilter);
+  const [trackFilter, setTrackFilter] = useState<TrackFilter>(initialUrlFilters.trackFilter);
+  const [selectedTag, setSelectedTag] = useState<string | null>(initialUrlFilters.selectedTag);
+  const [pinnedOnly, setPinnedOnly] = useState(initialUrlFilters.pinnedOnly);
+  const [myAgentsView, setMyAgentsView] = useState<MyAgentsView>(initialUrlFilters.myAgentsView);
+  const [searchQuery, setSearchQuery] = useState(initialUrlFilters.searchQuery);
+  const [sortBy, setSortBy] = useState<SortOption>(initialUrlFilters.sortBy);
   const [userVotes] = useState<Record<string, "up" | "down">>({});
+
+  // Sync active filters & sort to URL query params in list view
+  const currentUrlQuery = searchParams?.toString() ?? "";
+  useEffect(() => {
+    if (view !== "list" || !router || !pathname) return;
+    const nextQuery = buildForumSearchParams({
+      trackFilter,
+      feedFilter,
+      statusFilter,
+      pinnedOnly,
+      myAgentsView,
+      selectedTag,
+      searchQuery,
+      sortBy,
+    });
+    if (nextQuery === currentUrlQuery) return;
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }, [
+    view,
+    router,
+    pathname,
+    currentUrlQuery,
+    trackFilter,
+    feedFilter,
+    statusFilter,
+    pinnedOnly,
+    myAgentsView,
+    selectedTag,
+    searchQuery,
+    sortBy,
+  ]);
 
   // Scope hierarchy
   const initialScopeConfig: SelectedScope = React.useMemo(() => {

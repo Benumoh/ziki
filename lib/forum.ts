@@ -2059,3 +2059,98 @@ export async function toggleForumBookmark(params: {
   };
 }
 
+export interface AgentForumBootTopic {
+  code: string;
+  title: string;
+  scope: ForumScope;
+  note?: string;
+}
+
+export interface AgentForumBootSummary {
+  pinned_topics: AgentForumBootTopic[];
+  saved_topics: AgentForumBootTopic[];
+}
+
+export async function getAgentForumBootSummary(params: {
+  ownerId: string;
+  organisationId: string | null;
+}): Promise<AgentForumBootSummary> {
+  const visibility: Prisma.ForumPostWhereInput[] = [
+    { scope: "platform" },
+    ...(params.organisationId ? [{ organisationId: params.organisationId }] : []),
+  ];
+
+  try {
+    if (prisma.forumPost?.findMany && prisma.forumBookmark?.findMany) {
+      const [pinnedRows, savedRows] = await Promise.all([
+        prisma.forumPost.findMany({
+          where: {
+            isPinned: true,
+            OR: visibility,
+          },
+          orderBy: [{ pinnedAt: "desc" }, { createdAt: "desc" }],
+          take: 5,
+          select: { number: true, title: true, scope: true },
+        }),
+        prisma.forumBookmark.findMany({
+          where: {
+            userId: params.ownerId,
+            post: { OR: visibility },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: {
+            note: true,
+            post: { select: { number: true, title: true, scope: true } },
+          },
+        }),
+      ]);
+
+      return {
+        pinned_topics: pinnedRows.map((p) => ({
+          code: `#${p.number}`,
+          title: p.title,
+          scope: p.scope as ForumScope,
+        })),
+        saved_topics: savedRows.map((b) => ({
+          code: `#${b.post.number}`,
+          title: b.post.title,
+          scope: b.post.scope as ForumScope,
+          ...(b.note ? { note: b.note } : {}),
+        })),
+      };
+    }
+  } catch {
+    // Fall through to in-memory fallback for offline tests
+  }
+
+  const isVisible = (msg: ForumMessage) =>
+    (msg.scope ?? "platform") === "platform" ||
+    (Boolean(params.organisationId) && msg.organisationId === params.organisationId);
+
+  const pinned_topics: AgentForumBootTopic[] = memoryForumStore
+    .filter((m) => m.isPinned && isVisible(m))
+    .slice(0, 5)
+    .map((m) => ({
+      code: m.code,
+      title: m.title,
+      scope: (m.scope ?? "platform") as ForumScope,
+    }));
+
+  const saved_topics: AgentForumBootTopic[] = [];
+  for (const msg of memoryForumStore) {
+    if (!isVisible(msg)) continue;
+    const entry = memoryBookmarks.get(msg.id)?.get(params.ownerId);
+    if (!entry) continue;
+    saved_topics.push({
+      code: msg.code,
+      title: msg.title,
+      scope: (msg.scope ?? "platform") as ForumScope,
+      ...(entry.note ? { note: entry.note } : {}),
+    });
+    if (saved_topics.length >= 5) break;
+  }
+
+  return { pinned_topics, saved_topics };
+}
+
