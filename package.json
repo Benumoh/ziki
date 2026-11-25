@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.1.301",
+  "version": "0.1.302",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
