@@ -24,7 +24,7 @@ const bugCount = vi.hoisted(() => vi.fn());
 const bugFindFirst = vi.hoisted(() => vi.fn());
 const membershipUpsert = vi.hoisted(() => vi.fn());
 const txMembershipFindFirst = vi.hoisted(() => vi.fn());
-const awardSignupBonus = vi.hoisted(() => vi.fn());
+const giveWelcomeBonus = vi.hoisted(() => vi.fn());
 const ideaFindFirst = vi.hoisted(() => vi.fn());
 const notificationCreateMany = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 1 }));
 const membershipFindMany = vi.hoisted(() => vi.fn());
@@ -54,7 +54,7 @@ vi.mock("@/lib/prisma", () => ({
       run({ projectMembership: { upsert: projectMembershipUpsert }, membership: { upsert: membershipUpsert, findFirst: txMembershipFindFirst }, projectJoinRequest: { updateMany: projectJoinRequestUpdateMany } }),
   },
 }));
-vi.mock("@/lib/points/signup-bonus", () => ({ awardSignupBonus }));
+vi.mock("@/lib/coins/welcome-bonus", () => ({ giveWelcomeBonus }));
 vi.mock("@/lib/workflow", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/workflow")>()),
   workflowFor: vi.fn(async () => ({ ideaThreshold: 3, revisionLimit: 2 })),
@@ -326,17 +326,17 @@ describe("joinOpenProjectAction (#earnings)", () => {
     expect(await joinOpenProjectAction("p-1")).toEqual({ ok: true, href: "/ziki/marketing" });
   });
 
-  it("pays the signup bonus to a brand-new person (in no organisation), and not to someone already in one", async () => {
+  it("gives the welcome bonus to a brand-new person (in no organisation), and not to someone already in one", async () => {
     findFirst.mockResolvedValue(open);
     bugCount.mockResolvedValue(1);
     txMembershipFindFirst.mockResolvedValue(null);
     await joinOpenProjectAction("p-1");
-    expect(awardSignupBonus).toHaveBeenCalledWith(expect.anything(), "user-1", "t-1");
+    expect(giveWelcomeBonus).toHaveBeenCalledWith(expect.anything(), "user-1");
 
-    awardSignupBonus.mockClear();
+    giveWelcomeBonus.mockClear();
     txMembershipFindFirst.mockResolvedValue({ id: "m-1" });
     await joinOpenProjectAction("p-1");
-    expect(awardSignupBonus).not.toHaveBeenCalled();
+    expect(giveWelcomeBonus).not.toHaveBeenCalled();
     expect(membershipUpsert).not.toHaveBeenCalled();
   });
 

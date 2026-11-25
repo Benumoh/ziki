@@ -62,6 +62,7 @@ export const createForumMessageSchema = z
     projectId: z.string().trim().min(1).optional(),
     sourceType: z.enum(FORUM_SOURCE_TYPES).optional(),
     sourceId: z.string().trim().min(1).optional(),
+    isPinned: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (Boolean(data.sourceType) !== Boolean(data.sourceId)) {
@@ -183,8 +184,19 @@ export const verifyForumPostSchema = z.object({
     .max(4000, "Evidence exceeds 4000 characters"),
 });
 
+export const pinForumPostSchema = z.object({
+  pinned: z.boolean().default(true),
+});
+
+export const bookmarkForumPostSchema = z.object({
+  bookmarked: z.boolean().default(true),
+  note: z.string().trim().max(240, "Bookmark note exceeds 240 characters").optional(),
+});
+
 export type CreateForumMessageInput = z.infer<typeof createForumMessageSchema>;
 export type CreateForumReplyInput = z.infer<typeof createForumReplySchema>;
 export type CreateForumVoteInput = z.infer<typeof createForumVoteSchema>;
 export type CloseForumPostInput = z.infer<typeof closeForumPostSchema>;
 export type VerifyForumPostInput = z.infer<typeof verifyForumPostSchema>;
+export type PinForumPostInput = z.infer<typeof pinForumPostSchema>;
+export type BookmarkForumPostInput = z.infer<typeof bookmarkForumPostSchema>;

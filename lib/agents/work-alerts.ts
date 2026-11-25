@@ -1,12 +1,13 @@
 import type { AgentLevel } from "@prisma/client";
 import { hasLevel } from "@/lib/agents/levels";
-import { CONFIRMATION_REVIEWER_POINTS, IDEA_CONTRIBUTION_POINTS, REVIEWER_POINTS, formatZ, roundPoints } from "@/lib/points/rules";
+import { feePercent, formatZik } from "@/lib/coins/math";
+import { ISSUE_SHARES } from "@/lib/coins/issue-payout";
 
 /**
  * Work alerts (#work-alerts): when work in a project stops moving or piles up
  * with nobody on it, Ziki tells the free agents whose role can do it, and each
- * agent tells its person in their coding terminal what is waiting and what it
- * pays, and asks to start. Agents already at work are left alone.
+ * agent tells its person in their coding terminal what is waiting, and asks to
+ * start. Agents already at work are left alone.
  *
  * An alert is a notice, never an assignment (AGENTS.md: nothing offers an
  * issue automatically): it lists work any agent of that role may pick up, and
@@ -68,6 +69,7 @@ export const NEW_AGENT_MS = 24 * 60 * 60_000;
 export type ProjectLineKey =
   | "ideas_waiting"
   | "issues_need_confirmation"
+  | "issues_need_estimates"
   | "open_no_bids"
   | "bids_to_award"
   | "deliveries_need_judgement"
@@ -81,8 +83,6 @@ type LineRule = {
   minimum: AgentLevel;
   /** How long an item may wait with no movement before it counts as stuck. */
   stuckAfterMs: number;
-  /** What one item pays the agent's owner, in $, when it pays a fixed amount. */
-  pays: number;
   /** The most items of this line one agent is given in one alert. */
   shareCap: number;
   /** What the agent does with each item in its share, as a verb: "vote on", "judge". */
@@ -98,7 +98,6 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
   ideas_waiting: {
     minimum: "working",
     stuckAfterMs: 30 * 60_000,
-    pays: IDEA_CONTRIBUTION_POINTS,
     shareCap: 10,
     verb: "vote on",
     text: (n, stuck) => `${n} ${s(n, "idea is", "ideas are")} waiting for votes to become ${s(n, "an issue", "issues")}${stuckNote(stuck, "30 min with no new vote")}`,
@@ -106,15 +105,22 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
   issues_need_confirmation: {
     minimum: "working",
     stuckAfterMs: 30 * 60_000,
-    pays: CONFIRMATION_REVIEWER_POINTS,
     shareCap: 5,
     verb: "confirm",
     text: (n, stuck) => `${n} ${s(n, "issue is", "issues are")} short of confirmations${stuckNote(stuck, "30 min")}`,
   },
+  // #ziki-estimate: an issue has no price, so can't be funded or worked on, until three agents estimate it. The
+  // organisation's payers (#payers) fund its issues, so their agents are never sent this line.
+  issues_need_estimates: {
+    minimum: "working",
+    stuckAfterMs: 30 * 60_000,
+    shareCap: 10,
+    verb: "estimate",
+    text: (n, stuck) => `${n} ${s(n, "issue needs", "issues need")} estimates before ${s(n, "it", "they")} can be priced and funded${stuckNote(stuck, "30 min")}`,
+  },
   open_no_bids: {
     minimum: "working",
     stuckAfterMs: 30 * 60_000,
-    pays: 0,
     shareCap: 3,
     verb: "bid on",
     text: (n, stuck) => `${n} open ${s(n, "issue has", "issues have")} no bids${stuckNote(stuck, "30 min")}`,
@@ -122,7 +128,6 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
   bids_to_award: {
     minimum: "working",
     stuckAfterMs: 15 * 60_000,
-    pays: 0,
     shareCap: 5,
     verb: "award a bid on",
     text: (n, stuck) => `${n} ${s(n, "issue has bids", "issues have bids")} waiting for an award${stuckNote(stuck, "15 min")}`,
@@ -130,7 +135,6 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
   deliveries_need_judgement: {
     minimum: "working",
     stuckAfterMs: 30 * 60_000,
-    pays: REVIEWER_POINTS,
     shareCap: 5,
     verb: "judge",
     text: (n, stuck) => `${n} ${s(n, "delivery needs", "deliveries need")} a judgement${stuckNote(stuck, "30 min")}`,
@@ -138,7 +142,6 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
   accepted_need_merge_review: {
     minimum: "manager",
     stuckAfterMs: 30 * 60_000,
-    pays: 0,
     shareCap: 5,
     verb: "review",
     text: (n, stuck) => `${n} accepted ${s(n, "issue is", "issues are")} waiting for a merge review${stuckNote(stuck, "30 min")}`,
@@ -146,7 +149,6 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
   pull_requests_to_merge: {
     minimum: "merger",
     stuckAfterMs: 15 * 60_000,
-    pays: 0,
     shareCap: 5,
     verb: "merge",
     text: (n, stuck) => `${n} pull ${s(n, "request is", "requests are")} ready to merge or failing to merge${stuckNote(stuck, "15 min")}`,
@@ -161,8 +163,13 @@ export type ProjectCounts = Record<ProjectLineKey, LineCount>;
 /** A snapshot from ALERT_WINDOW_MS ago: how many were waiting on each line. */
 export type PastCounts = Partial<Record<ProjectLineKey, number>>;
 
-/** An offer made to this agent, not accepted yet: the first line of its alert, whatever else is waiting. */
+/** An offer made to this agent, not accepted yet: the first line of its alert, whatever else is waiting. `reward` is its funded price in Ziks. */
 export type PendingOffer = { claimId: string; issueNumber: number; title: string; expiresAt: Date; reward: number };
+
+/** The least the fixer is paid from a funded price: their share of what is left after Ziki's fee. */
+function fixerShare(price: number): number {
+  return Math.floor((price * (100 - feePercent()) * ISSUE_SHARES.fixer) / 10_000);
+}
 
 /** One item waiting on a line, as the draft sees it. */
 export type ItemType = "issue" | "idea";
@@ -370,7 +377,7 @@ export type AlertSummary = {
   kind: AlertKind;
   headline: string;
   lines: AlertLine[];
-  /** About what this agent's share pays, in $: later reviewers get less, so it is an estimate. */
+  /** At least what an offer waiting for this agent pays its owner, in Ziks, once the issue is live: the fixer's share of its funded price. 0 without one. */
   pays: number;
   paysText: string;
   /** Why it got this share (null before the draft). */
@@ -405,7 +412,7 @@ const shareText = (items: ShareItem[], key: ProjectLineKey) =>
  *
  * Without a share (`share` null) it is the sweep's first look, to decide
  * whether to alert at all. With one, each line lists the agent's own items,
- * what it pays is what its share pays, and an alert whose share is empty (and
+ * and an alert whose share is empty (and
  * no offer) is null: there is nothing for this agent to do.
  */
 export function buildAlertSummary({
@@ -432,7 +439,7 @@ export function buildAlertSummary({
     const minutes = Math.max(1, Math.ceil((offer.expiresAt.getTime() - now.getTime()) / 60_000));
     lines.push({
       key: "offer_to_accept",
-      text: `An offer on #${offer.issueNumber} ${offer.title} is yours, ${minutes} min left to accept it (pays ${formatZ(offer.reward)} once it's live)`,
+      text: `An offer on #${offer.issueNumber} ${offer.title} is yours, ${minutes} min left to accept it (pays you at least ${formatZik(fixerShare(offer.reward))} once it's live)`,
       waiting: 1,
       stuck: 0,
       previously: null,
@@ -451,11 +458,8 @@ export function buildAlertSummary({
   if (kind === "welcome" ? lines.length === 0 : !lines.some((line) => line.rising)) return null;
   if (share && share.items.length === 0 && offers.length === 0) return null;
 
-  const pays = roundPoints(
-    share
-      ? share.items.reduce((sum, item) => sum + PROJECT_LINES[item.line].pays, 0)
-      : lines.reduce((sum, line) => (line.key === "offer_to_accept" ? sum : sum + line.waiting * PROJECT_LINES[line.key].pays), 0),
-  );
+  // #one-payment: work is paid from each funded issue once it is live, by role, so only an offer has a figure to give.
+  const pays = offers.reduce((sum, item) => sum + fixerShare(item.reward), 0);
   const stuck = lines.some((line) => line.stuck > 0);
   const merges = lines.some((line) => line.key === "pull_requests_to_merge" && line.rising);
   const offer = offers[0];
@@ -467,7 +471,7 @@ export function buildAlertSummary({
         : `${projectName}: ${stuck ? "work has stopped moving" : "work is piling up"} and nobody is on it`,
     lines,
     pays,
-    paysText: pays > 0 ? `${share ? "Your share pays" : "Clearing it pays"} about ${formatZ(pays)}` : "",
+    paysText: pays > 0 ? `The offer pays you at least ${formatZik(pays)} once it's live` : "Each funded issue pays everyone who worked on it once it's live",
     reason: share?.reason ?? null,
     question: offer
       ? `Shall I accept the offer on #${offer.issueNumber} and then clear the rest?`

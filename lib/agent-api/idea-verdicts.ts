@@ -6,10 +6,7 @@ import { requireLevel } from "@/lib/agents/levels";
 import { audit } from "@/lib/agents/audit";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
-import { award } from "@/lib/points/award";
-import { IDEA_CONTRIBUTION_POINTS, ideaContributionSourceKey, pointSourceKey } from "@/lib/points/rules";
-import { calculateReporterPoints } from "@/lib/points/project-rewards";
-import { getProjectRewardConfig } from "@/lib/points/platform-rewards";
+
 import { workflowFor } from "@/lib/workflow";
 import { parseIssueRef } from "@/lib/issue-ref";
 import { assigneeChangedSummary, createdSummary, statusChangedSummary } from "@/lib/activity-log";
@@ -159,8 +156,7 @@ export type GivenVerdict = {
   convertible: boolean;
   /** True when this replaced an earlier verdict from the same person. */
   replaced: boolean;
-  /** Points paid for this contribution: 1 for the person's first verdict on the idea, else 0. */
-  pointsAwarded: number;
+
   /**
    * What this verdict did in a threshold-only project (#vote-governance): it
    * converted the idea (with the new issue) or rejected it. A marketing idea's
@@ -235,17 +231,6 @@ export async function giveIdeaVerdict(
 
     const humanApproval = await getHumanApprovalSummary(tx, { kind: "idea", id: ideaId }, humanApprovalsNeeded);
 
-    // The first verdict on each idea earns the person a point; the key makes a replacement free.
-    const paid = await award(tx, {
-      organisationId: giver.organisationId,
-      userId: giver.userId,
-      bugId: null,
-      ideaId,
-      role: "idea",
-      points: IDEA_CONTRIBUTION_POINTS,
-      sourceKey: ideaContributionSourceKey(ideaId, giver.userId),
-      agentId: giver.agent?.id ?? null,
-    });
 
     const convertible = ideaScore >= ideaThreshold && humanApproval.satisfied;
     await publish(tx, {
@@ -299,7 +284,7 @@ export async function giveIdeaVerdict(
       ideaThreshold,
       convertible: convertible && !decided,
       replaced: Boolean(existing),
-      pointsAwarded: paid ? IDEA_CONTRIBUTION_POINTS : 0,
+
       decided,
       ideaId,
     };
@@ -397,7 +382,7 @@ export async function convertIdea(agent: AgentContext, projectId: string, ideaRe
  * once: In progress with an active claim, with no confirmation, bid, award or
  * offer to wait for. A complex issue opens plan review for the agent's owner
  * instead. Everything from delivery on (testing, review, merge) is unchanged,
- * and points are paid as for any other issue. The note says where it was
+ * and it pays out as any other issue does. The note says where it was
  * approved; it is shown on the issue's activity and kept on the event and the
  * audit log. The owner's capacity still applies: at capacity, nothing is filed.
  */
@@ -410,6 +395,20 @@ export async function convertVettedIdea(tx: Tx, agent: AgentContext, projectId: 
   const converted = await convertLocked(tx, scope, locked, by, workflow.ideaThreshold, { via: "already_vetted", decidedByUserId: by.userId, decidedByAgentId: agent.agentId, vettedNote }, difficulty);
   const held = await holdVettedIssue(tx, agent, { id: converted.issueId, projectId, from: trackRules(locked.track).convertsTo }, workflow, difficulty, new Date(converted.convertedAt));
   return { ...converted, ...held };
+}
+
+/**
+ * Solo (#solo): an idea filed in a Solo project becomes an issue at once, with no verdicts: there is nobody else to
+ * give them, and an idea's owner can't vote on their own idea. It is converted as any idea is (not as vetted), so the
+ * owner's own agent still checks it once at Requires confirmation (the bug is real, it isn't a duplicate) before work
+ * starts. Null when the idea isn't open any more.
+ */
+export async function convertSoloIdea(tx: Tx, scope: Scope, ideaId: string) {
+  const locked = await lockedIdea(tx, scope, ideaId);
+  if (locked.status !== "open") return null;
+  const owner = locked.beneficiaryUserId ?? locked.reporterId ?? locked.createdByOwnerId;
+  if (!owner) return null;
+  return convertLocked(tx, scope, locked, { userId: owner, agentId: null }, 1);
 }
 
 /** A client selected this finding from a posted security report. Convert it as vetted
@@ -540,20 +539,7 @@ export async function convertLocked(
     },
     select: { id: true, number: true },
   });
-  // A vetted issue is confirmed from the start, so its reporter is paid now on every track (#vetted-start-now).
-  if ((rules.reporterPaidOn === "conversion" || decision?.via === "already_vetted") && locked.source !== "public") {
-    const reporterId = idea.beneficiaryUserId ?? idea.reporterId;
-    const rewardConfig = await getProjectRewardConfig(tx, projectId);
-    await award(tx, {
-      organisationId: scope.organisationId,
-      userId: reporterId,
-      bugId: issue.id,
-      role: "reporter",
-      points: calculateReporterPoints(rewardConfig),
-      sourceKey: pointSourceKey("reporter", issue.id, reporterId),
-      agentId: idea.createdByAgentId,
-    });
-  }
+
   // The report's files come with it; they stay readable from the idea too.
   await tx.attachment.updateMany({ where: { ideaId: locked.id }, data: { bugId: issue.id } });
   // #security-findings: a private finding follows its idea onto the issue (the issue keeps the placeholder text).
@@ -681,7 +667,7 @@ async function rejectLocked(
  * filed in the wrong project, with the evidence. The agent's owner must not own
  * the idea (its reporter, the person it is for, or the owner of the agent that
  * filed it). It leaves the open list and conversion and takes no more
- * verdicts. No points are paid or taken.
+ * verdicts. Nothing is paid or taken.
  */
 export async function archiveIdea(agent: AgentContext, projectId: string, ideaRef: string, input: Omit<ArchiveIdeaInput, "projectId">) {
   requireLevel(agent, "manager");
@@ -767,8 +753,7 @@ export type IdeaWithdrawer = { organisationId: string; userId: string; agentId: 
  * idea's owner may (its reporter, the person it is for, or the owner of the
  * agent that filed it), through any of their agents or in the web app; the
  * archive route can't use this reason. It leaves the open list and conversion
- * and takes no more verdicts. No points are paid, and points already paid
- * for verdicts on it stay.
+ * and takes no more verdicts. Nothing is paid.
  */
 export async function withdrawIdea(withdrawer: IdeaWithdrawer, projectId: string, ideaRef: string, input: Omit<WithdrawIdeaInput, "projectId"> = {}) {
   const evidence = input.evidence?.trim() ? input.evidence.trim() : null;

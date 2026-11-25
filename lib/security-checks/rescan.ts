@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CoinError, appendRows, lockUser, walletBalance } from "@/lib/coins/ledger";
+import { ZIKS_PER_DOLLAR } from "@/lib/coins/math";
 import { assertCanSpendOnSecurity, loanState } from "@/lib/coins/loan";
 import { ownershipProofRequired } from "@/lib/security-checks";
 import { earlierFindingsToRecheck } from "./engine";
@@ -10,7 +11,7 @@ import { earlierFindingsToRecheck } from "./engine";
  * agents recheck every earlier finding that isn't fixed (still there or fixed) and look for new problems. The earlier
  * findings stay their own rows, so their unlocks, prices and moved issues carry over and nothing is paid twice.
  */
-export const RESCAN_PRICE_ZIKS = 10;
+export const RESCAN_PRICE_ZIKS = ZIKS_PER_DOLLAR;
 
 /** What the confirm shows before anything is charged. */
 export type RescanQuote =
@@ -71,7 +72,7 @@ export async function startRescan(organisationId: string, userId: string, checkI
           return {
             ok: false,
             reason: "insufficient_ziks",
-            error: `Scanning again costs ${RESCAN_PRICE_ZIKS} Ziks and you have ${balance}. Buy Ziks on your Ziks page.`,
+            error: `Scanning again costs ${RESCAN_PRICE_ZIKS.toLocaleString("en-US")} Ziks and you have ${balance.toLocaleString("en-US")}. Buy Ziks on your Ziks page.`,
             needed: RESCAN_PRICE_ZIKS,
             balance,
             canBorrow: loan.canBorrow,

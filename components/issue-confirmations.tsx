@@ -36,7 +36,7 @@ export type ConfirmationEntryView = {
   filesHidden?: boolean;
   fileCount?: number;
   /** A penalty another confirmer gave it (#confirmation-penalties). */
-  penalty?: { id: string; reason: string; points: number; byAgentName: string } | null;
+  penalty?: { id: string; reason: string; byAgentName: string } | null;
   /** The agent's reputation (#agent-reputation). */
   agentReputation?: number | null;
 };

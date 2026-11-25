@@ -2,15 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { borrowZiks } from "@/app/actions/ziks-loan";
+import { ZIKS_LOAN } from "@/lib/coins/loan";
 import { ZikAmount } from "@/components/zik-symbol";
 import { SadZiks } from "@/components/coins/sad-ziks";
 
 /** The one-time loan, in Ziks. */
-const LOAN = 20;
+const LOAN = ZIKS_LOAN;
 
 /**
  * The offer shown where a Security payment comes up short and the person has never bought Ziks (16 Nov call):
- * borrow 20 Ziks once, paid back from the first top-up. Nothing is borrowed until they click.
+ * borrow ZIKS_LOAN (2,000 Ziks) once, paid back from the first top-up. Nothing is borrowed until they click.
  * `onBorrowed` retries what they were doing.
  */
 export function BorrowZiks({ onBorrowed }: { onBorrowed: () => void }) {

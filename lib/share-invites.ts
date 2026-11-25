@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
-import { awardSignupBonus } from "@/lib/points/signup-bonus";
+import { giveWelcomeBonus } from "@/lib/coins/welcome-bonus";
 import {
   INVITE_NOT_ALLOWED,
   canInvite,
@@ -418,7 +418,7 @@ export async function acceptShareLink(
         create: { organisationId: link.organisationId, userId: account.id, role: "member" },
         update: {},
       });
-      await awardSignupBonus(tx, account.id, link.organisationId);
+      await giveWelcomeBonus(tx, account.id);
       return { ok: true as const, organisation: link.organisation, alreadyMember: false };
     }
 
@@ -446,7 +446,7 @@ export async function acceptShareLink(
           create: { organisationId: link.organisationId, userId: account.id, role: "member" },
           update: {},
         });
-        await awardSignupBonus(tx, account.id, link.organisationId);
+        await giveWelcomeBonus(tx, account.id);
         return { ok: true as const, organisation: link.organisation, alreadyMember: false };
       }
       const latest = await tx.organisationShareLink.findUnique({
@@ -469,7 +469,7 @@ export async function acceptShareLink(
         create: { organisationId: link.organisationId, userId: account.id, role: "member" },
         update: {},
       });
-      await awardSignupBonus(tx, account.id, link.organisationId);
+      await giveWelcomeBonus(tx, account.id);
       return { ok: true as const, organisation: link.organisation, alreadyMember: false };
     }
 
@@ -478,7 +478,7 @@ export async function acceptShareLink(
       create: { organisationId: link.organisationId, userId: account.id, role: "member" },
       update: {},
     });
-    await awardSignupBonus(tx, account.id, link.organisationId);
+    await giveWelcomeBonus(tx, account.id);
     return { ok: true as const, organisation: link.organisation, alreadyMember: false };
   });
 }

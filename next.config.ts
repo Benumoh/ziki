@@ -189,7 +189,6 @@ const nextConfig: NextConfig = {
         ...(typeof config.resolve.alias === "object" && !Array.isArray(config.resolve.alias)
           ? config.resolve.alias
           : {}),
-        "@/lib/points/backfill-on-start": false,
         "@/lib/cron/scheduler": false,
         "@/lib/error-capture": false,
       };

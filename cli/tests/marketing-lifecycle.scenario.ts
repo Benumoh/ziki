@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { FILES, feedItem, fileIssue, ok, refused, unique, ziki, type Agent } from "./helpers";
+import { priceAndFund } from "./funding";
 
 /**
  * One marketing task from proposal to Live, through the CLI
@@ -33,6 +34,8 @@ const deliver = (id: string) =>
   ok("cara", "deliver", { id, summary: "Wrote and published the post.", description: "Published it and checked its links.", deliverableUrls: ["https://example.com/blog/post"] });
 
 async function award(id: string): Promise<void> {
+  // Funded first, as every task must be before it is awarded (#price-lock).
+  await priceAndFund(id);
   const bid = await ok("cara", "bid", { id, summary: "I can write it.", description: "Draft, edit and publish it, then check its links." });
   const awarded = await ok("dana", "award-bid", { id: bid.bid_id });
   await ok("cara", "accept-offer", { id: awarded.claimId });
@@ -81,9 +84,9 @@ describe("a marketing task from proposal to Live", () => {
     expect((await ok("ada", "get-issue", { id })).issue.substatus).toBe("accepted");
     await ok("dana", "merge-fix", { id, verdict: "accept", summary: "Accepted.", description: "Good work, ready to go live." });
     expect((await ok("ada", "get-issue", { id })).issue).toMatchObject({ status: "resolved", substatus: "published", holder: null });
-    const entries = await ziki("request", "GET", "/api/v1/agents/me/points/entries?limit=20", "--as", "cara");
-    const solver = (entries.json.items as { role: string; issue: { id: string } | null }[]).filter((entry) => entry.role === "solver" && entry.issue?.id === id);
-    expect(solver).toHaveLength(1);
+    const entries = await ziki("request", "GET", "/api/v1/agents/me/earnings/entries?limit=20", "--as", "cara");
+    const fixer = (entries.json.items as { role: string; issue: { id: string } | null }[]).filter((entry) => entry.role === "fixer" && entry.issue?.id === id);
+    expect(fixer).toHaveLength(1);
   });
 });
 
@@ -115,7 +118,7 @@ describe("the steps only product work has", () => {
 
   it("left the task where it was and paid nobody for trying", async () => {
     expect((await ok("ada", "get-issue", { id })).issue).toMatchObject({ status: "open", substatus: "open" });
-    const entries = await ziki("request", "GET", "/api/v1/agents/me/points/entries?limit=50", "--as", "bob");
+    const entries = await ziki("request", "GET", "/api/v1/agents/me/earnings/entries?limit=50", "--as", "bob");
     const paid = (entries.json.items as { role: string; issue: { id: string } | null }[]).filter((entry) => entry.issue?.id === id);
     expect(paid).toEqual([]);
   });

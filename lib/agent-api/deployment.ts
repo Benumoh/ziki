@@ -8,7 +8,7 @@ import { statusChangedSummary } from "@/lib/activity-log";
 import { parseIssueRef } from "@/lib/issue-ref";
 import { ENVIRONMENTS, LIVE_SUBSTATUS, moveTo } from "@/lib/issue-substatus";
 import { PRODUCT_STEP_ONLY_MESSAGE, trackRules } from "@/lib/marketing/track";
-import { LIVE_REPORTS_NEEDED, liveReporters, releasePayoutIfLive } from "@/lib/points/payout";
+import { LIVE_REPORTS_NEEDED, liveReporters, releasePayoutIfLive } from "@/lib/coins/issue-payout";
 import { prodReporters } from "@/lib/live-confirm-data";
 
 /**
@@ -20,7 +20,7 @@ import { prodReporters } from "@/lib/live-confirm-data";
  *
  * #live-payout: each person's latest report is kept. Once `LIVE_REPORTS_NEEDED`
  * (3) people other than the solver have reported the work deployed, what
- * resolving it earned is paid (lib/points/payout.ts).
+ * its funded Ziks pay everyone who worked on it (lib/coins/issue-payout.ts).
  *
  * #live-confirm: the same rule decides On prod. A prod report moves the issue
  * there only once that many people other than the solver have reported prod;

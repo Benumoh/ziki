@@ -47,9 +47,13 @@ async function loadMembers(
     where: { organisationId },
     orderBy: [{ role: "asc" }, { createdAt: "asc" }],
     take: MEMBER_LIMIT,
-    select: { role: true, createdAt: true, userId: true, strengths: true },
+    select: { role: true, createdAt: true, userId: true, strengths: true, canFundIssues: true },
   });
   if (rows.length === 0) return [];
+  // #payers: owners always pay; an admin only once an owner lets them.
+  const pays = new Set(
+    rows.filter((row) => row.role === "owner" || (row.role === "admin" && row.canFundIssues)).map((row) => row.userId),
+  );
   const userIds = rows.map((row) => row.userId);
   const [people, agents] = await Promise.all([
     prisma.user.findMany({
@@ -83,6 +87,7 @@ async function loadMembers(
       agents: agentsByOwner.get(member.user.id) ?? [],
       joinedAs: joinedAs.get(member.user.id) ?? null,
       invitedByName: invite?.name ?? null,
+      fundsIssues: pays.has(member.user.id),
     };
   });
 }
@@ -210,7 +215,8 @@ export default async function OrgTeamPage({
     <div className="space-y-6">
       <OrgPageHeader title="Team">
         Everyone in {org.name}, everyone you&apos;ve invited and whether they&apos;ve joined, people asking to
-        join a project, and anyone you&apos;ve deactivated. Roles apply only here.
+        join a project, and anyone you&apos;ve deactivated. Roles apply only here. Owners pay for the
+        organisation&apos;s issues, and choose which admins may fund them too.
       </OrgPageHeader>
       {org.admin ? null : (
         <ReadOnlyNote>

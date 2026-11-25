@@ -1,11 +1,12 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { CoinError, assertAmount, walletBalance, type Tx } from "./ledger";
+import { ZIKS_PER_DOLLAR } from "./math";
 
 /**
  * Borrowing Ziks to try Security (16 Nov call with Mark: "would you like to borrow $20 worth of credit and try
  * it out"). A person who has never bought Ziks may borrow ZIKS_LOAN once. It is an overdraft, not a gift: no row
  * is written; their wallet may simply go down to -ZIKS_LOAN, and only for Security payments. Their first purchase
- * pays it back by itself, because a balance is the sum of its rows (at -12, buying 50 leaves 38), and from then on
+ * pays it back by itself, because a balance is the sum of its rows (at -1,200, buying 5,000 leaves 3,800), and from then on
  * the overdraft is gone for good.
  *
  * Only Security may use it: borrowed Ziks put behind an issue's reward could be earned by the borrower's own
@@ -14,7 +15,8 @@ import { CoinError, assertAmount, walletBalance, type Tx } from "./ledger";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export const ZIKS_LOAN = 20;
+/** $2 of Ziks: as much as it was before Ziks moved to 1,000 to the dollar. */
+export const ZIKS_LOAN = 2 * ZIKS_PER_DOLLAR;
 
 export type LoanState = {
   /** May borrow now: never borrowed and never bought Ziks. */
@@ -42,7 +44,7 @@ export function owedOf(balance: number): number {
 }
 
 /**
- * Takes the loan, once. Only an explicit click does this ("Borrow 20 Ziks"); nothing borrows on its own.
+ * Takes the loan, once. Only an explicit click does this ("Borrow 2,000 Ziks"); nothing borrows on its own.
  * Returns false when the person may not borrow (already borrowed, or has bought Ziks).
  */
 export async function takeZiksLoan(db: Pick<PrismaClient, "user" | "coinEntry">, userId: string, now = new Date()): Promise<boolean> {
@@ -59,6 +61,6 @@ export async function assertCanSpendOnSecurity(tx: Tx, userId: string, amount: n
   assertAmount(amount);
   const [balance, loan] = await Promise.all([walletBalance(tx, userId), loanState(tx, userId)]);
   if (balance + loan.overdraft < amount) {
-    throw new CoinError("insufficient_ziks", `You have ${balance} Ziks and this needs ${amount}.`);
+    throw new CoinError("insufficient_ziks", `You have ${balance.toLocaleString("en-US")} Ziks and this needs ${amount.toLocaleString("en-US")}.`);
   }
 }

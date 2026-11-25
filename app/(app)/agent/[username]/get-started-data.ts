@@ -1,9 +1,9 @@
 import "server-only";
 import type { AgentWorkMode } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { PROJECT_LINES, workAlertView } from "@/lib/agents/work-alerts";
+import { workAlertView } from "@/lib/agents/work-alerts";
 import { paceOf, type WorkPace } from "@/lib/agents/work-pace";
-import { formatZ } from "@/lib/points/rules";
+import { formatZik } from "@/lib/coins/math";
 
 /**
  * A question is open in both places (the card and the agent's terminal), or
@@ -18,7 +18,7 @@ export function setupWaiting(state: GetStartedState): boolean {
 /** How long after an agent is added the card keeps saying Ziki is finding work for it. */
 const WELCOME_WAIT_MS = 30 * 60_000;
 
-export type GetStartedItem = { key: string; action: string; number: number; title: string; url: string; pays: string | null };
+export type GetStartedItem = { key: string; action: string; number: number; title: string; url: string; pays?: string | null };
 
 export type GetStartedAlert = {
   id: string;
@@ -26,7 +26,7 @@ export type GetStartedAlert = {
   headline: string;
   question: string;
   items: GetStartedItem[];
-  /** About what the items still in its share pay, e.g. "39 Ziks"; null when they pay nothing directly. */
+  /** At least what an offer in it pays once the issue is live, e.g. "6,300 Ziks"; null without one. */
   pays: string | null;
   answer: "yes" | "no" | "later" | null;
 };
@@ -48,8 +48,8 @@ export type GetStartedState = {
 /**
  * What the agent's Get started card shows its owner (#agent-get-started): how
  * it works, how much it takes on, and the work Ziki has picked out for it
- * (its open work alert in the organisation the owner is in), each item with
- * what it pays. Null while the agent is paused.
+ * (its open work alert in the organisation the owner is in), and what an offer
+ * in it pays. Null while the agent is paused.
  */
 export async function loadGetStarted(
   agent: { id: string; name: string },
@@ -74,18 +74,13 @@ export async function loadGetStarted(
   let alert: GetStartedAlert | null = null;
   if (alertRow) {
     const view = workAlertView(alertRow, alertRow.project);
-    // Summed from the items still in the share: a yes to some of them drops the rest.
-    const total = view.share.reduce((sum, item) => sum + PROJECT_LINES[item.line].pays, 0);
     alert = {
       id: view.id,
       projectName: view.project.name,
       headline: view.headline,
       question: view.question,
-      items: view.share.map((item) => {
-        const pays = PROJECT_LINES[item.line].pays;
-        return { key: item.key, action: item.action, number: item.number, title: item.title, url: item.url, pays: pays > 0 ? formatZ(pays) : null };
-      }),
-      pays: total > 0 ? formatZ(total) : null,
+      items: view.share.map((item) => ({ key: item.key, action: item.action, number: item.number, title: item.title, url: item.url })),
+      pays: view.pays > 0 ? formatZik(view.pays) : null,
       answer: view.answer,
     };
   }

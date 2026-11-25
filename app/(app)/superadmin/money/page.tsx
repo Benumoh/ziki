@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireSuperAdmin } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
-import { formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
+import { ZIKS_PER_DOLLAR, formatUsd, formatZik, zikToCents } from "@/lib/coins/math";
 import { moneyTotals, reconcile } from "@/lib/coins/money";
 import { getStripe, stripeConfigured } from "@/lib/coins/stripe";
 
@@ -27,7 +27,7 @@ export default async function MoneyPage() {
 
   const tiles = [
     { label: "Total bought", zik: totals.bought, note: "Ziks paid for through Stripe" },
-    { label: "From earnings", zik: totals.fromEarnings, note: "Moved in from people's points earnings, paid for by Ziki" },
+    { label: "From earnings", zik: totals.fromEarnings, note: "Moved in from points earnings, before Ziks were the only payment" },
     { label: "Held in escrow", zik: totals.inEscrow, note: "Behind issues, not yet paid out" },
     { label: "In project budgets", zik: totals.inBudgets, note: "Behind whole projects, not yet reserved for an issue" },
     { label: "Owed to earners", zik: totals.owedToEarners, note: "Earned and not yet withdrawn" },
@@ -45,7 +45,7 @@ export default async function MoneyPage() {
           <Link href="/superadmin/users" className="font-medium text-zk-accent hover:underline">← Site admin</Link>
         </p>
         <h1 className="mt-2 text-xl font-semibold text-zk-text sm:text-2xl">Money</h1>
-        <p className="mt-1 max-w-2xl text-sm text-zk-text2">Every figure is the sum of the Ziks ledger. One Zik is {zikToCents(1)}¢.</p>
+        <p className="mt-1 max-w-2xl text-sm text-zk-text2">Every figure is the sum of the Ziks ledger. {ZIKS_PER_DOLLAR.toLocaleString("en-US")} Ziks are $1.</p>
       </div>
 
       <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">

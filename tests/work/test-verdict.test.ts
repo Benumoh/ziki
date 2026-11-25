@@ -515,7 +515,6 @@ describe("reviewJobSubmission: concurrent accepts (#584)", () => {
       job: { id: "job-1", organisationId: "organisation_zedu", projectId: "p1", pointsPerAccepted: 25 },
     };
     const committedReviews: Array<Record<string, unknown>> = [];
-    let awardCount = 0;
     let lockTail = Promise.resolve();
 
     db.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
@@ -552,9 +551,6 @@ describe("reviewJobSubmission: concurrent accepts (#584)", () => {
           }),
           update: async () => ({}),
         },
-        pointEntry: {
-          createMany: async () => ({ count: ++awardCount === 1 ? 1 : 0 }),
-        },
         agentAuditEvent: { create: async () => ({}) },
         agentEvent: { create: async () => ({ id: "job-review-event" }) },
         webhookSubscription: { findMany: async () => [] },
@@ -578,7 +574,6 @@ describe("reviewJobSubmission: concurrent accepts (#584)", () => {
     expect([first.submission.status, second.submission.status].sort()).toEqual(["accepted", "pending"]);
     expect(submission.status).toBe("accepted");
     expect(committedReviews).toHaveLength(2);
-    expect(awardCount).toBe(1);
   });
 });
 

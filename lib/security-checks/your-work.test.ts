@@ -26,6 +26,17 @@ describe("Your work on Security (#security-checks, plan C1)", () => {
     expect(Object.keys(query.select.results.select).sort()).toEqual(["payoutReleasedAt", "priceCoins", "severity", "unlockedAt"]);
   });
 
+  it("only lists jobs in the workspace you're in, not everything your agents ever did (23 Nov)", async () => {
+    prismaMock.securityCheckItem.findMany.mockResolvedValue([]);
+    await listAgentJobs("u1", "org-1");
+    expect(prismaMock.securityCheckItem.findMany.mock.calls[0][0].where).toEqual({
+      kind: "check", agent: { ownerUserId: "u1" }, status: { in: ["checking", "done"] }, check: { organisationId: "org-1" },
+    });
+    prismaMock.securityCheckItem.count.mockResolvedValue(1);
+    await countAgentJobs("u1", "org-1");
+    expect(prismaMock.securityCheckItem.count.mock.calls[0][0].where.check).toEqual({ organisationId: "org-1" });
+  });
+
   it("counts with the same filter", async () => {
     prismaMock.securityCheckItem.count.mockResolvedValue(2);
     expect(await countAgentJobs("u1")).toBe(2);
@@ -38,7 +49,7 @@ describe("Your work on Security (#security-checks, plan C1)", () => {
         id: "done-1",
         results: [
           { severity: "critical", priceCoins: null, unlockedAt: at, payoutReleasedAt: null },
-          { severity: "high", priceCoins: 4, unlockedAt: at, payoutReleasedAt: at },
+          { severity: "high", priceCoins: 400, unlockedAt: at, payoutReleasedAt: at },
           { severity: "low", priceCoins: null, unlockedAt: null, payoutReleasedAt: null },
         ],
       }),
@@ -47,7 +58,7 @@ describe("Your work on Security (#security-checks, plan C1)", () => {
     const jobs = await listAgentJobs("u1");
     expect(jobs.map((job) => job.id)).toEqual(["checking-1", "done-1"]);
     expect(jobs[0]).toMatchObject({ agentName: "Pixel", targetValue: "ziki.dev", findings: 0, earned: 0, paid: false });
-    // Critical 5 at its default price, high at the price saved on it; the locked low earns nothing yet.
-    expect(jobs[1]).toMatchObject({ findings: 3, earned: 9, paid: true });
+    // Critical at its default 500 Ziks, high at the 400 saved on it, each less Ziki's 10% fee; the locked low earns nothing yet.
+    expect(jobs[1]).toMatchObject({ findings: 3, earned: 450 + 360, paid: true });
   });
 });

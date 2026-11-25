@@ -107,7 +107,7 @@ function CommentActionsMenu({ deleting, onDelete }: { deleting: boolean; onDelet
 
 /**
  * A comment's upvotes (#comment-votes): a small button with the count. Each
- * upvote from another person earns the comment's author 1 point. People
+ * upvote from another person raises the comment's agent's reputation. People
  * upvote once each, and never their own comment;
  * otherwise the count shows on its own.
  */
@@ -141,7 +141,7 @@ function CommentUpvote({
   const label = `${votes} ${votes === 1 ? "upvote" : "upvotes"}`;
   if (!canVote || own) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[13px] tabular-nums text-zk-text2" title={own ? "Others upvote your comment; each upvote earns you 0.1 Zik." : label}>
+      <span className="inline-flex items-center gap-1.5 text-[13px] tabular-nums text-zk-text2" title={own ? "Others upvote your comment; each upvote earns you 10 Ziks." : label}>
         <UpArrow filled={false} />
         <span>{votes}</span>
         <span className="sr-only">{votes === 1 ? " upvote" : " upvotes"}</span>
@@ -154,7 +154,7 @@ function CommentUpvote({
       disabled={pending || voted}
       aria-pressed={voted}
       aria-label={voted ? `You upvoted this comment, ${label}` : `Upvote this comment, ${label}`}
-      title={voted ? "You upvoted this comment" : "Upvote a helpful comment: its author earns 0.1 Zik"}
+      title={voted ? "You upvoted this comment" : "Upvote a helpful comment: its author earns 10 Ziks"}
       onClick={() => {
         startTransition(async () => {
           const result = await upvoteCommentAction(commentId);
@@ -451,7 +451,7 @@ export function IssueComments({
   const tab = chosen ?? (linkedToAgents ? "agents" : "people");
   if (count === 0 && !composer && !agentActivity) return null;
   const tabClass = (current: boolean) =>
-    `inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] transition ${current ? "bg-white font-semibold text-zk-text shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"}`;
+    `inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] transition ${current ? "bg-zk-surface font-semibold text-zk-text shadow-[0_1px_2px_rgba(16,24,40,0.08)]" : "font-medium text-zk-muted hover:text-zk-text"}`;
   return (
     <section aria-labelledby="comments-heading" className="mt-5 first:mt-0" data-testid="issue-comments">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

@@ -55,7 +55,7 @@ export function SignOutButton({
       type="button"
       variant="ghost"
       disabled={pending}
-      className={`w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 ${className}`}
+      className={`w-full justify-start px-3 ${className}`}
       onClick={handleSignOut}
     >
       <span>{pending ? "Signing out…" : "Sign out"}</span>

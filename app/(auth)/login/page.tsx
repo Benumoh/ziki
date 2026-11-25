@@ -7,6 +7,7 @@ import { localLogins } from "@/lib/local-logins";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
 import { AuthLegalNote } from "./auth-split-frame";
 import { NOINDEX } from "@/lib/seo/site";
+import { GoogleTwoFactorForm } from "@/components/google-two-factor-form";
 
 /* Distinct browser-tab title; the root layout appends the site name. */
 export const metadata: Metadata = {
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
 /** What has been waiting for them while they were away. */
 const story: AuthStory = {
   kicker: "Welcome back",
-  title: <>Your agents kept <span className="th-accent">working</span></>,
+  title: <>Your agents kept <span className="text-zk-blue">working</span></>,
   beats: [
     { when: "While you were away", what: "Agents found and fixed issues", detail: "Each fix checked by other agents." },
     { when: "Waiting for you", what: "Your yes on what matters", detail: "Anything critical needs one click from you." },
@@ -38,7 +39,9 @@ export default async function LoginPage({
   searchParams: Promise<{
     callbackUrl?: string;
     expired?: string;
+    passwordAdded?: string;
     error?: string;
+    googleCode?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -47,38 +50,44 @@ export default async function LoginPage({
 
   return (
     <AuthStoryPage story={story}>
-      <h2>Sign in to Ziki</h2>
+      <h2 className="text-xl font-semibold tracking-tight">Sign in to Ziki</h2>
+
+      {params.passwordAdded === "1" ? <p role="status" className="rounded-panel bg-zk-tint p-3 text-sm text-zk-accent">Your password is ready. Sign in with Google or your email and password.</p> : null}
 
       {params.expired && !params.error ? (
-        <p className="rounded-xl bg-zk-warn-bg p-3 text-sm text-zk-warn-fg" role="status">
+        <p className="rounded-panel bg-zk-warn-bg p-3 text-sm text-zk-warn-fg" role="status">
           Your session ended. Sign in again to continue.
         </p>
       ) : null}
 
       {params.error ? (
         <div
-          className="rounded-xl bg-zk-bad-bg p-3 text-sm text-zk-bad-fg"
+          className="rounded-panel bg-zk-bad-bg p-3 text-sm text-zk-bad-fg"
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
         >
           <p className="font-medium">
-            {params.error === "TwoFactor"
-              ? "This account has two-factor sign-in on. Sign in with email and password, then enter the code. Google cannot skip that step."
-              : params.error === "OAuthCallbackError" || params.error === "Configuration"
-                ? "Unable to complete Google sign-in. Please try again."
-                : "Authentication failed. Please try again."}
+            {params.error === "GoogleLinkRequired"
+              ? "Sign in with your email and password first, then connect Google in Settings → Security. Your password will keep working."
+              : params.error === "GoogleIntentExpired"
+                ? "Your Google sign-in request expired. Please try again."
+                : params.error === "GoogleAccountMismatch"
+                  ? "This Google account could not be connected. Sign in with your existing method and check Settings → Security."
+                  : params.error === "OAuthCallbackError" || params.error === "Configuration"
+                    ? "Unable to complete Google sign-in. Please try again."
+                    : "Authentication failed. Please try again."}
           </p>
         </div>
       ) : null}
 
-      <AuthMethods
+      {params.googleCode === "1" ? <GoogleTwoFactorForm /> : <AuthMethods
         callbackUrl={callbackUrl}
         emailForm={isPasswordAuthEnabled() ? <LoginForm callbackUrl={callbackUrl} quickLogins={quickLogins} /> : null}
-        emailOpen={params.error === "TwoFactor" || quickLogins.length > 0}
-      />
+        emailOpen={params.error === "GoogleLinkRequired" || quickLogins.length > 0}
+      />}
 
-      <p className="su-switch">
+      <p className="text-center text-sm text-zk-muted [&_a]:font-semibold [&_a]:text-zk-accent [&_a:hover]:underline">
         New to Ziki? <Link href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Create a free account</Link>
       </p>
       <AuthLegalNote />

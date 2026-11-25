@@ -289,7 +289,7 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
     const [crit, high, low] = report.findings;
     expect(crit).toMatchObject({ title: "crit title", howToFix: "crit fix", fix: { bucket: "fixing", issue: { number: 150, href: "/acme/web/150" } } });
     // Not paid for: shown in full, without how to fix, and without the agent that found it.
-    expect(high).toEqual({ id: "high", partId: "i3", severity: "high", area: "Headers", title: "high title", description: "high description", howToFix: null, fix: null, price: 3, checkId: "check1", recheck: null, recheckNote: null });
+    expect(high).toEqual({ id: "high", partId: "i3", severity: "high", area: "Headers", title: "high title", description: "high description", howToFix: null, fix: null, price: 300, checkId: "check1", recheck: null, recheckNote: null });
     expect(low).toMatchObject({ area: "CORS", howToFix: null });
     expect(report.counts).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
     expect(report.clearParts).toEqual(["Cookies"]);
@@ -394,7 +394,7 @@ describe("what a client sees of a check (12 and 14 Nov plans, part S)", () => {
     const maps = inflatedStreams(pdf).filter((stream) => stream.includes("begincmap")).join("\n");
     const printed = new Set([...maps.matchAll(/<([0-9a-f]{4,})>/gi)].map((m) => hexToText(m[1])));
     for (const char of ["₦", "Ọ", "ọ", "à", "́", "̀"]) expect(printed, char).toContain(char);
-  });
+  }, 20000);
 
   it("a moved problem's fix follows its finding: Live is fixed, a deleted issue doesn't count, a rejected idea is closed", () => {
     const project = { slug: "web", organisation: { slug: "ziki" } };
@@ -432,17 +432,17 @@ describe("scanning again (#security-rescan, 17 Nov)", () => {
     coins.loanState.mockResolvedValue({ canBorrow: true, overdraft: 0 });
   });
 
-  it("charges 10 Ziks and starts a follow-up of the finished scan, in one step", async () => {
+  it("charges 1,000 Ziks ($1) and starts a follow-up of the finished scan, in one step", async () => {
     db.securityCheck.findFirst.mockResolvedValue(finished);
     db.securityCheck.create.mockResolvedValue({ id: "rescan1" });
 
     expect(await startRescan("org1", "owner", "check0")).toEqual({ ok: true, checkId: "rescan1" });
 
-    expect(RESCAN_PRICE_ZIKS).toBe(10);
-    expect(db.securityCheck.create.mock.calls[0]![0].data).toMatchObject({ previousCheckId: "check0", targetId: "t1", free: false, priceCoins: 10, status: "queued" });
+    expect(RESCAN_PRICE_ZIKS).toBe(1000);
+    expect(db.securityCheck.create.mock.calls[0]![0].data).toMatchObject({ previousCheckId: "check0", targetId: "t1", free: false, priceCoins: 1000, status: "queued" });
     expect(coins.appendRows.mock.calls[0]![1]).toEqual([
-      { account: "wallet", userId: "owner", kind: "check_payment", amount: -10, sourceKey: "rescan:rescan1:wallet" },
-      { account: "revenue", kind: "check_payment", amount: 10, sourceKey: "rescan:rescan1:revenue" },
+      { account: "wallet", userId: "owner", kind: "check_payment", amount: -1000, sourceKey: "rescan:rescan1:wallet" },
+      { account: "revenue", kind: "check_payment", amount: 1000, sourceKey: "rescan:rescan1:revenue" },
     ]);
   });
 
@@ -450,7 +450,7 @@ describe("scanning again (#security-rescan, 17 Nov)", () => {
     db.securityCheck.findFirst.mockResolvedValue(finished);
     coins.assertCanSpendOnSecurity.mockRejectedValue(new coins.CoinError("insufficient_ziks", "short"));
 
-    expect(await startRescan("org1", "owner", "check0")).toMatchObject({ ok: false, reason: "insufficient_ziks", needed: 10, balance: 3, canBorrow: true });
+    expect(await startRescan("org1", "owner", "check0")).toMatchObject({ ok: false, reason: "insufficient_ziks", needed: 1000, balance: 3, canBorrow: true });
     expect(db.securityCheck.create).not.toHaveBeenCalled();
     expect(coins.appendRows).not.toHaveBeenCalled();
   });
@@ -469,12 +469,12 @@ describe("scanning again (#security-rescan, 17 Nov)", () => {
 
 describe("the 12 Nov plan's rules (#security-checks, #on-call)", () => {
   it("prices a finding by severity, worst costs most", () => {
-    expect(SEVERITY_PRICE).toEqual({ critical: 5, high: 3, medium: 2, low: 1 });
+    expect(SEVERITY_PRICE).toEqual({ critical: 500, high: 300, medium: 200, low: 100 });
     expect(unlockTotal([
-      { severity: "critical", priceCoins: 5 },
+      { severity: "critical", priceCoins: 500 },
       { severity: "high", priceCoins: null },
-      { severity: "low", priceCoins: 1 },
-    ])).toBe(9);
+      { severity: "low", priceCoins: 100 },
+    ])).toBe(900);
     expect(unlockTotal([])).toBe(0);
   });
 
@@ -545,19 +545,19 @@ beforeEach(() => {
 });
 
 describe("first deeper scan payment", () => {
-  it("quotes 20 Ziks without charging or queuing", async () => {
-    expect(await deeperScanQuote("org", "user", "c1")).toMatchObject({ ok: true, price: 20, state: "payment_required", balance: 100 });
+  it("quotes 2,000 Ziks ($2) without charging or queuing", async () => {
+    expect(await deeperScanQuote("org", "user", "c1")).toMatchObject({ ok: true, price: 2000, state: "payment_required", balance: 100 });
     expect(db.$transaction).not.toHaveBeenCalled();
     expect(coins.appendRows).not.toHaveBeenCalled();
   });
   it("a code scan, connected free from a website's Code scan step, is paid for here at its own price (18 Nov call)", async () => {
     check.codeScanForId = "site1";
-    expect(await deeperScanQuote("org", "user", "c1")).toMatchObject({ ok: true, price: 50, state: "payment_required" });
-    expect(await payAndStartDeeperScan("org", "user", "c1")).toMatchObject({ ok: true, charged: 50 });
-    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 50);
+    expect(await deeperScanQuote("org", "user", "c1")).toMatchObject({ ok: true, price: 5000, state: "payment_required" });
+    expect(await payAndStartDeeperScan("org", "user", "c1")).toMatchObject({ ok: true, charged: 5000 });
+    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 5000);
     expect(coins.appendRows).toHaveBeenCalledWith(expect.anything(), [
-      expect.objectContaining({ account: "wallet", userId: "user", amount: -50 }),
-      expect.objectContaining({ account: "revenue", amount: 50 }),
+      expect.objectContaining({ account: "wallet", userId: "user", amount: -5000 }),
+      expect.objectContaining({ account: "revenue", amount: 5000 }),
     ]);
   });
   it("scopes access to the requesting user and workspace", async () => {
@@ -587,18 +587,18 @@ describe("first deeper scan payment", () => {
   it("returns insufficient funds without updating the scan", async () => {
     coins.assertCanSpendOnSecurity.mockRejectedValue(new coins.CoinError("insufficient_ziks", "Not enough"));
     coins.walletBalance.mockResolvedValue(5);
-    expect(await payAndStartDeeperScan("org", "user", "c1")).toMatchObject({ reason: "insufficient_ziks", needed: 20, balance: 5, canBorrow: false });
+    expect(await payAndStartDeeperScan("org", "user", "c1")).toMatchObject({ reason: "insufficient_ziks", needed: 2000, balance: 5, canBorrow: false });
     expect(db.securityCheck.updateMany).not.toHaveBeenCalled();
     expect(coins.appendRows).not.toHaveBeenCalled();
   });
   it("charges the server price and queues the scan within the same transaction", async () => {
-    expect(await payAndStartDeeperScan("org", "user", "c1")).toEqual({ ok: true, checkId: "c1", charged: 20, reused: false });
+    expect(await payAndStartDeeperScan("org", "user", "c1")).toEqual({ ok: true, checkId: "c1", charged: 2000, reused: false });
     expect(coins.lockUser).toHaveBeenCalledWith(expect.anything(), "user");
-    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 20);
-    expect(db.securityCheck.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "queued", priceCoins: 20, paidAt: expect.any(Date) }) }));
+    expect(coins.assertCanSpendOnSecurity).toHaveBeenCalledWith(expect.anything(), "user", 2000);
+    expect(db.securityCheck.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "queued", priceCoins: 2000, paidAt: expect.any(Date) }) }));
     expect(coins.appendRows).toHaveBeenCalledWith(expect.anything(), [
-      expect.objectContaining({ account: "wallet", userId: "user", amount: -20, sourceKey: "deeper-scan:c1:wallet" }),
-      expect.objectContaining({ account: "revenue", amount: 20, sourceKey: "deeper-scan:c1:revenue" }),
+      expect.objectContaining({ account: "wallet", userId: "user", amount: -2000, sourceKey: "deeper-scan:c1:wallet" }),
+      expect.objectContaining({ account: "revenue", amount: 2000, sourceKey: "deeper-scan:c1:revenue" }),
     ]);
   });
   it("reuses a paid scan without charging on sequential retries", async () => {
@@ -608,7 +608,7 @@ describe("first deeper scan payment", () => {
   });
   it("reuses the same scan under serialized concurrent transaction retries", async () => {
     const outcomes = await Promise.all([payAndStartDeeperScan("org", "user", "c1"), payAndStartDeeperScan("org", "user", "c1")]);
-    expect(outcomes).toEqual([{ ok: true, checkId: "c1", charged: 20, reused: false }, { ok: true, checkId: "c1", charged: 0, reused: true }]);
+    expect(outcomes).toEqual([{ ok: true, checkId: "c1", charged: 2000, reused: false }, { ok: true, checkId: "c1", charged: 0, reused: true }]);
     expect(coins.appendRows).toHaveBeenCalledTimes(1);
   });
   it("rolls back payment eligibility when ledger writing fails", async () => {
@@ -667,7 +667,7 @@ describe("Connect code: connect first, pay later (#security-code-scan; 18 Nov ca
     expect(await connectCode("org", "user", "c1", { repo: "acme/web", projectId: "p1" })).toEqual({ ok: true, checkId: "code1" });
     expect(db.securityTarget.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { organisationId_kind_value: { organisationId: "org", kind: "repo", value: "acme/web" } } }));
     const created = db.securityCheck.create.mock.calls[0]![0].data;
-    expect(created).toMatchObject({ targetId: "t-repo", requestedById: "user", codeScanForId: "c1", projectId: "p1", free: false, priceCoins: 50 });
+    expect(created).toMatchObject({ targetId: "t-repo", requestedById: "user", codeScanForId: "c1", projectId: "p1", free: false, priceCoins: 5000 });
     expect(created.paidAt).toBeUndefined();
     expect(coins.assertCanSpendOnSecurity).not.toHaveBeenCalled();
     expect(coins.appendRows).not.toHaveBeenCalled();

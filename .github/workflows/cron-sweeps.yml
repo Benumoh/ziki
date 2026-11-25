@@ -10,7 +10,7 @@ on:
 
 jobs:
   sweep:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, emerjent]
     timeout-minutes: 10
     steps:
       - name: Call the cron endpoint

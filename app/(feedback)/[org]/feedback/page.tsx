@@ -1,0 +1,35 @@
+import { PaginationControls } from "@/components/pagination-controls";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { FeedbackPageHeader } from "@/components/feedback-page-header";
+import { FeedbackPortalSidebar } from "@/components/feedback-portal-sidebar";
+import { FeedbackIdeasToolbar } from "@/components/feedback-ideas-toolbar";
+import { PublicFeedbackIdeas } from "@/components/public-feedback-ideas";
+import { OrgFeedbackPortal } from "@/components/org-feedback-portal";
+import { listOrgFeedbackProjects } from "@/lib/public-projects";
+import { countPublicFeedbackIdeas, listPublicFeedbackIdeas } from "@/lib/public-feedback-ideas";
+import { FEEDBACK_PLATFORMS } from "@/lib/feedback-product-info";
+import { NOINDEX } from "@/lib/seo/site";
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Feedback portal", robots: NOINDEX };
+export default async function OrganisationFeedbackPage({ params, searchParams }: { params: Promise<{ org: string }>; searchParams: Promise<{ q?: string; view?: string; project?: string; platform?: string; status?: string; page?: string }> }) {
+  const [{ org }, query] = await Promise.all([params, searchParams]);
+  const data = await listOrgFeedbackProjects(org);
+  if (!data) notFound();
+  if (query.view !== "ideas") return <OrgFeedbackPortal orgSlug={data.organisation.slug} orgName={data.organisation.name} projects={data.projects} initialQuery={query.q?.slice(0, 200)} />;
+  const selected = data.projects.find(project => project.slug === query.project);
+  const platform = FEEDBACK_PLATFORMS.find(item => item.slug === query.platform);
+  const projectSlugs = platform && !selected ? data.projects.filter(project => project.platforms.includes(platform.slug)).map(project => project.slug) : undefined;
+  const requestedPage = Number(query.page);
+  const requested = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 1000000) : 1;
+  const pageSize = 30;
+  const options = { projectSlug: selected?.slug, projectSlugs, query: query.q?.trim().slice(0, 200), status: query.status };
+  const total = await countPublicFeedbackIdeas(org, options);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requested, totalPages);
+  const ideas = await listPublicFeedbackIdeas(org, { ...options, skip: (page - 1) * pageSize, take: pageSize });
+  const portal = `/${encodeURIComponent(org)}/feedback`;
+  const base = portal + "?view=ideas" + (platform ? "&platform=" + encodeURIComponent(platform.slug) : "");
+  const pagination = <div className="pt-4"><PaginationControls page={page} totalPages={totalPages} totalCount={total} from={total ? (page - 1) * pageSize + 1 : 0} to={Math.min(page * pageSize, total)} basePath={portal} queryParams={{ view: "ideas", project: selected?.slug, platform: platform?.slug, q: query.q?.slice(0, 200), status: query.status }} itemLabel="feedback item" /></div>;
+  return <div className="space-y-4 pb-6"><FeedbackPageHeader title={selected ? `${selected.name} feedback ideas` : "All feedback ideas"} identity={data.organisation.name} description={`Browse feedback shared across ${data.organisation.name} projects.`} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]"><PublicFeedbackIdeas orgSlug={org} ideas={ideas} showProject pagination={pagination} toolbar={<FeedbackIdeasToolbar key={(query.q ?? "") + (query.status ?? "") + (selected?.slug ?? "")} baseHref={base} query={query.q} status={query.status} project={selected?.slug} projects={data.projects} />} /><FeedbackPortalSidebar orgSlug={org} projectName={selected?.name} shareHref={selected ? `/${encodeURIComponent(org)}/${encodeURIComponent(selected.slug)}/feedback?view=share` : portal} /></div></div>;
+}

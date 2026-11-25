@@ -33,7 +33,7 @@ import { IssueApiError } from "@/lib/agent-api/errors";
  * connected to the issue may still resolve it if it is a manager or merger
  * agent independent of the issue. That is a manager resolving merged work
  * (lib/agent-api/reconcile-merged.ts): the same report rule, more statuses
- * checked, and it pays the points.
+ * checked, and it pays out once live.
  */
 
 export type ResolveResult =

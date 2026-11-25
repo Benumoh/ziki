@@ -1,19 +1,23 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/issue";
 import authConfig from "@/auth.config";
 import { cleanEnv } from "@/lib/env-clean";
 import { isPasswordAuthEnabled } from "@/lib/auth-mode";
-import { upsertGoogleUser, type GoogleAccount } from "@/lib/google-user";
+import { upsertGoogleUser, GoogleLinkRequiredError, GoogleLinkMismatchError } from "@/lib/google-user";
 import { isGoogleEmailAllowed, getGoogleAllowlist } from "@/lib/google-allowlist";
 import { clientIpFrom, consumeAuthRateLimit } from "@/lib/rate-limit";
 import { TwoFactorInvalidError, TwoFactorRequiredError } from "@/lib/auth-errors";
 import { isTwoFactorEnabled, verifySecondFactor } from "@/lib/two-factor";
-import { googleSignInBlockedByTwoFactor } from "@/lib/google-two-factor";
+import { createGoogleChallenge, consumeGoogleChallenge, GOOGLE_CHALLENGE_TTL_SECONDS } from "@/lib/google-two-factor";
+import { readGoogleIntent } from "@/lib/google-auth-intent";
+import { GOOGLE_INTENT_COOKIE, GOOGLE_CHALLENGE_COOKIE, GOOGLE_SECURITY_COOKIE } from "@/lib/google-auth-cookies";
+import { issueGoogleSecurityProof, GOOGLE_SECURITY_TTL_SECONDS } from "@/lib/google-security";
+import { appCookieOptions } from "@/lib/cookie-options";
 import { acceptedSessionRefresh } from "@/lib/session-refresh";
 import { recordSignInFailure, recordSignInSuccess } from "@/lib/user-sessions";
 
@@ -24,7 +28,7 @@ const googleClientSecret = cleanEnv(
   process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET,
 );
 const googleConfigured = Boolean(googleClientId) && Boolean(googleClientSecret);
-// Google-only in production; see lib/auth-mode.ts for the AUTH_PASSWORD_LOGIN flag.
+// Both login methods are on by default; deployments can explicitly disable passwords.
 const passwordAuthEnabled = isPasswordAuthEnabled();
 
 if (process.env.NODE_ENV !== "test") {
@@ -47,6 +51,27 @@ if (process.env.NODE_ENV !== "test") {
 export const { handlers, auth, signIn, signOut, unstable_update: updateSession } = NextAuth({
   ...authConfig,
   providers: [
+    Credentials({
+      id: "google-two-factor",
+      name: "Google two-factor",
+      credentials: { code: { type: "text" } },
+      async authorize(credentials) {
+        const jar = await cookies();
+        const raw = jar.get(GOOGLE_CHALLENGE_COOKIE)?.value ?? "";
+        const result = await consumeGoogleChallenge(raw, typeof credentials.code === "string" ? credentials.code : "");
+        if (!result) return null;
+        jar.delete(GOOGLE_CHALLENGE_COOKIE);
+        const sessionId = await recordSignInSuccess({
+          userId: result.user.id, sessionVersion: result.user.sessionVersion,
+          headers: await headers().catch(() => null),
+        });
+        return {
+          id: result.user.id, name: result.user.name, email: result.user.email,
+          role: result.user.role, sessionVersion: result.user.sessionVersion,
+          ...(sessionId ? { sessionId } : {}),
+        };
+      },
+    }),
     ...(googleConfigured
       ? [
           Google({
@@ -148,111 +173,64 @@ export const { handlers, auth, signIn, signOut, unstable_update: updateSession }
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return true;
-      const email =
-        (typeof user?.email === "string" && user.email) || null;
-      if (!isGoogleEmailAllowed(email)) {
-        const allowlist = getGoogleAllowlist();
-        console.warn(
-          `[auth] Google sign-in denied for ${email}: ` +
-            (allowlist.configured
-              ? "address is not on GOOGLE_ALLOWED_EMAILS / GOOGLE_ALLOWED_DOMAINS"
-              : "no allowlist configured but email is missing"),
-        );
-        return false;
-      }
-      // Password accounts with two-factor on must use email, password, and the
-      // code. Google must not open the session by itself (#388).
-      if (email && (await googleSignInBlockedByTwoFactor(email))) {
-        console.warn(`[auth] Google sign-in refused for ${email}: two-factor is on`);
-        const blockedUser = await prisma.user
-          .findUnique({ where: { email: email.toLowerCase() }, select: { id: true } })
-          .catch(() => null);
-        if (blockedUser) {
-          await recordSignInFailure({
-            userId: blockedUser.id,
-            status: "failed_2fa_required",
-            headers: await headers().catch(() => null),
-          });
+      const email = typeof profile?.email === "string" ? profile.email.toLowerCase() : null;
+      if (!email || profile?.email_verified !== true || !isGoogleEmailAllowed(email)) return false;
+      const jar = await cookies();
+      const rawIntent = jar.get(GOOGLE_INTENT_COOKIE)?.value;
+      const intent = readGoogleIntent(rawIntent);
+      jar.delete(GOOGLE_INTENT_COOKIE);
+      if (rawIntent && !intent) return "/login?error=GoogleIntentExpired";
+      try {
+        if (intent?.security) {
+          const session = await auth();
+          const raw = await issueGoogleSecurityProof(intent.security, account.providerAccountId, session?.user);
+          if (!raw) return "/settings/security?google=securityMismatch";
+          jar.set(GOOGLE_SECURITY_COOKIE, raw, appCookieOptions(GOOGLE_SECURITY_TTL_SECONDS));
+          return `/settings/security?googleSecurity=${intent.security.operation}`;
         }
-        return "/login?error=TwoFactor";
+        const dbUser = await upsertGoogleUser({
+          email, subject: account.providerAccountId, emailVerified: true,
+          name: user.name, image: user.image, link: intent?.link,
+        });
+        // Linking adds a method to the existing session; it never signs the
+        // browser into a different Google account or bypasses the factor.
+        if (intent?.link) return "/settings/security?google=linked";
+        if (await isTwoFactorEnabled(dbUser.id)) {
+          const raw = await createGoogleChallenge(dbUser, intent?.callbackUrl ?? "/home");
+          jar.set(GOOGLE_CHALLENGE_COOKIE, raw, appCookieOptions(GOOGLE_CHALLENGE_TTL_SECONDS));
+          return "/login?googleCode=1";
+        }
+        // Auth.js passes this same user to jwt() (no adapter is configured).
+        Object.assign(user, { id: dbUser.id, name: dbUser.name, email: dbUser.email, role: dbUser.role, sessionVersion: dbUser.sessionVersion });
+        return true;
+      } catch (error) {
+        if (intent?.security) return "/settings/security?google=securityMismatch";
+        if (error instanceof GoogleLinkRequiredError) return "/login?error=GoogleLinkRequired";
+        if (error instanceof GoogleLinkMismatchError) return intent?.link ? "/settings/security?google=mismatch" : "/login?error=GoogleAccountMismatch";
+        console.error("[auth] Google sign-in failed", error);
+        return "/login?error=OAuthCallbackError";
       }
-      return true;
     },
-    async jwt({ token, user, account, profile, trigger, session }) {
+    async jwt({ token, user, account, trigger, session }) {
+      if (user?.id && account) {
+        token.authenticationMethod = account.provider === "google" || account.provider === "google-two-factor" ? "google" : "credentials";
+        token.authenticatedAt = Date.now();
+      }
       if (account?.provider === "google") {
-        const email =
-          typeof profile?.email === "string"
-            ? profile.email.toLowerCase()
-            : typeof user?.email === "string"
-              ? user.email.toLowerCase()
-              : null;
-        if (email) {
-          // Defence in depth (#223): the signIn callback should already have
-          // denied disallowed addresses, but never reach the upsert without
-          // an explicit allowlist pass.
-          if (!isGoogleEmailAllowed(email)) {
-            throw new Error(
-              `Google sign-in denied for ${email}: not on the allowlist`,
-            );
-          }
-          if (await googleSignInBlockedByTwoFactor(email)) {
-            throw new Error(
-              `Google sign-in refused for ${email}: two-factor is enabled`,
-            );
-          }
-          const name =
-            (typeof profile?.name === "string" && profile.name) ||
-            user?.name ||
-            email.split("@")[0];
-          const image =
-            (typeof profile?.picture === "string" && profile.picture) ||
-            (typeof user?.image === "string" ? user.image : undefined);
-          // Google's own verified-email claim drives safe linking (#736).
-          const emailVerified =
-            typeof profile?.email_verified === "boolean"
-              ? profile.email_verified
-              : false;
-
-          let dbUser: GoogleAccount | null = null;
-          let lastError: unknown;
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              dbUser = await upsertGoogleUser({ email, name, image, emailVerified });
-              break;
-            } catch (dbError) {
-              lastError = dbError;
-              console.error(`[auth] Google user save attempt ${attempt} failed:`, dbError);
-              if (attempt < 3) {
-                await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
-              }
-            }
-          }
-
-          if (!dbUser) {
-            throw lastError instanceof Error
-              ? lastError
-              : new Error("Google sign-in could not save the user");
-          }
-
-          const googleSessionId = await recordSignInSuccess({
-            userId: dbUser.id,
-            sessionVersion: dbUser.sessionVersion,
-            headers: await headers().catch(() => null),
-          });
-
-          token.email = email;
-          token.name = dbUser.name || name;
-          token.id = dbUser.id;
-          token.sub = dbUser.id;
-          token.role = dbUser.role;
-          token.sv = dbUser.sessionVersion;
-          if (googleSessionId) {
-            token.sid = googleSessionId;
-          }
-          return token;
+        // Defence in depth: signIn must have resolved a real local account and
+        // Google alone must never issue a session while Ziki's factor is on.
+        if (!user?.id || typeof user.sessionVersion !== "number" || await isTwoFactorEnabled(user.id)) {
+          throw new Error("Google sign-in needs a verified local account and its second factor.");
         }
+        const sessionId = await recordSignInSuccess({
+          userId: user.id, sessionVersion: user.sessionVersion,
+          headers: await headers().catch(() => null),
+        });
+        if (sessionId) token.sid = sessionId;
+        token.email = user.email;
+        token.name = user.name;
       }
 
       if (user?.id) {

@@ -29,7 +29,6 @@ async function main() {
     const now = Date.now();
     const at = (days: number) => new Date(now - days * day);
 
-    await db.pointEntry.deleteMany({ where: { sourceKey: { startsWith: `${P}-` } } });
     await db.issueClaim.deleteMany({ where: { id: { startsWith: `${P}-` } } });
 
     const finished = [
@@ -45,16 +44,18 @@ async function main() {
       ["fx-bug-13", dara.id, dara.ownerUserId, 1],
       ["fx-bug-14", dara.id, dara.ownerUserId, 2],
     ] as const;
-    await db.pointEntry.createMany({
+    // Finished: claims that ended with the work resolved (Live).
+    await db.issueClaim.createMany({
       data: finished.map(([bugId, agentId, userId, daysAgo]) => ({
-        organisationId: issue.organisationId,
-        userId,
+        id: `${P}-finished-${bugId}`,
         bugId,
+        beneficiaryUserId: userId,
         agentId,
-        role: "solver" as const,
-        points: 2.5,
-        sourceKey: `${P}-finished-${bugId}`,
-        createdAt: at(daysAgo),
+        status: "released" as const,
+        claimedAt: at(daysAgo + 2),
+        releasedAt: at(daysAgo),
+        releaseReason: "resolved",
+        createdAt: at(daysAgo + 3),
       })),
     });
     await db.issueClaim.create({

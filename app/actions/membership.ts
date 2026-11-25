@@ -10,6 +10,7 @@ import {
   leaveMembership,
   reactivateMembership,
   removeMembership,
+  setCanFundIssues,
 } from "@/lib/membership-admin";
 import { prisma } from "@/lib/prisma";
 
@@ -46,6 +47,23 @@ export async function setMemberRoleAction(
     targetUserId: target,
     nextRole,
   });
+  if (!result.ok) return { error: result.error };
+  revalidateOrganisation();
+  return { ok: true };
+}
+
+/** Let an admin fund the organisation's issues from their own wallet, or stop them (#payers). Owners only. */
+export async function setMemberCanFundAction(
+  organisationId: string,
+  userId: string,
+  canFund: boolean,
+): Promise<MembershipActionResult> {
+  const actor = await requireUser();
+  const organisation = cleanId(organisationId);
+  const target = cleanId(userId);
+  if (!organisation || !target || typeof canFund !== "boolean") return { error: "That person isn't in this organisation." };
+
+  const result = await setCanFundIssues(prisma, actor, { organisationId: organisation, targetUserId: target, canFund });
   if (!result.ok) return { error: result.error };
   revalidateOrganisation();
   return { ok: true };

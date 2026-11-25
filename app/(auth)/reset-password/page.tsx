@@ -23,7 +23,7 @@ export default async function ResetPasswordPage({
       <AuthSplitFrame
         panelLabel="Reset password"
         title="Set a new password"
-        description="Choose a new password of at least 8 characters. Your old password will stop working immediately."
+        description="Choose a new password of at least 8 characters. Your old password will stop working immediately. Google sign-in stays connected."
       >
         {token ? (
           <ResetPasswordForm token={token} />

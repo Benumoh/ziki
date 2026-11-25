@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { priorityNow } from "@/lib/priority-now";
 import { workflowFor } from "@/lib/workflow";
-import { budgetBalance, issuePriceZik } from "./budget";
+import { LOW_BUDGET_ISSUES, PRICED_WHERE, budgetBalance, currentPriceZik, hasBudget } from "./budget";
 import { zikOf } from "./ledger";
+import { ZIKS_PER_DOLLAR } from "./math";
+import { PAYER_WHERE } from "./payers";
 import { BUDGET_FILTERS, budgetStatusOf, classifyIssues, type BudgetFilterId, type BudgetIssueState, type BudgetSort, type BudgetStatus } from "./budget-states";
 
 /**
@@ -28,8 +30,9 @@ export type BudgetOverview = {
 };
 
 export async function budgetOverview(projectId: string): Promise<BudgetOverview> {
-  const [project, available, reserved, paid] = await Promise.all([
-    prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { budgetEnabled: true, budgetPausedAt: true, budgetAlert: true } }),
+  const [project, enabled, available, reserved, paid] = await Promise.all([
+    prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { budgetPausedAt: true, budgetAlert: true } }),
+    hasBudget(prisma, projectId),
     budgetBalance(prisma, projectId),
     // What the issues hold now: reserved from the budget, or funded on the issue itself.
     prisma.coinEntry.aggregate({ where: { account: "escrow", bug: { projectId } }, _sum: { amount: true } }),
@@ -40,7 +43,7 @@ export async function budgetOverview(projectId: string): Promise<BudgetOverview>
     reserved: Math.max(0, zikOf(reserved._sum.amount)),
     // Releases leave escrow, so they are negative there.
     paidOut: Math.max(0, -zikOf(paid._sum.amount)),
-    enabled: project.budgetEnabled,
+    enabled,
     paused: Boolean(project.budgetPausedAt),
     alert: project.budgetAlert === "low" || project.budgetAlert === "empty" ? project.budgetAlert : null,
   };
@@ -79,7 +82,7 @@ export async function budgetIssueList(
     take: MAX_ISSUES + 1,
     select: {
       id: true, number: true, title: true, substatus: true, assigneeId: true, payoutReleasedAt: true,
-      reward: true, rewardEstimateCount: true, rewardOverrideZik: true,
+      reward: true, rewardEstimateCount: true, rewardOverrideZik: true, zikiEstimateZik: true, rewardFixedAt: true, lockedPriceZik: true,
     },
   });
   const truncated = bugs.length > MAX_ISSUES;
@@ -99,7 +102,7 @@ export async function budgetIssueList(
 
   const inputs = ordered.map((bug) => ({
     id: bug.id,
-    price: issuePriceZik(bug),
+    price: currentPriceZik(bug),
     held: heldBy.get(bug.id) ?? 0,
     paid: bug.payoutReleasedAt !== null,
     waiting: !bug.assigneeId && (bug.substatus === "open" || bug.substatus === "requires_confirmation"),
@@ -136,23 +139,28 @@ export type OwnedProjectBudget = {
 
 /**
  * The projects this person can fund, with each one's budget and status, for the Ziks page: every live project in an
- * organisation they own or administer, those with a budget first. `limit` keeps the list short.
+ * organisation they pay for (#payers), those with a budget first. `limit` keeps the list short.
  */
 export async function ownedProjectBudgets(userId: string, limit = 8): Promise<{ projects: OwnedProjectBudget[]; more: number }> {
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      organisation: { archivedAt: null, memberships: { some: { userId, role: { in: ["owner", "admin"] } } } },
+      organisation: { archivedAt: null, memberships: { some: { userId, ...PAYER_WHERE } } },
     },
     select: {
-      id: true, name: true, slug: true, budgetEnabled: true, budgetPausedAt: true, budgetAlert: true,
+      id: true, name: true, slug: true, budgetPausedAt: true, budgetAlert: true,
       organisation: { select: { name: true, slug: true } },
     },
-    orderBy: [{ budgetEnabled: "desc" }, { createdAt: "asc" }, { id: "asc" }],
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  const shown = projects.slice(0, limit);
-  const balances = await prisma.coinEntry.groupBy({ by: ["projectId"], where: { account: "budget", projectId: { in: shown.map((project) => project.id) } }, _sum: { amount: true } });
+  const [balances, fundedRows] = await Promise.all([
+    prisma.coinEntry.groupBy({ by: ["projectId"], where: { account: "budget", projectId: { in: projects.map((project) => project.id) } }, _sum: { amount: true } }),
+    prisma.coinEntry.groupBy({ by: ["projectId"], where: { account: "budget", kind: "fund_budget", projectId: { in: projects.map((project) => project.id) } } }),
+  ]);
   const balanceOf = new Map(balances.map((row) => [row.projectId, zikOf(row._sum.amount)]));
+  const everFunded = new Set(fundedRows.map((row) => row.projectId));
+  // Those with a budget first.
+  const shown = [...projects].sort((a, b) => Number(everFunded.has(b.id)) - Number(everFunded.has(a.id))).slice(0, limit);
   return {
     projects: shown.map((project) => ({
       id: project.id,
@@ -161,13 +169,46 @@ export async function ownedProjectBudgets(userId: string, limit = 8): Promise<{ 
       href: `/${project.organisation.slug}/${project.slug}/budget`,
       available: Math.max(0, balanceOf.get(project.id) ?? 0),
       status: budgetStatusOf({
-        enabled: project.budgetEnabled,
+        enabled: everFunded.has(project.id),
         paused: project.budgetPausedAt !== null,
         alert: project.budgetAlert === "low" || project.budgetAlert === "empty" ? project.budgetAlert : null,
       }),
     })),
     more: Math.max(0, projects.length - shown.length),
   };
+}
+
+/**
+ * What to suggest an owner puts into the project's budget (#price-lock): what the priced issues waiting for funding
+ * still need, plus room for the next LOW_BUDGET_ISSUES issues at the project's average price, less what the budget
+ * already holds. Never below `minimum` (the issue in front of the owner), rounded up to a whole dollar. Pure.
+ */
+export function suggestBudget(input: { needs: number[]; averagePrice: number; available: number; minimum: number }): number {
+  const waiting = input.needs.reduce((sum, need) => sum + Math.max(0, need), 0);
+  const wanted = waiting + LOW_BUDGET_ISSUES * Math.max(0, input.averagePrice) - Math.max(0, input.available);
+  return Math.ceil(Math.max(input.minimum, wanted) / ZIKS_PER_DOLLAR) * ZIKS_PER_DOLLAR;
+}
+
+/** The suggested budget for a project, read from its priced issues: see suggestBudget. */
+export async function suggestedBudget(projectId: string, minimum: number): Promise<number> {
+  const priced = await prisma.bug.findMany({
+    where: { projectId, isDeleted: false, ...PRICED_WHERE, status: { not: "closed" } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 200,
+    select: { id: true, reward: true, rewardEstimateCount: true, rewardOverrideZik: true, zikiEstimateZik: true, rewardFixedAt: true, lockedPriceZik: true, substatus: true, assigneeId: true, payoutReleasedAt: true },
+  });
+  const prices = priced.flatMap((bug) => {
+    const price = currentPriceZik(bug);
+    return price === null ? [] : [{ bug, price }];
+  });
+  const waiting = prices.filter(({ bug }) => !bug.assigneeId && !bug.payoutReleasedAt && (bug.substatus === "open" || bug.substatus === "requires_confirmation"));
+  const [held, available] = await Promise.all([
+    prisma.coinEntry.groupBy({ by: ["bugId"], where: { account: "escrow", bugId: { in: waiting.map(({ bug }) => bug.id) } }, _sum: { amount: true } }),
+    budgetBalance(prisma, projectId),
+  ]);
+  const heldBy = new Map(held.map((row) => [row.bugId, zikOf(row._sum.amount)]));
+  const averagePrice = prices.length > 0 ? prices.reduce((sum, { price }) => sum + price, 0) / prices.length : minimum;
+  return suggestBudget({ needs: waiting.map(({ bug, price }) => price - (heldBy.get(bug.id) ?? 0)), averagePrice, available, minimum });
 }
 
 export type BudgetMovement = {

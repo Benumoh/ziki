@@ -147,7 +147,7 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     const user = userEvent.setup();
     render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
 
-    expect(screen.getByText(/Marketing & Product Forum/i)).toBeInTheDocument();
+    expect(screen.getByText(/Global Forum/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /All Discussions/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Asks/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Discoveries/i })).toBeInTheDocument();
@@ -305,5 +305,119 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     // Replies and votes are present
     expect(screen.getAllByTitle("0 replies").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText("Helpful votes: 9")).toBeInTheDocument();
+  });
+
+  it("supports streamlined sidebar, mutually-exclusive My Agents views, Clear filters button, and footer links", async () => {
+    const user = userEvent.setup();
+    const msgsWithPinsAndBookmarks: ForumMessage[] = [
+      {
+        ...SAMPLE_MESSAGES[0],
+        author: { ...SAMPLE_MESSAGES[0].author, userId: "user-1" },
+        isPinned: true,
+        bookmarkCount: 2,
+        bookmarkedByViewer: true,
+      },
+      ...SAMPLE_MESSAGES.slice(1),
+    ];
+    render(<PublicMessageBoard currentUserId="user-1" initialMessages={msgsWithPinsAndBookmarks} />);
+
+    // Global Ziki Forum renders directly without a Forum Scope accordion header
+    expect(screen.queryByRole("button", { name: /Forum Scope/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Global Ziki Forum/i })).toBeInTheDocument();
+
+    // Non-collapsible My Agents header has external link to /agents/mine; footer has All Agents & Skills
+    expect(screen.getByRole("link", { name: /Go to My Agents/i })).toHaveAttribute("href", "/agents/mine");
+    expect(screen.getByRole("link", { name: /All Agents/i })).toHaveAttribute("href", "/agents");
+    expect(screen.getByRole("link", { name: /Skills/i })).toHaveAttribute("href", "/skills");
+    expect(screen.queryByRole("link", { name: /Clusters/i })).not.toBeInTheDocument();
+
+    // Pinned Topics section renders with "More pinned" filter button and Clear button resets it
+    expect(screen.getByRole("button", { name: /Pinned Topics/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Clear filters/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /More pinned/i }));
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Clear filters/i }));
+    expect(screen.getByText(/Showing 4 of 4 active topics/i)).toBeInTheDocument();
+
+    // My Agents in-forum views (Posts vs Saved) are mutually exclusive
+    const postsBtn = screen.getByRole("button", { name: /^Posts/i });
+    const savedBtn = screen.getByRole("button", { name: /^Saved/i });
+    await user.click(postsBtn);
+    expect(postsBtn).toHaveAttribute("aria-pressed", "true");
+    expect(savedBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+
+    await user.click(savedBtn);
+    expect(savedBtn).toHaveAttribute("aria-pressed", "true");
+    expect(postsBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+
+    // Clicking active Saved button again toggles it off
+    await user.click(savedBtn);
+    expect(savedBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/Showing 4 of 4 active topics/i)).toBeInTheDocument();
+
+    // Collapsing "Your Organisations" hides org entries
+    const orgsToggle = screen.getByRole("button", { name: /Your Organisations/i });
+    expect(orgsToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Zedu Technologies")).toBeInTheDocument();
+    await user.click(orgsToggle);
+    expect(orgsToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Zedu Technologies")).not.toBeInTheDocument();
+  });
+
+  it("defaults Sort menu dialog to Trending and allows switching sort options", async () => {
+    const user = userEvent.setup();
+    render(<PublicMessageBoard initialMessages={SAMPLE_MESSAGES} />);
+
+    // Tags are not rendered as sidebar Topics
+    expect(screen.queryByLabelText("Topics")).not.toBeInTheDocument();
+
+    // Sort menu defaults to Trending and opens dialog on click
+    const sortBtn = screen.getByRole("button", { name: /Open sort menu/i });
+    expect(sortBtn).toHaveTextContent(/Trending/i);
+    await user.click(sortBtn);
+    expect(screen.getByRole("button", { name: /^Newest$/i })).toBeInTheDocument();
+
+    // Clicking outside closes open toolbar dialogs
+    await user.click(document.body);
+    expect(screen.queryByRole("button", { name: /^Newest$/i })).not.toBeInTheDocument();
+
+    // Re-open and select Newest
+    await user.click(sortBtn);
+    await user.click(screen.getByRole("button", { name: /^Newest$/i }));
+    expect(sortBtn).toHaveTextContent(/Newest/i);
+  });
+
+  it("shows kind-appropriate empty reply states and collapsible sidebar sections in post detail", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <PublicMessageBoard initialView="detail" initialPostId="fm-1" initialMessages={SAMPLE_MESSAGES} />
+    );
+
+    // Ask post (#1) with 0 replies shows "No answers yet"
+    expect(screen.getByText("No answers yet")).toBeInTheDocument();
+
+    // Related topics clip to 1 line and include full title + reply count in tooltip
+    const relatedBtn = screen.getByRole("button", {
+      name: /Headline A\/B test copy generation for self-serve onboarding conversion/i,
+    });
+    expect(relatedBtn).toHaveAttribute(
+      "title",
+      "Headline A/B test copy generation for self-serve onboarding conversion (1 reply)"
+    );
+
+    // Detail sidebar sections collapse cleanly
+    const detailsToggle = screen.getByRole("button", { name: /Thread Details/i });
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(detailsToggle);
+    expect(detailsToggle).toHaveAttribute("aria-expanded", "false");
+    unmount();
+
+    // Report post (#4) with 0 replies shows "No comments yet"
+    render(
+      <PublicMessageBoard initialView="detail" initialPostId="fm-4" initialMessages={SAMPLE_MESSAGES} />
+    );
+    expect(screen.getByText("No comments yet")).toBeInTheDocument();
   });
 });

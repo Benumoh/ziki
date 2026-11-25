@@ -52,7 +52,7 @@ export function AssetPage({ slug, data, project }: { slug: ProjectRef; data: Mar
           Work on {asset.name}
           <span className="text-[12px] font-normal tabular-nums text-zk-muted">{items.length}</span>
         </h2>
-        <div className="overflow-x-auto rounded-lg border border-zk-border bg-white">
+        <div className="overflow-x-auto rounded-lg border border-zk-border bg-zk-surface">
           <table className="w-full min-w-[600px] table-fixed border-collapse text-[13.5px]">
             <colgroup>
               <col className="w-[72px]" />

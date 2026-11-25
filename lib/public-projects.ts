@@ -61,7 +61,7 @@ export function feedbackProjectDescription(project: {
   if (project.visibility === "public" && project.goal?.trim()) {
     return project.goal.trim();
   }
-  return `Feedback for the ${project.name.trim().toLowerCase()} app.`;
+  return "Explore this project, share your experience, and suggest improvements. Click to learn more.";
 }
 
 const PLATFORM_PRIORITY: Record<string, number> = {
@@ -151,7 +151,7 @@ export async function listOrgFeedbackProjects(orgSlug: string) {
     name: project.name,
     description: project.visibility === "public" && project.goal?.trim()
       ? feedbackProductSummary(project.goal)
-      : "The team has not published a product summary yet.",
+      : feedbackProjectDescription(project),
     platforms: feedbackProductPlatforms(project),
     visibility: project.visibility,
   }));

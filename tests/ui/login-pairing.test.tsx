@@ -9,7 +9,10 @@ import { loginAction } from "@/app/actions/auth";
 import { renderToString } from "react-dom/server";
 import { LoginForm } from "@/components/login-form";
 import { ResetPasswordForm } from "@/components/reset-password-form";
+import { SignInMethods } from "@/components/sign-in-methods";
 import { PairForm } from "@/app/(app)/settings/agents/pair/pair-form";
+
+vi.mock("@/app/(app)/settings/security/actions", () => ({ beginGoogleSecurityAction: vi.fn() }));
 
 const pairAgentAction = vi.hoisted(() => vi.fn());
 vi.mock("@/app/(app)/settings/agents/actions", () => ({ pairAgentAction }));
@@ -24,6 +27,8 @@ vi.mock("@/lib/google-oauth", () => ({
 
 vi.mock("@/app/actions/auth", () => ({
   googleSignInAction: vi.fn(),
+  addPasswordAction: vi.fn(),
+  connectGoogleAction: vi.fn(),
   loginAction: vi.fn(),
   resetPasswordAction: vi.fn(),
 }));
@@ -158,5 +163,33 @@ describe("pairing an agent (#431)", () => {
     expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "abcd2345" } });
     expect(input.value).toBe("ABCD-2345");
+  });
+});
+
+describe("adding a password within Settings", () => {
+  const methods = { hasPassword: false, googleLinked: true, googleConfigured: true, passwordEnabled: true, twoFactorEnabled: false, email: "a@x.dev" };
+
+  it("expands password and confirmation fields on click and clears them when cancelled", async () => {
+    const user = userEvent.setup();
+    render(<SignInMethods {...methods} passwordVerified />);
+    expect(screen.queryByLabelText("New password", { exact: true })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add a password" }));
+    await user.type(screen.getByLabelText("New password", { exact: true }), "NewPassw0rd!");
+    await user.type(screen.getByLabelText("Confirm password", { exact: true }), "NewPassw0rd!");
+    expect(screen.getByRole("button", { name: "Save password" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Add a password" }));
+    expect(screen.getByLabelText("New password", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("Confirm password", { exact: true })).toHaveValue("");
+  });
+
+  it("shows the fields but asks for Google verification before an older session can save", async () => {
+    const user = userEvent.setup();
+    render(<SignInMethods {...methods} />);
+    await user.click(screen.getByRole("button", { name: "Add a password" }));
+    expect(screen.getByLabelText("New password", { exact: true })).toBeInTheDocument();
+    expect(screen.getByLabelText("Confirm password", { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save password" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Verify with Google" })).toBeEnabled();
   });
 });

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
-import { SiteNav } from "@/components/homepage/site-nav";
-import "@/components/homepage/homepage.css";
+import { AuthPage } from "@/components/auth-page";
+import { isGoogleOAuthConfigured } from "@/lib/google-oauth";
 
 export type AuthStory = {
   kicker: string;
@@ -11,33 +11,42 @@ export type AuthStory = {
 };
 
 /**
- * Sign up and sign in (#signup-page), in the homepage's style: a short story of what happens next beside the form.
+ * Sign up and sign in keep their story beside a panel in the shared auth shell.
  */
 export function AuthStoryPage({ story, children }: { story: AuthStory; children: ReactNode }) {
   return (
-    <main className="ziki-homepage" id="top">
-      <section className="top-hero th-centered su-page">
-        <SiteNav />
-        <div className="su-grid">
-          <div className="su-story">
-            <span className="su-kicker">{story.kicker}</span>
-            <h1 className="su-title">{story.title}</h1>
-            <ol className="su-beats">
+    <main>
+      <AuthPage
+        panelLabel="Your account"
+        story={
+          <div className="flex min-w-0 flex-col gap-6">
+            <span className="self-start rounded-chip bg-zk-tint px-3 py-1.5 text-xs font-semibold text-zk-accent">
+              {story.kicker}
+            </span>
+            <h1 className="text-4xl leading-tight font-medium tracking-tight sm:text-5xl">
+              {story.title}
+            </h1>
+            <ol className="flex flex-col gap-5">
               {story.beats.map((beat, index) => (
-                <li key={beat.when}>
-                  <span className="su-num" aria-hidden="true">{index + 1}</span>
+                <li key={beat.when} className="flex items-start gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-chip bg-zk-tint text-sm font-semibold text-zk-accent" aria-hidden="true">
+                    {index + 1}
+                  </span>
                   <div>
-                    <b>{beat.when}: {beat.what}</b>
-                    <p>{beat.detail}</p>
+                    <b className="text-base font-semibold">{beat.when}: {beat.what}</b>
+                    <p className="mt-1 text-sm leading-relaxed text-zk-muted">{beat.detail}</p>
                   </div>
                 </li>
               ))}
             </ol>
-            <p className="su-promise">{story.promise}</p>
+            <p className="border-t border-zk-border pt-5 text-sm leading-relaxed text-zk-text2">
+              {story.promise}
+            </p>
           </div>
-          <div className="su-card">{children}</div>
-        </div>
-      </section>
+        }
+      >
+        {children}
+      </AuthPage>
     </main>
   );
 }
@@ -56,15 +65,19 @@ export function AuthMethods({
   emailForm: ReactNode | null;
   emailOpen?: boolean;
 }) {
+  const googleConfigured = isGoogleOAuthConfigured();
   return (
-    <div className="su-form">
-      <GoogleSignInButton callbackUrl={callbackUrl} />
-      {emailForm ? (
-        <details className="su-email" open={emailOpen}>
-          <summary>Continue with email</summary>
-          <div className="su-email-form">{emailForm}</div>
+    <div className="flex flex-col gap-4">
+      {googleConfigured ? <GoogleSignInButton callbackUrl={callbackUrl} /> : null}
+      {emailForm && googleConfigured ? (
+        <details open={emailOpen}>
+          <summary className="flex h-9 cursor-pointer list-none items-center justify-center rounded-control px-4 text-sm font-semibold text-zk-text2 hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
+            Continue with email
+          </summary>
+          <div className="mt-4 border-t border-zk-divider pt-4">{emailForm}</div>
         </details>
-      ) : null}
+      ) : emailForm}
+      {!emailForm && !googleConfigured ? <p role="status" className="text-sm text-zk-muted">Sign-in is not configured on this site. Contact an administrator.</p> : null}
     </div>
   );
 }

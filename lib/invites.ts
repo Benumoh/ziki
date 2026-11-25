@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { after } from "next/server";
-import { awardSignupBonus } from "@/lib/points/signup-bonus";
+import { giveWelcomeBonus } from "@/lib/coins/welcome-bonus";
 import type { MembershipRole, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { notifyOrganisationInvite } from "@/lib/agent-notifications";
@@ -399,7 +399,7 @@ export async function acceptInvite(
     });
     // An owner or admin invited them by name, so a deactivation (#team-page) no longer holds them out.
     await tx.membershipDeactivation.deleteMany({ where: { organisationId: invite.organisationId, userId: account.id } });
-    if (!existing) await awardSignupBonus(tx, account.id, invite.organisationId);
+    if (!existing) await giveWelcomeBonus(tx, account.id);
     return { ok: true as const, organisation: invite.organisation, alreadyMember: Boolean(existing) };
   });
 }

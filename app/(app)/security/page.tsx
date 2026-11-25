@@ -182,10 +182,10 @@ export default async function SecurityPage(props: {
     // One page (14 Nov plan): the box, the scan under it, then the person's scans.
     return (
       <div className="flex w-full flex-col pb-10">
-        {/* The title, "+ Add target" and the list are the panel's own (ScansArea); no tabs. Your work stays at /security/work. */}
+        {/* The chat box on top and the list under it are the panel's own (ScansArea), as Marketing's; no tabs. Your work stays at /security/work. */}
         {picker}
         {/* While the pop-up asks where it goes, nothing is scanned yet. */}
-        <SecurityChecksPanel checks={checks} highlight={highlight} startWith={picker ? undefined : (brought ?? undefined)} show={typeof params.show === "string" ? params.show : undefined} page={Number(params.page) > 0 ? Math.floor(Number(params.page)) : 1} />
+        <SecurityChecksPanel checks={checks} highlight={highlight} startWith={picker ? undefined : (brought ?? undefined)} show={typeof params.show === "string" ? params.show : undefined} page={Number(params.page) > 0 ? Math.floor(Number(params.page)) : 1} me={{ name: user.name ?? null, image: user.image ?? null }} />
       </div>
     );
   }

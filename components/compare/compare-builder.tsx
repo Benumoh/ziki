@@ -140,8 +140,8 @@ export function CompareBuilder({ options, initialSlug }: { options: PlatformOpti
         <PlatformPicker label="First platform" options={filtered(first)} value={first} disabledSlug={second?.slug ?? null} onChange={setFirst} />
         <span className="cmp-vs" aria-hidden="true">vs</span>
         <PlatformPicker label="Second platform" options={filtered(second)} value={second} disabledSlug={first?.slug ?? null} onChange={setSecond} />
+        <button className="th-btn th-btn-primary th-btn-lg cmp-go" type="submit" disabled={!ready}>Compare platforms</button>
       </div>
-      <button className="th-btn th-btn-dark th-btn-lg cmp-go" type="submit" disabled={!ready}>Compare platforms</button>
     </form>
   );
 }

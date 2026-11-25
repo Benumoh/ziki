@@ -6,8 +6,6 @@ import { hasLevel } from "@/lib/agents/levels";
 import { IssueApiError } from "@/lib/agent-api/errors";
 import { publish } from "@/lib/agent-api/events";
 import { MANAGER_VOTE_WEIGHT, reconcileVoteCount, tallyVoteGroups } from "@/lib/voting";
-import { award } from "@/lib/points/award";
-import { VOTE_POINTS, importanceSourceKey } from "@/lib/points/rules";
 
 const id = z.string().trim().min(1).max(191);
 
@@ -91,16 +89,6 @@ export async function upvoteIssue(caller: AgentContext, projectId: string, bugId
       await tx.vote.update({ where: { id: existing.id }, data });
     } else {
       await tx.vote.create({ data: { userId: caller.ownerId, bugId, ...data } });
-      // The first mark on an issue earns a point; the key keeps it to once per person (#vote-points).
-      await award(tx, {
-        organisationId: caller.organisationId,
-        userId: caller.ownerId,
-        bugId,
-        role: "vote",
-        points: VOTE_POINTS,
-        sourceKey: importanceSourceKey(bugId, caller.ownerId),
-        agentId: caller.agentId,
-      });
     }
     const importance = await recount(tx, bugId);
     await publish(tx, {

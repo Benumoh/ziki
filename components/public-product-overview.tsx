@@ -1,26 +1,17 @@
-import Link from "next/link";
+import { SECTION_TITLE } from "@/lib/ui-style";
+import { FeedbackPageHeader } from "@/components/feedback-page-header";
+import { FeedbackPortalSidebar } from "@/components/feedback-portal-sidebar";
+import { FeedbackIdeasToolbar } from "@/components/feedback-ideas-toolbar";
+import { PublicFeedbackIdeas } from "@/components/public-feedback-ideas";
 import { RichText } from "@/components/rich-text";
 import type { FeedbackPortalProject } from "@/lib/public-projects";
-import { publicFeedbackPath, publicOrgFeedbackPath } from "@/lib/public-project-paths";
-
-export function PublicProductOverview({ product }: { product: FeedbackPortalProject }) {
+import type { FeedbackIdea } from "@/lib/public-feedback-ideas";
+import { publicFeedbackPath } from "@/lib/public-project-paths";
+export function PublicProductOverview({ product, ideas = [], query = "", status = "" }: { product: FeedbackPortalProject; ideas?: FeedbackIdea[]; query?: string; status?: string }) {
   const ref = { orgSlug: product.organisation.slug, projectSlug: product.slug };
-  return <div className="mx-auto w-full max-w-[920px] space-y-6 pb-10">
-    <Link href={publicOrgFeedbackPath(ref.orgSlug)} className="inline-flex min-h-8 items-center text-sm font-semibold text-zk-accent hover:underline">← All projects</Link>
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-zk-muted">{product.organisation.name} · Product overview</p>
-        <h1 className="text-3xl font-extrabold tracking-tight text-zk-text">{product.name}</h1>
-        <p className="text-sm leading-6 text-zk-text2">Help improve {product.name}. Report a problem or suggest something better.</p>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <Link href={publicFeedbackPath(ref, "problem")} className="inline-flex min-h-10 items-center rounded-xl border border-zk-border bg-zk-surface px-4 py-2 text-sm font-semibold text-zk-text hover:bg-zk-chip">Report a problem</Link>
-        <Link href={publicFeedbackPath(ref, "improvement")} className="inline-flex min-h-10 items-center rounded-xl bg-zk-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90">Suggest an improvement</Link>
-      </div>
-    </header>
-    <section className="rounded-2xl border border-zk-border bg-zk-surface p-5 sm:p-7">
-      <h2 className="text-lg font-bold text-zk-text">About {product.name}</h2>
-      {product.goal?.trim() ? <RichText content={product.goal} className="mt-3 text-sm leading-7 text-zk-text2" /> : <p className="mt-3 text-sm leading-7 text-zk-text2">{product.visibility === "private" ? "The team has not published a product description for this project." : "The team has not added a product description yet."}</p>}
-    </section>
-  </div>;
+  const base = publicFeedbackPath(ref);
+  return <div className="space-y-4 pb-6"><FeedbackPageHeader title={product.name} identity={product.name} description={`${product.organisation.name} · Product information and feedback`} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]"><div className="min-w-0 space-y-4">
+    <section className="rounded-panel border border-zk-border bg-zk-surface p-5"><h2 className={SECTION_TITLE}>About this product</h2>{product.goal?.trim() ? <RichText content={product.goal} className="mt-3 text-sm leading-6 text-zk-text2" /> : <div className="mt-3 space-y-3 text-sm leading-6 text-zk-text2"><p>Welcome to the feedback space for {product.name}, a project by {product.organisation.name}. This is where you can share your experience, highlight something that isn’t working, or suggest a change you would find useful.</p><p>When sharing feedback, tell the team what you were trying to do, what happened, and what would make the experience better. Screenshots and clear examples can help the team understand your suggestion.</p><p>You can also browse feedback from others and follow the status of your own report. Agents review submissions and give verdicts; approved feedback can become an issue for the project team to work on.</p></div>}</section>
+    <PublicFeedbackIdeas orgSlug={ref.orgSlug} ideas={ideas} title={`Feedback for ${product.name}`} viewAllHref={`/${encodeURIComponent(ref.orgSlug)}/feedback?view=ideas&project=${encodeURIComponent(ref.projectSlug)}`} toolbar={<FeedbackIdeasToolbar key={query + status} baseHref={base} query={query} status={status} />} />
+  </div><FeedbackPortalSidebar orgSlug={ref.orgSlug} projectName={product.name} shareHref={base + "?view=share"} /></div></div>;
 }

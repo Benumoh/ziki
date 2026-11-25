@@ -50,11 +50,6 @@ vi.mock("@/lib/agent-api/confirmations", () => ({
   isConfirmed: isConfirmedMock,
 }));
 
-const correctMock = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/points/correct", () => ({
-  correct: correctMock,
-}));
-
 const publishAgentEventMock = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("@/lib/agent-api/events", () => ({ publish: publishAgentEventMock }));
 
@@ -88,7 +83,6 @@ const db = vi.hoisted(() => {
     bugActivity: { create: vi.fn() },
     bugRevision: { create: vi.fn() },
     issueConfirmation: { deleteMany: vi.fn() },
-    pointEntry: { findFirst: vi.fn(), update: vi.fn() },
     agentAuditEvent: { update: vi.fn() },
     $queryRaw: vi.fn(async () => [{
       title: "Original Title",
@@ -148,18 +142,10 @@ function makeFormData(title: string, description: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   db.prisma.bug.findUnique.mockResolvedValue(existingBug());
-  db.tx.pointEntry.findFirst.mockResolvedValue({
-    id: "entry-1",
-    organisationId: "organisation-zedu",
-    userId: "reporter-1",
-    bugId: "bug-1",
-    role: "reporter",
-    points: 5,
-  });
 });
 
 describe("editBugContentAction confirmation invalidation (#713)", () => {
-  it("voids confirmations with a revision, reverses reporter points, and keeps the written entries", async () => {
+  it("voids confirmations with a revision and keeps the written entries", async () => {
     isConfirmedMock.mockResolvedValue(true);
 
     const formData = makeFormData("Updated Title", "Updated Description with new reproduction steps");
@@ -167,32 +153,7 @@ describe("editBugContentAction confirmation invalidation (#713)", () => {
 
     expect(result).toEqual({ ok: true });
 
-    // Checked if confirmed, before the revision that voids the entries
-    expect(isConfirmedMock).toHaveBeenCalledWith("bug-1", db.tx);
-    expect(isConfirmedMock.mock.invocationCallOrder[0]).toBeLessThan(db.tx.bugRevision.create.mock.invocationCallOrder[0]);
     expect(db.tx.bugRevision.create).toHaveBeenCalled();
-
-    // Found reporter points entry
-    expect(db.tx.pointEntry.findFirst).toHaveBeenCalledWith({
-      where: {
-        organisationId: "organisation-zedu",
-        sourceKey: "reporter:bug-1:reporter-1",
-      },
-      select: { id: true, organisationId: true, userId: true, bugId: true, role: true, points: true },
-    });
-
-    // Reversed reporter points via correct()
-    expect(correctMock).toHaveBeenCalledWith(db.tx, {
-      entry: expect.objectContaining({ id: "entry-1", points: 5, role: "reporter" }),
-    });
-
-    // Freed up the sourceKey
-    expect(db.tx.pointEntry.update).toHaveBeenCalledWith({
-      where: { id: "entry-1" },
-      data: {
-        sourceKey: "reporter:bug-1:reporter-1:invalidated:entry-1",
-      },
-    });
 
     // The entries and their replies stay; the revision makes them stop counting (#issue-confirmations).
     expect(db.tx.issueConfirmation.deleteMany).not.toHaveBeenCalled();
@@ -275,14 +236,6 @@ describe("agent structure edit history (#589)", () => {
       substatus: "open",
     }]);
     isConfirmedMock.mockResolvedValue(true);
-    db.tx.pointEntry.findFirst.mockResolvedValue({
-      id: "entry-1",
-      tenantId: "tenant-zedu",
-      userId: "reporter-1",
-      bugId: "bug-1",
-      role: "reporter",
-      points: 1.5,
-    });
     readAgentIssueMock.mockResolvedValue({ id: "bug-1", title: "Updated Title", confirmed: false });
   });
 
@@ -294,7 +247,6 @@ describe("agent structure edit history (#589)", () => {
     });
 
     expect(result.issue.confirmed).toBe(false);
-    expect(isConfirmedMock).toHaveBeenCalledWith("bug-1", db.tx);
     expect(db.tx.bugRevision.create).toHaveBeenCalledWith({
       data: {
         bugId: "bug-1",
@@ -312,7 +264,6 @@ describe("agent structure edit history (#589)", () => {
       }),
     }));
     expect(readAgentIssueMock.mock.invocationCallOrder[0]).toBeGreaterThan(db.tx.bugRevision.create.mock.invocationCallOrder[0]);
-    expect(correctMock).toHaveBeenCalledWith(db.tx, { entry: expect.objectContaining({ id: "entry-1" }) });
     expect(db.tx.issueConfirmation.deleteMany).not.toHaveBeenCalled();
   });
 

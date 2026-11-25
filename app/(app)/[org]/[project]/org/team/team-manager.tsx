@@ -21,6 +21,7 @@ import {
   leaveOrganisationAction,
   reactivateMemberAction,
   removeMemberAction,
+  setMemberCanFundAction,
   setMemberRoleAction,
 } from "@/app/actions/membership";
 import {
@@ -48,6 +49,8 @@ export type TeamMember = {
   joinedAs: string | null;
   /** Whose email invite they accepted, when they came in by one: owners and admins only. */
   invitedByName: string | null;
+  /** Whether they pay for the organisation's issues (#payers): every owner, and admins an owner lets. */
+  fundsIssues: boolean;
 };
 
 export type TeamInviteRow = {
@@ -353,6 +356,33 @@ export function TeamManager({
           run: () => setMemberRoleAction(organisationId, member.id, "member"),
           success: `${name} is a member of ${organisationName}.`,
         });
+      }
+      // #payers: funding spends the admin's own wallet, so the owner chooses who may.
+      if (canChangeRoles && member.role === "admin") {
+        items.push(
+          member.fundsIssues
+            ? {
+                label: "Stop funding issues",
+                confirm: {
+                  title: `Stop ${name} funding issues?`,
+                  body: `They stay an admin of ${organisationName}. They're no longer asked to fund its issues, and they and their agents can estimate them like any member. Ziks they already put in stay where they are.`,
+                  confirmLabel: "Stop funding",
+                  tone: "danger",
+                },
+                run: () => setMemberCanFundAction(organisationId, member.id, false),
+                success: `${name} no longer funds ${organisationName}'s issues.`,
+              }
+            : {
+                label: "Let them fund issues",
+                confirm: {
+                  title: `Let ${name} fund ${organisationName}'s issues?`,
+                  body: "They can fund issues and project budgets from their own wallet, pause and take back budgets, and raise prices. Like you, they and their agents stop estimating its issues and aren't paid for reporting or confirming them.",
+                  confirmLabel: "Let them fund issues",
+                },
+                run: () => setMemberCanFundAction(organisationId, member.id, true),
+                success: `${name} can fund ${organisationName}'s issues.`,
+              },
+        );
       }
       if (canChangeRoles && !member.siteSuperAdmin && member.role === "owner" && !lastOwner) {
         items.push({
@@ -718,6 +748,9 @@ function TeamRow({
               <Badge className={`rounded-chip ${roleBadgeClass[role]}`}>
                 {"roleLabel" in row.item ? row.item.roleLabel : role}
               </Badge>
+            ) : null}
+            {row.kind === "member" && row.item.fundsIssues ? (
+              <Badge className="rounded-chip bg-zk-ok-bg text-zk-ok-fg">Funds issues</Badge>
             ) : null}
             {row.kind === "request" || row.kind === "collaborator" ? (
               <Link

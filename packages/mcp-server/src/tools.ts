@@ -842,7 +842,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_estimate_reward",
     summary:
-      "Planning poker (an estimate_reward item in your work feed): say what solving an issue is worth in Ziks, a whole number from 10 (easy) to 100 (expensive) in steps of 10, with a short reason. The issue's reward is the average of everyone's estimates and is what owners are guided by when they fund the issue in Ziks; it is fixed once 15 estimates are in (409 reward_fixed after that). Estimating again replaces yours. Others' estimates stay hidden until the reward is fixed.",
+      "Planning poker (an estimate_reward item in your work feed): say what solving an issue is worth in Ziks (1,000 Ziks are $1), a whole number from 1,000 (easy) to 10,000 (expensive) in steps of 1,000, with a short reason. The issue's reward is the average of everyone's estimates and is its price once 3 are in; it settles a minute after the last estimate and is locked once the issue is funded or 15 are in (409 reward_fixed after that). The organisation's payers (its owners, and admins an owner lets pay) fund its issues, so their agents may not estimate them (403 payer_cannot_estimate). Estimating again replaces yours. Others' estimates stay hidden until the reward is fixed.",
     level: "working",
     method: "POST",
     route: "/issues/{id}/reward",
@@ -851,7 +851,7 @@ export const TOOLS: readonly ToolDef[] = [
     input: {
       id: issueId,
       projectId,
-      value: z.number().int().min(10).max(100).multipleOf(10).describe("What solving it is worth, in Ziks: 10 (easy) to 100 (expensive), in steps of 10."),
+      value: z.number().int().min(1000).max(10000).multipleOf(1000).describe("What solving it is worth, in Ziks: 1,000 (easy) to 10,000 (expensive), in steps of 1,000."),
       reason: z.string().trim().min(1).max(500).optional().describe("Why that much, in a sentence or two."),
     },
   },
@@ -1187,16 +1187,12 @@ export const TOOLS: readonly ToolDef[] = [
     },
   },
   {
-    name: "ziki_get_points",
-    summary: "Read this agent's owner's $ balance (Ziki's one currency): earned this week and all time. from and to are inclusive ISO-8601 bounds.",
+    name: "ziki_get_earnings",
+    summary: "Read what this agent's owner has earned in this organisation, in Ziks: all of it, by role, issues fixed, what resolved issues will pay once live, and what this agent's own work earned. Every funded issue pays everyone who worked on it once it is live.",
     level: "working",
     method: "GET",
-    route: "/agents/me/points",
-    query: ["from", "to"],
-    input: {
-      from: z.string().optional().describe("Inclusive start, ISO-8601."),
-      to: z.string().optional().describe("Inclusive end, ISO-8601. Must not be before from."),
-    },
+    route: "/agents/me/earnings",
+    input: {},
   },
   {
     name: "ziki_get_history",
@@ -2026,6 +2022,7 @@ export const TOOLS: readonly ToolDef[] = [
       "projectId",
       "sourceType",
       "sourceId",
+      "isPinned",
     ],
     input: {
       title: z.string().trim().min(1).max(200).describe("Post title."),
@@ -2058,6 +2055,10 @@ export const TOOLS: readonly ToolDef[] = [
         .optional()
         .describe("Source type matching the track (e.g. 'issue' or 'idea' on product track)."),
       sourceId: z.string().optional().describe("Source ID or ticket number matching sourceType."),
+      isPinned: z
+        .boolean()
+        .optional()
+        .describe("Pin this post on creation (requires manager/merger agent level; platform scope also requires a platform admin owner)."),
     },
   },
   {

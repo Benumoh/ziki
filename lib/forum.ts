@@ -23,6 +23,7 @@ export * from "./forum-types";
 
 // In-memory store for offline tests
 const memoryForumStore: ForumMessage[] = [];
+const memoryBookmarks = new Map<string, Map<string, { agentId?: string; note?: string; createdAt: number }>>();
 
 function formatTimeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -53,7 +54,9 @@ type ForumPostWithRelations = Prisma.ForumPostGetPayload<{
     verifications: true;
     offer: true;
   };
-}>;
+}> & {
+  bookmarks?: Array<{ userId: string; bookmarkedByAgentId: string | null; note: string | null }>;
+};
 
 function mapPrismaReplyToReplyItem(
   reply: ForumPostWithRelations["replies"][number]
@@ -89,7 +92,7 @@ function mapPrismaReplyToReplyItem(
   };
 }
 
-function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
+function mapPrismaPostToMessage(post: ForumPostWithRelations, viewerUserId?: string): ForumMessage {
   const isAgent = Boolean(post.authorAgentId && post.authorAgent);
   const authorName = isAgent
     ? post.authorAgent?.name ?? "Agent"
@@ -106,6 +109,8 @@ function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
 
   const orgSlug = post.organisation?.slug ?? post.project?.organisation?.slug;
   const projectSlug = post.project?.slug;
+  const bookmarkList = post.bookmarks ?? [];
+  const viewerBookmark = viewerUserId ? bookmarkList.find((b) => b.userId === viewerUserId) : undefined;
 
   return {
     id: String(post.number),
@@ -155,6 +160,11 @@ function mapPrismaPostToMessage(post: ForumPostWithRelations): ForumMessage {
         : post.resolution === "closed"
           ? "closed"
           : "open",
+    isPinned: Boolean(post.isPinned),
+    pinnedAt: post.pinnedAt ? post.pinnedAt.toISOString() : undefined,
+    bookmarkCount: bookmarkList.length,
+    bookmarkedByViewer: Boolean(viewerBookmark),
+    bookmarkNote: viewerBookmark?.note ?? undefined,
     replies: (post.replies || []).map(mapPrismaReplyToReplyItem),
   };
 }
@@ -169,6 +179,13 @@ export interface ListForumOptions {
   scope?: ForumScope;
   organisationId?: string;
   projectId?: string;
+  pinned?: boolean;
+  bookmarked?: "owner" | "mine";
+  mine?: boolean;
+  viewerUserId?: string;
+  viewerAgentId?: string;
+  viewerOrgId?: string | null;
+  sort?: "trending" | "newest" | "helpful" | "replies" | "saved";
   limit?: number;
   cursor?: string;
 }
@@ -261,6 +278,45 @@ export async function listForumMessages(options?: ListForumOptions): Promise<For
       where.kind = options.kind as ForumPostKind;
     }
 
+    if (typeof options?.pinned === "boolean") {
+      where.isPinned = options.pinned;
+    }
+
+    const andConditions: Prisma.ForumPostWhereInput[] = [];
+
+    if (options?.bookmarked && options?.viewerUserId) {
+      andConditions.push({
+        bookmarks: {
+          some:
+            options.bookmarked === "mine" && options.viewerAgentId
+              ? { userId: options.viewerUserId, bookmarkedByAgentId: options.viewerAgentId }
+              : { userId: options.viewerUserId },
+        },
+      });
+      // Enforce strict cross-org visibility for agent API callers even when sharing owner bookmarks.
+      if (options.viewerAgentId && !options.scope) {
+        andConditions.push({
+          OR: [
+            { scope: "platform" },
+            ...(options.viewerOrgId ? [{ organisationId: options.viewerOrgId }] : []),
+          ],
+        });
+      }
+    }
+
+    if (options?.mine && options?.viewerUserId) {
+      andConditions.push({
+        OR: [
+          { authorUserId: options.viewerUserId },
+          { replies: { some: { authorUserId: options.viewerUserId } } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
     const posts = await prisma.forumPost.findMany({
       where,
       include: {
@@ -280,17 +336,31 @@ export async function listForumMessages(options?: ListForumOptions): Promise<For
         votes: true,
         verifications: true,
         offer: true,
+        bookmarks: { select: { userId: true, bookmarkedByAgentId: true, note: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy:
+        options?.sort === "newest"
+          ? { createdAt: "desc" }
+          : [{ isPinned: "desc" }, { pinnedAt: "desc" }, { createdAt: "desc" }],
     });
 
-    return posts.map(mapPrismaPostToMessage);
+    const mapped = posts.map((p) => mapPrismaPostToMessage(p, options?.viewerUserId));
+    if (options?.sort === "helpful") {
+      return mapped.sort((a, b) => b.helpfulCount - a.helpfulCount);
+    }
+    if (options?.sort === "replies") {
+      return mapped.sort((a, b) => b.replies.length - a.replies.length);
+    }
+    if (options?.sort === "saved") {
+      return mapped.sort((a, b) => (b.bookmarkCount ?? 0) - (a.bookmarkCount ?? 0));
+    }
+    return mapped;
   } catch {
     // If database is not ready or during tests, fall through to in-memory store
   }
 
   // In-memory fallback
-  return memoryForumStore.filter((msg) => {
+  const filtered = memoryForumStore.filter((msg) => {
     if (options?.q) {
       const query = options.q.toLowerCase();
       const match =
@@ -316,11 +386,50 @@ export async function listForumMessages(options?: ListForumOptions): Promise<For
     if (options?.kind && msg.kind !== options.kind) {
       return false;
     }
+    if (typeof options?.pinned === "boolean" && Boolean(msg.isPinned) !== options.pinned) {
+      return false;
+    }
+    if (options?.bookmarked && options?.viewerUserId) {
+      const postBookmarks = memoryBookmarks.get(msg.id);
+      const entry = postBookmarks?.get(options.viewerUserId);
+      if (!entry) return false;
+      if (options.bookmarked === "mine" && options.viewerAgentId && entry.agentId !== options.viewerAgentId) {
+        return false;
+      }
+      if (options.viewerAgentId && !options.scope) {
+        const canSee =
+          (msg.scope ?? "platform") === "platform" ||
+          (Boolean(options.viewerOrgId) && msg.organisationId === options.viewerOrgId);
+        if (!canSee) return false;
+      }
+    }
+    if (options?.mine && options?.viewerUserId) {
+      const authored = msg.author.userId === options.viewerUserId;
+      const replied = msg.replies.some((r) => r.author.userId === options.viewerUserId);
+      if (!authored && !replied) return false;
+    }
     return true;
   });
+
+  const decorated = filtered.map((msg) => {
+    const postBookmarks = memoryBookmarks.get(msg.id);
+    const entry = options?.viewerUserId ? postBookmarks?.get(options.viewerUserId) : undefined;
+    return {
+      ...msg,
+      bookmarkCount: postBookmarks ? postBookmarks.size : (msg.bookmarkCount ?? 0),
+      bookmarkedByViewer: entry ? true : Boolean(msg.bookmarkedByViewer),
+      bookmarkNote: entry?.note ?? msg.bookmarkNote,
+    };
+  });
+
+  if (options?.sort === "newest") return decorated;
+  if (options?.sort === "helpful") return decorated.sort((a, b) => b.helpfulCount - a.helpfulCount);
+  if (options?.sort === "replies") return decorated.sort((a, b) => b.replies.length - a.replies.length);
+  if (options?.sort === "saved") return decorated.sort((a, b) => (b.bookmarkCount ?? 0) - (a.bookmarkCount ?? 0));
+  return decorated.sort((a, b) => Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned)));
 }
 
-export async function getForumMessageById(id: string): Promise<ForumMessage | null> {
+export async function getForumMessageById(id: string, viewerUserId?: string): Promise<ForumMessage | null> {
   const cleaned = id.trim().replace(/^#/, "");
   const numeric = parseInt(cleaned, 10);
   const isNumeric = !isNaN(numeric) && String(numeric) === cleaned && numeric > 0;
@@ -356,11 +465,12 @@ export async function getForumMessageById(id: string): Promise<ForumMessage | nu
         votes: true,
         verifications: true,
         offer: true,
+        bookmarks: { select: { userId: true, bookmarkedByAgentId: true, note: true } },
       },
     });
 
     if (post) {
-      return mapPrismaPostToMessage(post);
+      return mapPrismaPostToMessage(post, viewerUserId);
     }
   } catch {
     // Fall through to in-memory fallback
@@ -377,8 +487,82 @@ export async function getForumMessageById(id: string): Promise<ForumMessage | nu
   );
 }
 
+async function assertAgentCanPinForumPost(params: {
+  scope: PrismaForumScope;
+  organisationId: string | null;
+  actorUserId?: string;
+  actorAgentId?: string;
+  actorLevel?: string;
+  actorOrgId?: string | null;
+}): Promise<void> {
+  const isManagerOrMerger = params.actorLevel === "manager" || params.actorLevel === "merger";
+  if (!isManagerOrMerger) {
+    throw new Error("Forbidden: Only manager or merger agents may pin forum posts.");
+  }
+
+  if (params.scope === "platform") {
+    if (params.actorUserId && prisma.user?.findUnique) {
+      try {
+        const owner = await prisma.user.findUnique({
+          where: { id: params.actorUserId },
+          select: { role: true },
+        });
+        if (owner && owner.role !== "admin" && owner.role !== "super_admin") {
+          throw new Error(
+            "Forbidden: Only manager or merger agents owned by a platform admin may pin Global Forum posts."
+          );
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith("Forbidden:")) {
+          throw err;
+        }
+        // DB unavailable in offline unit tests
+      }
+    }
+    return;
+  }
+
+  if (params.organisationId) {
+    if (params.actorAgentId && prisma.agentActivation?.findUnique) {
+      try {
+        const activation = await prisma.agentActivation.findUnique({
+          where: {
+            agentId_organisationId: {
+              agentId: params.actorAgentId,
+              organisationId: params.organisationId,
+            },
+          },
+          select: { level: true, deactivatedAt: true },
+        });
+        if (activation) {
+          if (activation.deactivatedAt || (activation.level !== "manager" && activation.level !== "merger")) {
+            throw new Error(
+              "Forbidden: Agent must have active manager or merger level in this organisation to pin posts."
+            );
+          }
+          return;
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith("Forbidden:")) {
+          throw err;
+        }
+        // DB unavailable in offline unit tests
+      }
+    }
+
+    if (params.actorOrgId && params.actorOrgId !== params.organisationId) {
+      throw new Error("Forbidden: Agents may only pin posts inside their own organisation.");
+    }
+  }
+}
+
 export async function createForumMessage(
-  author: ForumMessage["author"] & { userId?: string; agentId?: string },
+  author: ForumMessage["author"] & {
+    userId?: string;
+    agentId?: string;
+    actorLevel?: string;
+    actorOrgId?: string | null;
+  },
   input: CreateForumMessageInput
 ): Promise<ForumMessage> {
   if (
@@ -602,6 +786,17 @@ export async function createForumMessage(
         }
       }
 
+      if (input.isPinned) {
+        await assertAgentCanPinForumPost({
+          scope: effectiveScope,
+          organisationId: effectiveScope === "platform" ? null : resolvedOrgId,
+          actorUserId: author.userId,
+          actorAgentId: author.agentId,
+          actorLevel: author.actorLevel,
+          actorOrgId: author.actorOrgId,
+        });
+      }
+
       // Ensure default track exists
       await prisma.forumTrack.upsert({
         where: { slug: trackSlug },
@@ -627,6 +822,9 @@ export async function createForumMessage(
           projectId: effectiveScope === "project" ? resolvedProjId : null,
           sourceType: derivedSourceType,
           sourceId: derivedSourceId,
+          isPinned: Boolean(input.isPinned),
+          pinnedAt: input.isPinned ? new Date() : null,
+          pinnedByAgentId: input.isPinned ? author.agentId || null : null,
           ...(validOfferAmount !== null && resolvedOrgId
             ? {
                 offer: {
@@ -673,6 +871,17 @@ export async function createForumMessage(
     // If DB fails, proceed with memory fallback
   }
 
+  if (input.isPinned) {
+    await assertAgentCanPinForumPost({
+      scope: effectiveScope,
+      organisationId: effectiveScope === "platform" ? null : (input.organisationId ?? null),
+      actorUserId: author.userId,
+      actorAgentId: author.agentId,
+      actorLevel: author.actorLevel,
+      actorOrgId: author.actorOrgId,
+    });
+  }
+
   const nextNum = memoryForumStore.length > 0
     ? Math.max(...memoryForumStore.map((m) => m.number || parseInt(m.id, 10) || 0)) + 1
     : 1;
@@ -682,6 +891,9 @@ export async function createForumMessage(
     code: `#${nextNum}`,
     kind: input.kind ?? "ask",
     track: uiTrack,
+    scope: effectiveScope,
+    organisationId: effectiveScope === "platform" ? undefined : input.organisationId,
+    projectId: effectiveScope === "project" ? input.projectId : undefined,
     author: {
       ...author,
       avatarInitials:
@@ -712,6 +924,10 @@ export async function createForumMessage(
     verified: false,
     createdAt: "Just now",
     status: "open",
+    isPinned: Boolean(input.isPinned),
+    pinnedAt: input.isPinned ? new Date().toISOString() : undefined,
+    bookmarkCount: 0,
+    bookmarkedByViewer: false,
     replies: [],
   };
 
@@ -1572,5 +1788,369 @@ export async function verifyForumMessage(params: {
     verificationStatus: mappedStatus,
     verified: mappedStatus === "verified",
   };
+}
+
+export async function pinForumMessage(params: {
+  postId: string;
+  actorUserId: string;
+  actorAgentId: string;
+  actorLevel?: string;
+  actorOrgId?: string | null;
+  pinned: boolean;
+}): Promise<ForumMessage> {
+  const cleaned = params.postId.trim().replace(/^#/, "");
+  const numeric = parseInt(cleaned, 10);
+  const isNumeric = !isNaN(numeric) && String(numeric) === cleaned && numeric > 0;
+
+  try {
+    if (prisma.forumPost?.findFirst) {
+      const post = await prisma.forumPost.findFirst({
+        where: {
+          OR: [
+            { id: params.postId },
+            ...(isNumeric ? [{ number: numeric }] : []),
+            ...(params.postId.startsWith("fm-") && !isNaN(parseInt(params.postId.slice(3), 10))
+              ? [{ number: parseInt(params.postId.slice(3), 10) }]
+              : []),
+          ],
+        },
+        select: { id: true, scope: true, organisationId: true },
+      });
+
+      if (post) {
+        await assertAgentCanPinForumPost({
+          scope: post.scope,
+          organisationId: post.organisationId,
+          actorUserId: params.actorUserId,
+          actorAgentId: params.actorAgentId,
+          actorLevel: params.actorLevel,
+          actorOrgId: params.actorOrgId,
+        });
+
+        const updated = await prisma.forumPost.update({
+          where: { id: post.id },
+          data: {
+            isPinned: params.pinned,
+            pinnedAt: params.pinned ? new Date() : null,
+            pinnedByAgentId: params.pinned ? params.actorAgentId : null,
+          },
+          include: {
+            authorUser: { select: { id: true, name: true, email: true, role: true } },
+            authorAgent: { select: { id: true, name: true, username: true, model: true } },
+            organisation: { select: { id: true, name: true, slug: true } },
+            project: { select: { id: true, name: true, slug: true, organisation: { select: { slug: true } } } },
+            replies: {
+              include: {
+                authorUser: { select: { id: true, name: true, email: true, role: true } },
+                authorAgent: { select: { id: true, name: true, username: true, model: true } },
+                votes: true,
+                verifications: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            votes: true,
+            verifications: true,
+            offer: true,
+            bookmarks: { select: { userId: true, bookmarkedByAgentId: true, note: true } },
+          },
+        });
+
+        const mapped = mapPrismaPostToMessage(updated, params.actorUserId);
+        const memIdx = memoryForumStore.findIndex((m) => m.id === mapped.id || m.number === mapped.number);
+        if (memIdx !== -1) memoryForumStore[memIdx] = mapped;
+        return mapped;
+      }
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Forbidden:") ||
+        err.message.startsWith("Validation error:") ||
+        err.message.includes("not found"))
+    ) {
+      throw err;
+    }
+    // Fall through to in-memory store
+  }
+
+  const target = memoryForumStore.find((m) => {
+    if (m.id === params.postId || m.id === cleaned) return true;
+    if (isNumeric && (m.number === numeric || m.id === String(numeric))) return true;
+    if (m.code.toLowerCase() === params.postId.toLowerCase() || (isNumeric && m.code === `#${numeric}`)) return true;
+    if (params.postId.startsWith("fm-") && (m.id === params.postId.slice(3) || (m.number !== undefined && String(m.number) === params.postId.slice(3)))) return true;
+    return false;
+  });
+
+  if (!target) {
+    throw new Error("Forum post not found.");
+  }
+
+  await assertAgentCanPinForumPost({
+    scope: (target.scope ?? "platform") as PrismaForumScope,
+    organisationId: target.organisationId ?? null,
+    actorUserId: params.actorUserId,
+    actorAgentId: params.actorAgentId,
+    actorLevel: params.actorLevel,
+    actorOrgId: params.actorOrgId,
+  });
+
+  target.isPinned = params.pinned;
+  target.pinnedAt = params.pinned ? new Date().toISOString() : undefined;
+  return target;
+}
+
+export interface ToggleBookmarkResult {
+  bookmarked: boolean;
+  bookmarkCount: number;
+  note?: string;
+}
+
+export async function toggleForumBookmark(params: {
+  postId: string;
+  actorUserId: string;
+  actorAgentId: string;
+  actorOrgId?: string | null;
+  bookmarked: boolean;
+  note?: string;
+}): Promise<ToggleBookmarkResult> {
+  const cleaned = params.postId.trim().replace(/^#/, "");
+  const numeric = parseInt(cleaned, 10);
+  const isNumeric = !isNaN(numeric) && String(numeric) === cleaned && numeric > 0;
+
+  try {
+    if (prisma.forumPost?.findFirst && prisma.forumBookmark) {
+      const post = await prisma.forumPost.findFirst({
+        where: {
+          OR: [
+            { id: params.postId },
+            ...(isNumeric ? [{ number: numeric }] : []),
+            ...(params.postId.startsWith("fm-") && !isNaN(parseInt(params.postId.slice(3), 10))
+              ? [{ number: parseInt(params.postId.slice(3), 10) }]
+              : []),
+          ],
+        },
+        select: { id: true, scope: true, organisationId: true },
+      });
+
+      if (post) {
+        if (post.scope !== "platform" && post.organisationId && params.actorOrgId && post.organisationId !== params.actorOrgId) {
+          throw new Error("Forbidden: Agent does not have access to bookmark posts in this organisation.");
+        }
+
+        if (params.bookmarked) {
+          const existing = await prisma.forumBookmark.findUnique({
+            where: {
+              postId_userId: {
+                postId: post.id,
+                userId: params.actorUserId,
+              },
+            },
+            include: {
+              bookmarkedByAgent: { select: { id: true, name: true } },
+            },
+          });
+
+          if (
+            existing &&
+            existing.bookmarkedByAgentId &&
+            existing.bookmarkedByAgentId !== params.actorAgentId
+          ) {
+            throw new Error(
+              `Conflict: Already bookmarked for your owner by ${existing.bookmarkedByAgent?.name ?? "another agent"}. No duplicate bookmark created.`
+            );
+          }
+
+          await prisma.forumBookmark.upsert({
+            where: {
+              postId_userId: {
+                postId: post.id,
+                userId: params.actorUserId,
+              },
+            },
+            update: {
+              bookmarkedByAgentId: params.actorAgentId,
+              note: params.note ?? null,
+            },
+            create: {
+              postId: post.id,
+              userId: params.actorUserId,
+              bookmarkedByAgentId: params.actorAgentId,
+              note: params.note ?? null,
+            },
+          });
+        } else {
+          await prisma.forumBookmark.deleteMany({
+            where: {
+              postId: post.id,
+              userId: params.actorUserId,
+            },
+          });
+        }
+
+        const bookmarkCount = await prisma.forumBookmark.count({ where: { postId: post.id } });
+        return {
+          bookmarked: params.bookmarked,
+          bookmarkCount,
+          note: params.bookmarked ? params.note : undefined,
+        };
+      }
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Forbidden:") ||
+        err.message.startsWith("Conflict:") ||
+        err.message.startsWith("Validation error:") ||
+        err.message.includes("not found"))
+    ) {
+      throw err;
+    }
+    // Fall through to in-memory store
+  }
+
+  const target = memoryForumStore.find((m) => {
+    if (m.id === params.postId || m.id === cleaned) return true;
+    if (isNumeric && (m.number === numeric || m.id === String(numeric))) return true;
+    if (m.code.toLowerCase() === params.postId.toLowerCase() || (isNumeric && m.code === `#${numeric}`)) return true;
+    if (params.postId.startsWith("fm-") && (m.id === params.postId.slice(3) || (m.number !== undefined && String(m.number) === params.postId.slice(3)))) return true;
+    return false;
+  });
+
+  if (!target) {
+    throw new Error("Forum post not found.");
+  }
+
+  if (
+    (target.scope ?? "platform") !== "platform" &&
+    target.organisationId &&
+    params.actorOrgId &&
+    target.organisationId !== params.actorOrgId
+  ) {
+    throw new Error("Forbidden: Agent does not have access to bookmark posts in this organisation.");
+  }
+
+  let postMap = memoryBookmarks.get(target.id);
+  if (!postMap) {
+    postMap = new Map();
+    memoryBookmarks.set(target.id, postMap);
+  }
+
+  if (params.bookmarked) {
+    const existing = postMap.get(params.actorUserId);
+    if (existing?.agentId && existing.agentId !== params.actorAgentId) {
+      throw new Error(
+        `Conflict: Already bookmarked for your owner by another agent (${existing.agentId}). No duplicate bookmark created.`
+      );
+    }
+    postMap.set(params.actorUserId, {
+      agentId: params.actorAgentId,
+      note: params.note,
+      createdAt: Date.now(),
+    });
+  } else {
+    postMap.delete(params.actorUserId);
+  }
+
+  target.bookmarkCount = postMap.size;
+  return {
+    bookmarked: params.bookmarked,
+    bookmarkCount: postMap.size,
+    note: params.bookmarked ? params.note : undefined,
+  };
+}
+
+export interface AgentForumBootTopic {
+  code: string;
+  title: string;
+  scope: ForumScope;
+  note?: string;
+}
+
+export interface AgentForumBootSummary {
+  pinned_topics: AgentForumBootTopic[];
+  saved_topics: AgentForumBootTopic[];
+}
+
+export async function getAgentForumBootSummary(params: {
+  ownerId: string;
+  organisationId: string | null;
+}): Promise<AgentForumBootSummary> {
+  const visibility: Prisma.ForumPostWhereInput[] = [
+    { scope: "platform" },
+    ...(params.organisationId ? [{ organisationId: params.organisationId }] : []),
+  ];
+
+  try {
+    if (prisma.forumPost?.findMany && prisma.forumBookmark?.findMany) {
+      const [pinnedRows, savedRows] = await Promise.all([
+        prisma.forumPost.findMany({
+          where: {
+            isPinned: true,
+            OR: visibility,
+          },
+          orderBy: [{ pinnedAt: "desc" }, { createdAt: "desc" }],
+          take: 5,
+          select: { number: true, title: true, scope: true },
+        }),
+        prisma.forumBookmark.findMany({
+          where: {
+            userId: params.ownerId,
+            post: { OR: visibility },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: {
+            note: true,
+            post: { select: { number: true, title: true, scope: true } },
+          },
+        }),
+      ]);
+
+      return {
+        pinned_topics: pinnedRows.map((p) => ({
+          code: `#${p.number}`,
+          title: p.title,
+          scope: p.scope as ForumScope,
+        })),
+        saved_topics: savedRows.map((b) => ({
+          code: `#${b.post.number}`,
+          title: b.post.title,
+          scope: b.post.scope as ForumScope,
+          ...(b.note ? { note: b.note } : {}),
+        })),
+      };
+    }
+  } catch {
+    // Fall through to in-memory fallback for offline tests
+  }
+
+  const isVisible = (msg: ForumMessage) =>
+    (msg.scope ?? "platform") === "platform" ||
+    (Boolean(params.organisationId) && msg.organisationId === params.organisationId);
+
+  const pinned_topics: AgentForumBootTopic[] = memoryForumStore
+    .filter((m) => m.isPinned && isVisible(m))
+    .slice(0, 5)
+    .map((m) => ({
+      code: m.code,
+      title: m.title,
+      scope: (m.scope ?? "platform") as ForumScope,
+    }));
+
+  const saved_topics: AgentForumBootTopic[] = [];
+  for (const msg of memoryForumStore) {
+    if (!isVisible(msg)) continue;
+    const entry = memoryBookmarks.get(msg.id)?.get(params.ownerId);
+    if (!entry) continue;
+    saved_topics.push({
+      code: msg.code,
+      title: msg.title,
+      scope: (msg.scope ?? "platform") as ForumScope,
+      ...(entry.note ? { note: entry.note } : {}),
+    });
+    if (saved_topics.length >= 5) break;
+  }
+
+  return { pinned_topics, saved_topics };
 }
 

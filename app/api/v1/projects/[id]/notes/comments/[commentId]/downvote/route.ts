@@ -5,7 +5,7 @@ import { createMethodNotAllowed, createOptions } from "@/lib/agent-api/http-erro
 
 export const runtime = "nodejs";
 
-/** Vote a note comment down: wrong, out of date or unhelpful. Its author loses 1 point. */
+/** Vote a note comment down: wrong, out of date or unhelpful. It pays and costs nothing (#one-payment). */
 export async function PUT(request: NextRequest, context: NotesRouteContext) {
   return notesRequest(request, context, "notes.vote", true, (actor, params) => voteNoteComment(actor, params.commentId!, -1));
 }

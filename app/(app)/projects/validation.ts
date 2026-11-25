@@ -175,21 +175,9 @@ export function nextProjectSlug(
   throw new Error(`Could not find a free slug for "${base}".`);
 }
 
+/** The project's earning guidelines from its form (#one-payment: what an issue pays is no setting). Null when the form has none. */
 export function parseRewardConfigFromFormData(formData: FormData) {
-  const hasCustomRewards =
-    formData.has("reporterPoints") ||
-    formData.has("reviewerPoints") ||
-    formData.has("rewardGuidelines");
-
-  if (!hasCustomRewards) return null;
-
-  const reporter = formData.get("reporterPoints");
-  const reviewer = formData.get("reviewerPoints");
+  if (!formData.has("rewardGuidelines")) return null;
   const guidelines = String(formData.get("rewardGuidelines") ?? "").trim();
-
-  return {
-    reporter: reporter ? Number(reporter) : undefined,
-    reviewer: reviewer ? Number(reviewer) : undefined,
-    guidelines: guidelines || null,
-  };
+  return { guidelines: guidelines || null };
 }

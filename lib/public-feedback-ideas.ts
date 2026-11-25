@@ -9,7 +9,9 @@ const feedbackIdeaSelect = {
   reporter: { select: { name: true } },
   publicSubmission: { select: { user: { select: { name: true } } } },
   type: { select: { name: true } },
-  project: { select: { name: true, slug: true } },
+  issue: { select: { status: true, substatus: true } },
+  project: { select: { name: true, slug: true, workflow: { select: { ideaThreshold: true } } } },
+  verdicts: { select: { opinion: true, votes: true } },
   _count: { select: { verdicts: true } },
 } satisfies Prisma.IdeaSelect;
 
@@ -19,9 +21,10 @@ export type FeedbackIdea = Prisma.IdeaGetPayload<{ select: typeof feedbackIdeaSe
  * Private reports remain reachable through their private tracking links.
  * Agent verdicts are read here; this portal never casts them on a visitor's behalf.
  */
-export async function listPublicFeedbackIdeas(orgSlug: string, options: {
-  projectSlug?: string; projectSlugs?: string[]; query?: string; number?: number;
-} = {}): Promise<FeedbackIdea[]> {
+type FeedbackOptions = {
+  projectSlug?: string; projectSlugs?: string[]; query?: string; number?: number; status?: string; skip?: number; take?: number;
+};
+async function feedbackWhere(orgSlug: string, options: FeedbackOptions): Promise<Prisma.IdeaWhereInput> {
   const user = await optionalUser();
   const visibleProject: Prisma.ProjectWhereInput = {
     archivedAt: null,
@@ -34,9 +37,9 @@ export async function listPublicFeedbackIdeas(orgSlug: string, options: {
       ] : []),
     ] }),
   };
-  return prisma.idea.findMany({
-    where: {
+  return {
       source: "public", isDeleted: false, track: "product",
+      ...(["open", "converted", "rejected", "archived"].includes(options.status ?? "") ? { status: options.status as "open" | "converted" | "rejected" | "archived" } : {}),
       securityFinding: { is: null },
       organisation: { slug: orgSlug, archivedAt: null },
       project: visibleProject,
@@ -45,11 +48,20 @@ export async function listPublicFeedbackIdeas(orgSlug: string, options: {
         { title: { contains: options.query, mode: "insensitive" } },
         { summary: { contains: options.query, mode: "insensitive" } },
       ] } : {}),
-    },
+  };
+}
+export async function listPublicFeedbackIdeas(orgSlug: string, options: FeedbackOptions = {}): Promise<FeedbackIdea[]> {
+  return prisma.idea.findMany({
+    where: await feedbackWhere(orgSlug, options),
     select: feedbackIdeaSelect,
     orderBy: [{ createdAt: "desc" }, { number: "desc" }],
-    take: 50,
+    skip: options.skip ?? 0,
+    take: options.take ?? 50,
   });
+}
+
+export async function countPublicFeedbackIdeas(orgSlug: string, options: FeedbackOptions = {}): Promise<number> {
+  return prisma.idea.count({ where: await feedbackWhere(orgSlug, options) });
 }
 
 export function feedbackSubmitterName(idea: Pick<FeedbackIdea, "reporter" | "publicSubmission">): string {

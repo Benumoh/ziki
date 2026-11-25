@@ -18,7 +18,7 @@ export default async function OrgForumPage({
   if (!organisation) notFound();
 
   const [messages, scopes] = await Promise.all([
-    listForumMessages({ scope: "org", organisationId: organisation.id }),
+    listForumMessages({ scope: "org", organisationId: organisation.id, viewerUserId: user.id }),
     getUserAccessibleScopes(user.id),
   ]);
 
@@ -29,6 +29,7 @@ export default async function OrgForumPage({
         scope="org"
         orgSlug={organisation.slug}
         orgName={organisation.name}
+        currentUserId={user.id}
         initialMessages={messages}
         organisations={scopes.organisations}
         externalProjects={scopes.externalProjects}

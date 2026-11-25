@@ -1,80 +1,125 @@
-/* The comparison directory (#compare). Built on the public site's tokens
-   (--ink, --muted, --line, --surface, --green, --white from homepage.css), which
-   already switch with the theme, so nothing here needs its own dark palette. */
+/* The comparison directory (#compare) and its detail pages. Built only on the
+   public site's tokens from homepage.css (--ink, --muted, --line, --surface,
+   --green, --green-soft, --white, --panel-radius, --button-radius). The public
+   pages are light in both themes (homepage.css sets color-scheme: light), so
+   nothing here needs its own dark palette. */
 
+/* Shared by the directory and the detail pages */
 .ziki-homepage .cmp-wrap { margin: 0 auto; max-width: 1180px; padding: 84px 30px; }
 .ziki-homepage .cmp-wrap + .cmp-wrap { padding-top: 24px; }
 .ziki-homepage .cmp-head { margin: 0 0 32px; max-width: 720px; }
-.ziki-homepage .cmp-head h2 { font-size: clamp(30px, 3.6vw, 44px); font-weight: 500; letter-spacing: -.045em; line-height: 1.08; }
+.ziki-homepage .cmp-head h2 { font-size: clamp(28px, 3.4vw, 42px); font-weight: 600; letter-spacing: -.04em; line-height: 1.1; }
 .ziki-homepage .cmp-head p { color: var(--muted); font-size: 16px; line-height: 1.6; margin-top: 14px; }
+.ziki-homepage .cmp-eyebrow { color: var(--green); display: block; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 
 /* Logos */
-.ziki-homepage .cmp-logo { align-items: center; background: var(--white); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); display: inline-flex; flex: none; font-weight: 700; justify-content: center; overflow: hidden; }
+.ziki-homepage .cmp-logo { align-items: center; background: var(--white); border: 1px solid var(--line); border-radius: var(--button-radius); color: var(--ink); display: inline-flex; flex: none; font-weight: 600; justify-content: center; overflow: hidden; }
 .ziki-homepage .cmp-logo-ziki { background: var(--green-soft); border-color: transparent; }
 .ziki-homepage .cmp-logo-initial { background: var(--surface); }
 
+/* Hero: the picker sits in the centred hero, like the plans on Pricing. */
+.ziki-homepage .cmp-page .th-centered .th-title { margin-top: 18px; }
+.ziki-homepage .cmp-hero-builder { background: var(--white); border: 1px solid var(--line); border-radius: var(--panel-radius); margin: 56px auto 0; max-width: 1040px; padding: 28px; text-align: left; width: calc(100% - 60px); }
+.ziki-homepage .cmp-builder-head { margin-bottom: 20px; }
+.ziki-homepage .cmp-builder-head h2 { color: var(--ink); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.ziki-homepage .cmp-builder-head p { color: var(--muted); font-size: 14px; line-height: 1.5; margin-top: 6px; }
+.ziki-homepage .cmp-builder-foot { color: var(--muted); font-size: 14px; margin: 20px auto 0; padding-bottom: 8px; text-align: center; }
+.ziki-homepage .cmp-builder-foot a { color: var(--green); font-weight: 600; }
+.ziki-homepage .cmp-builder-foot a:hover, .ziki-homepage .cmp-card a.cmp-link:hover { text-decoration: underline; }
+
 /* Builder */
-.ziki-homepage .cmp-builder { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; display: grid; gap: 20px; padding: 26px; }
+.ziki-homepage .cmp-builder { display: grid; gap: 20px; }
 .ziki-homepage .cmp-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.ziki-homepage .cmp-chip { background: var(--white); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 500; padding: 7px 14px; transition: border-color .2s, color .2s, background .2s; }
-.ziki-homepage .cmp-chip:hover { border-color: var(--green); color: var(--ink); }
-.ziki-homepage .cmp-chip.active { background: var(--ink); border-color: var(--ink); color: var(--white); }
-.ziki-homepage .cmp-builder-row { align-items: end; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
-.ziki-homepage .cmp-vs { color: var(--muted); font-size: 15px; font-weight: 600; padding-bottom: 14px; }
+.ziki-homepage .cmp-chip { background: var(--white); border: 1px solid var(--line); border-radius: var(--button-radius); color: var(--muted); font-size: 13px; font-weight: 500; padding: 7px 12px; transition: border-color .2s, color .2s, background .2s; }
+.ziki-homepage .cmp-chip:hover { background: var(--surface); color: var(--ink); }
+.ziki-homepage .cmp-chip.active { background: var(--green-soft); border-color: var(--green); color: var(--ink); }
+.ziki-homepage .cmp-builder-row { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; }
+.ziki-homepage .cmp-vs { color: var(--muted); font-size: 13px; font-weight: 600; padding-bottom: 15px; }
 .ziki-homepage .cmp-picker { position: relative; }
 .ziki-homepage .cmp-picker-label { color: var(--muted); display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; }
-.ziki-homepage .cmp-picker-box { align-items: center; background: var(--white); border: 1px solid var(--line); border-radius: 14px; display: flex; gap: 10px; min-height: 52px; padding: 0 14px; position: relative; }
-.ziki-homepage .cmp-picker-box:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgba(57,120,246,.18); }
+.ziki-homepage .cmp-picker-box { align-items: center; background: var(--white); border: 1px solid var(--line); border-radius: var(--button-radius); display: flex; gap: 10px; min-height: 48px; padding: 0 12px; position: relative; }
+.ziki-homepage .cmp-picker-box:focus-within { border-color: var(--green); outline: 2px solid var(--green); outline-offset: 2px; }
 .ziki-homepage .cmp-picker-value { align-items: center; display: flex; font-size: 15px; font-weight: 600; gap: 10px; pointer-events: none; position: absolute; }
-.ziki-homepage .cmp-picker-input { background: transparent; border: 0; color: var(--ink); flex: 1; font-size: 15px; min-width: 0; outline: none; padding: 14px 0; }
-.ziki-homepage .cmp-picker-list { background: var(--white); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); left: 0; list-style: none; margin: 8px 0 0; max-height: 320px; overflow-y: auto; padding: 6px; position: absolute; right: 0; z-index: 20; }
-.ziki-homepage .cmp-picker-option { align-items: center; border-radius: 10px; cursor: pointer; display: flex; gap: 10px; padding: 8px 10px; }
+.ziki-homepage .cmp-picker-input { background: transparent; border: 0; color: var(--ink); flex: 1; font-size: 15px; min-width: 0; outline: none; padding: 12px 0; }
+.ziki-homepage .cmp-picker-input::placeholder { color: var(--muted); }
+.ziki-homepage .cmp-picker-list { background: var(--white); border: 1px solid var(--line); border-radius: var(--panel-radius); box-shadow: var(--shadow); left: 0; list-style: none; margin: 8px 0 0; max-height: 320px; overflow-y: auto; padding: 6px; position: absolute; right: 0; z-index: 20; }
+.ziki-homepage .cmp-picker-option { align-items: center; border-radius: var(--button-radius); cursor: pointer; display: flex; gap: 10px; padding: 8px 10px; }
 .ziki-homepage .cmp-picker-option.active { background: var(--green-soft); }
 .ziki-homepage .cmp-picker-option.disabled { cursor: not-allowed; opacity: .55; }
 .ziki-homepage .cmp-picker-name { flex: 1; font-size: 14px; font-weight: 600; }
 .ziki-homepage .cmp-picker-cat { color: var(--muted); font-size: 12px; }
 .ziki-homepage .cmp-picker-empty { color: var(--muted); font-size: 14px; padding: 12px; }
-.ziki-homepage .cmp-go { justify-self: start; }
+.ziki-homepage .cmp-go { min-height: 48px; white-space: nowrap; }
 .ziki-homepage .cmp-go:disabled { cursor: not-allowed; opacity: .5; }
+.ziki-homepage .cmp-go:disabled:hover { background: var(--green); }
 
-/* Cards and category tiles */
-.ziki-homepage .cmp-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.ziki-homepage .cmp-card { background: var(--white); border: 1px solid var(--line); border-radius: 18px; display: flex; flex-direction: column; gap: 14px; padding: 20px; transition: border-color .2s, box-shadow .2s; }
-.ziki-homepage .cmp-card:hover { border-color: var(--green); box-shadow: var(--shadow); }
-.ziki-homepage .cmp-card-logos { align-items: center; display: flex; gap: 10px; }
+/* Directory sections: centred headings, like How it works. */
+.ziki-homepage .cmp-section { margin: 0 auto; max-width: 1180px; padding: 112px 30px 0; }
+.ziki-homepage .cmp-section-head { margin: 0 auto 40px; max-width: 700px; text-align: center; }
+.ziki-homepage .cmp-section-head h2 { color: var(--ink); font-size: clamp(28px, 3.4vw, 42px); font-weight: 600; letter-spacing: -.04em; line-height: 1.1; margin-top: 12px; }
+.ziki-homepage .cmp-section-head p { color: var(--muted); font-size: 16px; line-height: 1.6; margin-top: 14px; }
+.ziki-homepage .cmp-more { display: flex; justify-content: center; margin-top: 32px; }
+
+/* Category links, one row of controls above the full list. */
+.ziki-homepage .cmp-categories { display: flex; position: relative; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 32px; }
+.ziki-homepage .cmp-category { align-items: center; position: relative; border: 1px solid var(--line); border-radius: var(--button-radius); color: var(--ink); display: inline-flex; font-size: 14px; font-weight: 500; gap: 8px; padding: 8px 14px; transition: background .2s, border-color .2s; }
+.ziki-homepage .cmp-category > span { color: var(--muted); font-size: 12px; font-weight: 600; }
+.ziki-homepage .cmp-category:hover { background: var(--surface); }
+.ziki-homepage .cmp-category[aria-current="true"] { background: var(--green-soft); border-color: var(--green); }
+.ziki-homepage .cmp-category[aria-current="true"] > span { color: var(--ink); }
+
+/* Comparison cards: flat panels, the line turns blue on hover. */
+.ziki-homepage .cmp-grid { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ziki-homepage .cmp-card { background: var(--white); border: 1px solid var(--line); border-radius: var(--panel-radius); display: flex; flex-direction: column; gap: 12px; padding: 22px; position: relative; transition: border-color .2s; }
+.ziki-homepage .cmp-card:hover, .ziki-homepage .cmp-card:focus-within { border-color: var(--green); }
+.ziki-homepage .cmp-card-logos { align-items: center; display: flex; gap: 8px; }
 .ziki-homepage .cmp-card-logos > span:nth-child(2) { color: var(--muted); font-size: 12px; font-weight: 600; }
-.ziki-homepage .cmp-card h3 { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.ziki-homepage .cmp-card h3 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin-top: 4px; }
 .ziki-homepage .cmp-card p { color: var(--muted); flex: 1; font-size: 14px; line-height: 1.55; }
-.ziki-homepage .cmp-card a.cmp-link { color: var(--green); font-size: 14px; font-weight: 600; }
+.ziki-homepage .cmp-card a.cmp-link { align-items: center; color: var(--green); display: inline-flex; font-size: 14px; font-weight: 600; gap: 6px; }
 .ziki-homepage .cmp-card a.cmp-link::after { content: ""; inset: 0; position: absolute; }
-.ziki-homepage .cmp-card { position: relative; }
-.ziki-homepage .cmp-more { align-items: center; display: flex; justify-content: space-between; margin-top: 24px; }
-.ziki-homepage .cmp-tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-.ziki-homepage .cmp-tile { border: 1px solid var(--line); border-radius: 16px; display: grid; gap: 4px; padding: 16px 18px; transition: border-color .2s, background .2s; }
-.ziki-homepage .cmp-tile:hover, .ziki-homepage .cmp-tile[aria-current="true"] { background: var(--green-soft); border-color: var(--green); }
-.ziki-homepage .cmp-tile b { font-size: 15px; font-weight: 600; }
-.ziki-homepage .cmp-tile span { color: var(--muted); font-size: 13px; }
-.ziki-homepage .cmp-empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 16px; color: var(--muted); font-size: 15px; padding: 28px; }
+.ziki-homepage .cmp-empty { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--panel-radius); color: var(--muted); font-size: 15px; padding: 28px; text-align: center; }
 
-/* Differentiators */
-.ziki-homepage .cmp-why { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-.ziki-homepage .cmp-why > div { border-top: 2px solid var(--green); padding-top: 14px; }
-.ziki-homepage .cmp-why h3 { font-size: 16px; font-weight: 600; }
-.ziki-homepage .cmp-why p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-top: 8px; }
+/* Why compare Ziki: the light-blue explainer band from the homepage. */
+.ziki-homepage .cmp-why-band { margin-top: 112px; }
+.ziki-homepage .cmp-why-band .hx-inner { max-width: 1180px; }
+.ziki-homepage .hx-facts.cmp-why { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ziki-homepage .cmp-why .hx-fact h3 { font-size: 16px; }
+.ziki-homepage .cmp-why .hx-fact p { font-size: 14px; }
+
+@media (max-width: 1080px) {
+  .ziki-homepage .cmp-grid, .ziki-homepage .hx-facts.cmp-why { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .ziki-homepage .cmp-builder-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .ziki-homepage .cmp-go { grid-column: 1 / -1; }
+  .ziki-homepage .cmp-section { padding: 80px 20px 0; }
+  .ziki-homepage .cmp-why-band { margin-top: 80px; }
+}
+@media (max-width: 720px) {
+  .ziki-homepage .cmp-hero-builder { margin-top: 36px; padding: 20px; width: calc(100% - 32px); }
+  .ziki-homepage .cmp-builder-row { grid-template-columns: 1fr; }
+  .ziki-homepage .cmp-vs { padding: 0; text-align: center; }
+  .ziki-homepage .cmp-go { width: 100%; }
+  .ziki-homepage .cmp-section { padding: 64px 16px 0; }
+  .ziki-homepage .cmp-categories { flex-wrap: nowrap; justify-content: flex-start; margin: 0 -16px 24px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
+  .ziki-homepage .cmp-category { flex: none; }
+  .ziki-homepage .cmp-grid, .ziki-homepage .hx-facts.cmp-why { grid-template-columns: 1fr; }
+}
 
 /* Comparison page */
 .ziki-homepage .cmp-vs-head { align-items: center; display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
 .ziki-homepage .cmp-vs-head .cmp-vs { padding: 0; }
 .ziki-homepage .cmp-side { align-items: center; display: inline-flex; font-size: 18px; font-weight: 600; gap: 10px; }
 .ziki-homepage .cmp-meta { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 13px; gap: 6px 20px; margin-top: 16px; }
-.ziki-homepage .cmp-note { background: var(--green-soft); border-radius: 14px; font-size: 14px; line-height: 1.6; margin-top: 20px; padding: 14px 18px; }
+.ziki-homepage .cmp-note { background: var(--green-soft); border-radius: var(--panel-radius); font-size: 14px; line-height: 1.6; margin-top: 20px; padding: 14px 18px; }
 .ziki-homepage .cmp-intro { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-top: 28px; }
-.ziki-homepage .cmp-intro > div { border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+.ziki-homepage .cmp-intro > div { border: 1px solid var(--line); border-radius: var(--panel-radius); padding: 18px 20px; }
 .ziki-homepage .cmp-intro > div.is-ziki { background: var(--green-soft); border-color: transparent; }
 .ziki-homepage .cmp-intro h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .ziki-homepage .cmp-intro p { color: var(--muted); font-size: 14px; line-height: 1.6; }
 
-.ziki-homepage .cmp-table-wrap { border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.ziki-homepage .cmp-table-wrap { border: 1px solid var(--line); border-radius: var(--panel-radius); overflow: hidden; }
 .ziki-homepage .cmp-table { border-collapse: collapse; width: 100%; }
 .ziki-homepage .cmp-table th, .ziki-homepage .cmp-table td { border-bottom: 1px solid var(--line); font-size: 14px; line-height: 1.5; padding: 16px 20px; text-align: left; vertical-align: top; }
 .ziki-homepage .cmp-table tr:last-child > * { border-bottom: 0; }
@@ -100,7 +145,7 @@
 .ziki-homepage .cmp-detail p b { color: var(--ink); display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 
 .ziki-homepage .cmp-two { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
-.ziki-homepage .cmp-panel { border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+.ziki-homepage .cmp-panel { border: 1px solid var(--line); border-radius: var(--panel-radius); padding: 22px; }
 .ziki-homepage .cmp-panel.is-ziki { background: var(--green-soft); border-color: transparent; }
 .ziki-homepage .cmp-panel h3 { align-items: center; display: flex; font-size: 17px; font-weight: 600; gap: 10px; }
 .ziki-homepage .cmp-panel h4 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; }
@@ -112,7 +157,7 @@
 .ziki-homepage .cmp-choose ul { display: grid; font-size: 14px; gap: 8px; line-height: 1.55; margin: 0; padding-left: 18px; }
 .ziki-homepage .cmp-choose li span { color: var(--muted); display: block; }
 
-.ziki-homepage .cmp-cta { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; padding: 28px; }
+.ziki-homepage .cmp-cta { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--panel-radius); display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; padding: 28px; }
 .ziki-homepage .cmp-cta h2 { font-size: 24px; font-weight: 500; letter-spacing: -.03em; }
 .ziki-homepage .cmp-cta-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .ziki-homepage .cmp-sources { color: var(--muted); font-size: 13px; line-height: 1.7; margin-top: 18px; }
@@ -138,5 +183,5 @@
   .ziki-homepage .cmp-table tbody tr > * { border-bottom: 1px solid var(--line); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ziki-homepage .cmp-card, .ziki-homepage .cmp-chip, .ziki-homepage .cmp-tile { transition: none; }
+  .ziki-homepage .cmp-card, .ziki-homepage .cmp-chip, .ziki-homepage .cmp-category { transition: none; }
 }

@@ -19,7 +19,6 @@ const db = vi.hoisted(() => {
     planRevision: { create: vi.fn() },
     issueBid: { updateMany: vi.fn() },
     user: { findUniqueOrThrow: vi.fn() },
-    pointEntry: { createMany: vi.fn() },
     organisation: { findUnique: vi.fn() },
   };
   mock.$transaction.mockImplementation((run: (tx: typeof mock) => unknown) => run(mock));
@@ -77,7 +76,6 @@ beforeEach(() => {
   db.plan.create.mockResolvedValue({ id: "plan1" });
   db.plan.update.mockResolvedValue({ id: "plan1" });
   db.user.findUniqueOrThrow.mockResolvedValue({ name: "Bob" });
-  db.pointEntry.createMany.mockResolvedValue({ count: 1 });
   db.organisation.findUnique.mockResolvedValue(null);
   db.issueBid.updateMany.mockResolvedValue({ count: 1 });
 });
@@ -137,8 +135,6 @@ describe("approvePlan", () => {
     expect(db.bug.update).toHaveBeenCalledWith({ where: { id: "bug1" }, data: { assigneeId: "bob", status: "in_progress", substatus: "in_progress" } });
     expect(db.plan.update).toHaveBeenCalledWith({ where: { id: "plan1" }, data: expect.objectContaining({ decision: "approved" }) });
     expect(db.issueBid.updateMany).toHaveBeenCalledWith({ where: { bugId: "bug1", withdrawnAt: null, awardedAt: null }, data: { withdrawnAt: expect.any(Date) } });
-    // Approving your own agent's plan earns nothing on its own: the plan's $1 is held with the solver's reward at resolve (tests/merge/point-award).
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({ type: "plan.approved" }));
     expect(publish).toHaveBeenCalledWith(db, expect.objectContaining({ type: "claim.accepted", payload: expect.objectContaining({ via: "plan_approved" }) }));
   });
@@ -163,7 +159,6 @@ describe("approvePlan", () => {
     db.plan.findUnique.mockResolvedValue(storedPlan({ reviewBy: new Date(Date.now() - 1000) }));
     await expect(approvePlan({ userId: "bob" }, "bug1")).rejects.toMatchObject({ status: 409, body: { error: "plan_window_closed" } });
     expect(db.issueClaim.update).not.toHaveBeenCalled();
-    expect(db.pointEntry.createMany).not.toHaveBeenCalled();
   });
 });
 

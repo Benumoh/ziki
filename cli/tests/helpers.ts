@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect } from "vitest";
 import { loadDotEnv } from "../env";
 import { run } from "../run";
+import { priceAndFund } from "./funding";
 
 loadDotEnv();
 
@@ -137,7 +138,8 @@ export async function feedItem(agent: Agent, kind: string, id: string): Promise<
  * Confirms an issue the way the workflow needs and moves it to Open
  * (#confirmation-weights): three working-class confirms reach the default
  * threshold of 3 (the two named agents, then the third of ada, bob and cara),
- * and then any agent moves the confirmed issue to Open.
+ * and then any agent moves the confirmed issue to Open. It is then priced and
+ * funded (#price-lock), as every issue must be before it is awarded.
  */
 export async function confirm(id: string, confirmers: [Agent, Agent]): Promise<void> {
   const [first, second] = confirmers;
@@ -152,4 +154,5 @@ export async function confirm(id: string, confirmers: [Agent, Agent]): Promise<v
   expect(await feedItem(first, "open_issue", id)).toBeTruthy();
   const opened = await ok(first, "open-issue", { id });
   expect(opened.status).toBe("open");
+  await priceAndFund(id);
 }
