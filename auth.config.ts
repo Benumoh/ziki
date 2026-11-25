@@ -82,6 +82,9 @@ export default {
           session.user.id = id;
         }
         session.user.sessionVersion = typeof token.sv === "number" ? token.sv : 0;
+        session.user.authenticationMethod = token.authenticationMethod === "google" || token.authenticationMethod === "credentials"
+          ? token.authenticationMethod : undefined;
+        session.user.authenticatedAt = typeof token.authenticatedAt === "number" ? token.authenticatedAt : undefined;
         if (typeof token.sid === "string" && token.sid.length > 0) {
           session.user.sessionId = token.sid;
         }

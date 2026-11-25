@@ -8,13 +8,13 @@ import { compare, hash } from "bcryptjs";
  * ends older sessions (#208, #347), a refresh can't be forged (#389), and the
  * expired-session route signs the person out.
  */
-const { deleteCookieMock, setCookieMock } = vi.hoisted(() => ({ deleteCookieMock: vi.fn(), setCookieMock: vi.fn() }));
+const { deleteCookieMock, setCookieMock, getCookieMock } = vi.hoisted(() => ({ deleteCookieMock: vi.fn(), setCookieMock: vi.fn(), getCookieMock: vi.fn() }));
 const requestHeadersMock = vi.hoisted(() => vi.fn(async () => new Headers({ "x-forwarded-for": "203.0.113.7" })));
 const middleware = vi.hoisted(() => ({ handler: null as null | ((request: NextRequest & { auth?: { user: { id: string } } }) => Response) }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
-  cookies: vi.fn(async () => ({ delete: deleteCookieMock, get: vi.fn(), set: setCookieMock })),
+  cookies: vi.fn(async () => ({ delete: deleteCookieMock, get: getCookieMock, set: setCookieMock })),
   headers: requestHeadersMock,
 }));
 vi.mock("next/navigation", () => ({
@@ -39,6 +39,8 @@ vi.mock("@/lib/prisma", () => ({
     loginHistory: { create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     securityAuditEvent: { create: vi.fn(async () => ({})) },
     totpCredential: { findUnique: vi.fn() },
+    googleSecurityProof: { findUnique: vi.fn(), updateMany: vi.fn() },
+    agentApiKey: { updateMany: vi.fn() },
     passwordResetToken: { findUnique: vi.fn(), deleteMany: vi.fn(), create: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -51,7 +53,7 @@ import { resetRateLimits } from "@/lib/rate-limit";
 import { ACTIVE_ROLE_COOKIE_NAME } from "@/lib/roles";
 import { SESSION_EXPIRED_MESSAGE, resolveSessionUserId } from "@/lib/session-user";
 import { acceptedSessionRefresh, sessionRefreshFor } from "@/lib/session-refresh";
-import { connectGoogleAction, requestPasswordSetupAction, resetPasswordAction, signupAction } from "@/app/actions/auth";
+import { addPasswordAction, connectGoogleAction, resetPasswordAction, signupAction } from "@/app/actions/auth";
 import { signOutOtherSessionsAction, signOutSessionAction } from "@/app/actions/settings";
 import {
   buildLoginHistoryCsv,
@@ -65,8 +67,7 @@ import { upsertGoogleUser, GoogleLinkRequiredError, GoogleLinkMismatchError } fr
 import { sealGoogleIntent, readGoogleIntent } from "@/lib/google-auth-intent";
 import { isPasswordAuthEnabled } from "@/lib/auth-mode";
 import { sendMail } from "@/lib/mail";
-import { hashResetToken } from "@/lib/password-reset";
-import { GOOGLE_CHALLENGE_COOKIE, GOOGLE_INTENT_COOKIE } from "@/lib/google-auth-cookies";
+import { GOOGLE_CHALLENGE_COOKIE, GOOGLE_INTENT_COOKIE, GOOGLE_SECURITY_COOKIE } from "@/lib/google-auth-cookies";
 
 const mockAuth = auth as unknown as ReturnType<typeof vi.fn>;
 const db = prisma as unknown as {
@@ -85,6 +86,8 @@ const db = prisma as unknown as {
   loginHistory: { create: ReturnType<typeof vi.fn> };
   securityAuditEvent: { create: ReturnType<typeof vi.fn> };
   totpCredential: { findUnique: ReturnType<typeof vi.fn> };
+  googleSecurityProof: { findUnique: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
+  agentApiKey: { updateMany: ReturnType<typeof vi.fn> };
   passwordResetToken: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
@@ -479,66 +482,94 @@ describe("Google and password account ownership", () => {
   });
 });
 
-describe("adding a password to a Google account", () => {
+describe("adding a password directly to a Google account", () => {
+  let account: { id: string; name: string; email: string; role: string; passwordHash: string | null; googleSubject: string; sessionVersion: number };
+  let session: { id: string; email: string; role: string; sessionId: string; sessionVersion: number; authenticationMethod: string; authenticatedAt: number };
+  const input = (values: Record<string, string> = {}) => form({ password: "NewPassw0rd!", confirmPassword: "NewPassw0rd!", ...values });
   beforeEach(() => {
-    mockAuth.mockResolvedValue({ user: { id: "u1", email: "a@x.dev", role: "user", sessionVersion: 3 } });
-    db.userSession.findUnique.mockResolvedValue(null);
-    db.user.findUnique.mockResolvedValue({ id: "u1", name: "Ada", email: "a@x.dev", role: "user", sessionVersion: 3, passwordHash: null, googleSubject: "google-1" });
-    db.passwordResetToken.create.mockResolvedValue({});
-    db.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
-    db.$transaction.mockImplementation(async (operations: Promise<unknown>[]) => Promise.all(operations));
-    vi.mocked(sendMail).mockResolvedValue(undefined);
+    account = { id: "u1", name: "Ada", email: "a@x.dev", role: "user", passwordHash: null, googleSubject: "google-1", sessionVersion: 3 };
+    session = { id: "u1", email: "a@x.dev", role: "user", sessionId: "s1", sessionVersion: 3, authenticationMethod: "google", authenticatedAt: Date.now() };
+    mockAuth.mockResolvedValue({ user: session });
+    getCookieMock.mockReturnValue(undefined);
+    db.userSession.findUnique.mockResolvedValue({ id: "s1", userId: "u1", sessionVersion: 3, revokedAt: null, lastActiveAt: new Date() });
+    db.user.findUnique.mockImplementation(async () => account);
+    db.user.updateMany.mockImplementation(async ({ where, data }) => {
+      if (account.passwordHash || where.sessionVersion !== account.sessionVersion) return { count: 0 };
+      account.passwordHash = data.passwordHash;
+      account.sessionVersion += data.sessionVersion.increment;
+      return { count: 1 };
+    });
+    db.totpCredential.findUnique.mockResolvedValue(null);
+    db.googleSecurityProof.findUnique.mockResolvedValue(null);
+    db.googleSecurityProof.updateMany.mockResolvedValue({ count: 1 });
+    db.$transaction.mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db));
   });
 
-  it("emails a single-use setup proof to the signed-in account, without setting a password yet", async () => {
-    // Match headers() in a real Next.js server action: it has an internal
-    // `headers` field as well as the public Headers API.
-    requestHeadersMock.mockResolvedValue(HeadersAdapter.seal(new HeadersAdapter({
-      "x-forwarded-for": "203.0.113.7",
-    })));
-    expect(await requestPasswordSetupAction()).toHaveProperty("success");
-    const message = vi.mocked(sendMail).mock.calls[0][0];
-    expect(message.to).toBe("a@x.dev");
-    const token = message.text.match(/token=([a-f0-9]{64})/)?.[1];
-    expect(token).toBeDefined();
-    const stored = db.passwordResetToken.create.mock.calls[0][0].data;
-    expect(stored).toMatchObject({ userId: "u1", tokenHash: hashResetToken(token!) });
-    expect(stored.tokenHash).not.toBe(token);
-    expect(db.user.update).not.toHaveBeenCalled();
-  });
-
-  it("refuses to replace an existing password or add one without a proven Google identity", async () => {
-    db.user.findUnique.mockResolvedValue({ id: "u1", email: "a@x.dev", sessionVersion: 3, role: "user", passwordHash: "existing", googleSubject: "google-1" });
-    expect(await requestPasswordSetupAction()).toHaveProperty("error");
-    db.user.findUnique.mockResolvedValue({ id: "u1", email: "a@x.dev", sessionVersion: 3, role: "user", passwordHash: null, googleSubject: null });
-    expect(await requestPasswordSetupAction()).toHaveProperty("error");
-    expect(sendMail).not.toHaveBeenCalled();
-  });
-
-  it("adds a usable password while retaining Google and invalidating existing sessions", async () => {
-    const account = { passwordHash: null as string | null, googleSubject: "google-1", sessionVersion: 3, emailVerified: null as Date | null };
-    db.passwordResetToken.findUnique.mockResolvedValue({ id: "t1", userId: "u1", usedAt: null, expiresAt: new Date(Date.now() + 60_000) });
-    const tx = {
-      passwordResetToken: { updateMany: vi.fn(async () => ({ count: 1 })), deleteMany: vi.fn() },
-      user: { update: vi.fn(async ({ data }) => {
-        account.passwordHash = data.passwordHash;
-        account.emailVerified = data.emailVerified;
-        account.sessionVersion += data.sessionVersion.increment;
-      }) },
-      agentApiKey: { updateMany: vi.fn() },
-    };
-    db.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(tx));
-    await expect(resetPasswordAction(undefined, form({ token: "a".repeat(64), password: "NewPassw0rd!", confirmPassword: "NewPassw0rd!" }))).rejects.toMatchObject({ to: "/login" });
+  it("saves a usable password without SMTP, keeps Google connected and ends existing sessions", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SMTP_HOST", "");
+    vi.stubEnv("SMTP_FROM", "");
+    requestHeadersMock.mockResolvedValue(HeadersAdapter.seal(new HeadersAdapter({ "x-forwarded-for": "203.0.113.7" })));
+    await expect(addPasswordAction(undefined, input())).rejects.toMatchObject({ to: "/login?passwordAdded=1" });
     expect(await compare("NewPassw0rd!", account.passwordHash!)).toBe(true);
     expect(account.googleSubject).toBe("google-1");
     expect(account.sessionVersion).toBe(4);
-    expect(account.emailVerified).toBeInstanceOf(Date);
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(db.passwordResetToken.create).not.toHaveBeenCalled();
   });
 
-  it("does not issue a setup token for an unauthenticated request", async () => {
+  it("rejects mismatched confirmation and short passwords before changing the account", async () => {
+    expect(await addPasswordAction(undefined, input({ confirmPassword: "DifferentPassw0rd!" }))).toHaveProperty("error");
+    expect(await addPasswordAction(undefined, input({ password: "short", confirmPassword: "short" }))).toHaveProperty("error");
+    expect(account.passwordHash).toBeNull();
+    expect(account.sessionVersion).toBe(3);
+  });
+
+  it("requires fresh Google verification for old or non-Google sessions", async () => {
+    session.authenticatedAt = Date.now() - 301_000;
+    expect(await addPasswordAction(undefined, input())).toMatchObject({ requiresGoogleVerification: true });
+    session.authenticatedAt = Date.now();
+    session.authenticationMethod = "credentials";
+    expect(await addPasswordAction(undefined, input())).toMatchObject({ requiresGoogleVerification: true });
+    expect(account.passwordHash).toBeNull();
+  });
+
+  it("accepts a fresh password-specific Google proof for an older session", async () => {
+    session.authenticatedAt = Date.now() - 301_000;
+    const raw = "a".repeat(64);
+    getCookieMock.mockImplementation((name) => name === GOOGLE_SECURITY_COOKIE ? { value: raw } : undefined);
+    db.googleSecurityProof.findUnique.mockResolvedValue({ id: "proof1", userId: "u1", sessionId: "s1", sessionVersion: 3,
+      googleSubject: "google-1", operation: "password", usedAt: null, expiresAt: new Date(Date.now() + 60_000), user: account });
+    await expect(addPasswordAction(undefined, input())).rejects.toMatchObject({ to: "/login?passwordAdded=1" });
+    expect(await compare("NewPassw0rd!", account.passwordHash!)).toBe(true);
+  });
+
+  it("rejects expired and wrong-operation proofs and refuses to replace an existing password", async () => {
+    session.authenticatedAt = Date.now() - 301_000;
+    getCookieMock.mockImplementation((name) => name === GOOGLE_SECURITY_COOKIE ? { value: "a".repeat(64) } : undefined);
+    const proof = { id: "proof1", userId: "u1", sessionId: "s1", sessionVersion: 3, googleSubject: "google-1", operation: "setup",
+      usedAt: null, expiresAt: new Date(Date.now() + 60_000), user: account };
+    db.googleSecurityProof.findUnique.mockResolvedValue(proof);
+    expect(await addPasswordAction(undefined, input())).toHaveProperty("error");
+    proof.operation = "password";
+    proof.expiresAt = new Date(Date.now() - 1);
+    expect(await addPasswordAction(undefined, input())).toHaveProperty("error");
+    session.authenticatedAt = Date.now();
+    account.passwordHash = "existing-password";
+    expect(await addPasswordAction(undefined, input())).toHaveProperty("error");
+    expect(account.passwordHash).toBe("existing-password");
+  });
+
+  it("still requires an existing second factor when adding a password", async () => {
+    db.totpCredential.findUnique.mockResolvedValue({ enabledAt: new Date() });
+    expect(await addPasswordAction(undefined, input({ code: "wrong" }))).toHaveProperty("error");
+    expect(account.passwordHash).toBeNull();
+  });
+
+  it("rejects an unauthenticated request", async () => {
     mockAuth.mockResolvedValue(null);
-    await expect(requestPasswordSetupAction()).rejects.toMatchObject({ to: "/login" });
-    expect(sendMail).not.toHaveBeenCalled();
+    await expect(addPasswordAction(undefined, input())).rejects.toMatchObject({ to: "/login" });
+    expect(account.passwordHash).toBeNull();
   });
 });
 

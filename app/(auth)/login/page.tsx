@@ -39,6 +39,7 @@ export default async function LoginPage({
   searchParams: Promise<{
     callbackUrl?: string;
     expired?: string;
+    passwordAdded?: string;
     error?: string;
     googleCode?: string;
   }>;
@@ -50,6 +51,8 @@ export default async function LoginPage({
   return (
     <AuthStoryPage story={story}>
       <h2 className="text-xl font-semibold tracking-tight">Sign in to Ziki</h2>
+
+      {params.passwordAdded === "1" ? <p role="status" className="rounded-panel bg-zk-tint p-3 text-sm text-zk-accent">Your password is ready. Sign in with Google or your email and password.</p> : null}
 
       {params.expired && !params.error ? (
         <p className="rounded-panel bg-zk-warn-bg p-3 text-sm text-zk-warn-fg" role="status">

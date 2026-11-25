@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { GOOGLE_SECURITY_COOKIE } from "@/lib/google-auth-cookies";
 import { readGoogleSecurityProof } from "@/lib/google-security";
+import { isRecentGoogleAuthentication } from "@/lib/google-authentication";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { twoFactorStatus } from "@/lib/two-factor";
@@ -24,7 +25,8 @@ export default async function SecuritySettingsPage({ searchParams }: {
   });
   const hasPassword = Boolean(account?.passwordHash);
   const status = await twoFactorStatus(user.id);
-  const proof = await readGoogleSecurityProof((await cookies()).get(GOOGLE_SECURITY_COOKIE)?.value, (await auth())?.user);
+  const session = await auth();
+  const proof = await readGoogleSecurityProof((await cookies()).get(GOOGLE_SECURITY_COOKIE)?.value, session?.user);
   const verifiedFor = proof && proof.operation === params.googleSecurity ? proof.operation : undefined;
 
   return (
@@ -47,7 +49,9 @@ export default async function SecuritySettingsPage({ searchParams }: {
       {params.google === "mismatch" ? <p role="alert" className="rounded-panel bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">Google was not connected. Choose the Google account with your sign-in email, or confirm your password again if the request expired.</p> : null}
       {params.google === "securityMismatch" ? <p role="alert" className="rounded-panel bg-zk-bad-bg p-3 text-sm text-zk-bad-fg">Google verification failed. Choose the Google account connected to this account and try again.</p> : null}
       <SignInMethods hasPassword={hasPassword} googleLinked={Boolean(account?.googleSubject)}
+        passwordSetupRequested={verifiedFor === "password"}
         googleConfigured={isGoogleOAuthConfigured()} passwordEnabled={isPasswordAuthEnabled()}
+        passwordVerified={verifiedFor === "password" || isRecentGoogleAuthentication(session?.user)}
         twoFactorEnabled={status.enabled} email={account?.email ?? user.email ?? ""} />
 
       <section className="flex flex-col gap-4 rounded-panel border border-zk-border bg-zk-surface p-6">

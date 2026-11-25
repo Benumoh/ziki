@@ -41,6 +41,7 @@ import {
   type AuthRateLimitAction,
 } from "@/lib/rate-limit";
 import {
+  addPasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   signupSchema,
@@ -52,6 +53,7 @@ import { GOOGLE_CHALLENGE_COOKIE, GOOGLE_INTENT_COOKIE, GOOGLE_SECURITY_COOKIE }
 import { requireUser } from "@/lib/auth-helpers";
 import { confirmIdentity } from "@/lib/two-factor";
 import { isGoogleOAuthConfigured } from "@/lib/google-oauth";
+import { addGooglePassword } from "@/lib/google-security";
 
 const RESET_LINK_INVALID =
   "This reset link is invalid or has expired. Request a new one.";
@@ -314,31 +316,34 @@ export async function connectGoogleAction(
   await signIn("google", { redirectTo: "/settings/security" }, { prompt: "select_account" });
 }
 
-/** An emailed, single-use proof is needed before adding a new login method. */
-export async function requestPasswordSetupAction(): Promise<{ error?: string; success?: string }> {
+/** Add the first password after a recent Google sign-in or fresh Google verification. */
+export async function addPasswordAction(
+  _prev: (FieldAwareResult & { requiresGoogleVerification?: boolean }) | undefined,
+  formData: FormData,
+): Promise<(FieldAwareResult & { requiresGoogleVerification?: boolean }) | undefined> {
   const user = await requireUser();
   if (!isPasswordAuthEnabled()) return { error: PASSWORD_AUTH_DISABLED_MESSAGE };
-  const limited = await authRateLimited("forgotPassword", user.email ?? null);
+  const parsed = addPasswordSchema.safeParse({
+    password: formData.get("password"), confirmPassword: formData.get("confirmPassword"),
+    code: String(formData.get("code") ?? ""),
+  });
+  if (!parsed.success) return fromZodError(parsed.error);
+  const limited = await authRateLimited("changePassword", user.email ?? null);
   if (limited) return limited;
-  if (!canSendMail()) return { error: RESET_EMAIL_UNAVAILABLE };
-  const account = await prisma.user.findUnique({ where: { id: user.id }, select: { email: true, passwordHash: true, googleSubject: true } });
-  if (!account?.googleSubject) return { error: "Sign in with Google first to confirm your account." };
-  if (account.passwordHash) return { error: "Your account already has a password. Use Reset password instead." };
-  const raw = createRawResetToken();
-  const tokenHash = hashResetToken(raw);
-  await prisma.$transaction([
-    prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
-    prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS) } }),
-  ]);
+  const session = await auth();
+  if (session?.user.id !== user.id) return { error: "Sign in again before adding a password." };
+  const jar = await cookies();
+  let result: Awaited<ReturnType<typeof addGooglePassword>>;
   try {
-    await sendMail({ to: account.email, subject: "Add a password to your Ziki account",
-      text: `Open this link within 30 minutes to add a password. Google sign-in will keep working.\n\n${buildPasswordResetUrl(raw)}&setup=1\n\nIf you did not request this, ignore this email.` });
+    result = await addGooglePassword(jar.get(GOOGLE_SECURITY_COOKIE)?.value, session.user, parsed.data.password, parsed.data.code);
   } catch (error) {
-    logger.error("[password-setup] Could not send setup email", error);
-    await prisma.passwordResetToken.deleteMany({ where: { tokenHash } });
-    return { error: "We couldn't send the email. Please try again." };
+    logger.error("[password-setup] Could not save password", error);
+    return { error: "We couldn't save your password. Please try again." };
   }
-  return { success: "Check your email for a link to add a password. Google sign-in will keep working." };
+  if (!result.ok) return result;
+  jar.delete(GOOGLE_SECURITY_COOKIE);
+  await signOut({ redirect: false });
+  redirect("/login?passwordAdded=1");
 }
 
 export async function googleTwoFactorAction(

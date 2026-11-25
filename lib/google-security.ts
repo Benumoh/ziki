@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { createRawResetToken, hashResetToken } from "@/lib/password-reset";
 import type { GoogleSecurityIntent, GoogleSecurityOperation } from "@/lib/google-auth-intent";
-import { verifySecondFactor } from "@/lib/two-factor";
+import { isTwoFactorEnabled, verifySecondFactor } from "@/lib/two-factor";
+import { hash } from "bcryptjs";
+import { isRecentGoogleAuthentication } from "@/lib/google-authentication";
 
 export const GOOGLE_SECURITY_TTL_SECONDS = 5 * 60;
-export type SecuritySession = { id: string; sessionId?: string; sessionVersion?: number };
+export type SecuritySession = { id: string; sessionId?: string; sessionVersion?: number; authenticationMethod?: string; authenticatedAt?: number };
 
 /** OAuth callbacks must prove the same Google identity and still-active app session. */
 export async function issueGoogleSecurityProof(intent: GoogleSecurityIntent, subject: string, session: SecuritySession | undefined) {
@@ -36,12 +38,13 @@ export async function readGoogleSecurityProof(raw: string | undefined, session: 
   if (!proof || proof.usedAt || proof.expiresAt.getTime() <= Date.now() || proof.userId !== session.id ||
       proof.sessionId !== session.sessionId || proof.sessionVersion !== session.sessionVersion ||
       proof.user.sessionVersion !== proof.sessionVersion || proof.user.passwordHash ||
-      proof.user.googleSubject !== proof.googleSubject || !["setup", "disable", "regenerate"].includes(proof.operation)) return null;
+      proof.user.googleSubject !== proof.googleSubject || !["setup", "disable", "regenerate", "password"].includes(proof.operation)) return null;
   return { ...proof, operation: proof.operation as GoogleSecurityOperation };
 }
 
 /** Each proof authorizes one operation; a valid existing factor is also needed for destructive changes. */
 export async function consumeGoogleSecurityProof(raw: string | undefined, session: SecuritySession | undefined, operation: GoogleSecurityOperation, code?: string) {
+  if (operation === "password") return { ok: false as const, error: "Use password setup to save your password." };
   const proof = await readGoogleSecurityProof(raw, session);
   if (!proof || proof.operation !== operation) return { ok: false as const, requiresGoogleVerification: true, error: "Verify with Google again before making this change." };
   if (operation !== "setup" && !(await verifySecondFactor(proof.userId, code ?? ""))) {
@@ -54,4 +57,43 @@ export async function consumeGoogleSecurityProof(raw: string | undefined, sessio
     data: { usedAt: new Date() },
   });
   return claimed.count === 1 ? { ok: true as const } : { ok: false as const, requiresGoogleVerification: true, error: "This verification expired or was already used. Verify with Google again." };
+}
+
+class PasswordSetupChanged extends Error {}
+
+/** Save the first password atomically, retaining Google and the enrolled factor. */
+export async function addGooglePassword(raw: string | undefined, session: SecuritySession | undefined, password: string, code?: string) {
+  const denied = { ok: false as const, requiresGoogleVerification: true, error: "Verify your Google account again before saving a password." };
+  if (!session?.sessionId) return denied;
+  const recentGoogleSignIn = isRecentGoogleAuthentication(session);
+  const proof = recentGoogleSignIn ? null : await readGoogleSecurityProof(raw, session);
+  if (!recentGoogleSignIn && proof?.operation !== "password") return denied;
+  const account = await prisma.user.findUnique({ where: { id: session.id } });
+  if (!account || account.passwordHash || !account.googleSubject || account.sessionVersion !== session.sessionVersion) return denied;
+  if (await isTwoFactorEnabled(account.id) && !(await verifySecondFactor(account.id, code ?? ""))) {
+    return { ok: false as const, error: "Enter a valid authenticator or backup code." };
+  }
+  const passwordHash = await hash(password, 10);
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (proof) {
+        const claimed = await tx.googleSecurityProof.updateMany({
+          where: { id: proof.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() },
+        });
+        if (claimed.count !== 1) throw new PasswordSetupChanged();
+      }
+      const changed = await tx.user.updateMany({
+        where: { id: account.id, OR: [{ passwordHash: null }, { passwordHash: "" }], sessionVersion: account.sessionVersion, googleSubject: account.googleSubject,
+          userSessions: { some: { id: session.sessionId, revokedAt: null, sessionVersion: account.sessionVersion } } },
+        data: { passwordHash, sessionVersion: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new PasswordSetupChanged();
+      await tx.passwordResetToken.deleteMany({ where: { userId: account.id } });
+      await tx.agentApiKey.updateMany({ where: { revokedAt: null, agent: { ownerUserId: account.id } }, data: { revokedAt: new Date() } });
+    });
+    return { ok: true as const };
+  } catch (error) {
+    if (error instanceof PasswordSetupChanged) return denied;
+    throw error;
+  }
 }

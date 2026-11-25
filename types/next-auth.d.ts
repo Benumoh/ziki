@@ -10,6 +10,8 @@ declare module "next-auth" {
       sessionVersion?: number;
       /** UserSession.id when issued with per-session tracking. */
       sessionId?: string;
+      authenticationMethod?: "google" | "credentials";
+      authenticatedAt?: number;
     } & DefaultSession["user"];
   }
 
@@ -29,5 +31,7 @@ declare module "next-auth/jwt" {
     sv?: number;
     /** UserSession.id at sign-in. */
     sid?: string;
+    authenticationMethod?: "google" | "credentials";
+    authenticatedAt?: number;
   }
 }
