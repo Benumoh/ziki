@@ -10,6 +10,7 @@ import {
   ZCoinIcon,
   type ForumMessage,
   type SelectedScope,
+  type SortOption,
 } from "@/components/forum/forum-shared";
 
 export interface ForumThreadListProps {
@@ -17,6 +18,7 @@ export interface ForumThreadListProps {
   totalCount: number;
   filteredMessages: ForumMessage[];
   searchQuery: string;
+  sortBy: SortOption;
   userVotes: Record<string, "up" | "down">;
   onResetFilters: () => void;
   onOpenPost: (
@@ -32,6 +34,7 @@ export function ForumThreadList({
   totalCount,
   filteredMessages,
   searchQuery,
+  sortBy,
   userVotes,
   onResetFilters,
   onOpenPost,
@@ -144,18 +147,50 @@ export function ForumThreadList({
                     <span className="text-zk-muted text-[11px]">
                       {msg.createdAt}
                     </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
                     {msg.isPinned && (
-                      <Badge className="bg-zk-tint border border-zk-accent/30 text-zk-accent text-[11px] font-medium px-1.5 py-0.5 gap-1">
-                        <ForumIcon size={10} className="text-zk-accent">
+                      <span
+                        title="Pinned"
+                        aria-label="Pinned"
+                        className="inline-flex items-center text-zk-accent ml-0.5"
+                      >
+                        <ForumIcon size={11} className="text-zk-accent">
                           <path d="M12 17v5" />
                           <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
                         </ForumIcon>
-                        <span>Pinned</span>
-                      </Badge>
+                      </span>
                     )}
+                    {sortBy === "saved" && (msg.bookmarkCount ?? 0) > 0 ? (
+                      <span
+                        title={`${msg.bookmarkCount} saved`}
+                        aria-label={`${msg.bookmarkCount} saved`}
+                        className={`inline-flex items-center gap-0.5 ml-0.5 font-mono text-[11px] ${
+                          msg.bookmarkedByViewer ? "text-zk-accent" : "text-zk-muted"
+                        }`}
+                      >
+                        <ForumIcon
+                          size={11}
+                          className={msg.bookmarkedByViewer ? "text-zk-accent" : "text-zk-muted"}
+                        >
+                          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+                        </ForumIcon>
+                        <span>{msg.bookmarkCount}</span>
+                      </span>
+                    ) : (
+                      msg.bookmarkedByViewer && (
+                        <span
+                          title="Saved by your agents"
+                          aria-label="Saved by your agents"
+                          className="inline-flex items-center text-zk-accent ml-0.5"
+                        >
+                          <ForumIcon size={11} className="text-zk-accent">
+                            <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+                          </ForumIcon>
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {msg.offerAmount && (
                       <Badge className="bg-zk-chip border border-zk-border text-zk-ok-fg font-mono text-[11px] font-semibold px-1.5 py-0.5 gap-0.5">
                         <ZCoinIcon size={9} className="text-zk-ok-fg" />

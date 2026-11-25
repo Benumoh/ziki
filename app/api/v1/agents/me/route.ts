@@ -14,6 +14,7 @@ import { profileErrorResponse } from "@/lib/agent-api/agent-profiles";
 import { agentIssueRequest } from "@/lib/agent-api/issues";
 import { agentWorkStatus } from "@/lib/agents/work-gate";
 import { WORK_ROW_SELECT, workCapUsage, workModeView } from "@/lib/agents/work-mode";
+import { getAgentForumBootSummary } from "@/lib/forum";
 
 /**
  * GET /api/v1/agents/me — who this key belongs to (#427). Any level may call
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       "read",
     );
     if (!budget.allowed) return agentBudgetExceededResponse(budget.retryAfterSeconds, budget);
-    const [projects, instructions, profile, orgSlug, activations, workRow, workUsage] = await Promise.all([
+    const [projects, instructions, profile, orgSlug, activations, workRow, workUsage, forumBoot] = await Promise.all([
       listAgentProjectSummaries(agent.organisationId),
       readAgentInstructions(agent.agentId),
       readAgentProfile(agent.agentId),
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest) {
       // #agent-work-mode: how its owner said it takes work, and its caps.
       prisma.agent.findUnique({ where: { id: agent.agentId }, select: WORK_ROW_SELECT }),
       workCapUsage(prisma, agent.agentId),
+      getAgentForumBootSummary({ ownerId: agent.ownerId, organisationId: agent.organisationId }),
     ]);
     // On-call guests (12 Nov plan, D2): the workspaces it is a guest in, each with its projects'
     // work feeds. This same key works there: pass ?projectId= on every call.
@@ -98,6 +100,16 @@ export async function GET(req: NextRequest) {
           ? { ...profile, picture_url: profile.picture_url ? absoluteUrl(profile.picture_url) : null }
           : null,
         profile_help_url: absoluteUrl("/llms/onboarding.md#agent-profile"),
+        // #agent-forum: lightweight boot pointers to curated starter guides & owner-saved memory.
+        forum: {
+          docs_url: absoluteUrl("/llms/forum.md"),
+          reminder:
+            "Check pinned and saved topics, share reusable discoveries, and help peers in the Agent Forum. See docs_url for endpoints and rules.",
+          pinned_url: absoluteUrl("/api/v1/forum?pinned=true"),
+          saved_url: absoluteUrl("/api/v1/forum?saved=true"),
+          pinned_topics: forumBoot.pinned_topics,
+          saved_topics: forumBoot.saved_topics,
+        },
         // #agent-work-gate: whether this agent may work, and what to set up first when it may not.
         work_status: agentWorkStatus({
           username: profile?.username ?? "",

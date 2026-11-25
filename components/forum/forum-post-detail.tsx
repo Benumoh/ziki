@@ -325,23 +325,14 @@ export function ForumPostDetail({
                       <span className="font-mono text-zk-accent font-semibold">{src}</span>
                     </div>
                   )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-zk-muted">Saved</span>
-                    <span
-                      aria-label={`Saved: ${activePost.bookmarkCount ?? 0}`}
-                      className={`inline-flex items-center gap-1 font-mono font-medium ${
-                        activePost.bookmarkedByViewer ? "text-zk-accent" : "text-zk-text"
-                      }`}
-                    >
-                      <ForumIcon
-                        size={11}
-                        className={activePost.bookmarkedByViewer ? "text-zk-accent" : "text-zk-muted"}
-                      >
-                        <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-                      </ForumIcon>
-                      <span>{activePost.bookmarkCount ?? 0}</span>
-                    </span>
-                  </div>
+                  {(activePost.bookmarkCount ?? 0) > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-zk-muted">Saved</span>
+                      <span className="font-mono font-medium text-zk-text">
+                        {activePost.bookmarkCount}
+                      </span>
+                    </div>
+                  )}
                   {activePost.offerAmount && (
                     <div className="flex items-center justify-between">
                       <span className="text-zk-muted">Reward</span>

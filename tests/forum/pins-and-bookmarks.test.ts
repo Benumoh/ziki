@@ -6,10 +6,12 @@ vi.mock("@/lib/prisma", () => ({
 
 import {
   createForumMessage,
+  getAgentForumBootSummary,
   listForumMessages,
   pinForumMessage,
   toggleForumBookmark,
 } from "@/lib/forum";
+import { buildForumSearchParams, parseForumSearchParams } from "@/lib/forum-url";
 
 describe("Forum Pinned Topics & Owner-Shared Bookmarks", () => {
   it("blocks working agents from pinning posts and allows manager/merger agents", async () => {
@@ -134,6 +136,30 @@ describe("Forum Pinned Topics & Owner-Shared Bookmarks", () => {
     });
     expect(onlyAgentB).toHaveLength(0);
 
+    // Sibling agent under the same owner cannot overwrite an existing owner bookmark
+    await expect(
+      toggleForumBookmark({
+        postId: platformPost.id,
+        actorUserId: "owner-shared",
+        actorAgentId: "agent-b",
+        actorOrgId: "org-b",
+        bookmarked: true,
+        note: "Duplicate save attempt",
+      })
+    ).rejects.toThrow(/Conflict: Already bookmarked for your owner/i);
+
+    // Same agent can still update its own bookmark note cleanly
+    const updated = await toggleForumBookmark({
+      postId: platformPost.id,
+      actorUserId: "owner-shared",
+      actorAgentId: "agent-a",
+      actorOrgId: "org-a",
+      bookmarked: true,
+      note: "Updated onboarding checklist note",
+    });
+    expect(updated.bookmarked).toBe(true);
+    expect(updated.note).toBe("Updated onboarding checklist note");
+
     // Unbookmarking removes it cleanly
     const removed = await toggleForumBookmark({
       postId: platformPost.id,
@@ -144,5 +170,45 @@ describe("Forum Pinned Topics & Owner-Shared Bookmarks", () => {
     });
     expect(removed.bookmarked).toBe(false);
     expect(removed.bookmarkCount).toBe(0);
+  });
+
+  it("returns scoped pinned_topics and saved_topics for /agents/me boot summary", async () => {
+    const summaryOrgB = await getAgentForumBootSummary({
+      ownerId: "owner-shared",
+      organisationId: "org-b",
+    });
+    expect(summaryOrgB.pinned_topics.some((t) => t.title === "How to use Ziki effectively")).toBe(true);
+    // Org A private bookmark must not leak into Org B agent's boot summary
+    expect(summaryOrgB.saved_topics.some((t) => t.title === "Org A internal deploy notes")).toBe(false);
+
+    const summaryOrgA = await getAgentForumBootSummary({
+      ownerId: "owner-shared",
+      organisationId: "org-a",
+    });
+    expect(summaryOrgA.saved_topics.some((t) => t.title === "Org A internal deploy notes")).toBe(true);
+  });
+
+  it("parses and serializes forum URL query parameters cleanly", () => {
+    const parsed = parseForumSearchParams(
+      new URLSearchParams("track=security&feed=report&status=verified&pinned=true&saved=true&mine=true&tag=auth&q=ssrf&sort=saved"),
+    );
+    expect(parsed).toEqual({
+      trackFilter: "security",
+      feedFilter: "report",
+      statusFilter: "verified",
+      pinnedOnly: true,
+      myAgentsView: "saved",
+      selectedTag: "auth",
+      searchQuery: "ssrf",
+      sortBy: "saved",
+    });
+
+    const serialized = buildForumSearchParams(parsed);
+    expect(serialized).toBe("track=security&feed=report&status=verified&pinned=true&saved=true&tag=auth&q=ssrf&sort=saved");
+
+    // Defaults serialize to empty query string
+    expect(
+      buildForumSearchParams(parseForumSearchParams(new URLSearchParams("track=invalid&sort=trending"))),
+    ).toBe("");
   });
 });

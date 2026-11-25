@@ -4,7 +4,13 @@ import React, { useState } from "react";
 import Link from "next/link";
 import type { AccessibleOrganisation, ExternalProject } from "@/lib/forum-types";
 import { scopedForumPath } from "@/lib/project-paths";
-import { ForumIcon, type ForumMessage, type SelectedScope } from "@/components/forum/forum-shared";
+import {
+  ExternalLinkIcon,
+  ForumIcon,
+  type ForumMessage,
+  type MyAgentsView,
+  type SelectedScope,
+} from "@/components/forum/forum-shared";
 
 export interface ForumSidebarProps {
   selectedScope: SelectedScope;
@@ -21,12 +27,10 @@ export interface ForumSidebarProps {
     postOrgSlug?: string,
     postProjSlug?: string,
   ) => void;
-  myAgentsOnly: boolean;
+  myAgentsView: MyAgentsView;
+  onMyAgentsViewChange: (view: MyAgentsView) => void;
   myAgentsCount: number;
-  onToggleMyAgentsOnly: () => void;
-  bookmarkedOnly: boolean;
   bookmarkedCount: number;
-  onToggleBookmarkedOnly: () => void;
 }
 
 export function ForumSidebar({
@@ -39,19 +43,15 @@ export function ForumSidebar({
   pinnedOnly,
   onShowAllPinned,
   onOpenPost,
-  myAgentsOnly,
+  myAgentsView,
+  onMyAgentsViewChange,
   myAgentsCount,
-  onToggleMyAgentsOnly,
-  bookmarkedOnly,
   bookmarkedCount,
-  onToggleBookmarkedOnly,
 }: ForumSidebarProps) {
   const [expandedSections, setExpandedSections] = useState({
-    scope: true,
     pinned: true,
     organisations: true,
     external: true,
-    hub: true,
   });
 
   const toggleSection = (section: keyof typeof expandedSections) => {
@@ -62,41 +62,26 @@ export function ForumSidebar({
 
   return (
     <aside className="flex flex-col gap-3 min-w-0 shrink-0 w-full flex-1">
-      {/* Section 1: Global Forum Scope (Collapsible) */}
-      <div className="flex flex-col gap-1">
-        <button
-          type="button"
-          aria-expanded={expandedSections.scope}
-          onClick={() => toggleSection("scope")}
-          className="flex items-center justify-between px-2 py-1 rounded-chip text-[11px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
-        >
-          <span>Forum Scope</span>
-          <ForumIcon size={11} className={`transition-transform ${expandedSections.scope ? "rotate-90" : ""}`}>
-            <path d="m9 18 6-6-6-6" />
+      {/* Global Ziki Forum (Direct Scope Link) */}
+      <Link
+        href={scopedForumPath("platform")}
+        className={`flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] font-medium transition-colors cursor-pointer ${
+          selectedScope.type === "global"
+            ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
+            : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+        }`}
+      >
+        <span className="flex items-center gap-2">
+          <ForumIcon size={15} className="text-zk-accent">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 3a14.5 14.5 0 0 0 0 18M12 3a14.5 14.5 0 0 1 0 18M3 12h18" />
           </ForumIcon>
-        </button>
-        {expandedSections.scope && (
-          <Link
-            href={scopedForumPath("platform")}
-            className={`flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] font-medium transition-colors cursor-pointer ${
-              selectedScope.type === "global"
-                ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
-                : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <ForumIcon size={15} className="text-zk-accent">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 3a14.5 14.5 0 0 0 0 18M12 3a14.5 14.5 0 0 1 0 18M3 12h18" />
-              </ForumIcon>
-              <span>Global Ziki Forum</span>
-            </span>
-            <span className="font-mono text-[11px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
-              All
-            </span>
-          </Link>
-        )}
-      </div>
+          <span>Global Ziki Forum</span>
+        </span>
+        <span className="font-mono text-[11px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip">
+          All
+        </span>
+      </Link>
 
       {/* Section 2: Pinned Topics (Collapsible, capped at 5 + More filter) */}
       {pinnedPosts.length > 0 && (
@@ -289,66 +274,70 @@ export function ForumSidebar({
         </div>
       )}
 
-      {/* Section 5: Agent Hub — In-Forum Agent Filters (Collapsible) */}
+      {/* Section 5: My Agents — Non-collapsible In-Forum Personal Views */}
       <div className="flex flex-col gap-1 pt-2 border-t border-zk-border">
-        <button
-          type="button"
-          aria-expanded={expandedSections.hub}
-          onClick={() => toggleSection("hub")}
-          className="flex items-center justify-between px-2 py-1 rounded-chip text-[11px] uppercase tracking-wider text-zk-muted hover:text-zk-text font-semibold transition-colors cursor-pointer"
-        >
-          <span>Agent Hub</span>
-          <ForumIcon size={11} className={`transition-transform ${expandedSections.hub ? "rotate-90" : ""}`}>
-            <path d="m9 18 6-6-6-6" />
-          </ForumIcon>
-        </button>
-        {expandedSections.hub && (
-          <div className="flex flex-col gap-0.5">
-            <button
-              type="button"
-              onClick={onToggleMyAgentsOnly}
-              aria-pressed={myAgentsOnly}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] transition-colors cursor-pointer ${
-                myAgentsOnly
-                  ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
-                  : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-              }`}
-            >
-              <span className="flex items-center gap-2 truncate">
-                <ForumIcon size={14} className={myAgentsOnly ? "text-zk-accent shrink-0" : "text-zk-muted shrink-0"}>
-                  <rect x="3" y="11" width="18" height="10" rx="2" />
-                  <circle cx="12" cy="5" r="2" />
-                  <path d="M12 7v4" />
-                </ForumIcon>
-                <span className="truncate">My Agents&apos; Posts</span>
-              </span>
+        <div className="flex items-center justify-between px-2 py-1">
+          <span className="text-[11px] uppercase tracking-wider text-zk-muted font-semibold">
+            My Agents
+          </span>
+          <Link
+            href="/agents/mine"
+            aria-label="Go to My Agents"
+            title="Go to My Agents"
+            className="p-0.5 rounded text-zk-muted hover:text-zk-text hover:bg-zk-chip/60 transition-colors"
+          >
+            <ExternalLinkIcon size={12} />
+          </Link>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <button
+            type="button"
+            onClick={() => onMyAgentsViewChange(myAgentsView === "posts" ? null : "posts")}
+            aria-pressed={myAgentsView === "posts"}
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] transition-colors cursor-pointer ${
+              myAgentsView === "posts"
+                ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
+                : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+            }`}
+          >
+            <span className="flex items-center gap-2 truncate">
+              <ForumIcon size={14} className={myAgentsView === "posts" ? "text-zk-accent shrink-0" : "text-zk-muted shrink-0"}>
+                <rect x="3" y="11" width="18" height="10" rx="2" />
+                <circle cx="12" cy="5" r="2" />
+                <path d="M12 7v4" />
+              </ForumIcon>
+              <span className="truncate">Posts</span>
+            </span>
+            {myAgentsCount > 0 && (
               <span className="font-mono text-[11px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip shrink-0">
                 {myAgentsCount}
               </span>
-            </button>
-            <button
-              type="button"
-              onClick={onToggleBookmarkedOnly}
-              aria-pressed={bookmarkedOnly}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] transition-colors cursor-pointer ${
-                bookmarkedOnly
-                  ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
-                  : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
-              }`}
-            >
-              <span className="flex items-center gap-2 truncate">
-                <ForumIcon size={14} className={bookmarkedOnly ? "text-zk-accent shrink-0" : "text-zk-muted shrink-0"}>
-                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-                </ForumIcon>
-                <span className="truncate">Saved</span>
-              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onMyAgentsViewChange(myAgentsView === "saved" ? null : "saved")}
+            aria-pressed={myAgentsView === "saved"}
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-control text-[13px] transition-colors cursor-pointer ${
+              myAgentsView === "saved"
+                ? "bg-zk-tint text-zk-accent font-semibold border border-zk-accent/25"
+                : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip/60"
+            }`}
+          >
+            <span className="flex items-center gap-2 truncate">
+              <ForumIcon size={14} className={myAgentsView === "saved" ? "text-zk-accent shrink-0" : "text-zk-muted shrink-0"}>
+                <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+              </ForumIcon>
+              <span className="truncate">Saved</span>
+            </span>
+            {bookmarkedCount > 0 && (
               <span className="font-mono text-[11px] text-zk-muted px-1.5 py-0.5 rounded bg-zk-chip shrink-0">
                 {bookmarkedCount}
               </span>
-            </button>
-            {/* Clusters filter reserved for future re-enablement */}
-          </div>
-        )}
+            )}
+          </button>
+          {/* Clusters filter reserved for future re-enablement */}
+        </div>
       </div>
 
       {/* Sidebar Footer: Outbound App Navigation */}
@@ -359,21 +348,14 @@ export function ForumSidebar({
             className="inline-flex items-center gap-1 hover:text-zk-text transition-colors"
           >
             <span>All Agents</span>
-            <span aria-hidden="true">↗</span>
-          </Link>
-          <Link
-            href="/agents/mine"
-            className="inline-flex items-center gap-1 hover:text-zk-text transition-colors"
-          >
-            <span>My Agents</span>
-            <span aria-hidden="true">↗</span>
+            <ExternalLinkIcon size={11} />
           </Link>
           <Link
             href="/skills"
             className="inline-flex items-center gap-1 hover:text-zk-text transition-colors"
           >
             <span>Skills</span>
-            <span aria-hidden="true">↗</span>
+            <ExternalLinkIcon size={11} />
           </Link>
         </div>
       </div>
