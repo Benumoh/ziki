@@ -46,6 +46,12 @@ import {
   signupSchema,
 } from "@/lib/validations/issue";
 import { revokeSessionOnLogout } from "@/lib/user-sessions";
+import { appCookieOptions } from "@/lib/cookie-options";
+import { GOOGLE_INTENT_TTL_SECONDS, sealGoogleIntent } from "@/lib/google-auth-intent";
+import { GOOGLE_CHALLENGE_COOKIE, GOOGLE_INTENT_COOKIE, GOOGLE_SECURITY_COOKIE } from "@/lib/google-auth-cookies";
+import { requireUser } from "@/lib/auth-helpers";
+import { confirmIdentity } from "@/lib/two-factor";
+import { isGoogleOAuthConfigured } from "@/lib/google-oauth";
 
 const RESET_LINK_INVALID =
   "This reset link is invalid or has expired. Request a new one.";
@@ -195,6 +201,9 @@ export async function logoutAction() {
   });
   const cookieStore = await cookies();
   cookieStore.delete(ACTIVE_ROLE_COOKIE_NAME);
+  cookieStore.delete(GOOGLE_INTENT_COOKIE);
+  cookieStore.delete(GOOGLE_CHALLENGE_COOKIE);
+  cookieStore.delete(GOOGLE_SECURITY_COOKIE);
   await signOut({ redirectTo: "/login" });
 }
 
@@ -276,9 +285,81 @@ export async function googleSignInAction(
     if (typeof raw === "string") target = raw;
   }
   const safeTarget = safeCallbackUrl(target);
+  const jar = await cookies();
+  jar.delete(GOOGLE_CHALLENGE_COOKIE);
+  jar.set(GOOGLE_INTENT_COOKIE, sealGoogleIntent({ callbackUrl: safeTarget }), appCookieOptions(GOOGLE_INTENT_TTL_SECONDS));
   await signIn("google", { redirectTo: safeTarget });
 }
 
+/** Re-authenticate before linking an unverified password account to Google. */
+export async function connectGoogleAction(
+  _prev: { error?: string } | undefined,
+  formData: FormData,
+): Promise<{ error?: string } | undefined> {
+  const user = await requireUser();
+  if (!isGoogleOAuthConfigured()) return { error: "Google sign-in is not configured on this site yet." };
+  const identity = await confirmIdentity(user.id, {
+    password: String(formData.get("currentPassword") ?? ""),
+    code: String(formData.get("code") ?? ""),
+  });
+  if (!identity.ok) return { error: identity.error };
+  const account = await prisma.user.findUnique({ where: { id: user.id }, select: { email: true, sessionVersion: true } });
+  const session = await auth();
+  if (!account || session?.user?.id !== user.id || account.sessionVersion !== (session.user.sessionVersion ?? 0)) return { error: "Your session ended. Sign in again." };
+  const jar = await cookies();
+  jar.set(GOOGLE_INTENT_COOKIE, sealGoogleIntent({
+    callbackUrl: "/settings/security",
+    link: { userId: user.id, email: account.email, sessionVersion: account.sessionVersion },
+  }), appCookieOptions(GOOGLE_INTENT_TTL_SECONDS));
+  await signIn("google", { redirectTo: "/settings/security" }, { prompt: "select_account" });
+}
+
+/** An emailed, single-use proof is needed before adding a new login method. */
+export async function requestPasswordSetupAction(): Promise<{ error?: string; success?: string }> {
+  const user = await requireUser();
+  if (!isPasswordAuthEnabled()) return { error: PASSWORD_AUTH_DISABLED_MESSAGE };
+  const limited = await authRateLimited("forgotPassword", user.email ?? null);
+  if (limited) return limited;
+  if (!canSendMail()) return { error: RESET_EMAIL_UNAVAILABLE };
+  const account = await prisma.user.findUnique({ where: { id: user.id }, select: { email: true, passwordHash: true, googleSubject: true } });
+  if (!account?.googleSubject) return { error: "Sign in with Google first to confirm your account." };
+  if (account.passwordHash) return { error: "Your account already has a password. Use Reset password instead." };
+  const raw = createRawResetToken();
+  const tokenHash = hashResetToken(raw);
+  await prisma.$transaction([
+    prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
+    prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash, expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS) } }),
+  ]);
+  try {
+    await sendMail({ to: account.email, subject: "Add a password to your Ziki account",
+      text: `Open this link within 30 minutes to add a password. Google sign-in will keep working.\n\n${buildPasswordResetUrl(raw)}&setup=1\n\nIf you did not request this, ignore this email.` });
+  } catch (error) {
+    logger.error("[password-setup] Could not send setup email", error);
+    await prisma.passwordResetToken.deleteMany({ where: { tokenHash } });
+    return { error: "We couldn't send the email. Please try again." };
+  }
+  return { success: "Check your email for a link to add a password. Google sign-in will keep working." };
+}
+
+export async function googleTwoFactorAction(
+  _prev: { error?: string } | undefined,
+  formData: FormData,
+): Promise<{ error?: string } | undefined> {
+  const jar = await cookies();
+  const raw = jar.get(GOOGLE_CHALLENGE_COOKIE)?.value ?? "";
+  const challenge = /^[a-f0-9]{64}$/.test(raw)
+    ? await prisma.googleSignInChallenge.findUnique({ where: { tokenHash: hashResetToken(raw) } }) : null;
+  if (!challenge || challenge.usedAt || challenge.expiresAt.getTime() <= Date.now()) {
+    return { error: "Your Google sign-in expired. Continue with Google again." };
+  }
+  try {
+    await signIn("google-two-factor", { code: String(formData.get("code") ?? ""), redirect: false });
+  } catch (error) {
+    if (error instanceof AuthError) return { error: "That code wasn't accepted. Try another code or sign in with Google again." };
+    throw error;
+  }
+  redirect(safeCallbackUrl(challenge.callbackUrl));
+}
 
 
 export async function forgotPasswordAction(
@@ -397,5 +478,6 @@ export async function resetPasswordAction(
     return { error: RESET_LINK_INVALID };
   }
 
+  await signOut({ redirect: false });
   redirect("/login");
 }

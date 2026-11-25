@@ -8,8 +8,6 @@ import {
   resolveEffectiveRole,
   ACTIVE_ROLE_COOKIE_NAME,
 } from "@/lib/roles";
-import { isPasswordAuthEnabled } from "@/lib/auth-mode";
-import { upsertGoogleUser } from "@/lib/google-user";
 import { resolveSessionUserId } from "@/lib/session-user";
 import { isSuperAdminEmail } from "@/lib/super-admin";
 import { ensureZeduOwnerMembership } from "@/lib/organisations";
@@ -44,31 +42,8 @@ export async function requireUser(): Promise<SessionAppUser> {
   }
 
   const resolved = await resolveSessionUserId();
-  let userId: string;
-  if ("error" in resolved) {
-    const email = session.user.email?.toLowerCase();
-    // A tracked session that failed validation (revoked or stale version) must
-    // expire immediately rather than re-provisioning a Google user.
-    if (session.user.sessionId || !email || isPasswordAuthEnabled()) {
-      redirect(SESSION_EXPIRED_PATH);
-    }
-    try {
-      const googleAccount = await upsertGoogleUser({
-        email,
-        name: session.user.name,
-        image: session.user.image,
-      });
-      if ((session.user.sessionVersion ?? 0) !== googleAccount.sessionVersion) {
-        redirect(SESSION_EXPIRED_PATH);
-      }
-      userId = googleAccount.id;
-    } catch (error) {
-      logger.error("[auth] Google session could not be linked to a user", error);
-      redirect(SESSION_EXPIRED_PATH);
-    }
-  } else {
-    userId = resolved.userId;
-  }
+  if ("error" in resolved) redirect(SESSION_EXPIRED_PATH);
+  const userId = resolved.userId;
 
   const dbUser = await prisma.user
     .findUnique({

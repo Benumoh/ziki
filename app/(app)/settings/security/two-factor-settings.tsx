@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useState, useTransition } from "react";
+import { unstable_rethrow, useRouter } from "next/navigation";
+import type { GoogleSecurityOperation } from "@/lib/google-auth-intent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -11,6 +12,7 @@ import {
   disableTwoFactorAction,
   regenerateBackupCodesAction,
   startTwoFactorAction,
+  beginGoogleSecurityAction,
 } from "./actions";
 
 type Step =
@@ -24,21 +26,45 @@ type Step =
 /** Every two-factor change signs out the person's other sessions (Ziki #389). */
 const SIGNED_OUT_NOTICE = "You've been signed out on your other devices.";
 
+function GoogleVerification({ operation }: { operation: GoogleSecurityOperation }) {
+  const [result, action, pending] = useActionState(beginGoogleSecurityAction, undefined);
+  return (
+    <form action={action} className="space-y-3">
+      <input type="hidden" name="operation" value={operation} />
+      <p className="text-sm text-zk-muted">Confirm your Google account before continuing. You don&apos;t need to add a password.</p>
+      {result?.error ? <p role="alert" className="text-sm text-zk-bad-fg">{result.error}</p> : null}
+      <Button type="submit" disabled={pending}>{pending ? "Connecting…" : "Verify with Google"}</Button>
+    </form>
+  );
+}
+
 export function TwoFactorSettings({
   enabled,
   backupCodesLeft,
+  hasPassword = true,
+  googleVerifiedFor,
 }: {
   enabled: boolean;
   backupCodesLeft: number;
+  hasPassword?: boolean;
+  googleVerifiedFor?: GoogleSecurityOperation;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>({ name: "idle" });
+  const [step, setStep] = useState<Step>(() => {
+    switch (googleVerifiedFor) {
+      case "setup": return { name: "password" };
+      case "disable": return { name: "disable" };
+      case "regenerate": return { name: "regenerate" };
+      default: return { name: "idle" };
+    }
+  });
+  const [googleProofAvailable, setGoogleProofAvailable] = useState(Boolean(googleVerifiedFor));
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [signedOutOthers, setSignedOutOthers] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  function run<T extends { ok: boolean; error?: string }>(
+  function run<T extends { ok: boolean; error?: string; requiresGoogleVerification?: boolean }>(
     action: (formData: FormData) => Promise<T>,
     formData: FormData,
     onOk: (result: Extract<T, { ok: true }>) => void,
@@ -50,8 +76,12 @@ export function TwoFactorSettings({
       try {
         const result = await action(formData);
         if (result.ok) onOk(result as Extract<T, { ok: true }>);
-        else setError(result.error ?? "Something went wrong.");
-      } catch {
+        else {
+          if (result.requiresGoogleVerification) setGoogleProofAvailable(false);
+          setError(result.error ?? "Something went wrong.");
+        }
+      } catch (error) {
+        unstable_rethrow(error);
         setError("Something went wrong. Please try again.");
       }
     });
@@ -66,6 +96,7 @@ export function TwoFactorSettings({
   function finish() {
     setStep({ name: "idle" });
     setCopied(false);
+    setGoogleProofAvailable(false);
     router.refresh();
   }
 
@@ -177,17 +208,25 @@ export function TwoFactorSettings({
   }
 
   if (step.name === "password") {
+    if (!hasPassword && (!googleProofAvailable || googleVerifiedFor !== "setup")) {
+      return <div className="mt-4 space-y-3">
+        {errorLine}
+        <GoogleVerification operation="setup" />
+        <Button type="button" variant="secondary" onClick={cancel}>Cancel</Button>
+      </div>;
+    }
     return (
       <form
         className="mt-4 space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          run(startTwoFactorAction, new FormData(event.currentTarget), (result) =>
-            setStep({ name: "scan", secret: result.secret, qr: result.qr }),
-          );
+          run(startTwoFactorAction, new FormData(event.currentTarget), (result) => {
+            setGoogleProofAvailable(false);
+            setStep({ name: "scan", secret: result.secret, qr: result.qr });
+          });
         }}
       >
-        <div className="space-y-1.5">
+        {hasPassword ? <div className="space-y-1.5">
           <label htmlFor="setup-password" className="text-sm font-medium text-zk-text2">
             Confirm your password to continue
           </label>
@@ -198,7 +237,7 @@ export function TwoFactorSettings({
             required
             aria-describedby={error ? "two-factor-error" : undefined}
           />
-        </div>
+        </div> : <p className="text-sm text-zk-text2">Google confirmed your identity. Continue to set up your authenticator app.</p>}
         {errorLine}
         <div className="flex gap-2">
           <Button type="submit" disabled={pending}>
@@ -214,6 +253,13 @@ export function TwoFactorSettings({
 
   if (step.name === "regenerate" || step.name === "disable") {
     const disabling = step.name === "disable";
+    if (!hasPassword && (!googleProofAvailable || googleVerifiedFor !== step.name)) {
+      return <div className="mt-4 space-y-3">
+        {errorLine}
+        <GoogleVerification operation={step.name} />
+        <Button type="button" variant="secondary" onClick={cancel}>Cancel</Button>
+      </div>;
+    }
     return (
       <form
         className="mt-4 space-y-3"
@@ -228,6 +274,7 @@ export function TwoFactorSettings({
           } else {
             run(regenerateBackupCodesAction, data, (result) => {
               setSignedOutOthers(true);
+              setGoogleProofAvailable(false);
               setStep({ name: "codes", codes: result.codes, heading: "New backup codes made." });
             });
           }
@@ -235,11 +282,11 @@ export function TwoFactorSettings({
       >
         <p className="text-sm text-zk-muted">
           {disabling
-            ? "Turning this off means your password alone signs you in again."
+            ? "Turning this off removes Ziki's authenticator step from sign-in."
             : "This replaces your old backup codes, which stop working."}{" "}
           Confirm it is you:
         </p>
-        <div className="space-y-1.5">
+        {hasPassword ? <div className="space-y-1.5">
           <label htmlFor="reauth-password" className="text-sm font-medium text-zk-text2">
             Password
           </label>
@@ -250,7 +297,7 @@ export function TwoFactorSettings({
             required
             aria-describedby={error ? "two-factor-error" : undefined}
           />
-        </div>
+        </div> : <p className="text-sm text-zk-text2">Google confirmed your identity. Enter your authenticator or backup code to confirm this change.</p>}
         <div className="space-y-1.5">
           <label htmlFor="reauth-code" className="text-sm font-medium text-zk-text2">
             Authenticator or backup code

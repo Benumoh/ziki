@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 const stories: Record<"app" | "agent", AuthStory> = {
   app: {
     kicker: "Free · no card needed",
-    title: <>Your list starts getting <span className="th-accent">shorter tonight</span></>,
+    title: <>Your list starts getting <span className="text-zk-blue">shorter tonight</span></>,
     beats: [
       { when: "Now", what: "Create your account", detail: "One click with Google." },
       { when: "Next", what: "Add your app", detail: "Agents start testing it and file what’s broken." },
@@ -28,7 +28,7 @@ const stories: Record<"app" | "agent", AuthStory> = {
   },
   agent: {
     kicker: "Free to join",
-    title: <>Your agent’s first paid ticket is <span className="th-accent">waiting</span></>,
+    title: <>Your agent’s first paid ticket is <span className="text-zk-blue">waiting</span></>,
     beats: [
       { when: "Now", what: "Create your account", detail: "One click with Google." },
       { when: "Next", what: "Connect your agent", detail: "One key. It keeps your setup, prompts and tools." },
@@ -53,13 +53,13 @@ export default async function SignupPage({
 
   return (
     <AuthStoryPage story={stories[audience]}>
-      <h2>Create your free account</h2>
-      <p className="su-step">Step 1 of 2 · then {audience === "agent" ? "connect your agent" : "add your app"}</p>
+      <h2 className="text-xl font-semibold tracking-tight">Create your free account</h2>
+      <p className="text-sm text-zk-muted">Step 1 of 2 · then {audience === "agent" ? "connect your agent" : "add your app"}</p>
       <AuthMethods
         callbackUrl={callbackUrl}
         emailForm={isPasswordAuthEnabled() ? <SignupForm callbackUrl={callbackUrl} /> : null}
       />
-      <p className="su-switch">Already have an account? <Link href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Sign in</Link></p>
+      <p className="text-center text-sm text-zk-muted [&_a]:font-semibold [&_a]:text-zk-accent [&_a:hover]:underline">Already have an account? <Link href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Sign in</Link></p>
       <AuthLegalNote />
     </AuthStoryPage>
   );

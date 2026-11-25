@@ -1,151 +1,69 @@
-import { randomUUID } from "node:crypto";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isSuperAdminEmail } from "@/lib/super-admin";
-import { logger } from "@/lib/logger";
-import { clearTwoFactorAfterPasswordRemoved } from "@/lib/two-factor";
+import type { GoogleAuthIntent } from "@/lib/google-auth-intent";
 
-type Db = typeof prisma;
-
-/**
- * Runs a user upsert. When it removes an unproven password, any two-factor
- * set up for that password is cleared in the same transaction (#388): both
- * happen or neither does, so a failure leaves the account with its password
- * and factor (still usable, retried at the next sign-in), never with a factor
- * that can no longer be turned off.
- */
-async function upsertUser<T extends { id: string }>(
-  neutralizePassword: boolean,
-  run: (db: Db) => Promise<T>,
-): Promise<T> {
-  if (!neutralizePassword) return run(prisma);
-  return prisma.$transaction(async (tx) => {
-    const user = await run(tx as unknown as Db);
-    await clearTwoFactorAfterPasswordRemoved(user.id, tx);
-    return user;
-  });
-}
+export class GoogleLinkRequiredError extends Error {}
+export class GoogleLinkMismatchError extends Error {}
 
 export type GoogleAccount = {
   id: string;
+  email: string;
   name: string;
   role: Role;
   sessionVersion: number;
 };
 
-/**
- * Persist a Google sign-in. The full upsert is tried first. If a column the
- * current schema expects is missing in production, fall back to email and
- * name, then to a direct insert. A Google subject must never be used as User.id.
- */
+/** Link a verified Google identity without changing passwords, factors or account ownership. */
 export async function upsertGoogleUser(input: {
   email: string;
+  subject: string;
   name?: string | null;
   image?: string | null;
-  /** Google's own claim about this address (`profile.email_verified`). */
-  emailVerified?: boolean;
+  emailVerified: boolean;
+  link?: GoogleAuthIntent["link"];
 }): Promise<GoogleAccount> {
-  const email = input.email.toLowerCase();
-  const name = input.name?.trim() || email.split("@")[0] || "User";
-  const image = input.image || undefined;
-  const role: Role = isSuperAdminEmail(email) ? "super_admin" : "user";
-
-  // A password preregistered at an address is unproven: when Google claims
-  // the address, the unknown credential must not survive as a second login
-  // method (#736).
-  let neutralizePassword = false;
-  let existing: { passwordHash: string | null; emailVerified: Date | null } | null | undefined;
-  try {
-    existing = await prisma.user.findUnique({
-      where: { email },
-      select: { passwordHash: true, emailVerified: true },
-    });
-  } catch (error) {
-    logger.error("[auth] Google account pre-read failed:", error);
-    throw error;
+  if (input.emailVerified !== true || !input.subject || input.subject.length > 255) {
+    throw new GoogleLinkMismatchError("Google must verify the account email.");
   }
-  if (existing?.passwordHash) {
-    if (input.emailVerified === false) {
-      throw new Error(
-        "Google sign-in email is unverified; refusing to link it to a password account",
-      );
+  const email = input.email.trim().toLowerCase();
+  return prisma.$transaction(async (tx) => {
+    const linked = await tx.user.findUnique({ where: { googleSubject: input.subject } });
+    if (linked) {
+      if (input.link && (linked.id !== input.link.userId ||
+          linked.sessionVersion !== input.link.sessionVersion || email !== input.link.email)) {
+        throw new GoogleLinkMismatchError("Choose the Google account with your sign-in email.");
+      }
+      return linked;
     }
-    // Verified credentials kept their password (the owner proved the
-    // address some other way or still signs in with it).
-    neutralizePassword = !existing.emailVerified;
-  }
-
-  try {
-    const user = await upsertUser(neutralizePassword, (db) => db.user.upsert({
-      where: { email },
-      create: {
+    const existing = await tx.user.findUnique({ where: { email } });
+    if (input.link && (!existing || existing.id !== input.link.userId ||
+        existing.sessionVersion !== input.link.sessionVersion || email !== input.link.email)) {
+      throw new GoogleLinkMismatchError("The account changed. Confirm your password again.");
+    }
+    if (existing) {
+      if (existing.googleSubject) throw new GoogleLinkMismatchError("A different Google account is already connected.");
+      // Email/password signup alone does not prove ownership of the address.
+      // Require both the password (signed link intent) and Google in that case.
+      if (existing.passwordHash && !existing.emailVerified && !input.link) {
+        throw new GoogleLinkRequiredError("Sign in with your password, then connect Google in Settings.");
+      }
+      const changed = await tx.user.updateMany({
+        where: { id: existing.id, sessionVersion: existing.sessionVersion, googleSubject: null },
+        data: { googleSubject: input.subject, emailVerified: new Date(), ...(input.image ? { image: input.image } : {}) },
+      });
+      if (changed.count !== 1) throw new GoogleLinkMismatchError("The account changed. Try connecting Google again.");
+      return existing;
+    }
+    return tx.user.create({
+      data: {
         email,
-        name,
-        ...(image ? { image } : {}),
+        name: input.name?.trim() || email.split("@")[0],
+        googleSubject: input.subject,
         emailVerified: new Date(),
-        ...(role === "super_admin" ? { role } : {}),
+        ...(input.image ? { image: input.image } : {}),
+        ...(isSuperAdminEmail(email) ? { role: "super_admin" } : {}),
       },
-      // `name` is only used when the account is created. Updating it here
-      // would undo a display name the person chose in Settings (#293) at
-      // their next sign-in.
-      update: {
-        ...(image ? { image } : {}),
-        emailVerified: new Date(),
-        ...(role === "super_admin" ? { role } : {}),
-        ...(neutralizePassword ? { passwordHash: null } : {}),
-      },
-      select: { id: true, name: true, role: true, sessionVersion: true },
-    }));
-    return { id: user.id, name: user.name, role: user.role, sessionVersion: user.sessionVersion };
-  } catch (error) {
-    logger.error("[auth] Google user upsert failed:", error);
-  }
-
-  try {
-    const user = await upsertUser(neutralizePassword, (db) => db.user.upsert({
-      where: { email },
-      create: { email, name },
-      update: {
-        ...(neutralizePassword ? { passwordHash: null } : {}),
-      },
-      select: { id: true, name: true, sessionVersion: true },
-    }));
-    return { id: user.id, name: user.name, role, sessionVersion: user.sessionVersion ?? 0 };
-  } catch (error) {
-    logger.error("[auth] Minimal Google user upsert failed:", error);
-  }
-
-  // #388: the raw insert below only creates a new row (ON CONFLICT DO
-  // NOTHING), so for an existing account it would return the user with the
-  // unproven password still in place. Refuse instead of signing in.
-  if (neutralizePassword) {
-    throw new Error(
-      "Google sign-in could not remove the unproven password on this account; refusing to sign in",
-    );
-  }
-
-  const id = randomUUID();
-  try {
-    await prisma.$executeRaw`
-      INSERT INTO "User" ("id", "name", "email", "createdAt")
-      VALUES (${id}, ${name}, ${email}, CURRENT_TIMESTAMP)
-      ON CONFLICT ("email") DO NOTHING
-    `;
-  } catch (error) {
-    logger.error("[auth] Google user insert without password failed:", error);
-    await prisma.$executeRaw`
-      INSERT INTO "User" ("id", "name", "email", "passwordHash", "createdAt")
-      VALUES (${id}, ${name}, ${email}, '', CURRENT_TIMESTAMP)
-      ON CONFLICT ("email") DO NOTHING
-    `;
-  }
-
-  const saved = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, name: true, sessionVersion: true },
+    });
   });
-  if (!saved) {
-    throw new Error("Google sign-in could not save the user");
-  }
-  return { id: saved.id, name: saved.name, role, sessionVersion: saved.sessionVersion ?? 0 };
 }

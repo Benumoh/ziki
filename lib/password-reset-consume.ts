@@ -30,7 +30,7 @@ export async function consumeResetToken(
   await tx.user.update({
     where: { id: userId },
     // Bumping the version signs out every existing session for this user (#208).
-    data: { passwordHash, sessionVersion: { increment: 1 } },
+    data: { passwordHash, emailVerified: now, sessionVersion: { increment: 1 } },
   });
   // A reset password must not leave live agent keys behind (#513). The agent
   // rows stay, so the owner can regenerate a key from settings.

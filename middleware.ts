@@ -8,6 +8,7 @@ import { isProjectFirstPath } from "@/lib/project-paths";
 import { isPublicAgentPath } from "@/lib/public-agent-paths";
 import { publicIntakeSegments, publicIssuesSegments, publicOrgFeedbackSegments } from "@/lib/public-project-paths";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
+import { GOOGLE_CHALLENGE_COOKIE } from "@/lib/google-auth-cookies";
 
 /**
  * Edge-only auth wrapper — initialized from auth.config (no Prisma/bcrypt).
@@ -139,7 +140,9 @@ export default auth((req) => {
 
   // Allow reset links even when a session exists; only bounce login/signup.
   // Signed-in people land on the Overview, the post-login home.
-  if (isLoggedIn && isAuthPage) {
+  const googleCodeStep = pathWithoutBase === "/login" &&
+    req.nextUrl.searchParams.get("googleCode") === "1" && req.cookies.has(GOOGLE_CHALLENGE_COOKIE);
+  if (isLoggedIn && isAuthPage && !googleCodeStep) {
     const callback = pathWithoutBase === "/login" ? safeCallbackUrl(req.nextUrl.searchParams.get("callbackUrl")) : "/home";
     return NextResponse.redirect(
       new URL(BASE_PATH ? `${BASE_PATH}${callback}` : callback, req.nextUrl.origin),

@@ -12,11 +12,10 @@ type AuthModeEnv = {
 /**
  * Whether email/password sign-in (and the forgot/reset password flow) is on.
  *
- * Zedu Bugs is Google-only in production. Password auth exists for local
- * development and the demo seed, so:
- * - `AUTH_PASSWORD_LOGIN=true`  → on (explicit opt-in, any environment)
+ * Both Google and passwords are supported in every environment:
+ * - `AUTH_PASSWORD_LOGIN=true`  → on (explicit enable, any environment)
  * - `AUTH_PASSWORD_LOGIN=false` → off
- * - unset → on outside production, off in production
+ * - unset → on
  *
  * Edge-safe (no Prisma / bcrypt) so middleware can import it.
  */
@@ -26,5 +25,5 @@ export function isPasswordAuthEnabled(
   const flag = cleanEnv(env.AUTH_PASSWORD_LOGIN)?.toLowerCase();
   if (flag === "true" || flag === "1") return true;
   if (flag === "false" || flag === "0") return false;
-  return env.NODE_ENV !== "production";
+  return true;
 }
