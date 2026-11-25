@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { HeadersAdapter } from "next/dist/server/web/spec-extension/adapters/headers";
 import {
   AGENT_RATE_BUDGETS,
   agentBudgetExceededResponse,
@@ -85,6 +86,23 @@ describe("sign-in limits", () => {
 
   it("ignores junk in proxy headers", () => {
     expect(clientIpFrom(new Headers({ "x-forwarded-for": "<script>" }))).toBeNull();
+  });
+
+  it.each(["signup", "forgotPassword"] as const)("reads Next.js headers for %s limits and still accepts request objects", (action) => {
+    const headers = HeadersAdapter.seal(new HeadersAdapter({
+      "x-forwarded-for": "198.51.100.20",
+    }));
+    expect(clientIpFrom(headers)).toBe("198.51.100.20");
+    expect(clientIpFrom({ headers })).toBe("198.51.100.20");
+    const { max } = AUTH_RATE_LIMITS[action].ip;
+    for (let i = 0; i < max; i++) {
+      expect(checkAuthRateLimit(action, {
+        email: `signup${i}@example.com`, ip: clientIpFrom(headers),
+      }, 0).allowed).toBe(true);
+    }
+    expect(checkAuthRateLimit(action, {
+      email: "another@example.com", ip: clientIpFrom(headers),
+    }, 0).allowed).toBe(false);
   });
 
   it("counts each key in its own window", () => {
