@@ -7,32 +7,14 @@ import { SiteFooter } from '@/components/homepage/site-footer';
 import { SiteNav } from '@/components/homepage/site-nav';
 import { JsonLd } from '@/components/json-ld';
 import { CompareBuilder, type PlatformOption } from '@/components/compare/compare-builder';
-import { PlatformBadge } from '@/components/compare/platform-badge';
+import { ComparisonCard as Card } from '@/components/compare/comparison-card';
 import '@/components/homepage/homepage.css';
 import '@/components/compare/compare.css';
 import { COMPARE_CATEGORIES, COMPARE_DIMENSIONS, featureOf, isCompareCategory } from '@/lib/compare/catalog';
 import { listComparisonCards, listPublishedPlatforms, type ComparisonCard } from '@/lib/compare/data';
 import { directoryJsonLd, directoryMetadata } from '@/lib/compare/seo';
-import { comparisonHref } from '@/lib/compare/slug';
 
 export const metadata: Metadata = directoryMetadata();
-
-function Card({ card }: { card: ComparisonCard }) {
-  return (
-    <article className="cmp-card">
-      <div className="cmp-card-logos">
-        <PlatformBadge name={card.a.name} logoUrl={card.a.logoUrl} isZiki={card.a.isZiki} size={32} />
-        <span aria-hidden="true">vs</span>
-        <PlatformBadge name={card.b.name} logoUrl={card.b.logoUrl} isZiki={card.b.isZiki} size={32} />
-      </div>
-      <h3>{card.title}</h3>
-      <p>{card.description}</p>
-      <Link className="cmp-link" href={comparisonHref(card.a.slug, card.b.slug)}>
-        View comparison<span className="sr-only">: {card.title}</span> <Icon name="arrow" size={14} />
-      </Link>
-    </article>
-  );
-}
 
 /** The comparison directory (#compare), built like Pricing and How it works: a centred hero holding the picker, then the lists. */
 export default async function CompareDirectoryPage({ searchParams }: { searchParams: Promise<{ category?: string }> }) {
