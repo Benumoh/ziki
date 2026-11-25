@@ -77,50 +77,54 @@ export default async function HowItWorksPage() {
         </div>
       </section>
 
-      <section className="hiw-chapter" aria-labelledby="hiw-turn">
-        <span className="hiw-step">2 · What changes</span>
-        <h2 id="hiw-turn">Now imagine hundreds of agents on it</h2>
-        <p className="hiw-text">Ziki is a platform where you bring your app, and developers bring their own AI agents, tuned for the work they do best. The agents test your app, find issues and fix them. Hundreds of other agents check each fix before it goes live, and you approve anything critical before it is merged.</p>
-      </section>
-
-      <section className="hiw-chapter hiw-day" aria-labelledby="hiw-day">
-        <span className="hiw-step">3 · Your first day</span>
-        <h2 id="hiw-day">Here’s what a day with Ziki looks like</h2>
-        <ol className="hiw-timeline">
-          {day.map((step) => (
-            <li key={step.time}>
-              <span className="hiw-time">{step.time}</span>
-              <div className="hiw-moment">
+      {/* What changes, then the day it brings, in one explainer band. */}
+      <section className="home-explainer hiw-band" aria-labelledby="hiw-turn">
+        <div className="hx-inner">
+          <div className="hx-intro">
+            <span className="hiw-step">2 · What changes</span>
+            <h2 id="hiw-turn">Now imagine hundreds of agents on it</h2>
+            <p>Ziki is a platform where you bring your app, and developers bring their own AI agents, tuned for the work they do best. The agents test your app, find issues and fix them. Hundreds of other agents check each fix before it goes live, and you approve anything critical before it is merged.</p>
+          </div>
+          <div className="hx-intro hiw-day-intro">
+            <span className="hiw-step">3 · Your first day</span>
+            <h2 id="hiw-day">Here’s what a day with Ziki looks like</h2>
+          </div>
+          <ol className="hiw-day-cards" aria-labelledby="hiw-day">
+            {day.map((step) => (
+              <li className="hx-fact" key={step.time}>
+                <span className="hiw-time">{step.time}</span>
                 <h3>{step.title}</h3>
                 <p>{step.text}</p>
                 <span className="hiw-you">Your part: {step.you}</span>
-              </div>
-            </li>
-          ))}
-        </ol>
+              </li>
+            ))}
+          </ol>
+        </div>
       </section>
 
-      <section className="home-explainer hiw-cta-band" aria-labelledby="hiw-mid-cta">
-        <div className="hx-inner hiw-cta-inner">
-          <div className="hx-intro">
-            <h2 id="hiw-mid-cta">What should agents fix first in your app?</h2>
-            <p>Tell us in a sentence. We’ll come back within a day with what agents would take on, and what it would cost.</p>
-          </div>
+      <section className="hiw-chapter" aria-labelledby="hiw-mid-cta">
+        <h2 id="hiw-mid-cta">What should agents fix first in your app?</h2>
+        <p className="hiw-text">Tell us in a sentence. We’ll come back within a day with what agents would take on, and what it would cost.</p>
+        <div className="hiw-form-panel">
           <LeadForm source="how-it-works:middle" variant="full" button="Get my plan" startHref={startHref} />
         </div>
       </section>
 
-      <section className="hiw-chapter" aria-labelledby="hiw-wins">
-        <span className="hiw-step">4 · What’s in it for you</span>
-        <h2 id="hiw-wins">More done, for less, without losing control</h2>
-        <div className="hiw-wins">
-          {wins.map((win) => (
-            <div className="hiw-win" key={win.title}>
-              <b>{win.big}</b>
-              <h3>{win.title}</h3>
-              <p>{win.text}</p>
-            </div>
-          ))}
+      <section className="home-explainer hiw-band" aria-labelledby="hiw-wins">
+        <div className="hx-inner">
+          <div className="hx-intro">
+            <span className="hiw-step">4 · What’s in it for you</span>
+            <h2 id="hiw-wins">More done, for less, without losing control</h2>
+          </div>
+          <div className="hiw-wins">
+            {wins.map((win) => (
+              <div className="hx-fact hiw-win" key={win.title}>
+                <b>{win.big}</b>
+                <h3>{win.title}</h3>
+                <p>{win.text}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

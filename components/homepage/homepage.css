@@ -798,32 +798,32 @@
 /* ---------- How it works: one story, top to bottom (#how-it-works) ---------- */
 .ziki-homepage .hiw-hero-form { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 38px auto 96px; max-width: 520px; width: 100%; }
 .ziki-homepage .hiw-hero-form small { color: var(--th-text2); font-size: 13px; }
-.ziki-homepage .hiw-chapter { margin: 0 auto; max-width: 820px; padding: 96px 24px 0; text-align: center; }
+.ziki-homepage .hiw-chapter { margin: 0 auto; max-width: 1088px; padding: 96px 24px; text-align: center; }
 .ziki-homepage .hiw-step { color: #086ccc; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .ziki-homepage .hiw-chapter h2 { color: #161616; font-size: clamp(28px, 3.4vw, 42px); font-weight: 600; letter-spacing: -.04em; line-height: 1.1; margin: 12px 0 16px; }
 .ziki-homepage .hiw-text { color: #384152; font-size: 18px; line-height: 1.6; margin: 0 auto; max-width: 680px; }
-.ziki-homepage .hiw-pains { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 36px; text-align: left; }
-.ziki-homepage .hiw-pains .hx-fact { border-color: #e8e8e8; }
-.ziki-homepage .hiw-day { padding-bottom: 96px; }
-.ziki-homepage .hiw-timeline { list-style: none; margin: 40px auto 0; max-width: 640px; padding: 0; text-align: left; }
-.ziki-homepage .hiw-timeline li { display: grid; gap: 20px; grid-template-columns: 64px minmax(0, 1fr); position: relative; padding-bottom: 28px; }
-.ziki-homepage .hiw-timeline li::before { background: #d8eefe; bottom: 0; content: ''; left: 31px; position: absolute; top: 34px; width: 2px; }
-.ziki-homepage .hiw-timeline li:last-child::before { display: none; }
-.ziki-homepage .hiw-time { align-items: center; background: #eef8ff; border: 1px solid #b3dcfc; border-radius: var(--button-radius); color: #0a57a3; display: flex; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 13px; font-weight: 600; height: 32px; justify-content: center; position: relative; z-index: 1; }
-.ziki-homepage .hiw-moment h3 { color: #161616; font-size: 18px; font-weight: 600; letter-spacing: -.01em; margin: 4px 0 6px; }
-.ziki-homepage .hiw-moment p { color: #384152; font-size: 15px; line-height: 1.55; margin: 0; }
-.ziki-homepage .hiw-you { color: #15803d; display: inline-block; font-size: 13px; font-weight: 600; margin-top: 8px; }
-.ziki-homepage .hiw-cta-inner { max-width: 640px; }
-.ziki-homepage .hiw-cta-inner .hx-intro { margin-bottom: 28px; }
-.ziki-homepage .hiw-wins { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 36px; }
-.ziki-homepage .hiw-win { background: #fff; border: 1px solid #e8e8e8; border-radius: var(--panel-radius); padding: 26px 22px; }
-.ziki-homepage .hiw-win b { color: #0972d5; display: block; font-size: 40px; font-weight: 600; letter-spacing: -.04em; line-height: 1; }
-.ziki-homepage .hiw-win h3 { color: #161616; font-size: 16px; font-weight: 600; margin: 10px 0 8px; }
-.ziki-homepage .hiw-win p { color: #384152; font-size: 14px; line-height: 1.5; margin: 0; }
-.ziki-homepage .hiw-without { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; margin: 32px auto 0; max-width: 680px; padding: 0; text-align: left; }
-.ziki-homepage .hiw-without li { align-items: center; border: 1px solid #e8e8e8; border-radius: var(--button-radius); color: #384152; display: flex; font-size: 15px; gap: 10px; padding: 12px 14px; text-decoration: line-through; text-decoration-color: rgba(56, 65, 82, .45); }
+.ziki-homepage .hiw-pains { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 40px; text-align: left; }
+.ziki-homepage .hiw-pains .hx-fact { border-color: var(--line); }
+/* The light-blue bands: what changes and the day it brings, then the wins. */
+.ziki-homepage .hiw-band .hx-intro { max-width: 760px; }
+.ziki-homepage .hiw-day-intro { margin-top: 72px; }
+.ziki-homepage .hiw-day-cards { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; }
+.ziki-homepage .hiw-day-cards .hx-fact { display: flex; flex-direction: column; }
+.ziki-homepage .hiw-time { align-self: flex-start; background: var(--green-soft); border: 1px solid #b3dcfc; border-radius: var(--button-radius); color: #0a57a3; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 13px; font-weight: 600; margin-bottom: 14px; padding: 4px 10px; }
+.ziki-homepage .hiw-you { color: #15803d; display: block; font-size: 13px; font-weight: 600; margin-top: auto; padding-top: 12px; }
+/* The middle form sits on white in a panel, so the blue bands don't meet. */
+.ziki-homepage .hiw-form-panel { background: var(--white); border: 1px solid var(--line); border-radius: var(--panel-radius); margin: 36px auto 0; max-width: 640px; padding: 28px; }
+.ziki-homepage .hiw-wins { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ziki-homepage .hiw-win { text-align: center; }
+.ziki-homepage .hiw-win b { color: var(--green); display: block; font-size: 40px; font-weight: 600; letter-spacing: -.04em; line-height: 1; }
+.ziki-homepage .hiw-win h3 { margin: 12px 0 8px; }
+.ziki-homepage .hiw-without { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; margin: 36px auto 0; max-width: 720px; padding: 0; text-align: left; }
+.ziki-homepage .hiw-without li { align-items: center; border: 1px solid var(--line); border-radius: var(--button-radius); color: #384152; display: flex; font-size: 15px; gap: 10px; padding: 12px 14px; text-decoration: line-through; text-decoration-color: rgba(56, 65, 82, .45); }
 .ziki-homepage .hiw-without li::before { color: #dc2626; content: '✕'; font-size: 12px; text-decoration: none; }
-.ziki-homepage .hiw-end { padding-top: 110px; }
+.ziki-homepage .hiw-end { padding-top: 40px; }
+@media (max-width: 1000px) and (min-width: 761px) {
+  .ziki-homepage .hiw-day-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .ziki-homepage .hiw-end-form { margin-top: 28px; max-width: 520px; width: 100%; }
 
 /* The lead forms. */
@@ -847,8 +847,10 @@
 .ziki-homepage .lead-form-done a { color: #086ccc; font-weight: 600; text-decoration: underline; }
 
 @media (max-width: 760px) {
-  .ziki-homepage .hiw-chapter { padding-top: 64px; }
-  .ziki-homepage .hiw-pains, .ziki-homepage .hiw-wins, .ziki-homepage .hiw-without { grid-template-columns: 1fr; }
+  .ziki-homepage .hiw-chapter { padding: 64px 16px; }
+  .ziki-homepage .hiw-day-intro { margin-top: 52px; }
+  .ziki-homepage .hiw-form-panel { padding: 18px; }
+  .ziki-homepage .hiw-pains, .ziki-homepage .hiw-wins, .ziki-homepage .hiw-without, .ziki-homepage .hiw-day-cards { grid-template-columns: 1fr; }
   .ziki-homepage .lead-row { flex-direction: column; }
   .ziki-homepage .hiw-hero-form { margin-bottom: 64px; }
 }
