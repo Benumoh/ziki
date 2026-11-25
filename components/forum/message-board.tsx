@@ -14,6 +14,7 @@ import {
   type ForumMessage,
   type ForumReplyItem,
   type ForumViewMode,
+  type MyAgentsView,
   type SelectedScope,
   type SortOption,
   type StatusFilter,
@@ -93,8 +94,7 @@ export function PublicMessageBoard({
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [pinnedOnly, setPinnedOnly] = useState(false);
-  const [bookmarkedOnly, setBookmarkedOnly] = useState(false);
-  const [myAgentsOnly, setMyAgentsOnly] = useState(false);
+  const [myAgentsView, setMyAgentsView] = useState<MyAgentsView>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("trending");
   const [userVotes] = useState<Record<string, "up" | "down">>({});
@@ -166,6 +166,12 @@ export function PublicMessageBoard({
   const pinnedPosts = messages.filter((m) => m.isPinned);
   const myAgentsCount = currentUserId ? messages.filter(isOwnedByViewer).length : 0;
   const bookmarkedCount = messages.filter((m) => m.bookmarkedByViewer).length;
+  const hasActiveFilters =
+    statusFilter !== "all" ||
+    pinnedOnly ||
+    myAgentsView !== null ||
+    selectedTag !== null ||
+    searchQuery.trim().length > 0;
 
   const filteredMessages = messages
     .filter((msg) => {
@@ -174,8 +180,8 @@ export function PublicMessageBoard({
       if (statusFilter === "closed" && msg.status !== "closed") return false;
       if (statusFilter === "verified" && !msg.verified) return false;
       if (pinnedOnly && !msg.isPinned) return false;
-      if (bookmarkedOnly && !msg.bookmarkedByViewer) return false;
-      if (myAgentsOnly && !isOwnedByViewer(msg)) return false;
+      if (myAgentsView === "saved" && !msg.bookmarkedByViewer) return false;
+      if (myAgentsView === "posts" && !isOwnedByViewer(msg)) return false;
       if (feedFilter === "ask" && msg.kind !== "ask") return false;
       if (feedFilter === "report" && msg.kind !== "report") return false;
       if (feedFilter === "archived") return false;
@@ -239,8 +245,7 @@ export function PublicMessageBoard({
     setTrackFilter("all");
     setSelectedTag(null);
     setPinnedOnly(false);
-    setBookmarkedOnly(false);
-    setMyAgentsOnly(false);
+    setMyAgentsView(null);
     setSearchQuery("");
   };
 
@@ -261,16 +266,14 @@ export function PublicMessageBoard({
             onStatusFilterChange={setStatusFilter}
             pinnedOnly={pinnedOnly}
             onPinnedOnlyChange={setPinnedOnly}
-            bookmarkedOnly={bookmarkedOnly}
-            onBookmarkedOnlyChange={setBookmarkedOnly}
-            myAgentsOnly={myAgentsOnly}
-            onMyAgentsOnlyChange={setMyAgentsOnly}
             selectedTag={selectedTag}
             onSelectedTagChange={setSelectedTag}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
             sortBy={sortBy}
             onSortByChange={setSortBy}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={handleResetFilters}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-stretch">
@@ -287,12 +290,10 @@ export function PublicMessageBoard({
                 pinnedOnly={pinnedOnly}
                 onShowAllPinned={() => setPinnedOnly((prev) => !prev)}
                 onOpenPost={handleOpenPost}
-                myAgentsOnly={myAgentsOnly}
+                myAgentsView={myAgentsView}
+                onMyAgentsViewChange={setMyAgentsView}
                 myAgentsCount={myAgentsCount}
-                onToggleMyAgentsOnly={() => setMyAgentsOnly((prev) => !prev)}
-                bookmarkedOnly={bookmarkedOnly}
                 bookmarkedCount={bookmarkedCount}
-                onToggleBookmarkedOnly={() => setBookmarkedOnly((prev) => !prev)}
               />
             </div>
 
@@ -304,6 +305,7 @@ export function PublicMessageBoard({
                 totalCount={messages.length}
                 filteredMessages={filteredMessages}
                 searchQuery={searchQuery}
+                sortBy={sortBy}
                 userVotes={userVotes}
                 onResetFilters={handleResetFilters}
                 onOpenPost={handleOpenPost}

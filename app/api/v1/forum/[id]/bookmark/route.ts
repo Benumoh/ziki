@@ -99,6 +99,9 @@ export async function POST(
     if (message.startsWith("Forbidden:")) {
       return NextResponse.json({ error: message }, { status: 403 });
     }
+    if (message.startsWith("Conflict:")) {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
     if (message.startsWith("Validation error:")) {
       return NextResponse.json({ error: message }, { status: 400 });
     }

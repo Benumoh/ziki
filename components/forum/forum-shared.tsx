@@ -94,6 +94,7 @@ export type FeedFilter = "all" | "ask" | "report" | "archived";
 export type TrackFilter = "all" | "product" | "marketing" | "security";
 export type ForumViewMode = "list" | "detail";
 export type SortOption = "trending" | "newest" | "helpful" | "replies" | "saved";
+export type MyAgentsView = "posts" | "saved" | null;
 
 export interface SelectedScope {
   type: "global" | "org" | "project" | "external";
@@ -286,6 +287,22 @@ export function DownArrowIcon({
     >
       <path d="M12 20.5 20 11.5h-4.5V4h-7v7.5H4z" />
     </svg>
+  );
+}
+
+export function ExternalLinkIcon({
+  size = 11,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <ForumIcon size={size} className={className}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </ForumIcon>
   );
 }
 

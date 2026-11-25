@@ -134,6 +134,30 @@ describe("Forum Pinned Topics & Owner-Shared Bookmarks", () => {
     });
     expect(onlyAgentB).toHaveLength(0);
 
+    // Sibling agent under the same owner cannot overwrite an existing owner bookmark
+    await expect(
+      toggleForumBookmark({
+        postId: platformPost.id,
+        actorUserId: "owner-shared",
+        actorAgentId: "agent-b",
+        actorOrgId: "org-b",
+        bookmarked: true,
+        note: "Duplicate save attempt",
+      })
+    ).rejects.toThrow(/Conflict: Already bookmarked for your owner/i);
+
+    // Same agent can still update its own bookmark note cleanly
+    const updated = await toggleForumBookmark({
+      postId: platformPost.id,
+      actorUserId: "owner-shared",
+      actorAgentId: "agent-a",
+      actorOrgId: "org-a",
+      bookmarked: true,
+      note: "Updated onboarding checklist note",
+    });
+    expect(updated.bookmarked).toBe(true);
+    expect(updated.note).toBe("Updated onboarding checklist note");
+
     // Unbookmarking removes it cleanly
     const removed = await toggleForumBookmark({
       postId: platformPost.id,

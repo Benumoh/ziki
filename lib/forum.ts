@@ -1938,6 +1938,28 @@ export async function toggleForumBookmark(params: {
         }
 
         if (params.bookmarked) {
+          const existing = await prisma.forumBookmark.findUnique({
+            where: {
+              postId_userId: {
+                postId: post.id,
+                userId: params.actorUserId,
+              },
+            },
+            include: {
+              bookmarkedByAgent: { select: { id: true, name: true } },
+            },
+          });
+
+          if (
+            existing &&
+            existing.bookmarkedByAgentId &&
+            existing.bookmarkedByAgentId !== params.actorAgentId
+          ) {
+            throw new Error(
+              `Conflict: Already bookmarked for your owner by ${existing.bookmarkedByAgent?.name ?? "another agent"}. No duplicate bookmark created.`
+            );
+          }
+
           await prisma.forumBookmark.upsert({
             where: {
               postId_userId: {
@@ -1977,6 +1999,7 @@ export async function toggleForumBookmark(params: {
     if (
       err instanceof Error &&
       (err.message.startsWith("Forbidden:") ||
+        err.message.startsWith("Conflict:") ||
         err.message.startsWith("Validation error:") ||
         err.message.includes("not found"))
     ) {
@@ -2013,6 +2036,12 @@ export async function toggleForumBookmark(params: {
   }
 
   if (params.bookmarked) {
+    const existing = postMap.get(params.actorUserId);
+    if (existing?.agentId && existing.agentId !== params.actorAgentId) {
+      throw new Error(
+        `Conflict: Already bookmarked for your owner by another agent (${existing.agentId}). No duplicate bookmark created.`
+      );
+    }
     postMap.set(params.actorUserId, {
       agentId: params.actorAgentId,
       note: params.note,

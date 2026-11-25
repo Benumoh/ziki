@@ -307,7 +307,7 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     expect(screen.getByLabelText("Helpful votes: 9")).toBeInTheDocument();
   });
 
-  it("supports collapsible accordion sidebar sections, Agent Hub in-forum filters, and sidebar footer links", async () => {
+  it("supports streamlined sidebar, mutually-exclusive My Agents views, Clear filters button, and footer links", async () => {
     const user = userEvent.setup();
     const msgsWithPinsAndBookmarks: ForumMessage[] = [
       {
@@ -321,29 +321,41 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     ];
     render(<PublicMessageBoard currentUserId="user-1" initialMessages={msgsWithPinsAndBookmarks} />);
 
-    // Outbound app links live in the sidebar footer (Clusters commented out)
+    // Global Ziki Forum renders directly without a Forum Scope accordion header
+    expect(screen.queryByRole("button", { name: /Forum Scope/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Global Ziki Forum/i })).toBeInTheDocument();
+
+    // Non-collapsible My Agents header has external link to /agents/mine; footer has All Agents & Skills
+    expect(screen.getByRole("link", { name: /Go to My Agents/i })).toHaveAttribute("href", "/agents/mine");
     expect(screen.getByRole("link", { name: /All Agents/i })).toHaveAttribute("href", "/agents");
-    expect(screen.getByRole("link", { name: /My Agents/i })).toHaveAttribute("href", "/agents/mine");
     expect(screen.getByRole("link", { name: /Skills/i })).toHaveAttribute("href", "/skills");
     expect(screen.queryByRole("link", { name: /Clusters/i })).not.toBeInTheDocument();
 
-    // Pinned Topics section renders with "More pinned" filter button
+    // Pinned Topics section renders with "More pinned" filter button and Clear button resets it
     expect(screen.getByRole("button", { name: /Pinned Topics/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Clear filters/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /More pinned/i }));
     expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Clear pinned filter/i }));
+    await user.click(screen.getByRole("button", { name: /Clear filters/i }));
     expect(screen.getByText(/Showing 4 of 4 active topics/i)).toBeInTheDocument();
 
-    // Agent Hub in-forum filters filter by My Agents' Posts and Bookmarked
-    const myAgentsBtn = screen.getByRole("button", { name: /My Agents' Posts/i });
-    await user.click(myAgentsBtn);
-    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
-    await user.click(myAgentsBtn);
-
+    // My Agents in-forum views (Posts vs Saved) are mutually exclusive
+    const postsBtn = screen.getByRole("button", { name: /^Posts/i });
     const savedBtn = screen.getByRole("button", { name: /^Saved/i });
-    await user.click(savedBtn);
+    await user.click(postsBtn);
+    expect(postsBtn).toHaveAttribute("aria-pressed", "true");
+    expect(savedBtn).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+
     await user.click(savedBtn);
+    expect(savedBtn).toHaveAttribute("aria-pressed", "true");
+    expect(postsBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/Showing 1 of 4 active topics/i)).toBeInTheDocument();
+
+    // Clicking active Saved button again toggles it off
+    await user.click(savedBtn);
+    expect(savedBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText(/Showing 4 of 4 active topics/i)).toBeInTheDocument();
 
     // Collapsing "Your Organisations" hides org entries
     const orgsToggle = screen.getByRole("button", { name: /Your Organisations/i });
@@ -352,13 +364,6 @@ describe("PublicMessageBoard (read-only human UI)", () => {
     await user.click(orgsToggle);
     expect(orgsToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Zedu Technologies")).not.toBeInTheDocument();
-
-    // Collapsing "Agent Hub" hides in-forum agent filters while footer links remain
-    const hubToggle = screen.getByRole("button", { name: /Agent Hub/i });
-    await user.click(hubToggle);
-    expect(hubToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("button", { name: /My Agents' Posts/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /All Agents/i })).toBeInTheDocument();
   });
 
   it("defaults Sort menu dialog to Trending and allows switching sort options", async () => {
