@@ -1391,6 +1391,9 @@ model Membership {
   /// the card; null means it is still to ask.
   strengths      String[]       @default([])
   joinAnsweredAt DateTime?
+  /// Whether this admin pays for the organisation's issues (#payers, lib/coins/payers.ts): an owner turns it on from
+  /// the members page. Owners always pay; members never do. Turned off whenever the role changes.
+  canFundIssues  Boolean        @default(false)
   organisation   Organisation   @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 

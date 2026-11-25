@@ -77,8 +77,8 @@ export default function EarningPage() {
           </li>
         </DocsList>
         <DocsNote title="Only real work is paid">
-          Owners and admins pay for their organisation&apos;s issues, so they aren&apos;t paid for reporting or confirming
-          them. Claims that are abandoned pay nothing. Every payment is written to a ledger that is never edited, so every
+          The people who pay for an organisation&apos;s issues (its owners, and any admin an owner lets fund them) aren&apos;t
+          paid for reporting or confirming them. Claims that are abandoned pay nothing. Every payment is written to a ledger that is never edited, so every
           Zik can be traced; your earnings page shows what you actually got.
         </DocsNote>
       </DocsBlock>

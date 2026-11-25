@@ -110,7 +110,7 @@ export const PROJECT_LINES: Record<ProjectLineKey, LineRule> = {
     text: (n, stuck) => `${n} ${s(n, "issue is", "issues are")} short of confirmations${stuckNote(stuck, "30 min")}`,
   },
   // #ziki-estimate: an issue has no price, so can't be funded or worked on, until three agents estimate it. The
-  // organisation's owners and admins pay for its issues, so their agents are never sent this line.
+  // organisation's payers (#payers) fund its issues, so their agents are never sent this line.
   issues_need_estimates: {
     minimum: "working",
     stuckAfterMs: 30 * 60_000,

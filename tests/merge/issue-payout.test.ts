@@ -137,7 +137,7 @@ describe("paying out once the work is live (#live-payout)", () => {
     expect(world.rows.length).toBe(before);
   });
 
-  it("doesn't pay the organisation's owners and admins for reporting or confirming its issues", async () => {
+  it("doesn't pay the organisation's payers (#payers) for reporting or confirming its issues", async () => {
     world.confirms = [{ id: "k1", verdict: "confirm", onBehalfOfUserId: "boss", agentId: null }, { id: "k2", verdict: "confirm", onBehalfOfUserId: "cal", agentId: null }];
     world.payers = ["rob", "boss"];
     expect(await releasePayoutNow(tx as never, "bug")).toBe(true);

@@ -105,6 +105,7 @@ import { canContributeToProject } from "@/lib/project-permissions";
 import { createBugAction, requestRetestAction, updateBugAction } from "@/app/actions/issues";
 import { setWatchingAction } from "@/app/actions/watch";
 import { joinAgentConnectAction, saveJoinAnswersAction } from "@/app/actions/join-questions";
+import { refuseCanFundChange } from "@/lib/membership-admin";
 
 const organisationOf = currentOrganisationIdFor as unknown as ReturnType<typeof vi.fn>;
 
@@ -356,5 +357,23 @@ describe("join questions (#join-questions)", () => {
     activateAgent.mockResolvedValueOnce({ ok: true, key: { agentId: "agent-1", name: "Claude", rawKey: "zk_live_raw", prefix: "zk_live" } });
     await expect(joinAgentConnectAction({ organisationId: "org-1", agentId: "agent-1" })).resolves.toMatchObject({ ok: true, agentId: "agent-1", setupText: expect.stringContaining("zk_live_raw") });
     expect(activateAgent).toHaveBeenCalledWith(expect.objectContaining({ id: "joiner-1" }), "agent-1", "org-1");
+  });
+});
+
+describe("who funds an organisation's issues (#payers)", () => {
+  const admin = { role: "admin" as const, canFundIssues: false };
+
+  it("lets only an owner (or the site super admin) let an admin fund issues, or stop them", () => {
+    expect(refuseCanFundChange({ actorIsOwner: true, actorIsSuperAdmin: false, target: admin, canFund: true })).toBeNull();
+    expect(refuseCanFundChange({ actorIsOwner: false, actorIsSuperAdmin: true, target: admin, canFund: true })).toBeNull();
+    expect(refuseCanFundChange({ actorIsOwner: true, actorIsSuperAdmin: false, target: { ...admin, canFundIssues: true }, canFund: false })).toBeNull();
+    // An admin can't make themself or another admin a payer: funding spends their own wallet, and the owner decides.
+    expect(refuseCanFundChange({ actorIsOwner: false, actorIsSuperAdmin: false, target: admin, canFund: true })).toBe("fund-not-allowed");
+  });
+
+  it("gives it only to admins: owners always fund, members never do", () => {
+    expect(refuseCanFundChange({ actorIsOwner: true, actorIsSuperAdmin: false, target: { role: "member", canFundIssues: false }, canFund: true })).toBe("fund-admins-only");
+    expect(refuseCanFundChange({ actorIsOwner: true, actorIsSuperAdmin: false, target: { role: "owner", canFundIssues: false }, canFund: false })).toBe("fund-admins-only");
+    expect(refuseCanFundChange({ actorIsOwner: true, actorIsSuperAdmin: false, target: null, canFund: true })).toBe("not-found");
   });
 });

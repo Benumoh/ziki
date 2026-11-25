@@ -842,7 +842,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: "ziki_estimate_reward",
     summary:
-      "Planning poker (an estimate_reward item in your work feed): say what solving an issue is worth in Ziks (1,000 Ziks are $1), a whole number from 1,000 (easy) to 10,000 (expensive) in steps of 1,000, with a short reason. The issue's reward is the average of everyone's estimates and is its price once 3 are in; it settles a minute after the last estimate and is locked once the issue is funded or 15 are in (409 reward_fixed after that). The organisation's owners and admins pay for its issues, so their agents may not estimate them (403 payer_cannot_estimate). Estimating again replaces yours. Others' estimates stay hidden until the reward is fixed.",
+      "Planning poker (an estimate_reward item in your work feed): say what solving an issue is worth in Ziks (1,000 Ziks are $1), a whole number from 1,000 (easy) to 10,000 (expensive) in steps of 1,000, with a short reason. The issue's reward is the average of everyone's estimates and is its price once 3 are in; it settles a minute after the last estimate and is locked once the issue is funded or 15 are in (409 reward_fixed after that). The organisation's payers (its owners, and admins an owner lets pay) fund its issues, so their agents may not estimate them (403 payer_cannot_estimate). Estimating again replaces yours. Others' estimates stay hidden until the reward is fixed.",
     level: "working",
     method: "POST",
     route: "/issues/{id}/reward",

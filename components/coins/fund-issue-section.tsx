@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { canFundIssue } from "@/lib/coins/fund";
-import { SETTLE_FIELDS, budgetBalance, canManageBudget, lockPrice, priceStage } from "@/lib/coins/budget";
+import { SETTLE_FIELDS, budgetBalance, lockPrice, priceStage } from "@/lib/coins/budget";
+import { isPayer } from "@/lib/coins/payers";
 import { suggestedBudget } from "@/lib/coins/budget-view";
 import { escrowBalance, lockBug, walletBalance } from "@/lib/coins/ledger";
 import { feePercent } from "@/lib/coins/math";
@@ -8,7 +9,7 @@ import { IssueFundingCard } from "./issue-funding-card";
 
 /**
  * The Ziks behind an issue (#price-lock), on the issue page inside the Reward panel. Everyone sees where its price
- * stands; the person who pays for it (its reporter, or an owner or admin) is asked to fund it once it is priced. A
+ * stands; the person who pays for it (its reporter, or a payer: an owner, or an admin an owner lets pay, #payers) is asked to fund it once it is priced. A
  * settled price the project's budget covers is locked as the page opens, so nobody waits for the next sweep. Draws
  * nothing for a finished issue that holds nothing.
  */
@@ -40,7 +41,7 @@ export async function FundIssueSection({ bugId, userId }: { bugId: string; userI
   const held = Math.max(0, await escrowBalance(prisma, bugId));
   if (finished && held === 0) return null;
 
-  const [mayFund, mayFundProject] = finished ? [false, false] : await Promise.all([canFundIssue(userId, bug), canManageBudget(userId, bug.organisationId)]);
+  const [mayFund, mayFundProject] = finished ? [false, false] : await Promise.all([canFundIssue(userId, bug), isPayer(prisma, userId, bug.organisationId)]);
   const price = stage.stage === "estimating" ? null : stage.price;
   const asking = mayFund && price !== null && (stage.stage === "settled" || stage.stage === "locked") && price > held;
 

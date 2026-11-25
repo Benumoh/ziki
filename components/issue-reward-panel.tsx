@@ -26,7 +26,7 @@ const ESTIMATES_FOR_A_PRICE = 3;
 /**
  * The issue page's Reward panel (#rewards), compact: what solving the issue is worth, in Ziks (the average of the
  * estimates once three are in, locked once it is funded), and the values in one row with yours highlighted. Picking one
- * gives or changes your estimate at once. The organisation's owners and admins pay for its issues, so they see the
+ * gives or changes your estimate at once. The organisation's payers (#payers) fund its issues, so they see the
  * values but don't estimate (#price-lock).
  */
 export function IssueRewardPanel({

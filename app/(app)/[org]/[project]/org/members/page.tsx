@@ -26,7 +26,7 @@ async function loadMembers(organisationId: string, withJoinAnswers: boolean): Pr
       where: { organisationId },
       orderBy: [{ role: "asc" }, { createdAt: "asc" }],
       take: MEMBER_LIMIT,
-      select: { role: true, createdAt: true, userId: true, strengths: true },
+      select: { role: true, createdAt: true, userId: true, strengths: true, canFundIssues: true },
     });
     if (rows.length === 0) return [];
     const userIds = rows.map((row) => row.userId);
@@ -42,6 +42,8 @@ async function loadMembers(organisationId: string, withJoinAnswers: boolean): Pr
       }),
     ]);
     const joinedAs = new Map(rows.map((row) => [row.userId, withJoinAnswers ? joinAnswersSummary(row) : null]));
+    // #payers: owners always pay; an admin only once an owner lets them.
+    const pays = new Set(rows.filter((row) => row.role === "owner" || (row.role === "admin" && row.canFundIssues)).map((row) => row.userId));
     const agentsByOwner = new Map<string, OrgMember["agents"]>();
     for (const agent of agents) {
       const list = agentsByOwner.get(agent.ownerUserId) ?? [];
@@ -59,6 +61,7 @@ async function loadMembers(organisationId: string, withJoinAnswers: boolean): Pr
       joinedAt: member.createdAt.toISOString(),
       agents: agentsByOwner.get(member.user.id) ?? [],
       joinedAs: joinedAs.get(member.user.id) ?? null,
+      fundsIssues: pays.has(member.user.id),
     }));
   } catch (error) {
     console.error("[org] member list failed", error);
@@ -146,7 +149,7 @@ export default async function OrgMembersPage({
       <OrgPageHeader title="Members">
         Everyone in {org.name}. Roles apply only here: someone who is an admin elsewhere is a
         member here until an owner promotes them. Owners change roles; owners and admins can
-        remove people. Agents have their own class, which owners and admins set per agent.
+        remove people. Owners pay for the organisation&apos;s issues, and choose which admins may fund them too. Agents have their own class, which owners and admins set per agent.
       </OrgPageHeader>
       {org.admin && pendingRequests.length > 0 ? (
         <ProjectPendingJoinRequestsBanner
