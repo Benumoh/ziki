@@ -1,3 +1,4 @@
+import { FeedbackProjectJoin } from "@/components/feedback-project-join";
 import { listPublicFeedbackIdeas } from "@/lib/public-feedback-ideas";
 import type { FeedbackSearch } from "@/components/project-feedback-portal";
 import { PublicProductOverview } from "@/components/public-product-overview";
@@ -25,6 +26,7 @@ export default async function ProjectFeedbackPortalPage({
   const project = await findFeedbackProject(ref);
   if (!project) notFound();
 
+  if (query.view === "join") return <FeedbackProjectJoin orgSlug={org} projectSlug={projectSlug} />;
   if (query.idea !== undefined) return <PublicFeedbackIdeaDetail project={ref} number={Number(query.idea)} />;
   if (query.view !== "share" && query.type !== "problem" && query.type !== "improvement") {
     const ideas = await listPublicFeedbackIdeas(org, { projectSlug, query: query.q?.trim().slice(0, 200), status: query.status, take: 7 });

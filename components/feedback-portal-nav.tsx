@@ -5,6 +5,7 @@ import { ZikiMark } from "@/components/ziki-mark";
 import { Avatar } from "@/components/avatar";
 import { PAGE_CONTAINER_CLASS } from "@/components/page-container";
 import { avatarTone } from "@/lib/avatar";
+import { orgHomePath } from "@/lib/project-paths";
 import { publicOrgFeedbackPath } from "@/lib/public-project-paths";
 const focus = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue focus-visible:ring-offset-2";
 export function FeedbackPortalNav({ orgSlug, orgName, name }: { orgSlug: string | null; orgName?: string | null; name?: string | null }) {
@@ -15,9 +16,9 @@ export function FeedbackPortalNav({ orgSlug, orgName, name }: { orgSlug: string 
   const tabs = [{ id: "projects", label: "Projects", href: portal }, { id: "feedback", label: "Feedback", href: orgSlug ? portal + "?view=ideas" : portal }, { id: "submissions", label: "My submissions", href: "/my-submissions" }];
   return <header className="relative z-40 border-b border-zk-border bg-zk-surface lg:sticky lg:top-0"><div className={`${PAGE_CONTAINER_CLASS} flex flex-wrap items-center gap-x-3 gap-y-2 py-3 lg:py-1.5 max-sm:gap-x-2 max-sm:py-2 sm:px-6`}>
     <div className="flex min-w-0 items-center gap-2">
-      <Link href={portal} aria-label="Ziki" className={`flex shrink-0 items-center rounded-full ${focus}`}><ZikiMark className="h-8 w-auto text-zk-text max-sm:h-7" /></Link>
+      <Link href="/" aria-label="Ziki" className={`flex shrink-0 items-center rounded-full ${focus}`}><ZikiMark className="h-8 w-auto text-zk-text max-sm:h-7" /></Link>
       <span aria-hidden="true" className="h-[18px] w-px shrink-0 bg-zk-border max-sm:hidden" />
-      <Link href={portal} aria-label={`${orgName ?? "Organisation"} feedback portal`} className={`inline-flex h-[30px] max-w-44 items-center gap-2 rounded-full px-1.5 text-[13px] font-medium text-zk-text hover:bg-zk-chip ${focus}`}>
+      <Link href={orgSlug ? orgHomePath(orgSlug) : "/"} aria-label={`${orgName ?? "Organisation"} main page`} className={`inline-flex h-[30px] max-w-44 items-center gap-2 rounded-full px-1.5 text-[13px] font-medium text-zk-text hover:bg-zk-chip ${focus}`}>
         <span aria-hidden="true" className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-chip text-xs font-bold ${avatarTone(orgName)}`}>{orgName?.trim().charAt(0).toUpperCase() || "?"}</span><span className="truncate">{orgName ?? "Feedback portal"}</span>
       </Link>
     </div>

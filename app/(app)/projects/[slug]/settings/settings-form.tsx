@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
+import { generateProjectDescriptionAction } from "@/app/actions/project-description";
 import { updateProjectAction } from "@/app/(app)/projects/actions";
 import type { ProjectActionResult } from "@/app/(app)/projects/actions";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,10 @@ export function ProjectSettingsForm({
   defaults?: ProjectRewardConfig | null;
 }) {
   const [result, action, pending] = useActionState<ProjectActionResult | undefined, FormData>(updateProjectAction, undefined);
+  const [goal, setGoal] = useState(project.goal ?? "");
+  const [descriptionDetails, setDescriptionDetails] = useState("");
+  const [descriptionMessage, setDescriptionMessage] = useState<string | null>(null);
+  const [generatingDescription, startDescription] = useTransition();
   const [visibility, setVisibility] = useState<"public" | "private">(project.visibility === "public" ? "public" : "private");
   const [isOpenForContributors, setIsOpenForContributors] = useState(Boolean(project.isOpenForContributors));
   const [acceptsGuestIdeas, setAcceptsGuestIdeas] = useState(Boolean(project.acceptsGuestIdeas));
@@ -58,9 +63,18 @@ export function ProjectSettingsForm({
         {result?.field === "name" ? <span className="text-xs text-zk-bad-fg">{result.fieldErrors?.name ?? result.error}</span> : null}
       </label>
       <label htmlFor="project-goal" className="block space-y-1 text-sm font-medium text-zk-text">Project Brief &amp; Context for Agents
-        <Textarea id="project-goal" name="goal" defaultValue={project.goal ?? ""} maxLength={4000} rows={6} aria-describedby="project-goal-hint" placeholder="Explain what this project is building, who it is for, and how the final product should work." />
+        <Textarea id="project-goal" name="goal" value={goal} onChange={event => setGoal(event.target.value)} maxLength={4000} rows={6} aria-describedby="project-goal-hint" placeholder="Explain what this project is building, who it is for, and how the final product should work." />
         <span id="project-goal-hint" className="block text-xs font-normal text-zk-muted">Agents read this context when working on your project. Markdown is supported. Maximum 4,000 characters.</span>
       </label>
+      {!project.goal?.trim() && !goal.trim() ? <section className="space-y-2 rounded-panel border border-zk-border bg-zk-bg p-4" aria-label="Ziki description assistant"><label htmlFor="description-details" className="block text-sm font-medium">Draft a description with Ziki</label><p className="text-xs leading-5 text-zk-muted">No connected agent needed. Tell Ziki what the project does and who it is for. Review and edit the draft before saving.</p><Textarea id="description-details" value={descriptionDetails} onChange={event => setDescriptionDetails(event.target.value)} maxLength={1500} rows={3} placeholder="For example: A mobile app that helps students organise their study schedule." /><Button type="button" variant="secondary" disabled={generatingDescription || pending} onClick={() => startDescription(async () => {
+        setDescriptionMessage(null);
+        try {
+          const result = await generateProjectDescriptionAction({ slug: project.slug, details: descriptionDetails });
+          if (result.ok) { setGoal(current => current.trim() ? current : result.description); setDescriptionMessage("Draft ready. Review and edit the description, then save your project settings to publish it."); }
+          else setDescriptionMessage(result.error);
+        } catch { setDescriptionMessage("The draft couldn't be generated. Your text is unchanged; please try again."); }
+      })}>{generatingDescription ? "Drafting…" : "Generate description with Ziki"}</Button></section> : null}
+      {descriptionMessage ? <p role="status" className="text-sm text-zk-text2">{descriptionMessage}</p> : null}
       <label htmlFor="project-human-approval-guidelines" className="block space-y-1 text-sm font-medium text-zk-text">Human Approval Guidelines (Criticality Policy)
         <Textarea id="project-human-approval-guidelines" name="humanApprovalGuidelines" defaultValue={project.humanApprovalGuidelines ?? DEFAULT_HUMAN_APPROVAL_GUIDELINES} maxLength={8000} rows={7} aria-describedby="project-human-approval-hint" placeholder={DEFAULT_HUMAN_APPROVAL_GUIDELINES} />
         <span id="project-human-approval-hint" className="block text-xs font-normal text-zk-muted">Agents check this policy before converting major ideas or merging PRs. Clear it to restore the default policy. Maximum 8,000 characters.</span>

@@ -10,7 +10,7 @@ import { FeedbackDetail } from "@/components/feedback-detail";
 const idea = {
   number: 33, title: "Save fails", summary: "Save failed", description: "Tap Save on mobile", status: "open" as const, score: 2,
   createdAt: new Date(), updatedAt: new Date(), reporter: { name: "Guest" }, publicSubmission: null,
-  project: { name: "Web", slug: "web", organisation: { name: "Team", slug: "team" }, workflow: { ideaThreshold: 4 } }, issue: null,
+  project: { name: "Web", slug: "web", visibility: "public" as const, organisation: { name: "Team", slug: "team" }, workflow: { ideaThreshold: 4 } }, issue: null,
   verdicts: [{ id: "v1", opinion: "good" as const, votes: 3, summary: "Reproduced on mobile", updatedAt: new Date(), agent: { name: "Reviewer" } }, { id: "v2", opinion: "bad" as const, votes: 1, summary: "Needs more detail", updatedAt: new Date(), agent: null }],
 };
 it("shows actual weighted votes, project threshold and verdicts without a voting control", () => {
@@ -27,4 +27,16 @@ it("offers the private receipt and tracking actions only when authorized paths a
   const html = renderToStaticMarkup(<FeedbackDetail idea={idea} confirmationHref="/private?view=confirmation" trackingPath="/private" />);
   expect(html).toContain('href="/private?view=confirmation"');
   expect(html).toContain("Copy tracking link");
+});
+
+it("shows rejection pending only when the project's weighted vote criteria are met", () => {
+  const pending = { ...idea, score: -4, verdicts: [{ ...idea.verdicts[0], opinion: "bad" as const, votes: 4 }] };
+  const html = renderToStaticMarkup(<FeedbackDetail idea={pending} />);
+  expect(html).toContain("Awaiting rejection decision");
+  expect(html).toContain("no final rejection has been recorded");
+  expect(html).not.toContain("Net votes:");
+  const belowThreshold = renderToStaticMarkup(<FeedbackDetail idea={{ ...pending, verdicts: [{ ...pending.verdicts[0], votes: 3 }] }} />);
+  expect(belowThreshold).not.toContain("Awaiting rejection decision");
+  const rejected = renderToStaticMarkup(<FeedbackDetail idea={{ ...pending, status: "rejected" }} />);
+  expect(rejected).not.toContain("Awaiting rejection decision");
 });

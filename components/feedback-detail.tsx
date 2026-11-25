@@ -1,3 +1,4 @@
+import { ideaVotes, isBadIdea } from "@/lib/idea-rejection";
 import type { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { FeedbackPageHeader } from "@/components/feedback-page-header";
@@ -12,7 +13,7 @@ import { PILL_TONES } from "@/lib/pill-tones";
 export const feedbackDetailSelect = {
   number: true, title: true, summary: true, description: true, status: true, score: true, createdAt: true, updatedAt: true,
   reporter: { select: { name: true } }, publicSubmission: { select: { user: { select: { name: true } } } },
-  project: { select: { name: true, slug: true, organisation: { select: { name: true, slug: true } }, workflow: { select: { ideaThreshold: true } } } },
+  project: { select: { name: true, slug: true, visibility: true, organisation: { select: { name: true, slug: true } }, workflow: { select: { ideaThreshold: true } } } },
   issue: { select: { number: true, status: true, substatus: true, updatedAt: true } },
   verdicts: { select: { id: true, opinion: true, votes: true, summary: true, updatedAt: true, agent: { select: { name: true } } }, orderBy: { updatedAt: "desc" } },
 } satisfies Prisma.IdeaSelect;
@@ -21,7 +22,8 @@ export function FeedbackDetail({ idea, confirmationHref, trackingPath, issueHref
   const votes = { good: 0, bad: 0, neutral: 0 };
   for (const verdict of idea.verdicts) votes[verdict.opinion] += verdict.votes;
   const threshold = idea.project.workflow?.ideaThreshold ?? 3;
-  const tone = idea.status === "rejected" ? "red" : idea.status === "converted" ? "green" : idea.status === "archived" ? "grey" : "teal";
+  const awaitingRejection = idea.status === "open" && !idea.issue && isBadIdea(ideaVotes(idea.verdicts), threshold);
+  const tone = idea.status === "rejected" || awaitingRejection ? "red" : idea.status === "converted" ? "green" : idea.status === "archived" ? "grey" : "teal";
   return <div className="space-y-4 pb-6">
     <FeedbackPageHeader title={idea.title} identity={idea.project.name} description={`${idea.project.name} · Idea #${idea.number}`} />
     <p className="text-sm text-zk-muted">Submitted by {feedbackSubmitterName(idea)} · <LocalTime date={idea.createdAt} /></p>
@@ -35,7 +37,7 @@ export function FeedbackDetail({ idea, confirmationHref, trackingPath, issueHref
         </section>
       </div>
       <aside className="min-w-0 space-y-4">
-        <section className="space-y-3 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5"><h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2><span className="inline-flex rounded-chip px-2 py-1 text-xs" style={PILL_TONES[tone]}>{publicSubmissionStatus(idea)}</span><p className="text-sm leading-6 text-zk-text2">{idea.status === "open" ? `Net votes: ${idea.score} of ${threshold} needed before conversion to an issue.` : idea.status === "rejected" ? "The feedback was reviewed and rejected." : idea.status === "converted" ? "This feedback became an issue." : "This feedback is archived."}</p><div className="border-t border-zk-divider pt-3"><h3 className="text-sm font-medium">Latest update</h3><p className="mt-2 text-sm text-zk-text2">{idea.verdicts.length ? `${idea.verdicts.length} verdict${idea.verdicts.length === 1 ? "" : "s"} received.` : "Feedback received and awaiting review."}</p><p className="mt-1 text-xs text-zk-muted"><LocalTime date={idea.issue?.updatedAt ?? idea.updatedAt} /></p></div>{issueHref ? <Link href={issueHref} className={feedbackTextLink}>View issue #{idea.issue?.number} →</Link> : null}</section>
+        <section className="space-y-3 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5"><h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2><span className="inline-flex rounded-chip px-2 py-1 text-xs" style={PILL_TONES[tone]}>{awaitingRejection ? "Awaiting rejection decision" : publicSubmissionStatus(idea)}</span><p className="text-sm leading-6 text-zk-text2">{awaitingRejection ? "The votes meet this project’s rejection criteria. A final rejection decision is pending." : idea.status === "open" ? `Net votes: ${idea.score} of ${threshold} needed before conversion to an issue.` : idea.status === "rejected" ? "The feedback was reviewed and rejected." : idea.status === "converted" ? "This feedback became an issue." : "This feedback is archived."}</p><div className="border-t border-zk-divider pt-3"><h3 className="text-sm font-medium">Latest update</h3><p className="mt-2 text-sm text-zk-text2">{awaitingRejection ? "Agent votes meet the rejection criteria; no final rejection has been recorded yet." : idea.verdicts.length ? `${idea.verdicts.length} verdict${idea.verdicts.length === 1 ? "" : "s"} received.` : "Feedback received and awaiting review."}</p><p className="mt-1 text-xs text-zk-muted"><LocalTime date={idea.issue?.updatedAt ?? idea.updatedAt} /></p></div>{issueHref ? <Link href={issueHref} className={feedbackTextLink}>View issue #{idea.issue?.number} →</Link> : null}</section>
         {confirmationHref || trackingPath ? <section className="space-y-3 rounded-panel border border-zk-border bg-zk-surface px-4 py-3.5"><h2 className="text-base font-medium">Your report</h2>{confirmationHref ? <div><Link href={confirmationHref} className={feedbackTextLink}>View submission confirmation →</Link></div> : null}{trackingPath ? <FeedbackDetailCopy path={trackingPath} /> : null}</section> : null}
       </aside>
     </div>

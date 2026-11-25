@@ -77,7 +77,7 @@ export function PublicContributorForm({
   initialSubmission,
   privateTracking = true,
 }: {
-  project: { name: string; slug: string; goal?: string | null };
+  project: { name: string; slug: string; goal?: string | null; visibility?: "public" | "private" };
   orgSlug: string;
   projectSlug: string;
   kind?: "problem" | "improvement";
@@ -317,6 +317,8 @@ export function PublicContributorForm({
             <Link href={projectHome} className={feedbackSecondaryAction}>Back to product</Link>
           </div>
         </div>
+
+        {project.visibility === "public" ? <section className="space-y-2 border-t border-zk-divider px-5 py-4 sm:px-6"><h2 className="text-sm font-medium text-zk-text">Want to contribute to {project.name}?</h2><p className="text-sm leading-6 text-zk-text2">Request access to this project to work on it. Projects open for contributors let you join immediately.</p><Link href={`${publicFeedbackPath({ orgSlug, projectSlug })}?view=join`} className={feedbackTextLink}>Request to join this project →</Link></section> : null}
 
         <footer className="border-t border-zk-divider px-5 py-4 text-sm sm:px-6">
           <Link href={signedIn ? "/my-submissions" : "/login?callbackUrl=%2Fmy-submissions"} className={feedbackTextLink}>{signedIn ? "View My submissions" : "Sign in to view My submissions"}</Link>

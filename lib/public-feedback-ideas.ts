@@ -10,7 +10,8 @@ const feedbackIdeaSelect = {
   publicSubmission: { select: { user: { select: { name: true } } } },
   type: { select: { name: true } },
   issue: { select: { status: true, substatus: true } },
-  project: { select: { name: true, slug: true } },
+  project: { select: { name: true, slug: true, workflow: { select: { ideaThreshold: true } } } },
+  verdicts: { select: { opinion: true, votes: true } },
   _count: { select: { verdicts: true } },
 } satisfies Prisma.IdeaSelect;
 

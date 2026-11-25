@@ -61,7 +61,7 @@ export function feedbackProjectDescription(project: {
   if (project.visibility === "public" && project.goal?.trim()) {
     return project.goal.trim();
   }
-  return `Learn about ${project.name.trim()} and share feedback with its team.`;
+  return "Explore this project, share your experience, and suggest improvements. Click to learn more.";
 }
 
 const PLATFORM_PRIORITY: Record<string, number> = {
