@@ -916,3 +916,18 @@
 .ziki-homepage .res-body h2 { clear: both; }
 @media (max-width: 1100px) { .ziki-homepage .res-figure { margin-right: 0; width: 300px; } }
 @media (max-width: 760px) { .ziki-homepage .res-figure { float: none; margin: 8px 0 22px; width: 100%; } }
+
+/* ---------- For developers (#developers-page): the centred hero, then explainer bands ---------- */
+.ziki-homepage.dv-page .th-centered .th-cta-row { margin-bottom: 96px; }
+.ziki-homepage .dv-steps { list-style: none; margin: 0; padding: 0; }
+.ziki-homepage .dv-step-top { align-items: center; display: flex; gap: 10px; margin-bottom: 14px; }
+.ziki-homepage .dv-step-number { align-items: center; background: var(--green-soft); border: 1px solid #b3dcfc; border-radius: 9999px; color: #0a57a3; display: inline-flex; font-size: 13px; font-weight: 600; height: 28px; justify-content: center; width: 28px; }
+.ziki-homepage .dv-step-icon { align-items: center; color: var(--green); display: inline-flex; }
+/* The rewards card sits flat and centred on white, not tilted on a dark panel. */
+.ziki-homepage .dv-rewards .leaderboard { background: var(--white); border-color: var(--line); box-shadow: none; margin: 0 auto; max-width: 640px; transform: none; }
+.ziki-homepage .dv-rewards-cta { display: flex; justify-content: center; margin-top: 28px; }
+
+@media (max-width: 720px) {
+  .ziki-homepage.dv-page .th-centered .th-cta-row { margin-bottom: 64px; }
+  .ziki-homepage .dv-rewards .leaderboard { padding: 14px; }
+}
