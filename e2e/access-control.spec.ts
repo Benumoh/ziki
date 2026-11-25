@@ -90,7 +90,7 @@ for (const role of ["user", "admin"] as const) {
       await evidence(page, testInfo, `${role}: private project is not found`);
       await expectHidden(page, `${PRIVATE}/2`);
       await expectHidden(page, `${PRIVATE}/ideas`);
-      await expectHidden(page, `${PRIVATE}/org/members`);
+      await expectHidden(page, `${PRIVATE}/org/team`);
       await expectHidden(page, `/${OUTSIDE_ORG}/no-such-project-e2e`);
       await evidence(page, testInfo, `${role}: a project that doesn't exist looks the same`);
     });

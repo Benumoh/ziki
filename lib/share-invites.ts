@@ -32,9 +32,10 @@ export const SHARE_LINK_ACTIVE_CAP = 20;
 
 export type ShareLinkState = "open" | "expired" | "used" | "revoked";
 
-export type ShareLinkFailure = "invalid" | "expired" | "used" | "revoked";
+export type ShareLinkFailure = "invalid" | "expired" | "used" | "revoked" | "deactivated";
 
 export const SHARE_LINK_ERRORS: Record<ShareLinkFailure | "rate", string> = {
+  deactivated: "Your access to this organisation was turned off. Ask an owner or admin to reactivate you.",
   invalid: "This invite link isn't valid. Ask the person who sent it for a new one.",
   expired: "This invite link has expired. Ask the person who sent it for a new one.",
   used: "This invite link has already been used by as many people as it allows. Ask for a new one.",
@@ -399,6 +400,13 @@ export async function acceptShareLink(
       select: { id: true },
     });
     if (existing) return { ok: true as const, organisation: link.organisation, alreadyMember: true };
+
+    // Someone an owner or admin deactivated (#team-page) can't let themself back in with a link.
+    const deactivated = await tx.membershipDeactivation.findUnique({
+      where: { organisationId_userId: { organisationId: link.organisationId, userId: account.id } },
+      select: { id: true },
+    });
+    if (deactivated) return { ok: false as const, reason: "deactivated" as const };
 
     const redeemed = await tx.organisationShareRedemption.findUnique({
       where: { linkId_userId: { linkId: link.id, userId: account.id } },

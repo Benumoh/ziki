@@ -177,15 +177,24 @@ export async function createInviteAction(
   _previous: CreateInviteActionResult | undefined,
   formData: FormData,
 ): Promise<CreateInviteActionResult> {
+  return sendInvite(String(formData.get("organisationId") ?? ""), formData.get("email"));
+}
+
+/**
+ * Send a pending or expired invite again (#team-page): a new link replaces the old one, whose
+ * token can't be shown again, and the person is told again.
+ */
+export async function resendInviteAction(organisationId: string, email: string): Promise<CreateInviteActionResult> {
+  return sendInvite(organisationId, email);
+}
+
+async function sendInvite(organisationId: string, email: unknown): Promise<CreateInviteActionResult> {
   const user = await requireUser();
   if (!(await consumeRateLimit(`organisation-invite:${user.id}`, CREATE_INVITE_RATE_LIMIT)).allowed) {
     return { ok: false, error: RATE_LIMIT_MESSAGE };
   }
 
-  const result = await createInvite(prisma, user, {
-    organisationId: String(formData.get("organisationId") ?? ""),
-    email: formData.get("email"),
-  });
+  const result = await createInvite(prisma, user, { organisationId, email });
   if (!result.ok) return result;
 
   let delivery: InviteDelivery = "manual";

@@ -357,6 +357,8 @@ model User {
   notifications               Notification[]
   // Agent platform (#423).
   memberships                 Membership[]
+  membershipDeactivations     MembershipDeactivation[]      @relation("MembershipDeactivationUser")
+  membershipsDeactivated      MembershipDeactivation[]      @relation("MembershipDeactivatedBy")
   agents                      Agent[]
   agentPairingsApproved       AgentPairing[]
   agentPreferences            AgentPreference[]
@@ -928,6 +930,7 @@ model Organisation {
   marketingAssets    MarketingAsset[]
   milestones         Milestone[]
   memberships        Membership[]
+  deactivatedMembers MembershipDeactivation[]
   agentActivations   AgentActivation[]
   agentApiKeys       AgentApiKey[]
   skillTags          SkillTag[]
@@ -1348,12 +1351,35 @@ model Membership {
 
 /// A change to who is in an organisation and what they can do there.
 /// Site-wide User.role is not this: an admin of one organisation is a member of another.
+/// A member an owner or admin deactivated (#team-page). Deactivating takes the membership away, as
+/// removing does (their agents are switched off there and their keys stop), and keeps it here so
+/// Reactivate gives it back with the same role and join answers. A share link can't bring them back
+/// on its own; an email invite or Reactivate can. One row per person and organisation.
+model MembershipDeactivation {
+  id              String         @id @default(cuid())
+  organisationId  String
+  userId          String
+  role            MembershipRole
+  strengths       String[]       @default([])
+  joinAnsweredAt  DateTime?
+  /// When they first joined, kept so Reactivate restores it.
+  joinedAt        DateTime
+  deactivatedAt   DateTime       @default(now())
+  deactivatedById String?
+  organisation    Organisation   @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  user            User           @relation("MembershipDeactivationUser", fields: [userId], references: [id], onDelete: Cascade)
+  deactivatedBy   User?          @relation("MembershipDeactivatedBy", fields: [deactivatedById], references: [id], onDelete: SetNull)
+
+  @@unique([organisationId, userId])
+  @@index([userId])
+}
+
 model MembershipChange {
   id             String          @id @default(cuid())
   organisationId String
   actorUserId    String?
   targetUserId   String?
-  /// "role_changed", "removed", or "left".
+  /// "role_changed", "removed", "left", "deactivated" or "reactivated".
   action         String
   fromRole       MembershipRole?
   toRole         MembershipRole?

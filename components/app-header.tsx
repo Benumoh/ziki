@@ -258,7 +258,7 @@ export function AppHeader({
   const activeOrganisationName = organisationOptions.find((organisation) => organisation.id === activeOrganisationId)?.name ?? null;
   const roleAccess = roleAccessFor(organisationRole, realRole);
   // There is no request form yet: the members page names the admins who can change a role.
-  const requestAccessHref = projectSlug ? orgPath(projectSlug, "members") : "/organisations";
+  const requestAccessHref = projectSlug ? orgPath(projectSlug, "team") : "/organisations";
 
   return (
     // Sticky only from lg: on phones and tablets the toolbar wraps onto rows,

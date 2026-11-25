@@ -101,7 +101,7 @@ describe("requestToJoinProjectAction", () => {
     );
     const { data } = db.notificationCreateMany.mock.calls[0][0];
     expect(data.map((n: { userId: string }) => n.userId)).toEqual(["owner-1", "admin-1"]);
-    expect(data[0]).toMatchObject({ kind: "join_request", url: "/acme/web/org/invites" });
+    expect(data[0]).toMatchObject({ kind: "join_request", url: "/acme/web/org/team?show=requests" });
     // Requesting never grants anything by itself.
     expect(db.projectMembershipUpsert).not.toHaveBeenCalled();
   });

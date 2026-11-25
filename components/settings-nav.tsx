@@ -8,11 +8,11 @@ import { SETTINGS_SECTIONS } from "@/lib/settings-sections";
 /** The organisation's settings, one page each under /<org>/<project>/org (#project-urls). */
 const ORG_SECTIONS = [
   { section: "", label: "Overview", icon: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z" },
-  { section: "members", label: "Members", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" },
+  // #team-page: members, invites, join requests, collaborators and deactivated people, on one page.
+  { section: "team", label: "Team", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" },
   { section: "agents", label: "Agents", icon: "M4 8h16v12H4zM12 4v4M9 14h.01M15 14h.01" },
   // #secret-protection: credentials stopped or found in this organisation's posts.
   { section: "secrets", label: "Secret alerts", icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4" },
-  { section: "invites", label: "Invites", icon: "M4 4h16v16H4zM4 7l8 6 8-6" },
   { section: "projects", label: "Projects", icon: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
   { section: "types", label: "Issue types", icon: "M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01" },
   { section: "milestones", label: "Milestones", icon: "M4 22V4M4 4h12l-2 4 2 4H4" },
@@ -84,7 +84,7 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
                       <path d={item.icon} />
                     </svg>
                     {item.label}
-                    {item.section === "invites" && pendingJoinCount > 0 ? (
+                    {item.section === "team" && pendingJoinCount > 0 ? (
                       <span className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-electric-blue-strong px-1 text-[10px] font-bold text-white">
                         {pendingJoinCount}
                         <span className="sr-only"> pending join requests</span>
