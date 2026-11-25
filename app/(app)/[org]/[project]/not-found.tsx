@@ -1,40 +1,18 @@
 import Link from "next/link";
-import { auth } from "@/auth";
-import { IssueSignInLink } from "@/components/issue-sign-in-link";
-import {
-  StatusPage,
-  primaryActionClass,
-  secondaryActionClass,
-} from "@/components/status-page";
+import { StatusPage, primaryActionClass } from "@/components/status-page";
 
-/**
- * Shown when an issue page calls notFound(), e.g. an issue id that doesn't
- * exist or was deleted (#214), and any other 404 under `/<project>/...`
- * (#project-urls), which lands on this segment's boundary. Anonymous
- * visitors (link-preview fallbacks) get a sign-in link, because the issue may simply need a
- * session to view; it returns them to the issue they asked for (#457).
- */
-export default async function IssueNotFound() {
-  const session = await auth();
-  const signedIn = Boolean(session?.user);
-
+export default function ProjectNotFound() {
   return (
     <StatusPage
       code="404"
-      title="We couldn't find that issue"
+      title="We couldn't find that project"
       actions={
-        <>
-          <Link href="/home" className={primaryActionClass}>
-            Go to your issues
-          </Link>
-          {signedIn ? null : <IssueSignInLink className={secondaryActionClass} />}
-        </>
+        <Link href="/discover" className={primaryActionClass}>
+          All Projects
+        </Link>
       }
     >
-      <p>
-        The link may be wrong, or the issue may have been deleted.
-        {signedIn ? null : " Some issues are only visible after you sign in."}
-      </p>
+      <p>The link may be wrong, or the project may no longer be available.</p>
     </StatusPage>
   );
 }

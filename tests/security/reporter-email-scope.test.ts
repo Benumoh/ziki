@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /** Project pages load reporters' names, roles and pictures, never their emails (#access-control). */
 const read = (...parts: string[]) => readFileSync(path.join(process.cwd(), ...parts), "utf8");
 
-const issuePage = read("app", "(app)", "[org]", "[project]", "[number]", "page.tsx");
+const issuePage = read("app", "(app)", "[org]", "[project]", "[number]", "(detail)", "page.tsx");
 const workstreamPage = read("app", "(app)", "[org]", "[project]", "workstream", "page.tsx");
 const marketingTaskDetail = read("components", "marketing", "marketing-task-detail.tsx");
 

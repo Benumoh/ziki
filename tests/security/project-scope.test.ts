@@ -103,8 +103,8 @@ import { joinOpenProjectAction } from "@/app/actions/project-join-requests";
 import { requireUser } from "@/lib/auth-helpers";
 import { reviewSkillSubmissionAction } from "@/app/actions/skill-submissions";
 import { sitemapSectionXml } from "@/lib/seo/sitemap";
-import IssueHistoryPage from "@/app/(app)/[org]/[project]/[number]/history/page";
-import ProjectIssueLayout from "@/app/(app)/[org]/[project]/[number]/layout";
+import IssueHistoryPage from "@/app/(app)/[org]/[project]/[number]/(detail)/history/page";
+import ProjectIssueLayout from "@/app/(app)/[org]/[project]/[number]/(detail)/layout";
 
 const agent = {
   agentId: "agent1",

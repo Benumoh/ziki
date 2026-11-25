@@ -7,6 +7,13 @@ import { expect, test, PROJECT } from "./fixtures";
 test.describe("not-found pages", () => {
   test.use({ as: "user" });
 
+  test("a project that doesn't exist", async ({ page }) => {
+    const orgPath = PROJECT.slice(0, PROJECT.lastIndexOf("/"));
+    await page.goto(`${orgPath}/no-such-project-e2e`);
+    await expect(page.getByRole("heading", { name: "We couldn't find that project" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "All Projects", exact: true })).toHaveAttribute("href", "/discover");
+  });
+
   test("an issue that doesn't exist", async ({ page }) => {
     // The issue layout throws this 404 before streaming, so the status is real.
     const response = await page.goto(`${PROJECT}/999999`);

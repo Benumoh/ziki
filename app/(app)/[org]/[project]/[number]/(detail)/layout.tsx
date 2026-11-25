@@ -13,7 +13,8 @@ import { organisationAccessFor } from "@/lib/organisation-access";
  * notFound() thrown later from the page can no longer produce a 404 — it
  * would render "not found" with a success status. A layout renders outside
  * its own segment's loading boundary, so a check here still controls the
- * status. The page keeps its own checks; this only has to run first.
+ * status. This route group lets the parent [number] boundary catch those
+ * 404s. The page keeps its own checks; this only has to run first.
  *
  * An issue numbered here in another project, or in another of the viewer's
  * organisations, is not a 404: the page redirects or offers the switch.
