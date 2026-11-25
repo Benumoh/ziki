@@ -214,6 +214,10 @@ export const { handlers, auth, signIn, signOut, unstable_update: updateSession }
       }
     },
     async jwt({ token, user, account, trigger, session }) {
+      if (user?.id && account) {
+        token.authenticationMethod = account.provider === "google" || account.provider === "google-two-factor" ? "google" : "credentials";
+        token.authenticatedAt = Date.now();
+      }
       if (account?.provider === "google") {
         // Defence in depth: signIn must have resolved a real local account and
         // Google alone must never issue a session while Ziki's factor is on.

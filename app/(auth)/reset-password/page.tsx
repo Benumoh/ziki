@@ -11,20 +11,19 @@ export const metadata = { title: "Set a new password", robots: NOINDEX };
 export default async function ResetPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string; setup?: string }>;
+  searchParams: Promise<{ token?: string }>;
 }) {
   if (!isPasswordAuthEnabled()) notFound();
 
   const params = await searchParams;
   const token = typeof params.token === "string" ? params.token.trim() : "";
-  const setup = params.setup === "1";
 
   return (
     <main>
       <AuthSplitFrame
         panelLabel="Reset password"
-        title={setup ? "Add a password" : "Set a new password"}
-        description={setup ? "Choose a password of at least 8 characters. You can then sign in with Google or your email and password." : "Choose a new password of at least 8 characters. Your old password will stop working immediately. Google sign-in stays connected."}
+        title="Set a new password"
+        description="Choose a new password of at least 8 characters. Your old password will stop working immediately. Google sign-in stays connected."
       >
         {token ? (
           <ResetPasswordForm token={token} />

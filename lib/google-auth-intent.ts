@@ -3,7 +3,7 @@ import { resolveAuthSecret } from "@/lib/auth-secret";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
 
 export const GOOGLE_INTENT_TTL_SECONDS = 10 * 60;
-export type GoogleSecurityOperation = "setup" | "disable" | "regenerate";
+export type GoogleSecurityOperation = "setup" | "disable" | "regenerate" | "password";
 export type GoogleSecurityIntent = {
   userId: string;
   sessionId: string;
@@ -48,7 +48,7 @@ export function readGoogleIntent(value: string | undefined, now = Date.now()): G
     if (parsed.security && (parsed.link || typeof parsed.security.userId !== "string" ||
         typeof parsed.security.sessionId !== "string" || typeof parsed.security.subject !== "string" ||
         !Number.isInteger(parsed.security.sessionVersion) ||
-        !["setup", "disable", "regenerate"].includes(parsed.security.operation))) return null;
+        !["setup", "disable", "regenerate", "password"].includes(parsed.security.operation))) return null;
     return { ...parsed, callbackUrl: safeCallbackUrl(parsed.callbackUrl) };
   } catch {
     return null;

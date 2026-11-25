@@ -273,6 +273,14 @@ export const resetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
+export const addPasswordSchema = z.object({
+  password: passwordField,
+  confirmPassword: z.string().min(1, "Confirm your password"),
+  code: z.string().trim().max(32).optional(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match", path: ["confirmPassword"],
+});
+
 /** Credentials required before a signed-in person can change their password. */
 export const changePasswordSchema = z
   .object({

@@ -46,7 +46,7 @@ export async function beginGoogleSecurityAction(
 ): Promise<{ error?: string } | undefined> {
   const user = await requireUser();
   const operation = text(formData.get("operation"));
-  if (operation !== "setup" && operation !== "disable" && operation !== "regenerate") return { error: "Choose a security setting to change." };
+  if (operation !== "setup" && operation !== "disable" && operation !== "regenerate" && operation !== "password") return { error: "Choose a security setting to change." };
   if (!isGoogleOAuthConfigured()) return { error: "Google sign-in is not configured on this site." };
   const session = await auth();
   const account = await prisma.user.findUnique({ where: { id: user.id } });
