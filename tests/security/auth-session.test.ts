@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { HeadersAdapter } from "next/dist/server/web/spec-extension/adapters/headers";
 import { compare, hash } from "bcryptjs";
 
 /**
@@ -8,12 +9,13 @@ import { compare, hash } from "bcryptjs";
  * expired-session route signs the person out.
  */
 const { deleteCookieMock, setCookieMock } = vi.hoisted(() => ({ deleteCookieMock: vi.fn(), setCookieMock: vi.fn() }));
+const requestHeadersMock = vi.hoisted(() => vi.fn(async () => new Headers({ "x-forwarded-for": "203.0.113.7" })));
 const middleware = vi.hoisted(() => ({ handler: null as null | ((request: NextRequest & { auth?: { user: { id: string } } }) => Response) }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ delete: deleteCookieMock, get: vi.fn(), set: setCookieMock })),
-  headers: vi.fn(async () => new Headers({ "x-forwarded-for": "203.0.113.7" })),
+  headers: requestHeadersMock,
 }));
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((to: string) => {
@@ -95,6 +97,7 @@ function form(values: Record<string, string>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  requestHeadersMock.mockResolvedValue(new Headers({ "x-forwarded-for": "203.0.113.7" }));
   resetRateLimits();
   vi.stubEnv("AUTH_PASSWORD_LOGIN", "true");
   vi.stubEnv("RATE_LIMIT_STORE", "memory");
@@ -488,6 +491,11 @@ describe("adding a password to a Google account", () => {
   });
 
   it("emails a single-use setup proof to the signed-in account, without setting a password yet", async () => {
+    // Match headers() in a real Next.js server action: it has an internal
+    // `headers` field as well as the public Headers API.
+    requestHeadersMock.mockResolvedValue(HeadersAdapter.seal(new HeadersAdapter({
+      "x-forwarded-for": "203.0.113.7",
+    })));
     expect(await requestPasswordSetupAction()).toHaveProperty("success");
     const message = vi.mocked(sendMail).mock.calls[0][0];
     expect(message.to).toBe("a@x.dev");

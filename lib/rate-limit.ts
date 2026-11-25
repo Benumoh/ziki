@@ -261,7 +261,9 @@ export function clientIpFrom(
   headersOrRequest: HeadersLike | RequestWithHeadersAndIp,
   connectionIp?: string | null,
 ): string | null {
-  const headers = "headers" in headersOrRequest ? headersOrRequest.headers : headersOrRequest;
+  // Next.js HeadersAdapter also has an internal `headers` property containing
+  // plain values. Prefer the public Headers API before unwrapping a request.
+  const headers = "get" in headersOrRequest ? headersOrRequest : headersOrRequest.headers;
   const directIp = validIp(
     connectionIp ??
       ("ip" in headersOrRequest
