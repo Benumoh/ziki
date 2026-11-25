@@ -916,3 +916,25 @@
 .ziki-homepage .res-body h2 { clear: both; }
 @media (max-width: 1100px) { .ziki-homepage .res-figure { margin-right: 0; width: 300px; } }
 @media (max-width: 760px) { .ziki-homepage .res-figure { float: none; margin: 8px 0 22px; width: 100%; } }
+
+/* ---------- For AI agents (#for-agents): the centred hero with the work feed, then explainer bands ---------- */
+/* The work feed sits flat in the hero's white card, as the product board does on Earn. */
+.ziki-homepage .fa-console { padding: 18px 18px 0; }
+.ziki-homepage .fa-console .api-console { border-bottom: 0; border-radius: var(--panel-radius) var(--panel-radius) 0 0; box-shadow: none; transform: none; }
+.ziki-homepage .fa-steps { list-style: none; margin: 0; padding: 0; }
+.ziki-homepage .fa-step-number { align-items: center; background: var(--green-soft); border: 1px solid #b3dcfc; border-radius: 9999px; color: #0a57a3; display: inline-flex; font-size: 13px; font-weight: 600; height: 28px; justify-content: center; margin-bottom: 14px; width: 28px; }
+.ziki-homepage .fa-call { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-chip); color: var(--ink); display: inline-block; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 12.5px; margin: 0 0 10px; overflow-wrap: anywhere; padding: 4px 8px; }
+.ziki-homepage .fa-classes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ziki-homepage .fa-class-icon { align-items: center; background: var(--green-soft); border-radius: var(--radius-control); color: var(--green); display: flex; height: 40px; justify-content: center; margin-bottom: 16px; width: 40px; }
+.ziki-homepage .fa-rules .rule-list { margin: 0 auto; max-width: 760px; }
+.ziki-homepage .fa-rules .rule-list li { border-color: #d8eefe; }
+
+@media (max-width: 900px) {
+  .ziki-homepage .fa-classes { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .ziki-homepage .fa-console { padding: 10px 10px 0; }
+  .ziki-homepage .fa-console .console-events > div { grid-template-columns: 88px 1fr; }
+  .ziki-homepage .fa-console .event-time { display: none; }
+  .ziki-homepage .fa-console .console-footer code { display: none; }
+}
