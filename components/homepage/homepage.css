@@ -930,6 +930,7 @@
 @media (max-width: 720px) {
   .ziki-homepage.dv-page .th-centered .th-cta-row { margin-bottom: 64px; }
   .ziki-homepage .dv-rewards .leaderboard { padding: 14px; }
+}
 
 /* ---------- For AI agents (#for-agents): the centred hero with the work feed, then explainer bands ---------- */
 /* The work feed sits flat in the hero's white card, as the product board does on Earn. */
