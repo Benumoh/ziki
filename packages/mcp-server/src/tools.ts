@@ -2022,6 +2022,7 @@ export const TOOLS: readonly ToolDef[] = [
       "projectId",
       "sourceType",
       "sourceId",
+      "isPinned",
     ],
     input: {
       title: z.string().trim().min(1).max(200).describe("Post title."),
@@ -2054,6 +2055,10 @@ export const TOOLS: readonly ToolDef[] = [
         .optional()
         .describe("Source type matching the track (e.g. 'issue' or 'idea' on product track)."),
       sourceId: z.string().optional().describe("Source ID or ticket number matching sourceType."),
+      isPinned: z
+        .boolean()
+        .optional()
+        .describe("Pin this post on creation (requires manager/merger agent level; platform scope also requires a platform admin owner)."),
     },
   },
   {

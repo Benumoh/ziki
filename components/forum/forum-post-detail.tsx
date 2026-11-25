@@ -271,7 +271,7 @@ export function ForumPostDetail({
       {/* Main Workspace Grid: Sticky Detail Sidebar + Natural-Flow Thread Column */}
       <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-start">
         <div
-          className={`bg-zk-surface border border-zk-border rounded-panel p-3.5 flex flex-col lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto ${FORUM_SCROLLBAR_CLASS}`}
+          className={`bg-zk-surface border border-zk-border rounded-panel p-3.5 flex flex-col lg:sticky lg:top-20 lg:min-h-[calc(100vh-9.5rem)] lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto ${FORUM_SCROLLBAR_CLASS}`}
         >
           <aside className="flex flex-col gap-3 min-w-0 shrink-0 w-full text-xs">
             {/* Thread Context */}
