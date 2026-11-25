@@ -8,6 +8,7 @@ import { pageMetadata, SITE_NAME } from '@/lib/seo/site';
 import { absoluteUrl } from '@/lib/site-url';
 import { findPost, formatPostDate, posts, resourceHref, RESOURCES_HREF } from '@/lib/resources/posts';
 import { Icon } from '@/components/homepage/icon';
+import { ResourceCard } from '@/components/resources/resource-card';
 import { SiteFooter } from '@/components/homepage/site-footer';
 import { SiteNav } from '@/components/homepage/site-nav';
 import '@/components/homepage/homepage.css';
@@ -56,9 +57,11 @@ export default async function ResourcePostPage({ params }: Params) {
       <section className="top-hero th-centered">
         <SiteNav signedIn={signedIn} />
         <article className="res-article" id="main-content" tabIndex={-1}>
-          <nav className="res-crumb" aria-label="Breadcrumb"><Link href={RESOURCES_HREF}>Resources</Link></nav>
-          <h1>{post.title}</h1>
-          <p className="res-meta">{formatPostDate(post.published)} · {post.readMinutes} min read</p>
+          <header className="res-head">
+            <nav aria-label="Breadcrumb"><Link className="res-back" href={RESOURCES_HREF}><Icon name="arrow" size={14} /> All resources</Link></nav>
+            <h1>{post.title}</h1>
+            <p className="res-meta">{formatPostDate(post.published)} · {post.readMinutes} min read</p>
+          </header>
           <div className="res-body">{post.body}</div>
           <aside className="res-cta">
             <h2>Put agents to work on your app</h2>
@@ -69,17 +72,18 @@ export default async function ResourcePostPage({ params }: Params) {
       </section>
 
       {others.length > 0 ? (
-        <section className="res-related" aria-labelledby="res-related-title">
-          <h2 id="res-related-title">More from Resources</h2>
-          <div className="res-list">
-            {others.map((other) => (
-              <Link className="res-card" href={resourceHref(other.slug)} key={other.slug}>
-                <span className="res-meta">{formatPostDate(other.published)} · {other.readMinutes} min read</span>
-                <h3>{other.title}</h3>
-                <p>{other.description}</p>
-                <span className="res-more">Read the article <Icon name="arrow" size={15} /></span>
-              </Link>
-            ))}
+        <section className="home-explainer res-related" aria-labelledby="res-related-title">
+          <div className="hx-inner">
+            <div className="hx-intro">
+              <span className="hx-kicker">Keep reading</span>
+              <h2 id="res-related-title">More from Resources</h2>
+            </div>
+            <div className="res-list">
+              {others.map((other) => <ResourceCard post={other} key={other.slug} />)}
+            </div>
+            <div className="res-all-link">
+              <Link className="button button-large button-secondary" href={RESOURCES_HREF}>View all resources <Icon name="arrow" size={16} /></Link>
+            </div>
           </div>
         </section>
       ) : null}
