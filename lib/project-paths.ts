@@ -159,7 +159,7 @@ export function ideaPath(slug: ProjectRef, number: number): string {
   return projectPath(slug, `/ideas/${number}`);
 }
 
-/** The organisation admin area under a project: `/<org>/<project>/org`, `.../org/members`. */
+/** The organisation admin area under a project: `/<org>/<project>/org`, `.../org/team`. */
 export function orgPath(slug: ProjectRef, section = ""): string {
   return projectPath(slug, section ? `/org/${section}` : "/org");
 }

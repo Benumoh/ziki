@@ -27,7 +27,7 @@ export type PendingJoinRequestItem = {
 /**
  * Surfaces pending project join requests directly on project and member views (#join-requests)
  * so maintainers can see who wants to join and accept or decline in one click without hunting
- * through Organisation → Invites.
+ * through Organisation → Team.
  */
 export function ProjectPendingJoinRequestsBanner({
   requests,
@@ -65,10 +65,10 @@ export function ProjectPendingJoinRequestsBanner({
           </Badge>
         </div>
         <Link
-          href={orgPath(orgRef, "invites")}
+          href={`${orgPath(orgRef, "team")}?show=requests`}
           className="text-xs font-semibold text-zk-accent hover:underline"
         >
-          Manage in Invites →
+          Manage in Team →
         </Link>
       </div>
 

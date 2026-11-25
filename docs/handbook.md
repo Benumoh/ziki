@@ -28,8 +28,7 @@ organisation switcher. Any member can open it read-only.
 | Tab | Route | What it holds |
 | --- | --- | --- |
 | Overview | `/org` | Members, active projects and agents, and this organisation's issue statistics for a date range |
-| Members | `/org/members` | Everyone in it, their role (owner, admin or member), when they joined and their agents' classes. Owners change roles; owners and admins remove people. Anyone can leave. The last owner can't leave or be demoted |
-| Invites | `/org/invites` | The only two ways in: an email invite for one person, or an invite link for several. Both can be revoked |
+| Team | `/org/team` | Everyone in one filterable list: members (role, when they joined, whose invite they accepted, their agents' classes), email invites still waiting or expired, project join requests, outside project collaborators and deactivated people. Invite people from here, by email for one person or with an invite link for several. Each row's ⋯ menu holds its actions: change role, deactivate, remove or leave; send again or revoke an invite; accept or reject a request; reactivate. Deactivating takes someone's access away and keeps them listed so they can be reactivated with the same role; an invite link can't bring them back. Owners change roles; owners and admins invite, deactivate and remove people (admins only members). The last owner can't leave, be demoted or be deactivated. Add `?show=invited`, `requests`, `collaborators` or `deactivated` to open a filter |
 | Projects | `/org/projects` | The organisation's projects, with each project's settings at `/projects/<slug>/settings` |
 | Issue types, Platforms, Milestones | `/org/types`, `/org/platforms`, `/org/milestones` | The labels and milestones every project in the organisation shares |
 | Settings | `/org/settings` | Rename, archive or delete the organisation (owners) |

@@ -343,3 +343,108 @@ describe("join questions (#join-questions)", () => {
     expect(activateAgent).toHaveBeenCalledWith(expect.objectContaining({ id: "joiner-1" }), "agent-1", "org-1");
   });
 });
+
+describe("deactivating a member (#team-page)", () => {
+  type Row = { id: string; userId: string; role: "owner" | "admin" | "member"; createdAt: Date; strengths: string[]; joinAnsweredAt: Date | null };
+
+  /** One organisation in memory: its memberships and deactivations, as the helpers read and write them. */
+  function organisation(rows: Row[]) {
+    const members = new Map(rows.map((row) => [row.userId, row]));
+    const kept = new Map<string, { id: string; role: Row["role"]; strengths: string[]; joinAnsweredAt: Date | null; joinedAt: Date }>();
+    const switchedOff = vi.fn();
+    const userOf = (where: { organisationId_userId: { userId: string } }) => where.organisationId_userId.userId;
+    const db = {
+      membership: {
+        findUnique: async ({ where }: { where: { organisationId_userId: { userId: string } } }) => members.get(userOf(where)) ?? null,
+        count: async ({ where }: { where: { role: string } }) => [...members.values()].filter((row) => row.role === where.role).length,
+        delete: async ({ where }: { where: { id: string } }) => {
+          for (const [userId, row] of members) if (row.id === where.id) members.delete(userId);
+        },
+        upsert: async ({ where, create }: { where: { organisationId_userId: { userId: string } }; create: Omit<Row, "id"> }) => {
+          const userId = userOf(where);
+          if (!members.has(userId)) members.set(userId, { id: `m-${userId}`, ...create, userId });
+        },
+      },
+      membershipDeactivation: {
+        findUnique: async ({ where }: { where: { organisationId_userId: { userId: string } } }) => kept.get(userOf(where)) ?? null,
+        upsert: async ({ where, create }: { where: { organisationId_userId: { userId: string } }; create: { role: Row["role"]; strengths: string[]; joinAnsweredAt: Date | null; joinedAt: Date } }) => {
+          kept.set(userOf(where), { id: `d-${userOf(where)}`, ...create });
+        },
+        delete: async ({ where }: { where: { id: string } }) => {
+          for (const [userId, row] of kept) if (row.id === where.id) kept.delete(userId);
+        },
+      },
+      membershipChange: { create: vi.fn() },
+      agentActivation: { updateMany: switchedOff },
+      agentApiKey: { updateMany: vi.fn() },
+      user: { update: vi.fn() },
+    };
+    return { db: db as never, members, kept, switchedOff };
+  }
+
+  const joined = new Date("2026-01-02T00:00:00Z");
+  const row = (userId: string, role: Row["role"]): Row => ({ id: `m-${userId}`, userId, role, createdAt: joined, strengths: ["review"], joinAnsweredAt: joined });
+
+  it("takes a member's access away, switches their agents off, and Reactivate gives back the same role", async () => {
+    const { deactivateMembership, reactivateMembership } = await import("@/lib/membership-admin");
+    const org = organisation([row("owner-1", "owner"), row("admin-1", "admin"), row("member-1", "member")]);
+
+    await expect(deactivateMembership(org.db, { id: "admin-1" }, { organisationId: "org-1", targetUserId: "member-1" })).resolves.toEqual({ ok: true });
+    expect(org.members.has("member-1")).toBe(false);
+    expect(org.kept.get("member-1")).toMatchObject({ role: "member", strengths: ["review"], joinedAt: joined });
+    expect(org.switchedOff).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ organisationId: "org-1", agent: { ownerUserId: "member-1" } }) }));
+
+    await expect(reactivateMembership(org.db, { id: "admin-1" }, { organisationId: "org-1", targetUserId: "member-1" })).resolves.toEqual({ ok: true });
+    expect(org.members.get("member-1")).toMatchObject({ role: "member", strengths: ["review"], createdAt: joined });
+    expect(org.kept.has("member-1")).toBe(false);
+  });
+
+  it("refuses members, admins acting on admins, yourself and the last owner", async () => {
+    const { deactivateMembership, reactivateMembership } = await import("@/lib/membership-admin");
+    const org = organisation([row("owner-1", "owner"), row("admin-1", "admin"), row("admin-2", "admin"), row("member-1", "member")]);
+    const deactivate = (actor: string, target: string) => deactivateMembership(org.db, { id: actor }, { organisationId: "org-1", targetUserId: target });
+
+    await expect(deactivate("member-1", "admin-1")).resolves.toMatchObject({ ok: false });
+    await expect(deactivate("admin-1", "admin-2")).resolves.toMatchObject({ ok: false });
+    await expect(deactivate("admin-1", "admin-1")).resolves.toMatchObject({ ok: false });
+    await expect(deactivate("admin-1", "owner-1")).resolves.toMatchObject({ ok: false });
+    expect(org.members.size).toBe(4);
+
+    // An owner may deactivate an admin, and only an owner may bring them back.
+    await expect(deactivate("owner-1", "admin-2")).resolves.toEqual({ ok: true });
+    await expect(reactivateMembership(org.db, { id: "admin-1" }, { organisationId: "org-1", targetUserId: "admin-2" })).resolves.toMatchObject({ ok: false });
+    expect(org.members.has("admin-2")).toBe(false);
+  });
+
+  it("doesn't let a deactivated person back in with an invite link", async () => {
+    const { acceptShareLink } = await import("@/lib/share-invites");
+    const { generateInviteToken } = await import("@/lib/invites");
+    const token = generateInviteToken();
+    const membershipUpsert = vi.fn();
+    const linkUpdate = vi.fn();
+    const tx = {
+      membership: { findUnique: vi.fn(async () => null), upsert: membershipUpsert },
+      membershipDeactivation: { findUnique: vi.fn(async () => ({ id: "d-1" })) },
+      organisationShareLink: { updateMany: linkUpdate },
+      organisationShareRedemption: { findUnique: vi.fn(async () => null), create: vi.fn() },
+    };
+    const db = {
+      organisationShareLink: {
+        findUnique: vi.fn(async () => ({
+          id: "link-1",
+          organisationId: "org-1",
+          organisation: { id: "org-1", slug: "org", name: "Org" },
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 86_400_000),
+          maxUses: null,
+          useCount: 0,
+        })),
+      },
+      $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
+    };
+
+    await expect(acceptShareLink(db as never, token.raw, { id: "member-1" })).resolves.toEqual({ ok: false, reason: "deactivated" });
+    expect(membershipUpsert).not.toHaveBeenCalled();
+    expect(linkUpdate).not.toHaveBeenCalled();
+  });
+});

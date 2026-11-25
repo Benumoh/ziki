@@ -20,6 +20,12 @@ export const MEMBERSHIP_ADMIN_ERRORS = {
   "same-role": "They already have that role.",
   "cannot-remove-self": "You can't remove yourself. Leave the organisation instead.",
   "admin-removes-member-only": "Admins can remove members. Ask an owner to change another admin.",
+  "deactivate-not-allowed": "Only an owner or admin of this organisation can deactivate someone.",
+  "cannot-deactivate-self": "You can't deactivate yourself. Leave the organisation instead.",
+  "admin-deactivates-member-only": "Admins can deactivate members. Ask an owner to change another admin.",
+  "not-deactivated": "That person isn't deactivated in this organisation.",
+  "reactivate-not-allowed": "Only an owner or admin of this organisation can reactivate someone.",
+  "admin-reactivates-member-only": "Admins can reactivate members. Ask an owner to bring back an admin or owner.",
   failed: "Couldn't update that membership. Try again.",
 } as const;
 
@@ -118,8 +124,8 @@ async function recordChange(
     organisationId: string;
     actorUserId: string;
     targetUserId: string;
-    action: "role_changed" | "removed" | "left";
-    fromRole: MembershipRole;
+    action: "role_changed" | "removed" | "left" | "deactivated" | "reactivated";
+    fromRole: MembershipRole | null;
     toRole: MembershipRole | null;
   },
 ): Promise<void> {
@@ -224,6 +230,177 @@ export async function removeMembership(
         data: { sessionVersion: { increment: 1 } },
       });
     }
+    return { ok: true };
+  });
+}
+
+/**
+ * Deactivate someone (#team-page): they lose the membership as removing does (their agents are
+ * switched off there, their keys stop and their sessions are refreshed), and it is kept so
+ * Reactivate can give it back. Who may deactivate whom is the removal rule.
+ */
+export async function deactivateMembership(
+  db: Db,
+  actor: Actor,
+  input: { organisationId: string; targetUserId: string },
+  now = new Date(),
+): Promise<MembershipAdminResult> {
+  return inTransaction(db, async (tx) => {
+    const [target, actorMembership, owners] = await Promise.all([
+      tx.membership.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: input.targetUserId } },
+        select: { id: true, role: true, userId: true, createdAt: true, strengths: true, joinAnsweredAt: true },
+      }),
+      tx.membership.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: actor.id } },
+        select: { role: true },
+      }),
+      ownerCount(tx, input.organisationId),
+    ]);
+
+    const refusal = refuseMemberRemoval({
+      actorId: actor.id,
+      actorIsOwner: actorMembership?.role === "owner",
+      actorIsAdmin: actorMembership?.role === "admin",
+      actorIsSuperAdmin: isSuperAdmin(actor.role),
+      target,
+      ownerCount: owners,
+    });
+    if (refusal || !target) {
+      const code =
+        refusal === "not-allowed"
+          ? "deactivate-not-allowed"
+          : refusal === "cannot-remove-self"
+            ? "cannot-deactivate-self"
+            : refusal === "admin-removes-member-only"
+              ? "admin-deactivates-member-only"
+              : (refusal ?? "not-found");
+      return { ok: false, error: refusalMessage(code) };
+    }
+
+    const kept = {
+      role: target.role,
+      strengths: target.strengths ?? [],
+      joinAnsweredAt: target.joinAnsweredAt ?? null,
+      joinedAt: target.createdAt,
+      deactivatedAt: now,
+      deactivatedById: actor.id,
+    };
+    await tx.membershipDeactivation.upsert({
+      where: { organisationId_userId: { organisationId: input.organisationId, userId: input.targetUserId } },
+      create: { organisationId: input.organisationId, userId: input.targetUserId, ...kept },
+      update: kept,
+    });
+    await tx.membership.delete({ where: { id: target.id } });
+    await switchOffAgentsIn(tx, input.targetUserId, input.organisationId);
+    await recordChange(tx, {
+      organisationId: input.organisationId,
+      actorUserId: actor.id,
+      targetUserId: input.targetUserId,
+      action: "deactivated",
+      fromRole: target.role,
+      toRole: null,
+    });
+    if (typeof tx.user?.update === "function") {
+      await tx.user.update({
+        where: { id: input.targetUserId },
+        data: { sessionVersion: { increment: 1 } },
+      });
+    }
+    return { ok: true };
+  });
+}
+
+/**
+ * Give a deactivated person their membership back, with the role and join answers they had.
+ * Owners reactivate anyone; admins reactivate members. Their agents stay switched off until
+ * their owner connects them again, since their keys were stopped.
+ */
+export async function reactivateMembership(
+  db: Db,
+  actor: Actor,
+  input: { organisationId: string; targetUserId: string },
+): Promise<MembershipAdminResult> {
+  return inTransaction(db, async (tx) => {
+    const [kept, actorMembership] = await Promise.all([
+      tx.membershipDeactivation.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: input.targetUserId } },
+        select: { id: true, role: true, strengths: true, joinAnsweredAt: true, joinedAt: true },
+      }),
+      tx.membership.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: actor.id } },
+        select: { role: true },
+      }),
+    ]);
+    if (!kept) return { ok: false, error: refusalMessage("not-deactivated") };
+    const actorIsOwner = actorMembership?.role === "owner" || isSuperAdmin(actor.role);
+    const actorIsAdmin = actorMembership?.role === "admin";
+    if (!actorIsOwner && !actorIsAdmin) return { ok: false, error: refusalMessage("reactivate-not-allowed") };
+    if (!actorIsOwner && kept.role !== "member") {
+      return { ok: false, error: refusalMessage("admin-reactivates-member-only") };
+    }
+
+    await tx.membership.upsert({
+      where: { organisationId_userId: { organisationId: input.organisationId, userId: input.targetUserId } },
+      create: {
+        organisationId: input.organisationId,
+        userId: input.targetUserId,
+        role: kept.role,
+        strengths: kept.strengths,
+        joinAnsweredAt: kept.joinAnsweredAt,
+        createdAt: kept.joinedAt,
+      },
+      update: {},
+    });
+    await tx.membershipDeactivation.delete({ where: { id: kept.id } });
+    await recordChange(tx, {
+      organisationId: input.organisationId,
+      actorUserId: actor.id,
+      targetUserId: input.targetUserId,
+      action: "reactivated",
+      fromRole: null,
+      toRole: kept.role,
+    });
+    return { ok: true };
+  });
+}
+
+/**
+ * Forget a deactivated person for good: they stay out, and the next email invite or share link
+ * treats them like anyone new. Same rule as reactivating.
+ */
+export async function forgetDeactivatedMember(
+  db: Db,
+  actor: Actor,
+  input: { organisationId: string; targetUserId: string },
+): Promise<MembershipAdminResult> {
+  return inTransaction(db, async (tx) => {
+    const [kept, actorMembership] = await Promise.all([
+      tx.membershipDeactivation.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: input.targetUserId } },
+        select: { id: true, role: true },
+      }),
+      tx.membership.findUnique({
+        where: { organisationId_userId: { organisationId: input.organisationId, userId: actor.id } },
+        select: { role: true },
+      }),
+    ]);
+    if (!kept) return { ok: false, error: refusalMessage("not-deactivated") };
+    const actorIsOwner = actorMembership?.role === "owner" || isSuperAdmin(actor.role);
+    const actorIsAdmin = actorMembership?.role === "admin";
+    if (!actorIsOwner && !actorIsAdmin) return { ok: false, error: refusalMessage("remove-not-allowed") };
+    if (!actorIsOwner && kept.role !== "member") {
+      return { ok: false, error: refusalMessage("admin-removes-member-only") };
+    }
+    await tx.membershipDeactivation.delete({ where: { id: kept.id } });
+    await recordChange(tx, {
+      organisationId: input.organisationId,
+      actorUserId: actor.id,
+      targetUserId: input.targetUserId,
+      action: "removed",
+      fromRole: kept.role,
+      toRole: null,
+    });
     return { ok: true };
   });
 }

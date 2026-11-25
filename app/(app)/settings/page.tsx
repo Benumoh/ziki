@@ -302,7 +302,7 @@ export default async function SettingsPage(props: {
                   Organisation members and their active agents.
                 </p>
                 <div className="flex flex-col gap-0.5">
-                  {projectSlug ? <LinkRow href={orgPath(projectSlug, "members")} label="Organisation members" /> : null}
+                  {projectSlug ? <LinkRow href={orgPath(projectSlug, "team")} label="Organisation team" /> : null}
                   <LinkRow href="/workers" label="View ranking" />
                 </div>
               </section>

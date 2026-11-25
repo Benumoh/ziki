@@ -2221,7 +2221,7 @@ export async function IssuesList({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {canContribute ? <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? orgPath(ref, "invites") : undefined} /> : null}
+          {canContribute ? <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? `${orgPath(ref, "team")}?invite=1` : undefined} /> : null}
           <ProjectIconLinks
             settingsHref={isOrgAdmin ? `/projects/${encodeURIComponent(slug)}/settings` : undefined}
           />
@@ -2259,7 +2259,7 @@ export async function IssuesList({
         ) : null}
         {/* The feedback portal, Design and settings, as icons, beside the tabs. */}
         {!isDeletedView && canContribute ? (
-          <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? orgPath(ref, "invites") : undefined} />
+          <ShareMenu orgSlug={project.orgSlug} inviteHref={isOrgAdmin ? `${orgPath(ref, "team")}?invite=1` : undefined} />
         ) : null}
         {!isDeletedView ? (
           <ProjectIconLinks

@@ -397,6 +397,8 @@ export async function acceptInvite(
       create: { organisationId: invite.organisationId, userId: account.id, role: "member" },
       update: {},
     });
+    // An owner or admin invited them by name, so a deactivation (#team-page) no longer holds them out.
+    await tx.membershipDeactivation.deleteMany({ where: { organisationId: invite.organisationId, userId: account.id } });
     if (!existing) await awardSignupBonus(tx, account.id, invite.organisationId);
     return { ok: true as const, organisation: invite.organisation, alreadyMember: Boolean(existing) };
   });
@@ -406,11 +408,13 @@ export async function acceptInvite(
 // Managing a organisation's invites
 // ---------------------------------------------------------------------------
 
-export type PendingInvite = {
+export type TeamInvite = {
   id: string;
   email: string;
   expiresAt: Date;
   createdAt: Date;
+  acceptedAt: Date | null;
+  state: InviteState;
   invitedByName: string;
 };
 
@@ -466,18 +470,21 @@ export async function openInvitesFor(
   return open;
 }
 
-/** Links still waiting to be used, newest first. */
-export async function pendingInvites(
+/**
+ * An organisation's email invites in every state, newest first (#team-page): waiting, expired
+ * (to send again) and accepted (to show who joined by whose invite).
+ */
+export async function organisationInvites(
   db: Db,
   organisationId: string,
   now = new Date(),
-): Promise<PendingInvite[]> {
+): Promise<TeamInvite[]> {
   // The inviter is loaded apart so a deleted account does not fail the page.
   const rows = await db.organisationInvite.findMany({
-    where: { organisationId, acceptedAt: null, expiresAt: { gt: now } },
-    select: { id: true, email: true, expiresAt: true, createdAt: true, invitedById: true },
+    where: { organisationId },
+    select: { id: true, email: true, expiresAt: true, createdAt: true, acceptedAt: true, invitedById: true },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 200,
   });
   const ids = [...new Set(rows.map((row) => row.invitedById))];
   const people =
@@ -493,6 +500,8 @@ export async function pendingInvites(
     email: row.email,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
+    acceptedAt: row.acceptedAt,
+    state: inviteState(row, now),
     invitedByName: names.get(row.invitedById) ?? "Someone",
   }));
 }

@@ -58,7 +58,7 @@ test.describe("accessibility", () => {
     test.use({ as: "admin" });
 
     test("the organisation admin screens", async ({ page }) => {
-      await page.goto(`${PROJECT}/org/members`);
+      await page.goto(`${PROJECT}/org/team`);
       await expectNoA11yViolations(page);
 
       await page.goto(`${PROJECT}/org/types`);

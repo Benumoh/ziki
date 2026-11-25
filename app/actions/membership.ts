@@ -5,7 +5,10 @@ import type { MembershipRole } from "@prisma/client";
 import { requireUser } from "@/lib/auth-helpers";
 import {
   changeMembershipRole,
+  deactivateMembership,
+  forgetDeactivatedMember,
   leaveMembership,
+  reactivateMembership,
   removeMembership,
 } from "@/lib/membership-admin";
 import { prisma } from "@/lib/prisma";
@@ -59,6 +62,54 @@ export async function removeMemberAction(
   if (!organisation || !target) return { error: "That person isn't in this organisation." };
 
   const result = await removeMembership(prisma, actor, { organisationId: organisation, targetUserId: target });
+  if (!result.ok) return { error: result.error };
+  revalidateOrganisation();
+  return { ok: true };
+}
+
+/** Deactivate someone in one organisation (#team-page): out until reactivated or invited by email. */
+export async function deactivateMemberAction(
+  organisationId: string,
+  userId: string,
+): Promise<MembershipActionResult> {
+  const actor = await requireUser();
+  const organisation = cleanId(organisationId);
+  const target = cleanId(userId);
+  if (!organisation || !target) return { error: "That person isn't in this organisation." };
+
+  const result = await deactivateMembership(prisma, actor, { organisationId: organisation, targetUserId: target });
+  if (!result.ok) return { error: result.error };
+  revalidateOrganisation();
+  return { ok: true };
+}
+
+/** Give a deactivated person their membership back, with their old role. */
+export async function reactivateMemberAction(
+  organisationId: string,
+  userId: string,
+): Promise<MembershipActionResult> {
+  const actor = await requireUser();
+  const organisation = cleanId(organisationId);
+  const target = cleanId(userId);
+  if (!organisation || !target) return { error: "That person isn't deactivated in this organisation." };
+
+  const result = await reactivateMembership(prisma, actor, { organisationId: organisation, targetUserId: target });
+  if (!result.ok) return { error: result.error };
+  revalidateOrganisation();
+  return { ok: true };
+}
+
+/** Forget a deactivated person: they stay out, and can be invited again like anyone new. */
+export async function forgetDeactivatedMemberAction(
+  organisationId: string,
+  userId: string,
+): Promise<MembershipActionResult> {
+  const actor = await requireUser();
+  const organisation = cleanId(organisationId);
+  const target = cleanId(userId);
+  if (!organisation || !target) return { error: "That person isn't deactivated in this organisation." };
+
+  const result = await forgetDeactivatedMember(prisma, actor, { organisationId: organisation, targetUserId: target });
   if (!result.ok) return { error: result.error };
   revalidateOrganisation();
   return { ok: true };

@@ -11,7 +11,7 @@ export type JoinRequestState = "none" | "pending" | "rejected";
 
 /**
  * Ask to join a public project that isn't open for contributors (#join-requests). The maintainers (the
- * organisation's owners and admins) accept or decline it from the project page or Organisation → Invites.
+ * organisation's owners and admins) accept or decline it from the project page or Organisation → Team.
  */
 export function ProjectJoinRequestButton({
   project,

@@ -11,7 +11,7 @@ const access = roleAccessFor("member", "user")!;
 function renderBadge(organisationName: string | null = "Zedu") {
   return render(
     <div>
-      <RoleAccessBadge label="Member" access={access} organisationName={organisationName} requestHref="/zedu/desktop/org/members" />
+      <RoleAccessBadge label="Member" access={access} organisationName={organisationName} requestHref="/zedu/desktop/org/team" />
       <button type="button">Elsewhere</button>
     </div>,
   );
@@ -55,7 +55,7 @@ describe("RoleAccessBadge", () => {
     renderBadge();
     await user.hover(trigger());
     const link = screen.getByRole("link", { name: /request upgraded access/i });
-    expect(link.getAttribute("href")).toBe("/zedu/desktop/org/members");
+    expect(link.getAttribute("href")).toBe("/zedu/desktop/org/team");
   });
 
   it("stays open while the pointer crosses from the badge onto the card", async () => {

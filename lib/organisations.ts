@@ -51,7 +51,7 @@ const MEMBERSHIP_ROLE_ORDER: Record<MembershipRole, number> = {
 /**
  * Pair memberships with the people they point at. A membership whose user
  * row is gone is skipped: joining it in one query makes Prisma throw
- * "Field user is required" and the whole members page (/org/members) fails.
+ * "Field user is required" and the whole Team page (/org/team) fails.
  */
 export function organisationMembersFrom<TUser extends { id: string; name: string | null }>(
   memberships: { role: MembershipRole; createdAt: Date; userId: string }[],
