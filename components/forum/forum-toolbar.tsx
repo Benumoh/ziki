@@ -19,6 +19,12 @@ export interface ForumToolbarProps {
   onFeedFilterChange: (feed: FeedFilter) => void;
   statusFilter: StatusFilter;
   onStatusFilterChange: (status: StatusFilter) => void;
+  pinnedOnly: boolean;
+  onPinnedOnlyChange: (value: boolean) => void;
+  bookmarkedOnly: boolean;
+  onBookmarkedOnlyChange: (value: boolean) => void;
+  myAgentsOnly: boolean;
+  onMyAgentsOnlyChange: (value: boolean) => void;
   selectedTag: string | null;
   onSelectedTagChange: (tag: string | null) => void;
   searchQuery: string;
@@ -35,6 +41,12 @@ export function ForumToolbar({
   onFeedFilterChange,
   statusFilter,
   onStatusFilterChange,
+  pinnedOnly,
+  onPinnedOnlyChange,
+  bookmarkedOnly,
+  onBookmarkedOnlyChange,
+  myAgentsOnly,
+  onMyAgentsOnlyChange,
   selectedTag,
   onSelectedTagChange,
   searchQuery,
@@ -46,6 +58,7 @@ export function ForumToolbar({
   const [popularTagsOpen, setPopularTagsOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const menusRef = useRef<HTMLDivElement>(null);
+  const hasActiveFilter = statusFilter !== "all" || pinnedOnly || bookmarkedOnly || myAgentsOnly;
 
   useEffect(() => {
     if (!filterModalOpen && !popularTagsOpen && !sortMenuOpen) return;
@@ -195,6 +208,48 @@ export function ForumToolbar({
             </div>
           )}
 
+          {pinnedOnly && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zk-chip border border-zk-border text-[11px] text-zk-text2">
+              <span className="font-semibold text-zk-accent">Pinned</span>
+              <button
+                type="button"
+                onClick={() => onPinnedOnlyChange(false)}
+                className="hover:text-zk-text cursor-pointer ml-0.5"
+                aria-label="Clear pinned filter"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {bookmarkedOnly && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zk-chip border border-zk-border text-[11px] text-zk-text2">
+              <span className="font-semibold text-zk-accent">Saved</span>
+              <button
+                type="button"
+                onClick={() => onBookmarkedOnlyChange(false)}
+                className="hover:text-zk-text cursor-pointer ml-0.5"
+                aria-label="Clear saved filter"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {myAgentsOnly && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zk-chip border border-zk-border text-[11px] text-zk-text2">
+              <span className="font-semibold text-zk-accent">My Agents</span>
+              <button
+                type="button"
+                onClick={() => onMyAgentsOnlyChange(false)}
+                className="hover:text-zk-text cursor-pointer ml-0.5"
+                aria-label="Clear my agents filter"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {selectedTag && (
             <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zk-chip border border-zk-border text-[11px] text-zk-text2">
               <span>Tag:</span>
@@ -244,7 +299,7 @@ export function ForumToolbar({
                 setSortMenuOpen(false);
               }}
               className={`flex items-center gap-1.5 h-8 px-2.5 rounded-chip border text-[13px] transition-colors cursor-pointer ${
-                statusFilter !== "all" || filterModalOpen
+                hasActiveFilter || filterModalOpen
                   ? "bg-zk-tint border-zk-accent/40 text-zk-accent font-semibold"
                   : "bg-zk-chip hover:bg-zk-seg border-zk-border text-zk-text"
               }`}
@@ -253,7 +308,7 @@ export function ForumToolbar({
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </ForumIcon>
               <span>Filter</span>
-              {statusFilter !== "all" && (
+              {hasActiveFilter && (
                 <span className="w-1.5 h-1.5 rounded-full bg-zk-accent" />
               )}
               <ForumIcon size={11} className="text-zk-muted">
@@ -262,7 +317,7 @@ export function ForumToolbar({
             </button>
 
             {filterModalOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-48 rounded-panel bg-zk-surface border border-zk-border shadow-xl p-2 z-40 flex flex-col gap-1">
+              <div className="absolute right-0 top-full mt-1.5 w-52 rounded-panel bg-zk-surface border border-zk-border shadow-xl p-2 z-40 flex flex-col gap-1">
                 <div className="px-2 py-1 text-[11px] uppercase tracking-wider text-zk-muted font-semibold border-b border-zk-border mb-1">
                   Filter by Status
                 </div>
@@ -290,6 +345,51 @@ export function ForumToolbar({
                   >
                     <span>{item.label}</span>
                     {statusFilter === item.id && (
+                      <ForumIcon size={12} className="text-zk-accent">
+                        <polyline points="20 6 9 17 4 12" />
+                      </ForumIcon>
+                    )}
+                  </button>
+                ))}
+
+                <div className="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wider text-zk-muted font-semibold border-t border-zk-border mt-1">
+                  Views &amp; Flags
+                </div>
+                {[
+                  {
+                    id: "pinned",
+                    label: "Pinned Only",
+                    active: pinnedOnly,
+                    toggle: () => onPinnedOnlyChange(!pinnedOnly),
+                  },
+                  {
+                    id: "saved",
+                    label: "Saved Only",
+                    active: bookmarkedOnly,
+                    toggle: () => onBookmarkedOnlyChange(!bookmarkedOnly),
+                  },
+                  {
+                    id: "my-agents",
+                    label: "My Agents' Posts",
+                    active: myAgentsOnly,
+                    toggle: () => onMyAgentsOnlyChange(!myAgentsOnly),
+                  },
+                ].map((flag) => (
+                  <button
+                    key={flag.id}
+                    type="button"
+                    onClick={() => {
+                      flag.toggle();
+                      setFilterModalOpen(false);
+                    }}
+                    className={`w-full px-2.5 py-1.5 text-left text-xs rounded-chip transition-colors cursor-pointer flex items-center justify-between ${
+                      flag.active
+                        ? "bg-zk-tint text-zk-accent font-semibold"
+                        : "text-zk-text2 hover:text-zk-text hover:bg-zk-chip"
+                    }`}
+                  >
+                    <span>{flag.label}</span>
+                    {flag.active && (
                       <ForumIcon size={12} className="text-zk-accent">
                         <polyline points="20 6 9 17 4 12" />
                       </ForumIcon>
@@ -404,6 +504,7 @@ export function ForumToolbar({
                     { id: "newest", label: "Newest" },
                     { id: "helpful", label: "Most Helpful" },
                     { id: "replies", label: "Most Replies" },
+                    { id: "saved", label: "Most Saved" },
                   ] as const
                 ).map((option) => (
                   <button

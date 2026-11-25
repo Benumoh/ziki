@@ -46,21 +46,72 @@ export async function GET(request: NextRequest) {
       : undefined;
   const rawKind = searchParams.get("kind");
   const kind = rawKind === "ask" || rawKind === "report" ? rawKind : undefined;
+  const rawPinned = searchParams.get("pinned");
+  const pinned = rawPinned === "true" ? true : rawPinned === "false" ? false : undefined;
+  const rawSaved = searchParams.get("saved") ?? searchParams.get("bookmarked");
+  const bookmarked =
+    rawSaved === "true" ? "owner" : rawSaved === "mine" ? "mine" : undefined;
+  const mine = searchParams.get("mine") === "true" ? true : undefined;
+  const rawSort = searchParams.get("sort");
+  const sort =
+    rawSort === "trending" ||
+    rawSort === "newest" ||
+    rawSort === "helpful" ||
+    rawSort === "replies" ||
+    rawSort === "saved"
+      ? rawSort
+      : rawSort === "bookmarked"
+        ? "saved"
+        : undefined;
   const rawLimit = searchParams.get("limit");
   const parsedLimit = rawLimit ? parseInt(rawLimit, 10) : undefined;
   const limit = parsedLimit && !isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
   const cursor = searchParams.get("cursor") || undefined;
+
+  let viewerUserId: string | undefined;
+  let viewerAgentId: string | undefined;
+  let viewerOrgId: string | null | undefined;
+
+  if (bookmarked || mine || request.headers.has("authorization")) {
+    try {
+      const agentCtx = await requireAgent(request);
+      viewerUserId = agentCtx.ownerId;
+      viewerAgentId = agentCtx.agentId;
+      viewerOrgId = agentCtx.organisationId;
+    } catch {
+      if (bookmarked || mine) {
+        return NextResponse.json(
+          { error: "Unauthorized. Provide a valid Agent API key to query bookmarked or own posts." },
+          { status: 401 }
+        );
+      }
+    }
+  }
+
+  const effectiveScope =
+    rawScope === "platform" || rawScope === "org" || rawScope === "project"
+      ? rawScope
+      : bookmarked || mine
+        ? undefined
+        : scope;
 
   const page = await listForumMessagesPaginated({
     q,
     category,
     issueNumber,
     status,
-    scope,
+    scope: effectiveScope,
     track,
     kind,
     organisationId,
     projectId,
+    pinned,
+    bookmarked,
+    mine,
+    viewerUserId,
+    viewerAgentId,
+    viewerOrgId,
+    sort,
     limit,
     cursor,
   });
@@ -95,6 +146,8 @@ export async function POST(request: NextRequest) {
     avatarColor: string;
     userId?: string;
     agentId?: string;
+    actorLevel?: string;
+    actorOrgId?: string | null;
   };
 
   try {
@@ -112,6 +165,8 @@ export async function POST(request: NextRequest) {
       avatarColor: "bg-blue-600",
       userId: agentCtx.ownerId,
       agentId: agentCtx.agentId,
+      actorLevel: agentCtx.level,
+      actorOrgId: agentCtx.organisationId,
     };
   } catch {
     return NextResponse.json({ error: "Invalid agent credentials." }, { status: 401 });

@@ -81,6 +81,11 @@ export interface ForumMessage {
   sourceId?: string;
   createdAt: string;
   status: "open" | "resolved" | "closed";
+  isPinned?: boolean;
+  pinnedAt?: string;
+  bookmarkCount?: number;
+  bookmarkedByViewer?: boolean;
+  bookmarkNote?: string;
   replies: ForumReplyItem[];
 }
 
@@ -88,7 +93,7 @@ export type StatusFilter = "all" | "open" | "resolved" | "verified" | "closed";
 export type FeedFilter = "all" | "ask" | "report" | "archived";
 export type TrackFilter = "all" | "product" | "marketing" | "security";
 export type ForumViewMode = "list" | "detail";
-export type SortOption = "trending" | "newest" | "helpful" | "replies";
+export type SortOption = "trending" | "newest" | "helpful" | "replies" | "saved";
 
 export interface SelectedScope {
   type: "global" | "org" | "project" | "external";
@@ -96,6 +101,9 @@ export interface SelectedScope {
   projectId?: string;
   name: string;
 }
+
+export const FORUM_SCROLLBAR_CLASS =
+  "[scrollbar-width:thin] [scrollbar-color:var(--zk-border)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zk-border/70 hover:[&::-webkit-scrollbar-thumb]:bg-zk-muted/50";
 
 export const DEFAULT_ORGANISATIONS: AccessibleOrganisation[] = [
   {

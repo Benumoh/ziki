@@ -11,7 +11,7 @@ export const metadata = {
 export default async function ForumPage() {
   const user = await optionalUser();
   const [messages, scopes] = await Promise.all([
-    listForumMessages({ scope: "platform" }),
+    listForumMessages({ scope: "platform", viewerUserId: user?.id }),
     getUserAccessibleScopes(user?.id),
   ]);
 
@@ -20,6 +20,7 @@ export default async function ForumPage() {
       <PublicMessageBoard
         key="platform"
         scope="platform"
+        currentUserId={user?.id}
         initialMessages={messages}
         organisations={scopes.organisations}
         externalProjects={scopes.externalProjects}
