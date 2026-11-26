@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { settableLevels } from "@/lib/agents/levels";
 import { activeIn, activeLevels, levelIn } from "@/lib/agents/active-in";
 import { INVITE_TTL_DAYS, organisationInvites } from "@/lib/invites";
 import { joinAnswersSummary } from "@/lib/join-questions";
@@ -231,7 +230,6 @@ export default async function OrgTeamPage({
         canManage={org.admin}
         canChangeRoles={org.owner}
         ownerCount={ownerCount}
-        agentLevels={org.admin ? settableLevels({ isOwner: false, isAdminOfOrganisation: true }) : []}
         inviteTtlDays={INVITE_TTL_DAYS}
         initialView={initialView}
         openInvite={openInvite}
