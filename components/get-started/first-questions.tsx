@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { IdeaChat } from "@/components/idea-chat";
 import { NeedPicker, needsFor, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/get-started/need-picker";
 import { saveProductKindsAction } from "@/app/(app)/projects/actions";
 import { PRODUCT_OTHER_MAX, readProductKinds, type ProductKind } from "@/lib/product-kinds";
@@ -18,10 +17,9 @@ import { PRODUCT_OTHER_MAX, readProductKinds, type ProductKind } from "@/lib/pro
  * 1. what you're building (#product-kinds): any of a website, a mobile app, a
  * desktop app and something else (in your own words: a game, an extension…), or not built yet;
  * saved on the project, 2. what you need help with (tap tiles, worded for what
- * you build), 3. your first request, sent through the normal Ideas box. It
+ * you build), which ends it onto the dashboard, where the request box is. It
  * doesn't ask for links: the project header and Project Settings set those.
- * Skip or × closes it for this project on this device; sending the request
- * closes it onto the dashboard (not the new idea), and the project then has an idea.
+ * Finishing, skipping or × closes it for this project on this device.
  */
 
 const DONE_KEY = "ziki.first-questions.v1.done";
@@ -36,7 +34,7 @@ type Props = {
   firstName: string | null;
 };
 
-type Step = "kind" | "needs" | "request";
+type Step = "kind" | "needs";
 
 /** Pick all that apply; "Not built yet" stands alone. */
 const KINDS: { id: ProductKind; icon: string; label: string; hint: string }[] = [
@@ -46,21 +44,6 @@ const KINDS: { id: ProductKind; icon: string; label: string; hint: string }[] = 
   { id: "other", icon: "🧩", label: "Something else", hint: "A game, an extension, a bot…" },
   { id: "idea", icon: "💡", label: "Not built yet", hint: "I have an idea to start" },
 ];
-
-const REQUEST_EXAMPLE: Record<ProductKind, string> = {
-  website: "For example: The contact form on my website doesn't send me an email.",
-  mobile: "For example: The sign-up screen in my app freezes after I tap Continue.",
-  desktop: "For example: My app won't open on a Mac after the latest update.",
-  other: "For example: Players fall through the floor on level 3.",
-  idea: "For example: I want an app where neighbours can lend each other tools.",
-};
-
-/** The example in the request box: the one kind's, or a general one for several. */
-function requestExample(kinds: readonly ProductKind[]): string {
-  if (kinds.length === 1) return REQUEST_EXAMPLE[kinds[0]];
-  if (kinds.length === 0) return REQUEST_EXAMPLE.website;
-  return "For example: Customers can't reset their password.";
-}
 
 function readDone(projectId: string): boolean {
   try {
@@ -101,8 +84,7 @@ export function FirstQuestions({
   const [saving, setSaving] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const requestRef = useRef<HTMLDivElement>(null);
-  const steps: Step[] = ["kind", "needs", "request"];
+  const steps: Step[] = ["kind", "needs"];
   const step = steps[index];
   const greeting = firstName ? `Welcome, ${firstName}!` : "Welcome!";
 
@@ -128,13 +110,9 @@ export function FirstQuestions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Each screen's question takes focus, so screen readers say it; the last one starts in the box.
+  // Each screen's question takes focus, so screen readers say it.
   useEffect(() => {
     if (!open) return;
-    if (step === "request") {
-      const timer = setTimeout(() => requestRef.current?.querySelector("textarea")?.focus(), 200);
-      return () => clearTimeout(timer);
-    }
     headingRef.current?.focus();
   }, [open, step]);
 
@@ -174,21 +152,9 @@ export function FirstQuestions({
     next();
   }
 
-  function fill(text: string) {
-    const box = requestRef.current?.querySelector("textarea");
-    if (!box) return;
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(box, text);
-    box.dispatchEvent(new Event("input", { bubbles: true }));
-    box.focus();
-    const blank = text.indexOf("___");
-    if (blank >= 0) box.setSelectionRange(blank, blank + 3);
-  }
-
   if (!open) return null;
 
   const needs = needsFor(kinds.length > 0 ? kinds : ["website"]);
-  const pickedNeeds = needs.filter((need) => picked.includes(need.id));
-  const starters = pickedNeeds.length > 0 ? pickedNeeds : needs.slice(0, 3);
 
   // A big question, left-aligned; a line break in the text starts its second line.
   const heading = (text: string) => (
@@ -301,47 +267,9 @@ export function FirstQuestions({
               needs={needs}
               picked={picked}
               onPickedChange={setPicked}
-              onNext={next}
-              onSkip={next}
+              onNext={close}
+              onSkip={close}
             />
-          ) : null}
-
-          {step === "request" ? (
-            <>
-              {heading("Tell us one thing\nyou want")}
-              {lead("Use your own words. Tap a start below, then fill in the blank.")}
-              <div className="mt-6 flex flex-wrap gap-2">
-                {starters.map((need) => (
-                  <button
-                    key={need.id}
-                    type="button"
-                    onClick={() => fill(need.text)}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-chip border border-zk-border bg-zk-surface px-4 text-sm font-semibold text-zk-text transition hover:border-electric-blue hover:bg-zk-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue"
-                  >
-                    <span aria-hidden="true">{need.icon}</span>
-                    {need.label}
-                  </button>
-                ))}
-              </div>
-              <div ref={requestRef} className="mt-4 w-full">
-                {/* Sent: the card closes onto the dashboard, which now lists the request, rather than opening the idea. */}
-                <IdeaChat
-                  projectId={projectId}
-                  alwaysOpen
-                  placeholder={requestExample(kinds)}
-                  onSent={() => {
-                    close();
-                    router.refresh();
-                  }}
-                />
-              </div>
-              <p className="m-0 mt-3 text-sm text-zk-muted">Press Enter or the round arrow to send it. Nothing changes without your OK.</p>
-              <div className="mt-auto flex w-full flex-col pt-8">
-                <button type="button" onClick={close} className={SECONDARY_BUTTON}>
-                  I&apos;ll do this later
-                </button>
-              </div>
-            </>
           ) : null}
         </div>
       </div>
