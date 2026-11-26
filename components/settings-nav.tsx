@@ -34,13 +34,13 @@ export function SettingsNav({ orgRef, orgName, pendingJoinCount = 0, owner = fal
   const section = params.get("section") ?? "account";
   const teamHref = orgRef ? orgPath(orgRef, "team") : null;
 
-  // #team-page: the organisation's Team comes first among the main sections, since people manage it most.
-  const mainSections = [
-    ...(teamHref
-      ? [{ id: "team", href: teamHref, label: "Team", hint: "Members, invites and requests", icon: TEAM_ICON, on: pathname === teamHref || pathname.startsWith(`${teamHref}/`), badge: pendingJoinCount }]
-      : []),
-    ...SETTINGS_SECTIONS.map((item) => ({ ...item, href: `/settings?section=${item.id}`, on: onSettings && section === item.id, badge: 0 })),
-  ];
+  // #team-page: the organisation's Team sits among the main sections, third, after Account and Finance.
+  const team = teamHref
+    ? [{ id: "team", href: teamHref, label: "Team", hint: "Members, invites and requests", icon: TEAM_ICON, on: pathname === teamHref || pathname.startsWith(`${teamHref}/`), badge: pendingJoinCount }]
+    : [];
+  const personal = SETTINGS_SECTIONS.map((item) => ({ ...item, href: `/settings?section=${item.id}`, on: onSettings && section === item.id, badge: 0 }));
+  const afterFinance = personal.findIndex((item) => item.id === "finance") + 1;
+  const mainSections = [...personal.slice(0, afterFinance), ...team, ...personal.slice(afterFinance)];
 
   return (
     <nav aria-label="Settings sections" className="settings-navigation">
