@@ -17,9 +17,11 @@ import { PRODUCT_OTHER_MAX, readProductKinds, type ProductKind } from "@/lib/pro
  * 1. what you're building (#product-kinds): any of a website, a mobile app, a
  * desktop app and something else (in your own words: a game, an extension…), or not built yet;
  * saved on the project, 2. what you need help with (tap tiles, worded for what
- * you build), which ends it onto the dashboard, where the request box is. It
- * doesn't ask for links: the project header and Project Settings set those.
- * Finishing, skipping or × closes it for this project on this device.
+ * you build), 3. "You're all set": how the work gets done here, naming what
+ * they picked, and one button onto the dashboard. Nothing to type or choose:
+ * the dashboard's own request box and "Who will work on your tasks?" take it
+ * from there. It doesn't ask for links: the project header and Project
+ * Settings set those. Finishing, skipping or × closes it for this project on this device.
  */
 
 const DONE_KEY = "ziki.first-questions.v1.done";
@@ -34,7 +36,22 @@ type Props = {
   firstName: string | null;
 };
 
-type Step = "kind" | "needs";
+type Step = "kind" | "needs" | "done";
+
+/** "fix something broken and keep it safe": what they picked, as words for a sentence. */
+function pickedWords(labels: string[]): string | null {
+  const words = labels.map((label) => label.charAt(0).toLowerCase() + label.slice(1));
+  if (words.length === 0) return null;
+  if (words.length === 1) return words[0];
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+/** How work gets done on Ziki, in three short lines for the last screen. */
+const HOW_IT_WORKS: { icon: string; title: string; text: string }[] = [
+  { icon: "💬", title: "Say what you need", text: "A fix, a feature or a change, in plain words, in the box at the top of your dashboard." },
+  { icon: "🤖", title: "AI agents do the work", text: "Your own agent, or agents on Ziki. They pick it up, build it and show you the result." },
+  { icon: "✅", title: "You stay in charge", text: "Every change is tested and checked, and nothing goes live without your yes." },
+];
 
 /** Pick all that apply; "Not built yet" stands alone. */
 const KINDS: { id: ProductKind; icon: string; label: string; hint: string }[] = [
@@ -84,7 +101,7 @@ export function FirstQuestions({
   const [saving, setSaving] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const steps: Step[] = ["kind", "needs"];
+  const steps: Step[] = ["kind", "needs", "done"];
   const step = steps[index];
   const greeting = firstName ? `Welcome, ${firstName}!` : "Welcome!";
 
@@ -155,6 +172,7 @@ export function FirstQuestions({
   if (!open) return null;
 
   const needs = needsFor(kinds.length > 0 ? kinds : ["website"]);
+  const pickedLine = pickedWords(needs.filter((need) => picked.includes(need.id)).map((need) => need.label));
 
   // A big question, left-aligned; a line break in the text starts its second line.
   const heading = (text: string) => (
@@ -267,9 +285,36 @@ export function FirstQuestions({
               needs={needs}
               picked={picked}
               onPickedChange={setPicked}
-              onNext={close}
-              onSkip={close}
+              onNext={next}
+              onSkip={next}
             />
+          ) : null}
+
+          {step === "done" ? (
+            <>
+              {heading(firstName ? `You're all set,\n${firstName}! 🎉` : "You're all set! 🎉")}
+              {lead(
+                pickedLine
+                  ? `Ziki is ready to help you ${pickedLine}. Here's how it works:`
+                  : "Your project is ready. Here's how work gets done here:",
+              )}
+              <ol className="mt-7 flex w-full list-none flex-col gap-3 p-0">
+                {HOW_IT_WORKS.map((point) => (
+                  <li key={point.title} className="flex items-start gap-4 rounded-panel border border-zk-border bg-zk-surface px-5 py-4">
+                    <span aria-hidden="true" className="text-2xl leading-none">{point.icon}</span>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-[15px] font-bold leading-tight text-zk-text">{point.title}</span>
+                      <span className="text-sm leading-snug text-zk-text2">{point.text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-auto flex w-full flex-col pt-8">
+                <button type="button" onClick={close} className={PRIMARY_BUTTON}>
+                  Take me to my dashboard
+                </button>
+              </div>
+            </>
           ) : null}
         </div>
       </div>
