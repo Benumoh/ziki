@@ -17,6 +17,7 @@ import {
   type InviteDelivery,
 } from "@/lib/invites";
 import { acceptShareLink, createShareLink, revokeShareLink } from "@/lib/share-invites";
+import { INVITE_BATCH_MAX, splitEmails } from "@/lib/invite-emails";
 import { prisma } from "@/lib/prisma";
 
 import { RATE_LIMIT_MESSAGE, consumeRateLimit } from "@/lib/rate-limit";
@@ -173,12 +174,33 @@ export type CreateInviteActionResult =
     }
   | { ok: false; error: string; field?: string };
 
-/** An owner or admin invites an email address into their organisation. */
-export async function createInviteAction(
-  _previous: CreateInviteActionResult | undefined,
-  formData: FormData,
-): Promise<CreateInviteActionResult> {
-  return sendInvite(String(formData.get("organisationId") ?? ""), formData.get("email"));
+export type CreateInvitesActionResult =
+  | { ok: true; results: (CreateInviteActionResult & { email: string })[] }
+  | { ok: false; error: string };
+
+/**
+ * An owner or admin invites one or more email addresses into their organisation (#team-page). Each
+ * address gets its own single-use link and counts against the hourly invite limit; one that can't be
+ * invited (already a member, not an address) is reported beside the others, which still go out.
+ */
+export async function createInvitesAction(organisationId: string, emails: unknown): Promise<CreateInvitesActionResult> {
+  const list = Array.isArray(emails) ? splitEmails(emails.filter((value) => typeof value === "string").join(" ")) : [];
+  if (list.length === 0) return { ok: false, error: "Add at least one email address." };
+  if (list.length > INVITE_BATCH_MAX) {
+    return { ok: false, error: `Invite up to ${INVITE_BATCH_MAX} people at a time.` };
+  }
+
+  const results: (CreateInviteActionResult & { email: string })[] = [];
+  for (const email of list) {
+    const result = await sendInvite(organisationId, email);
+    results.push(result.ok ? result : { ...result, email });
+    // Past the hourly limit, the rest would be refused the same way: say so for each without asking again.
+    if (!result.ok && result.error === RATE_LIMIT_MESSAGE) {
+      for (const rest of list.slice(results.length)) results.push({ ok: false, error: RATE_LIMIT_MESSAGE, email: rest });
+      break;
+    }
+  }
+  return { ok: true, results };
 }
 
 /**

@@ -108,7 +108,7 @@ export function InviteDialog({
         {mode === "email" ? (
           <>
             <p className="mt-4 text-sm text-zk-text2">
-              For one person. The link works once, only for the address you enter, and expires after {inviteTtlDays}{" "}
+              Each person gets their own link. It works once, only for their address, and expires after {inviteTtlDays}{" "}
               days. They show on the Team page as Invited until they join.
             </p>
             <InviteForm organisationId={organisationId} />

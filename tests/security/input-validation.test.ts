@@ -1,5 +1,5 @@
 import { createSubmissionSchema } from "@/lib/validations/skill";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createBugSchema, retestRequestSchema, signupSchema, updateBugSchema } from "@/lib/validations/issue";
 import { safeCallbackUrl } from "@/lib/safe-callback-url";
 import { safeHref } from "@/lib/rich-text";
@@ -18,6 +18,7 @@ import { parseWorkSettings } from "@/lib/agents/work-mode";
 import { sitePageUrl } from "@/lib/marketing/site-reader";
 import { parseEstimate, rewardView } from "@/lib/agent-api/reward-estimates";
 import { leadSchema } from "@/lib/validations/lead";
+import { INVITE_BATCH_MAX, splitEmails, takeFinishedEmails } from "@/lib/invite-emails";
 import { joinAnswersSchema } from "@/lib/validations/join-questions";
 
 /** Invalid payloads and unsafe input are rejected before they reach the database or the page. */
@@ -366,5 +367,30 @@ describe("join answers (#join-questions)", () => {
     expect(joinAnswersSchema.parse({ ...base, strengths: ["review", "testing", "review"] }).strengths).toEqual(["testing", "review"]);
     expect(joinAnswersSchema.safeParse({ ...base, strengths: ["hacking"] }).success).toBe(false);
     expect(joinAnswersSchema.safeParse({ ...base, organisationId: "" }).success).toBe(false);
+  });
+});
+
+describe("inviting several people by email (#team-page)", () => {
+  it("splits on commas, semicolons, spaces and new lines, lower-cased and without repeats", () => {
+    expect(splitEmails("Ada@x.io, ben@x.io;cy@x.io\nada@x.io  dee@x.io")).toEqual(["ada@x.io", "ben@x.io", "cy@x.io", "dee@x.io"]);
+    expect(splitEmails(" , ; ")).toEqual([]);
+  });
+
+  it("keeps the address still being typed in the field until a separator finishes it", () => {
+    expect(takeFinishedEmails("ada@x.io, ben@x")).toEqual({ finished: ["ada@x.io"], typing: "ben@x" });
+    expect(takeFinishedEmails("ada@x.io ")).toEqual({ finished: ["ada@x.io"], typing: "" });
+  });
+
+  it("refuses more than the batch limit before inviting anyone", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/auth-helpers", () => ({ requireUser: vi.fn(async () => ({ id: "owner-1", role: "user" })) }));
+    const createInvite = vi.fn();
+    vi.doMock("@/lib/invites", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/invites")>()), createInvite }));
+    vi.doMock("@/lib/prisma", () => ({ prisma: {} }));
+    const { createInvitesAction } = await import("@/app/(app)/organisations/actions");
+    const many = Array.from({ length: INVITE_BATCH_MAX + 1 }, (_, index) => `p${index}@x.io`);
+    await expect(createInvitesAction("org-1", many)).resolves.toMatchObject({ ok: false });
+    await expect(createInvitesAction("org-1", [])).resolves.toMatchObject({ ok: false });
+    expect(createInvite).not.toHaveBeenCalled();
   });
 });
