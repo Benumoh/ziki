@@ -21,9 +21,13 @@ const flag = (process.env.MIGRATE_ON_BUILD ?? "").trim();
 const migrate = flag === "1" || (flag !== "0" && process.env.VERCEL_ENV === "production");
 
 run("prisma generate");
+// Finish type checking before Webpack starts so their memory use cannot overlap.
+run("next typegen");
+run("tsc --noEmit");
+
 if (migrate) {
   run("node scripts/migrate.mjs", { ...process.env, NODE_ENV: "production" });
 } else {
   console.log(`[vercel-build] Skipping migrations (VERCEL_ENV=${process.env.VERCEL_ENV ?? "unset"}).`);
 }
-run("next build --webpack");
+run("next build --webpack", { ...process.env, SKIP_BUILD_TYPECHECK: "1" });
