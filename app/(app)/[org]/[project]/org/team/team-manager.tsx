@@ -1,17 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentLevel } from "@prisma/client";
 import { Avatar } from "@/components/avatar";
 import { LocalTime } from "@/components/local-time";
-import { TeamAgentLevelControl } from "@/components/team-agent-level";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm, type ConfirmOptions } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { AGENT_LEVEL_LABELS } from "@/lib/agents/levels";
 import { copyText } from "@/lib/clipboard";
 import type { OrganisationRole } from "@/lib/organisation-role";
 import { TOOL_BUTTON, TOOL_BUTTON_ON } from "@/lib/ui-style";
@@ -114,6 +112,22 @@ const VIEW_LABELS: Record<TeamView, string> = {
   deactivated: "Deactivated",
 };
 
+/** The header over each kind of person when everyone is shown, like Linear's "Active 1". */
+const GROUP_LABELS: Record<Row["kind"], string> = {
+  request: "Requests",
+  member: "Members",
+  invite: "Invited",
+  collaborator: "Collaborators",
+  deactivated: "Deactivated",
+};
+
+// One line per person, as in Linear's members table: Name (with the email under it), Role, Agents, Joined, then the ⋯ menu.
+const TH = "px-3 py-2.5 text-left text-xs font-medium text-zk-muted first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5";
+const TD = "px-3 py-3 align-middle first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5";
+/** Role, Agents and Joined: on phones they fold into the name cell instead. */
+const WIDE = "hidden sm:table-cell";
+const COLUMNS = 5;
+
 const KIND_OF_VIEW: Record<Exclude<TeamView, "all">, Row["kind"]> = {
   active: "member",
   invited: "invite",
@@ -129,10 +143,10 @@ const roleBadgeClass: Record<OrganisationRole, string> = {
 };
 
 /** The one status chip each row carries. */
-function statusOf(row: Row): { label: string; className: string } {
+function statusOf(row: Row): { label: string; className: string } | null {
   switch (row.kind) {
     case "member":
-      return { label: "Active", className: "bg-zk-ok-bg text-zk-ok-fg" };
+      return null;
     case "invite":
       return row.item.state === "pending"
         ? { label: "Invited", className: "bg-zk-info-bg text-zk-info-fg" }
@@ -203,7 +217,6 @@ export function TeamManager({
   canManage,
   canChangeRoles,
   ownerCount,
-  agentLevels,
   inviteTtlDays,
   initialView,
   openInvite,
@@ -221,7 +234,6 @@ export function TeamManager({
   /** Owners and the site super admin. */
   canChangeRoles: boolean;
   ownerCount: number;
-  agentLevels: AgentLevel[];
   inviteTtlDays: number;
   initialView: TeamView;
   openInvite: boolean;
@@ -647,170 +659,211 @@ export function TeamManager({
           </p>
         ) : null}
 
-        <ul className="-mx-4 divide-y divide-zk-divider border-t border-zk-divider sm:-mx-5" aria-busy={pending}>
-          {shown.length === 0 ? (
-            <li className="px-4 py-8 text-center text-sm text-zk-muted sm:px-5">
-              {filtered
-                ? "No one matches these filters."
-                : view === "invited"
-                  ? "No invites waiting. People you invite show here until they join."
-                  : view === "requests"
-                    ? "No one is asking to join a project right now."
-                    : view === "deactivated"
-                      ? "No one is deactivated."
-                      : view === "collaborators"
-                        ? "No outside collaborators on your projects."
-                        : `No one has joined ${organisationName} yet.`}
-            </li>
-          ) : (
-            shown.map((row) => (
-              <TeamRow
-                key={row.key}
-                row={row}
-                isSelf={row.kind === "member" && row.item.id === viewerId}
-                agentLevels={agentLevels}
-                menu={menuFor(row)}
-                pending={pending}
-                onPick={run}
-              />
-            ))
-          )}
-        </ul>
+        <div className="-mx-4 overflow-x-auto border-t border-zk-divider sm:-mx-5">
+          <table className="w-full border-collapse text-sm" aria-busy={pending}>
+            <thead className="border-b border-zk-divider">
+              <tr>
+                <th scope="col" className={TH}>Name</th>
+                <th scope="col" className={`${TH} ${WIDE}`}>Role</th>
+                <th scope="col" className={`${TH} ${WIDE}`}>Agents</th>
+                <th scope="col" className={`${TH} ${WIDE}`}>Joined</th>
+                <th scope="col" className={`${TH} w-12`}><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zk-divider">
+              {shown.length === 0 ? (
+                <tr>
+                  <td colSpan={COLUMNS} className="px-4 py-8 text-center text-sm text-zk-muted sm:px-5">
+                    {filtered
+                      ? "No one matches these filters."
+                      : view === "invited"
+                        ? "No invites waiting. People you invite show here until they join."
+                        : view === "requests"
+                          ? "No one is asking to join a project right now."
+                          : view === "deactivated"
+                            ? "No one is deactivated."
+                            : view === "collaborators"
+                              ? "No outside collaborators on your projects."
+                              : `No one has joined ${organisationName} yet.`}
+                  </td>
+                </tr>
+              ) : (
+                shown.map((row, index) => (
+                  <Fragment key={row.key}>
+                    {view === "all" && shown[index - 1]?.kind !== row.kind ? (
+                      <tr className="bg-zk-chip/60">
+                        <th scope="rowgroup" colSpan={COLUMNS} className="px-4 py-2 text-left text-xs font-medium text-zk-text2 sm:px-5">
+                          {GROUP_LABELS[row.kind]}{" "}
+                          <span className="ml-1 font-normal text-zk-muted">{shown.filter((other) => other.kind === row.kind).length}</span>
+                        </th>
+                      </tr>
+                    ) : null}
+                    <TeamRow
+                      row={row}
+                      isSelf={row.kind === "member" && row.item.id === viewerId}
+                      menu={menuFor(row)}
+                      pending={pending}
+                      onPick={run}
+                    />
+                  </Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
+/** A member's agents by name: the first two, then "+N" for the rest (their classes live on the Workers page). */
+function AgentNames({ agents }: { agents: TeamMember["agents"] }) {
+  if (agents.length === 0) return <span className="text-zk-muted">—</span>;
+  const more = agents.length - 2;
+  return (
+    <span className="flex min-w-0 max-w-[240px] items-center gap-1.5 text-zk-text2" title={agents.map((agent) => agent.name).join(", ")}>
+      <span className="truncate">{agents.slice(0, 2).map((agent) => agent.name).join(", ")}</span>
+      {more > 0 ? <span className="shrink-0 text-xs text-zk-muted">+{more}</span> : null}
+    </span>
+  );
+}
+
+/** The chips in a row's Role column: its status (when it isn't a member), its role, and its project. */
+function RoleChips({ row }: { row: Row }) {
+  const status = statusOf(row);
+  const role = roleOf(row);
+  return (
+    <>
+      {status ? <Badge className={`rounded-chip ${status.className}`}>{status.label}</Badge> : null}
+      {role ? <Badge className={`rounded-chip ${roleBadgeClass[role]}`}>{"roleLabel" in row.item ? row.item.roleLabel : role}</Badge> : null}
+      {row.kind === "member" && row.item.fundsIssues ? <Badge className="rounded-chip bg-zk-ok-bg text-zk-ok-fg">Funds issues</Badge> : null}
+      {row.kind === "request" || row.kind === "collaborator" ? (
+        <Link
+          href={row.item.projectHref}
+          className="rounded-chip border border-zk-border bg-zk-chip px-1.5 py-0.5 text-[11px] font-medium text-zk-accent hover:border-zk-accent"
+        >
+          {row.item.projectName}
+        </Link>
+      ) : null}
+    </>
+  );
+}
+
+/** The second line under the name: the email, or who sent an invite. What else is known is its tooltip. */
+function detailOf(row: Row): { text: string | null; note: string | null } {
+  switch (row.kind) {
+    case "member": {
+      const notes = [row.item.joinedAs, row.item.invitedByName ? `Accepted an invite from ${row.item.invitedByName}` : null].filter(Boolean);
+      return { text: row.item.email, note: notes.length > 0 ? notes.join(" · ") : null };
+    }
+    case "invite":
+      return { text: `Invited by ${row.item.invitedByName}`, note: null };
+    case "request":
+      return { text: row.item.email, note: null };
+    case "collaborator":
+      return { text: row.item.email, note: "Works on this project only" };
+    case "deactivated":
+      return { text: row.item.email, note: row.item.deactivatedByName ? `Deactivated by ${row.item.deactivatedByName}` : null };
+  }
+}
+
+/** The Joined column: when they joined, or when an invite expires, a request came in or someone was deactivated. */
+function DateCell({ row }: { row: Row }) {
+  switch (row.kind) {
+    case "member":
+    case "collaborator":
+      return <LocalTime date={row.kind === "member" ? row.item.joinedAt : row.item.createdAt} />;
+    case "invite":
+      return (
+        <>
+          {row.item.state === "pending" ? "Expires" : "Expired"} <LocalTime date={row.item.expiresAt} />
+        </>
+      );
+    case "request":
+      return (
+        <>
+          Asked <LocalTime date={row.item.createdAt} />
+        </>
+      );
+    case "deactivated":
+      return (
+        <>
+          Deactivated <LocalTime date={row.item.deactivatedAt} />
+        </>
+      );
+  }
+}
+
 function TeamRow({
   row,
   isSelf,
-  agentLevels,
   menu,
   pending,
   onPick,
 }: {
   row: Row;
   isSelf: boolean;
-  agentLevels: AgentLevel[];
   menu: MenuItem[];
   pending: boolean;
   onPick: (item: MenuItem) => void;
 }) {
   const name = displayName(row);
-  const status = statusOf(row);
-  const role = roleOf(row);
   const image = row.kind === "invite" ? null : row.item.image;
-  const email = row.kind === "invite" ? null : row.item.email;
+  const detail = detailOf(row);
+  const agents = row.kind === "member" ? row.item.agents : [];
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start sm:px-5">
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <Avatar name={row.kind === "invite" ? row.item.email : row.item.name} image={image} size="md" />
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-zk-text">
-            <span className="truncate">{name}</span>
-            {isSelf ? <span className="text-xs font-normal text-zk-muted">(you)</span> : null}
-            <Badge className={`rounded-chip ${status.className}`}>{status.label}</Badge>
-            {role && row.kind !== "invite" ? (
-              <Badge className={`rounded-chip ${roleBadgeClass[role]}`}>
-                {"roleLabel" in row.item ? row.item.roleLabel : role}
-              </Badge>
-            ) : null}
-            {row.kind === "member" && row.item.fundsIssues ? (
-              <Badge className="rounded-chip bg-zk-ok-bg text-zk-ok-fg">Funds issues</Badge>
-            ) : null}
-            {row.kind === "request" || row.kind === "collaborator" ? (
-              <Link
-                href={row.item.projectHref}
-                className="rounded-chip border border-zk-border bg-zk-chip px-1.5 py-0.5 text-[11px] font-medium text-zk-accent hover:border-zk-accent"
-              >
-                {row.item.projectName}
-              </Link>
-            ) : null}
-          </p>
-          {email && email !== name ? <p className="truncate text-xs text-zk-muted">{email}</p> : null}
-          <RowMeta row={row} />
-          {row.kind === "request" && row.item.message ? (
-            <p className="rounded-control border border-zk-border bg-zk-bg px-3 py-2 text-xs text-zk-text2">
-              <span className="font-semibold text-zk-text">Note: </span>
-              {row.item.message}
+    <tr className="hover:bg-zk-chip/40">
+      <td className={TD}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={row.kind === "invite" ? row.item.email : row.item.name} image={image} size="md" />
+          <div className="min-w-0 max-w-[280px]">
+            <p className="flex min-w-0 items-center gap-1.5 font-medium text-zk-text">
+              <span className="truncate">{name}</span>
+              {isSelf ? <span className="shrink-0 text-xs font-normal text-zk-muted">(you)</span> : null}
             </p>
-          ) : null}
-          {row.kind === "member" && row.item.agents.length > 0 ? (
-            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5" aria-label={`${name}'s agents`}>
-              {row.item.agents.map((agent) => (
-                <li key={agent.id} className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-zk-text2">{agent.name}</span>
-                  {agentLevels.length > 0 ? (
-                    <TeamAgentLevelControl agentId={agent.id} agentName={agent.name} level={agent.level} levels={agentLevels} />
-                  ) : (
-                    <span className="rounded-full bg-zk-info-bg px-2 py-0.5 text-[11px] font-bold text-zk-info-fg">
-                      {AGENT_LEVEL_LABELS[agent.level]}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+            {detail.text && detail.text !== name ? (
+              <p className="truncate text-xs text-zk-muted" title={detail.note ?? undefined}>{detail.text}</p>
+            ) : null}
+            {row.kind === "request" && row.item.message ? (
+              <p className="truncate text-xs text-zk-text2" title={row.item.message}>
+                <span className="font-semibold text-zk-text">Note: </span>
+                {row.item.message}
+              </p>
+            ) : null}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
+              <RoleChips row={row} />
+              {agents.length > 0 ? <AgentNames agents={agents} /> : null}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
-        {row.kind === "request" && menu.length > 0 ? (
-          <Button type="button" variant="secondary" disabled={pending} onClick={() => onPick(menu[0])}>
-            Accept
-          </Button>
-        ) : null}
-        {row.kind === "deactivated" && menu.length > 0 ? (
-          <Button type="button" variant="secondary" disabled={pending} onClick={() => onPick(menu[0])}>
-            Reactivate
-          </Button>
-        ) : null}
-        {menu.length > 0 ? <RowMenu name={name} items={menu} pending={pending} onPick={onPick} /> : null}
-      </div>
-    </li>
+      </td>
+      <td className={`${TD} ${WIDE}`}>
+        <div className="flex flex-wrap items-center gap-1">
+          <RoleChips row={row} />
+        </div>
+      </td>
+      <td className={`${TD} ${WIDE}`}>{row.kind === "member" ? <AgentNames agents={agents} /> : <span className="text-zk-muted">—</span>}</td>
+      <td className={`${TD} ${WIDE} whitespace-nowrap text-zk-text2`}>
+        <DateCell row={row} />
+      </td>
+      <td className={TD}>
+        <div className="flex items-center justify-end gap-2">
+          {row.kind === "request" && menu.length > 0 ? (
+            <Button type="button" variant="secondary" disabled={pending} onClick={() => onPick(menu[0])}>
+              Accept
+            </Button>
+          ) : null}
+          {row.kind === "deactivated" && menu.length > 0 ? (
+            <Button type="button" variant="secondary" disabled={pending} onClick={() => onPick(menu[0])}>
+              Reactivate
+            </Button>
+          ) : null}
+          {menu.length > 0 ? <RowMenu name={name} items={menu} pending={pending} onPick={onPick} /> : null}
+        </div>
+      </td>
+    </tr>
   );
-}
-
-function RowMeta({ row }: { row: Row }) {
-  switch (row.kind) {
-    case "member":
-      return (
-        <>
-          <p className="text-xs text-zk-muted">
-            Joined <LocalTime date={row.item.joinedAt} />
-            {row.item.invitedByName ? ` · accepted an invite from ${row.item.invitedByName}` : ""}
-          </p>
-          {row.item.joinedAs ? <p className="text-xs text-zk-text2">{row.item.joinedAs}</p> : null}
-        </>
-      );
-    case "invite":
-      return (
-        <p className="text-xs text-zk-muted">
-          Invited by {row.item.invitedByName} <LocalTime date={row.item.createdAt} /> ·{" "}
-          {row.item.state === "pending" ? "not accepted yet, expires" : "expired"} <LocalTime date={row.item.expiresAt} />
-        </p>
-      );
-    case "request":
-      return (
-        <p className="text-xs text-zk-muted">
-          Asked to join <LocalTime date={row.item.createdAt} />
-        </p>
-      );
-    case "collaborator":
-      return (
-        <p className="text-xs text-zk-muted">
-          Works on this project only · since <LocalTime date={row.item.createdAt} />
-        </p>
-      );
-    case "deactivated":
-      return (
-        <p className="text-xs text-zk-muted">
-          Deactivated <LocalTime date={row.item.deactivatedAt} />
-          {row.item.deactivatedByName ? ` by ${row.item.deactivatedByName}` : ""} · joined{" "}
-          <LocalTime date={row.item.joinedAt} />
-        </p>
-      );
-  }
 }
 
 /** A row's ⋯ menu: every action on that person, in one place. */
@@ -852,7 +905,7 @@ function RowMenu({
     <details ref={ref} className="relative">
       <summary
         aria-label={`Actions for ${name}`}
-        className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-zk-border bg-zk-surface text-zk-text2 transition hover:bg-zk-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue [&::-webkit-details-marker]:hidden"
+        className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-control text-zk-muted transition hover:bg-zk-chip hover:text-zk-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue [&::-webkit-details-marker]:hidden"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <circle cx="5" cy="12" r="1.8" />
