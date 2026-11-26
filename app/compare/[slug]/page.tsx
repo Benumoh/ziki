@@ -1,12 +1,17 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { MarketingPage } from '@/components/homepage/marketing-page';
+import { Icon } from '@/components/homepage/icon';
+import { SiteFooter } from '@/components/homepage/site-footer';
+import { SiteNav } from '@/components/homepage/site-nav';
 import { JsonLd } from '@/components/json-ld';
+import { ComparisonCard } from '@/components/compare/comparison-card';
 import { PlatformBadge } from '@/components/compare/platform-badge';
 import { StatusPill } from '@/components/compare/status-pill';
+import '@/components/homepage/homepage.css';
 import '@/components/compare/compare.css';
 import { buildComparison, type BuiltComparison, type PlatformData } from '@/lib/compare/build';
 import { categoryShortLabel, FEATURE_STATUSES } from '@/lib/compare/catalog';
@@ -43,6 +48,7 @@ function List({ items, empty }: { items: string[]; empty: string }) {
   return <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>;
 }
 
+/** One comparison (#compare), built like the directory: a centred hero with the two platforms, then the sections. */
 export default async function ComparisonPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const loaded = await load(slug);
@@ -64,41 +70,60 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
   const sideClass = (p: PlatformData) => (p.isZiki ? 'is-ziki' : undefined);
 
   return (
-    <MarketingPage
-      signedIn={signedIn}
-      kicker="Compare"
-      title={<>{a.name} <br />vs {b.name}</>}
-      lede={built.summary}
-      actions={<a className="th-btn th-btn-dark th-btn-lg" href="#table">See the comparison</a>}
-    >
+    <main className="ziki-homepage cmp-page" id="top">
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <JsonLd data={comparisonJsonLd(built, a, b)} />
 
-      <section className="cmp-wrap" aria-labelledby="intro-title">
-        <p className="cmp-crumbs"><Link href="/compare">← All comparisons</Link></p>
-        <div className="cmp-vs-head" id="intro-title">
-          <span className="cmp-side"><PlatformBadge name={a.name} logoUrl={a.logoUrl} isZiki={a.isZiki} size={44} />{a.name}</span>
-          <span className="cmp-vs" aria-hidden="true">vs</span>
-          <span className="cmp-side"><PlatformBadge name={b.name} logoUrl={b.logoUrl} isZiki={b.isZiki} size={44} />{b.name}</span>
+      <section className="top-hero th-centered" id="main-content" tabIndex={-1}>
+        <SiteNav signedIn={signedIn} />
+        <div className="th-copy">
+          <Link className="cmp-back" href="/compare">
+            <Icon name="arrow" size={14} /> All comparisons
+          </Link>
+          <div className="cmp-hero-pair" aria-hidden="true">
+            <PlatformBadge name={a.name} logoUrl={a.logoUrl} isZiki={a.isZiki} size={56} />
+            <span className="cmp-hero-vs">vs</span>
+            <PlatformBadge name={b.name} logoUrl={b.logoUrl} isZiki={b.isZiki} size={56} />
+          </div>
+          <h1 className="th-title">{a.name} <span className="th-accent">vs {b.name}</span></h1>
+          <p className="th-lede">{built.summary}</p>
+          <div className="th-cta-row">
+            <a className="th-btn th-btn-lg th-btn-primary" href="#table">See the comparison</a>
+            {visit.map((p) => (
+              <a key={p.id} className="th-btn th-btn-lg th-btn-soft" href={p.websiteUrl} target="_blank" rel="noopener noreferrer">Visit {p.name} website</a>
+            ))}
+          </div>
+          <p className="cmp-meta">
+            <span>{a.name}: {verifiedText(a.lastVerifiedAt)}</span>
+            <span>{b.name}: {verifiedText(b.lastVerifiedAt)}</span>
+            <span>Page updated {formatDate(built.updatedAt)}</span>
+          </p>
         </div>
-        <div className="cmp-meta">
-          <span>{a.name}: {verifiedText(a.lastVerifiedAt)}</span>
-          <span>{b.name}: {verifiedText(b.lastVerifiedAt)}</span>
-          <span>Page updated {formatDate(built.updatedAt)}</span>
-        </div>
-        <p className="cmp-note">{built.relationshipNote}</p>
-        <div className="cmp-intro">
-          {[a, b].map((p) => (
-            <div key={p.id} className={sideClass(p)}>
-              <h3>{p.name} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· {categoryShortLabel(p.category)}</span></h3>
-              <p>{p.description}</p>
-            </div>
-          ))}
-        </div>
-        {built.customIntro ? <p className="cmp-note">{built.customIntro}</p> : null}
+
+        <section className="cmp-hero-builder cmp-hero-intro" aria-labelledby="intro-title">
+          <h2 className="sr-only" id="intro-title">The two platforms</h2>
+          <div className="cmp-intro">
+            {[a, b].map((p) => (
+              <div key={p.id} className={sideClass(p)}>
+                <div className="cmp-intro-name">
+                  <PlatformBadge name={p.name} logoUrl={p.logoUrl} isZiki={p.isZiki} size={36} />
+                  <div>
+                    <h3>{p.name}</h3>
+                    <span>{categoryShortLabel(p.category)}</span>
+                  </div>
+                </div>
+                <p>{p.description}</p>
+              </div>
+            ))}
+          </div>
+          <p className="cmp-note">{built.relationshipNote}</p>
+          {built.customIntro ? <p className="cmp-note">{built.customIntro}</p> : null}
+        </section>
       </section>
 
-      <section className="cmp-wrap" id="table" aria-labelledby="table-title">
-        <div className="cmp-head">
+      <section className="cmp-section" id="table" aria-labelledby="table-title">
+        <div className="cmp-section-head">
+          <span className="cmp-eyebrow">At a glance</span>
           <h2 id="table-title">Quick comparison</h2>
           <p>
             {built.rows.length} capabilities that apply to both. Verified answers: {a.name} {built.verifiedA} of {built.rows.length}, {b.name} {built.verifiedB} of {built.rows.length}.
@@ -138,15 +163,18 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
         </p>
       </section>
 
-      <section className="cmp-wrap" aria-labelledby="detail-title">
-        <div className="cmp-head"><h2 id="detail-title">Detailed comparison</h2></div>
+      <section className="cmp-section" aria-labelledby="detail-title">
+        <div className="cmp-section-head">
+          <span className="cmp-eyebrow">Side by side</span>
+          <h2 id="detail-title">Detailed comparison</h2>
+        </div>
         {built.details.length > 0 ? (
-          <div>
+          <div className="cmp-details">
             {built.details.map((detail) => (
               <div className="cmp-detail" key={detail.heading}>
                 <h3>{detail.heading}</h3>
-                <p><b>{a.name}</b>{detail.a}</p>
-                <p><b>{b.name}</b>{detail.b}</p>
+                <p className={sideClass(a)}><b>{a.name}</b>{detail.a}</p>
+                <p className={sideClass(b)}><b>{b.name}</b>{detail.b}</p>
               </div>
             ))}
           </div>
@@ -155,23 +183,29 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
         )}
       </section>
 
-      <section className="cmp-wrap" aria-labelledby="sl-title">
-        <div className="cmp-head"><h2 id="sl-title">Strengths and limitations</h2></div>
+      <section className="cmp-section" aria-labelledby="sl-title">
+        <div className="cmp-section-head">
+          <span className="cmp-eyebrow">Trade-offs</span>
+          <h2 id="sl-title">Strengths and limitations</h2>
+        </div>
         <div className="cmp-two">
           {([[a, built.strengthsA, built.limitationsA], [b, built.strengthsB, built.limitationsB]] as const).map(([p, strengths, limitations]) => (
             <div key={p.id} className={`cmp-panel ${p.isZiki ? 'is-ziki' : ''}`}>
-              <h3><PlatformBadge name={p.name} logoUrl={p.logoUrl} isZiki={p.isZiki} size={30} />{p.name}</h3>
-              <h4>Strengths</h4>
+              <h3><PlatformBadge name={p.name} logoUrl={p.logoUrl} isZiki={p.isZiki} size={32} />{p.name}</h3>
+              <h4><Icon name="check" size={14} /> Strengths</h4>
               <List items={strengths} empty="Not verified yet. Check the vendor’s own documentation." />
-              <h4>Limitations</h4>
+              <h4><Icon name="x" size={14} /> Limitations</h4>
               <List items={limitations} empty="Not verified yet. No limitation is assumed." />
             </div>
           ))}
         </div>
       </section>
 
-      <section className="cmp-wrap" aria-labelledby="choose-title">
-        <div className="cmp-head"><h2 id="choose-title">Which platform should you choose?</h2></div>
+      <section className="cmp-section" aria-labelledby="choose-title">
+        <div className="cmp-section-head">
+          <span className="cmp-eyebrow">Decide</span>
+          <h2 id="choose-title">Which platform should you choose?</h2>
+        </div>
         {built.recommendations.length > 0 ? (
           <div className="cmp-choose">
             {([[`Choose ${a.name} if you want…`, picks.a], [`Choose ${b.name} if you want…`, picks.b], ['Either can work for…', picks.either]] as const)
@@ -193,38 +227,33 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
         ) : null}
       </section>
 
-      <section className="cmp-wrap" aria-labelledby="cta-title">
-        <div className="cmp-cta">
-          <h2 id="cta-title">{rival ? `Ready to try Ziki, or see ${rival.name} first?` : 'Look closer'}</h2>
-          <div className="cmp-cta-row">
-            <Link className="th-btn th-btn-light" href="/">Explore Ziki</Link>
-            <Link className="th-btn th-btn-dark" href={signedIn ? '/home' : '/signup'}>{signedIn ? 'Open your workspace' : 'Get started'}</Link>
-            {visit.map((p) => (
-              <a key={p.id} className="th-btn th-btn-light" href={p.websiteUrl} target="_blank" rel="noopener noreferrer">Visit {p.name} website</a>
-            ))}
+      {related.length > 0 ? (
+        <section className="cmp-section" aria-labelledby="related-title">
+          <div className="cmp-section-head">
+            <span className="cmp-eyebrow">Keep comparing</span>
+            <h2 id="related-title">Related comparisons</h2>
           </div>
+          <div className="cmp-grid">{related.map((card) => <ComparisonCard key={card.slug} card={card} />)}</div>
+          <div className="cmp-more"><Link className="th-btn th-btn-lg th-btn-soft" href="/compare#all">View all comparisons</Link></div>
+        </section>
+      ) : null}
+
+      <section className="closing-cta cmp-closing" aria-labelledby="cta-title">
+        <div className="cta-mark"><Image src="/homepage/ziki-mark.svg" width={32} height={32} alt="" /></div>
+        <h2 id="cta-title">{rival ? `Ready to try Ziki, or see ${rival.name} first?` : 'Look closer'}</h2>
+        <p>Add your app and watch agents find, fix and check the work. Your first 5 fixes are free.</p>
+        <div className="cta-pair">
+          <Link className="button button-large" href={signedIn ? '/home' : '/signup'}>
+            {signedIn ? 'Open your workspace' : 'Get started'} <Icon name="arrow" size={17} />
+          </Link>
+          <Link className="button button-large button-secondary" href="/">Explore Ziki</Link>
+          {visit.map((p) => (
+            <a key={p.id} className="button button-large button-secondary" href={p.websiteUrl} target="_blank" rel="noopener noreferrer">Visit {p.name} website</a>
+          ))}
         </div>
       </section>
 
-      {related.length > 0 ? (
-        <section className="cmp-wrap" aria-labelledby="related-title">
-          <div className="cmp-head"><h2 id="related-title">Related comparisons</h2></div>
-          <div className="cmp-grid">
-            {related.map((card) => (
-              <article className="cmp-card" key={card.slug}>
-                <div className="cmp-card-logos">
-                  <PlatformBadge name={card.a.name} logoUrl={card.a.logoUrl} isZiki={card.a.isZiki} />
-                  <span aria-hidden="true">vs</span>
-                  <PlatformBadge name={card.b.name} logoUrl={card.b.logoUrl} isZiki={card.b.isZiki} />
-                </div>
-                <h3>{card.title}</h3>
-                <p>{card.description}</p>
-                <Link className="cmp-link" href={comparisonHref(card.a.slug, card.b.slug)}>View comparison<span className="sr-only">: {card.title}</span></Link>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-    </MarketingPage>
+      <SiteFooter />
+    </main>
   );
 }

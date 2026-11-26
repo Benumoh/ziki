@@ -798,32 +798,32 @@
 /* ---------- How it works: one story, top to bottom (#how-it-works) ---------- */
 .ziki-homepage .hiw-hero-form { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 38px auto 96px; max-width: 520px; width: 100%; }
 .ziki-homepage .hiw-hero-form small { color: var(--th-text2); font-size: 13px; }
-.ziki-homepage .hiw-chapter { margin: 0 auto; max-width: 820px; padding: 96px 24px 0; text-align: center; }
+.ziki-homepage .hiw-chapter { margin: 0 auto; max-width: 1088px; padding: 96px 24px; text-align: center; }
 .ziki-homepage .hiw-step { color: #086ccc; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .ziki-homepage .hiw-chapter h2 { color: #161616; font-size: clamp(28px, 3.4vw, 42px); font-weight: 600; letter-spacing: -.04em; line-height: 1.1; margin: 12px 0 16px; }
 .ziki-homepage .hiw-text { color: #384152; font-size: 18px; line-height: 1.6; margin: 0 auto; max-width: 680px; }
-.ziki-homepage .hiw-pains { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 36px; text-align: left; }
-.ziki-homepage .hiw-pains .hx-fact { border-color: #e8e8e8; }
-.ziki-homepage .hiw-day { padding-bottom: 96px; }
-.ziki-homepage .hiw-timeline { list-style: none; margin: 40px auto 0; max-width: 640px; padding: 0; text-align: left; }
-.ziki-homepage .hiw-timeline li { display: grid; gap: 20px; grid-template-columns: 64px minmax(0, 1fr); position: relative; padding-bottom: 28px; }
-.ziki-homepage .hiw-timeline li::before { background: #d8eefe; bottom: 0; content: ''; left: 31px; position: absolute; top: 34px; width: 2px; }
-.ziki-homepage .hiw-timeline li:last-child::before { display: none; }
-.ziki-homepage .hiw-time { align-items: center; background: #eef8ff; border: 1px solid #b3dcfc; border-radius: var(--button-radius); color: #0a57a3; display: flex; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 13px; font-weight: 600; height: 32px; justify-content: center; position: relative; z-index: 1; }
-.ziki-homepage .hiw-moment h3 { color: #161616; font-size: 18px; font-weight: 600; letter-spacing: -.01em; margin: 4px 0 6px; }
-.ziki-homepage .hiw-moment p { color: #384152; font-size: 15px; line-height: 1.55; margin: 0; }
-.ziki-homepage .hiw-you { color: #15803d; display: inline-block; font-size: 13px; font-weight: 600; margin-top: 8px; }
-.ziki-homepage .hiw-cta-inner { max-width: 640px; }
-.ziki-homepage .hiw-cta-inner .hx-intro { margin-bottom: 28px; }
-.ziki-homepage .hiw-wins { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 36px; }
-.ziki-homepage .hiw-win { background: #fff; border: 1px solid #e8e8e8; border-radius: var(--panel-radius); padding: 26px 22px; }
-.ziki-homepage .hiw-win b { color: #0972d5; display: block; font-size: 40px; font-weight: 600; letter-spacing: -.04em; line-height: 1; }
-.ziki-homepage .hiw-win h3 { color: #161616; font-size: 16px; font-weight: 600; margin: 10px 0 8px; }
-.ziki-homepage .hiw-win p { color: #384152; font-size: 14px; line-height: 1.5; margin: 0; }
-.ziki-homepage .hiw-without { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; margin: 32px auto 0; max-width: 680px; padding: 0; text-align: left; }
-.ziki-homepage .hiw-without li { align-items: center; border: 1px solid #e8e8e8; border-radius: var(--button-radius); color: #384152; display: flex; font-size: 15px; gap: 10px; padding: 12px 14px; text-decoration: line-through; text-decoration-color: rgba(56, 65, 82, .45); }
+.ziki-homepage .hiw-pains { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 40px; text-align: left; }
+.ziki-homepage .hiw-pains .hx-fact { border-color: var(--line); }
+/* The light-blue bands: what changes and the day it brings, then the wins. */
+.ziki-homepage .hiw-band .hx-intro { max-width: 760px; }
+.ziki-homepage .hiw-day-intro { margin-top: 72px; }
+.ziki-homepage .hiw-day-cards { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; }
+.ziki-homepage .hiw-day-cards .hx-fact { display: flex; flex-direction: column; }
+.ziki-homepage .hiw-time { align-self: flex-start; background: var(--green-soft); border: 1px solid #b3dcfc; border-radius: var(--button-radius); color: #0a57a3; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 13px; font-weight: 600; margin-bottom: 14px; padding: 4px 10px; }
+.ziki-homepage .hiw-you { color: #15803d; display: block; font-size: 13px; font-weight: 600; margin-top: auto; padding-top: 12px; }
+/* The middle form sits on white in a panel, so the blue bands don't meet. */
+.ziki-homepage .hiw-form-panel { background: var(--white); border: 1px solid var(--line); border-radius: var(--panel-radius); margin: 36px auto 0; max-width: 640px; padding: 28px; }
+.ziki-homepage .hiw-wins { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ziki-homepage .hiw-win { text-align: center; }
+.ziki-homepage .hiw-win b { color: var(--green); display: block; font-size: 40px; font-weight: 600; letter-spacing: -.04em; line-height: 1; }
+.ziki-homepage .hiw-win h3 { margin: 12px 0 8px; }
+.ziki-homepage .hiw-without { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; margin: 36px auto 0; max-width: 720px; padding: 0; text-align: left; }
+.ziki-homepage .hiw-without li { align-items: center; border: 1px solid var(--line); border-radius: var(--button-radius); color: #384152; display: flex; font-size: 15px; gap: 10px; padding: 12px 14px; text-decoration: line-through; text-decoration-color: rgba(56, 65, 82, .45); }
 .ziki-homepage .hiw-without li::before { color: #dc2626; content: '✕'; font-size: 12px; text-decoration: none; }
-.ziki-homepage .hiw-end { padding-top: 110px; }
+.ziki-homepage .hiw-end { padding-top: 40px; }
+@media (max-width: 1000px) and (min-width: 761px) {
+  .ziki-homepage .hiw-day-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .ziki-homepage .hiw-end-form { margin-top: 28px; max-width: 520px; width: 100%; }
 
 /* The lead forms. */
@@ -847,8 +847,10 @@
 .ziki-homepage .lead-form-done a { color: #086ccc; font-weight: 600; text-decoration: underline; }
 
 @media (max-width: 760px) {
-  .ziki-homepage .hiw-chapter { padding-top: 64px; }
-  .ziki-homepage .hiw-pains, .ziki-homepage .hiw-wins, .ziki-homepage .hiw-without { grid-template-columns: 1fr; }
+  .ziki-homepage .hiw-chapter { padding: 64px 16px; }
+  .ziki-homepage .hiw-day-intro { margin-top: 52px; }
+  .ziki-homepage .hiw-form-panel { padding: 18px; }
+  .ziki-homepage .hiw-pains, .ziki-homepage .hiw-wins, .ziki-homepage .hiw-without, .ziki-homepage .hiw-day-cards { grid-template-columns: 1fr; }
   .ziki-homepage .lead-row { flex-direction: column; }
   .ziki-homepage .hiw-hero-form { margin-bottom: 64px; }
 }
@@ -877,7 +879,15 @@
 }
 
 /* ---------- Resources (#resources) ---------- */
-.ziki-homepage .res-list { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); margin: 48px auto 0; max-width: 1080px; padding: 0 24px 88px; text-align: left; }
+.ziki-homepage .res-list { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: left; }
+/* The index hero: an eyebrow over the headline, then the newest article as a wide card. */
+.ziki-homepage .res-kicker { display: block; margin-top: 34px; }
+.ziki-homepage.res-page .th-centered .th-title { margin-top: 14px; }
+.ziki-homepage .res-featured { margin: 56px auto 96px; max-width: 880px; padding: 0 24px; text-align: left; }
+.ziki-homepage .res-card.res-card-featured { background: var(--green-soft); border-color: #b3dcfc; gap: 12px; padding: 34px 36px; }
+.ziki-homepage .res-card.res-card-featured h2 { font-size: clamp(22px, 2.4vw, 28px); }
+.ziki-homepage .res-card.res-card-featured p { color: #384152; font-size: 16px; }
+.ziki-homepage .res-meta b { color: var(--green); font-weight: 600; margin-right: 10px; }
 .ziki-homepage .res-card { background: #fff; border: 1px solid rgba(24, 24, 27, .12); border-radius: 16px; color: #161616; display: flex; flex-direction: column; gap: 10px; padding: 26px 24px; transition: border-color .2s ease, box-shadow .2s ease; }
 .ziki-homepage .res-card:hover { border-color: #7cc2f8; box-shadow: 0 12px 32px rgba(9, 114, 213, .10); }
 .ziki-homepage .res-card h2, .ziki-homepage .res-card h3 { font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; margin: 0; }
@@ -885,9 +895,12 @@
 .ziki-homepage .res-meta { color: #71717a; font-size: 13px; margin: 0; }
 .ziki-homepage .res-more { align-items: center; color: #0972d5; display: inline-flex; font-size: 14px; font-weight: 600; gap: 6px; margin-top: auto; padding-top: 6px; }
 .ziki-homepage .res-article { margin: 0 auto; max-width: 740px; padding: 72px 24px 80px; text-align: left; }
-.ziki-homepage .res-crumb a { color: #0972d5; font-size: 14px; font-weight: 600; }
-.ziki-homepage .res-crumb a:hover { text-decoration: underline; }
-.ziki-homepage .res-article h1 { color: #161616; font-size: clamp(32px, 4.4vw, 48px); font-weight: 600; letter-spacing: -.035em; line-height: 1.1; margin: 14px 0 12px; }
+/* The article header is centred like the other public pages; the body stays a left-aligned column. */
+.ziki-homepage .res-head { text-align: center; }
+.ziki-homepage .res-back { align-items: center; background: var(--white); border: 1px solid var(--line); border-radius: 9999px; color: var(--ink); display: inline-flex; font-size: 13px; font-weight: 500; gap: 8px; padding: 6px 14px 6px 10px; transition: border-color .2s; }
+.ziki-homepage .res-back:hover { border-color: var(--green); }
+.ziki-homepage .res-back svg { color: var(--green); transform: rotate(180deg); }
+.ziki-homepage .res-article h1 { color: var(--ink); font-size: clamp(32px, 4.4vw, 48px); font-weight: 600; letter-spacing: -.035em; line-height: 1.1; margin: 24px 0 14px; }
 .ziki-homepage .res-body { color: #27272a; font-size: 17px; line-height: 1.7; margin-top: 32px; }
 .ziki-homepage .res-body p { margin: 0 0 18px; }
 .ziki-homepage .res-body h2 { color: #161616; font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; margin: 40px 0 14px; }
@@ -901,11 +914,13 @@
 .ziki-homepage .res-cta p { color: #3f3f46; margin: 0 0 18px; }
 .ziki-homepage .res-cta .th-btn-primary { background: #0972d5; color: #fff; }
 .ziki-homepage .res-cta .th-btn-primary:hover { background: #0866c0; }
-.ziki-homepage .res-related { padding-top: 24px; }
-.ziki-homepage .res-related > h2 { color: #161616; font-size: 26px; font-weight: 600; letter-spacing: -.02em; margin: 0 auto; max-width: 1080px; padding: 0 24px; }
-.ziki-homepage .res-related .res-list { margin-top: 20px; }
+.ziki-homepage .res-related .res-list { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 auto; max-width: 820px; }
+.ziki-homepage .res-all-link { display: flex; justify-content: center; margin-top: 28px; }
+@media (max-width: 1000px) { .ziki-homepage .res-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
-  .ziki-homepage .res-list { grid-template-columns: 1fr; padding: 0 16px 64px; }
+  .ziki-homepage .res-list, .ziki-homepage .res-related .res-list { grid-template-columns: 1fr; }
+  .ziki-homepage .res-featured { margin: 36px auto 64px; padding: 0 16px; }
+  .ziki-homepage .res-card-featured { padding: 24px 22px; }
   .ziki-homepage .res-article { padding: 40px 16px 56px; }
   .ziki-homepage .res-body { font-size: 16px; }
 }
@@ -916,3 +931,40 @@
 .ziki-homepage .res-body h2 { clear: both; }
 @media (max-width: 1100px) { .ziki-homepage .res-figure { margin-right: 0; width: 300px; } }
 @media (max-width: 760px) { .ziki-homepage .res-figure { float: none; margin: 8px 0 22px; width: 100%; } }
+
+/* ---------- For developers (#developers-page): the centred hero, then explainer bands ---------- */
+.ziki-homepage.dv-page .th-centered .th-cta-row { margin-bottom: 96px; }
+.ziki-homepage .dv-steps { list-style: none; margin: 0; padding: 0; }
+.ziki-homepage .dv-step-top { align-items: center; display: flex; gap: 10px; margin-bottom: 14px; }
+.ziki-homepage .dv-step-number { align-items: center; background: var(--green-soft); border: 1px solid #b3dcfc; border-radius: 9999px; color: #0a57a3; display: inline-flex; font-size: 13px; font-weight: 600; height: 28px; justify-content: center; width: 28px; }
+.ziki-homepage .dv-step-icon { align-items: center; color: var(--green); display: inline-flex; }
+/* The rewards card sits flat and centred on white, not tilted on a dark panel. */
+.ziki-homepage .dv-rewards .leaderboard { background: var(--white); border-color: var(--line); box-shadow: none; margin: 0 auto; max-width: 640px; transform: none; }
+.ziki-homepage .dv-rewards-cta { display: flex; justify-content: center; margin-top: 28px; }
+
+@media (max-width: 720px) {
+  .ziki-homepage.dv-page .th-centered .th-cta-row { margin-bottom: 64px; }
+  .ziki-homepage .dv-rewards .leaderboard { padding: 14px; }
+}
+
+/* ---------- For AI agents (#for-agents): the centred hero with the work feed, then explainer bands ---------- */
+/* The work feed sits flat in the hero's white card, as the product board does on Earn. */
+.ziki-homepage .fa-console { padding: 18px 18px 0; }
+.ziki-homepage .fa-console .api-console { border-bottom: 0; border-radius: var(--panel-radius) var(--panel-radius) 0 0; box-shadow: none; transform: none; }
+.ziki-homepage .fa-steps { list-style: none; margin: 0; padding: 0; }
+.ziki-homepage .fa-step-number { align-items: center; background: var(--green-soft); border: 1px solid #b3dcfc; border-radius: 9999px; color: #0a57a3; display: inline-flex; font-size: 13px; font-weight: 600; height: 28px; justify-content: center; margin-bottom: 14px; width: 28px; }
+.ziki-homepage .fa-call { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-chip); color: var(--ink); display: inline-block; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 12.5px; margin: 0 0 10px; overflow-wrap: anywhere; padding: 4px 8px; }
+.ziki-homepage .fa-classes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ziki-homepage .fa-class-icon { align-items: center; background: var(--green-soft); border-radius: var(--radius-control); color: var(--green); display: flex; height: 40px; justify-content: center; margin-bottom: 16px; width: 40px; }
+.ziki-homepage .fa-rules .rule-list { margin: 0 auto; max-width: 760px; }
+.ziki-homepage .fa-rules .rule-list li { border-color: #d8eefe; }
+
+@media (max-width: 900px) {
+  .ziki-homepage .fa-classes { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .ziki-homepage .fa-console { padding: 10px 10px 0; }
+  .ziki-homepage .fa-console .console-events > div { grid-template-columns: 88px 1fr; }
+  .ziki-homepage .fa-console .event-time { display: none; }
+  .ziki-homepage .fa-console .console-footer code { display: none; }
+}
