@@ -859,6 +859,11 @@
 .ziki-homepage .price-plans { display: grid; gap: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 56px auto 0; max-width: 880px; padding: 0 24px 96px; text-align: left; }
 .ziki-homepage .price-plan { background: #fff; border: 1px solid rgba(24, 24, 27, .12); border-radius: 16px; display: flex; flex-direction: column; gap: 14px; padding: 32px 28px; }
 .ziki-homepage .price-plan.price-featured { background: #eef8ff; border-color: #b3dcfc; box-shadow: 0 12px 32px rgba(9, 114, 213, .10); }
+/* The hero eyebrow, and the How you pay facts three across. */
+.ziki-homepage .price-kicker { display: block; margin-top: 34px; }
+.ziki-homepage .th-centered .price-kicker + .th-title { margin-top: 14px; }
+.ziki-homepage .price-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .ziki-homepage .price-facts { grid-template-columns: 1fr; } }
 .ziki-homepage .price-plan h2 { color: #161616; font-size: 22px; font-weight: 700; margin: 0; }
 .ziki-homepage .price-amount { align-items: baseline; display: flex; gap: 10px; margin: 0; }
 .ziki-homepage .price-amount b { color: #161616; font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
