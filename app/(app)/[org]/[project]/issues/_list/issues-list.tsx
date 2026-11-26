@@ -1810,18 +1810,6 @@ export async function IssuesList({
 
         {priorityIssues.length > 0 ? <PriorityNowStrip issues={priorityIssues} projectRef={ref} /> : null}
 
-        {/* First questions: full-screen, one at a time, over a project that has no ideas yet. */}
-        {showFirstQuestions ? (
-          <FirstQuestions
-            projectId={project.id}
-            projectSlug={project.slug}
-            productKinds={projectLinks?.productKinds ?? []}
-            productOther={projectLinks?.productOther ?? null}
-            canEditProject={canEditProjectLinks}
-            firstName={(user.name ?? "").trim().split(/\s+/)[0] || null}
-          />
-        ) : null}
-
         {/* Project Overview: who delivered what this week first, then the work you hold, then your open bids,
             only counted, under the list. Goals are in the project's settings. */}
 
